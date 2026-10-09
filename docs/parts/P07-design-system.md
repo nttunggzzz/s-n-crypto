@@ -26,8 +26,8 @@ Button, Input (kể cả input số thập phân), Select, Tabs, Modal/Sheet (mo
 - Trang trưng bày component (Storybook hoặc trang demo) để xem toàn bộ component.
 
 ## Checklist
-- [ ] Giai đoạn 0: tokens sáng/tối, component cơ bản, trang trưng bày
-- [ ] Giai đoạn 1: component chuyên cho sàn
+- [x] Giai đoạn 0: tokens sáng/tối, component cơ bản, trang trưng bày
+- [x] Giai đoạn 1: component chuyên cho sàn
 - [ ] Giai đoạn 3: bảng dữ liệu lớn cho Admin (lọc, phân trang)
 
 ## Xong khi
