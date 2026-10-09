@@ -24,21 +24,32 @@ const Env = z.object({
   RESEND_API_KEY: z.string().default(''),
   EMAIL_FROM: z.string().default('CEX Sim <no-reply@example.com>'),
   SESSION_TTL_DAYS: z.coerce.number().int().default(30),
+  /** base64 of 32 random bytes; encrypts 2FA secrets at rest. Required in production. */
+  DATA_ENCRYPTION_KEY: z.string().default(''),
+  /** Name shown in authenticator apps. */
+  TOTP_ISSUER: z.string().default('CEX Sim'),
   /** Multiplies every per-IP/per-user rate limit (tests raise it; production keeps 1). */
   RATE_LIMIT_SCALE: z.coerce.number().int().min(1).default(1),
   LOG_LEVEL: z.string().default('info'),
 });
 
-export type Config = z.infer<typeof Env> & { symbols: string[]; isProd: boolean };
+export type Config = z.infer<typeof Env> & { symbols: string[]; isProd: boolean; dataKey: string };
+
+/** Fixed key for development/tests only — never valid in production. */
+const DEV_DATA_KEY = Buffer.alloc(32, 'cex-dev-only-not-a-secret').toString('base64');
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const parsed = Env.parse(env);
   if (parsed.NODE_ENV === 'production' && parsed.EMAIL_TRANSPORT === 'log') {
     throw new Error('EMAIL_TRANSPORT=log is not allowed in production');
   }
+  if (parsed.NODE_ENV === 'production' && !parsed.DATA_ENCRYPTION_KEY) {
+    throw new Error('DATA_ENCRYPTION_KEY is required in production');
+  }
   return {
     ...parsed,
     symbols: parsed.SYMBOLS.split(',').map((s) => s.trim().toUpperCase()).filter(Boolean),
     isProd: parsed.NODE_ENV === 'production',
+    dataKey: parsed.DATA_ENCRYPTION_KEY || DEV_DATA_KEY,
   };
 }

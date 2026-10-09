@@ -16,6 +16,8 @@ export interface ReconciliationResult {
   ok: boolean;
   checkedBalances: number;
   mismatches: Mismatch[];
+  /** Stored run (when persisted). */
+  run?: typeof reconciliationRuns.$inferSelect;
 }
 
 /**
@@ -69,7 +71,8 @@ export async function reconcile(db: Db, persist = true): Promise<ReconciliationR
   }
   const result: ReconciliationResult = { ok: mismatches.length === 0, checkedBalances: n, mismatches };
   if (persist) {
-    await db.insert(reconciliationRuns).values({ startedAt, finishedAt: new Date(), ok: result.ok, checkedBalances: n, mismatches });
+    const [run] = await db.insert(reconciliationRuns).values({ startedAt, finishedAt: new Date(), ok: result.ok, checkedBalances: n, mismatches }).returning();
+    result.run = run;
   }
   if (!result.ok) logger.error({ mismatches }, 'ledger reconciliation FAILED');
   return result;

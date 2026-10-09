@@ -1,6 +1,6 @@
 import type { NextFunction, Request, Response, Router } from 'express';
 import { ZodError, type z } from 'zod';
-import { endpoints, type AuthLevel, type EndpointName, type EndpointOutput, type Endpoints } from '@cex/contracts';
+import { endpoints, hasPermission, STAFF_ROLES, type AuthLevel, type EndpointName, type EndpointOutput, type Endpoints, type Permission } from '@cex/contracts';
 import { AppError } from './errors.ts';
 import { logger } from '../logger.ts';
 import type { AuthContext } from '../modules/auth/authService.ts';
@@ -52,8 +52,13 @@ export function route<N extends EndpointName>(
         throw new AppError('EMAIL_NOT_VERIFIED', 'Verify your email first');
       }
       if (level === 'staff') {
-        // Admin API is declared in contracts 0.3.0; enforcement (2FA + permissions) lands in the next commit.
-        throw new AppError('TWO_FACTOR_REQUIRED', 'Admin API not available yet');
+        // Order matters for the UI: not staff → 403; staff without 2FA (or not signed in with it) → TWO_FACTOR_REQUIRED.
+        if (!STAFF_ROLES.includes(auth.user.role)) throw new AppError('FORBIDDEN', 'Staff only');
+        if (!auth.user.twoFactorEnabledAt || !auth.session.mfaVerified) {
+          throw new AppError('TWO_FACTOR_REQUIRED', 'Enable two-factor authentication and sign in with it to use the admin area');
+        }
+        const perm = (def as { permission?: Permission }).permission;
+        if (!perm || !hasPermission(auth.user.role, perm)) throw new AppError('FORBIDDEN', `Missing permission ${perm ?? '(none declared)'}`);
       }
     }
     const d = def as { path: string; params?: z.ZodType; query?: z.ZodType; body?: z.ZodType; response: z.ZodType; status?: number; format?: 'json' | 'csv' };

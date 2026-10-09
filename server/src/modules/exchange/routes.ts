@@ -1,6 +1,6 @@
 import type { Router } from 'express';
 import { and, asc, desc, eq, gte, inArray, lt, lte, notInArray, type SQL } from 'drizzle-orm';
-import { dec, toFixedStr, ZERO, type Dec } from '@cex/core';
+import { dec, toFixedStr, type Dec } from '@cex/core';
 import { ledgerEntries, OPEN_STATUSES, orderLists, orders, trades } from '../../db/schema.ts';
 import type { Db } from '../../db/client.ts';
 import { route, type RouteOptions } from '../../lib/http.ts';
@@ -11,7 +11,7 @@ import type { Exchange } from './index.ts';
 import { getBalances } from './ledger.ts';
 import { loadList } from './outcome.ts';
 import { exportLedgerCsv, exportOrdersCsv, exportTradesCsv } from './exports.ts';
-import { serializeBalance, serializeLedger, serializeOrder, serializeOrderList, serializeTrade } from './serializers.ts';
+import { serializeBalance, serializeLedger, serializeOrder, serializeOrderList, serializeTrade, valuateBalances } from './serializers.ts';
 
 /** USDT value of one unit of `asset`, or null when there is no live price. */
 export function makePriceOf(market: MarketDataService): (asset: string) => Dec | null {
@@ -52,18 +52,7 @@ export function registerExchangeRoutes(router: Router, opts: RouteOptions, db: D
 
   // ───── wallet
 
-  route(router, opts, 'balances', async ({ auth }) => {
-    const rows = await getBalances(db, auth.user.id);
-    const items = rows.map((r) => serializeBalance(r.asset, dec(r.available), dec(r.locked), priceOf));
-    let total = ZERO;
-    const unpricedAssets: string[] = [];
-    for (const b of items) {
-      if (b.valueUsdt === null) {
-        if (dec(b.total).gt(0)) unpricedAssets.push(b.asset);
-      } else total = total.add(dec(b.valueUsdt));
-    }
-    return { items, totalValueUsdt: toFixedStr(total), unpricedAssets };
-  });
+  route(router, opts, 'balances', async ({ auth }) => valuateBalances(await getBalances(db, auth.user.id), priceOf));
 
   route(router, opts, 'ledger', async ({ auth, query }) => {
     const where: SQL[] = [eq(ledgerEntries.userId, auth.user.id), ...timeRange(ledgerEntries.createdAt, query)];

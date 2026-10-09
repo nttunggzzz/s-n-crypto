@@ -717,7 +717,7 @@ export class OrderService {
     return id;
   }
 
-  async cancelAll(userId: string, symbol?: string): Promise<OrderRow[]> {
+  async cancelAll(userId: string, symbol?: string, reason: OrderRow['closeReason'] = 'USER_CANCELED'): Promise<OrderRow[]> {
     const where = [eq(orders.userId, userId), inArray(orders.status, [...OPEN_STATUSES])];
     if (symbol) where.push(eq(orders.symbol, symbol));
     const open = await this.db
@@ -732,7 +732,7 @@ export class OrderService {
         await this.commit(async (tx, out) => {
           const group = await this.lockGroup(tx, o.id, userId);
           if (!group.some((g) => g.id === o.id && isOpen(g.status))) return;
-          await this.cancelLegs(tx, out, group, 'USER_CANCELED');
+          await this.cancelLegs(tx, out, group, reason);
           for (const c of out.orders.values()) if (c.status === 'CANCELED') canceled.set(c.id, c);
         });
       } catch (err) {

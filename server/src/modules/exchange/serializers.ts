@@ -101,3 +101,16 @@ export function serializeBalance(asset: string, available: Dec, locked: Dec, pri
     valueUsdt: price === null ? null : toFixedStr(total.mul(price).toDecimalPlaces(8)),
   };
 }
+
+/** Values balances in USDT; total covers priced assets only, the rest are listed as unpriced. */
+export function valuateBalances(rows: { asset: string; available: string; locked: string }[], priceOf: (asset: string) => Dec | null) {
+  const items = rows.map((r) => serializeBalance(r.asset, dec(r.available), dec(r.locked), priceOf));
+  let total = dec('0');
+  const unpricedAssets: string[] = [];
+  for (const b of items) {
+    if (b.valueUsdt === null) {
+      if (dec(b.total).gt(0)) unpricedAssets.push(b.asset);
+    } else total = total.add(dec(b.valueUsdt));
+  }
+  return { items, totalValueUsdt: toFixedStr(total), unpricedAssets };
+}

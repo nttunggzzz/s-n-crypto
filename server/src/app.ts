@@ -12,6 +12,8 @@ import type { CandleService } from './modules/market/candleService.ts';
 import { registerMarketRoutes } from './modules/market/routes.ts';
 import type { Exchange } from './modules/exchange/index.ts';
 import { registerExchangeRoutes } from './modules/exchange/routes.ts';
+import { AdminService } from './modules/admin/adminService.ts';
+import { registerAdminRoutes } from './modules/admin/routes.ts';
 
 export interface AppDeps {
   config: Config;
@@ -93,6 +95,7 @@ export function createApp(deps: AppDeps) {
   registerAuthRoutes(router, opts, deps.auth, config);
   registerMarketRoutes(router, opts, deps.market, deps.exchange.config, deps.candles);
   registerExchangeRoutes(router, opts, deps.db, deps.exchange, deps.market, config.RATE_LIMIT_SCALE);
+  registerAdminRoutes(router, opts, new AdminService(deps.db, deps.exchange, deps.market), config.RATE_LIMIT_SCALE);
   app.use(router);
 
   app.use('/api', (_req: Request, _res: Response, next: NextFunction) => next(new AppError('NOT_FOUND', 'No such endpoint')));

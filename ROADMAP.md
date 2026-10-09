@@ -1,7 +1,7 @@
 # ROADMAP — Sàn giao dịch ảo + Web tín hiệu
 
-> Trạng thái: **ĐANG LÀM** — backend Giai đoạn 0–2 xong (chạy local, chưa lên cloud); giao diện đang làm. Cập nhật: 2026-10-09
-> Báo cáo mới nhất: [docs/reports/2026-10-09-backend-gd2.md](docs/reports/2026-10-09-backend-gd2.md) · trước đó: [GĐ0–1](docs/reports/2026-10-09-backend-gd0-gd1.md)
+> Trạng thái: **ĐANG LÀM** — backend Giai đoạn 0–3 xong (chạy local, chưa lên cloud); giao diện đang làm. Cập nhật: 2026-10-09
+> Báo cáo mới nhất: [docs/reports/2026-10-09-backend-gd3.md](docs/reports/2026-10-09-backend-gd3.md) · trước đó: [GĐ2](docs/reports/2026-10-09-backend-gd2.md), [GĐ0–1](docs/reports/2026-10-09-backend-gd0-gd1.md)
 > Dự án thử nghiệm cá nhân. Phần kinh doanh (thu phí, thanh toán…) để sau — xem [Backlog](#backlog-để-sau).
 > Chi tiết từng phần: [docs/parts/README.md](docs/parts/README.md)
 
@@ -80,8 +80,9 @@
 **Xong khi:** mua kèm TP/SL → chạm TP → SL tự hủy → lãi/lỗ và giá vốn đúng.
 
 ### Giai đoạn 3 — Admin
-- [ ] P03: Vai trò & quyền, 2FA bắt buộc cho admin, **nhật ký quản trị không xóa được**, cờ quyền dùng tín hiệu
-- [ ] P05: API admin — cộng/trừ số dư **bắt buộc lý do**, reset tài khoản, bật/tắt cặp, phí, cấu hình nạp, **dừng giao dịch khẩn cấp**, đối soát sổ cái; tài khoản bot khóa không cho chỉnh
+- [x] P03: Vai trò & quyền, 2FA bắt buộc cho admin (+ 2FA tùy chọn cho người dùng), **nhật ký quản trị không xóa được**, cờ quyền dùng tín hiệu
+- [x] P05: API admin — cộng/trừ số dư **bắt buộc lý do**, reset tài khoản, bật/tắt cặp, phí, cấu hình nạp, **dừng giao dịch khẩn cấp**, đối soát sổ cái; tài khoản bot khóa không cho chỉnh
+- [x] P02: Hợp đồng 0.3.0 + mock (giả lập vai trò)
 - [ ] P09: Giao diện Admin cho tất cả mục trên + tình trạng hệ thống + thống kê cơ bản
 
 ### Giai đoạn 4 — Engine tín hiệu (chạy ngầm)

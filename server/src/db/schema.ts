@@ -36,10 +36,32 @@ export const users = pgTable(
     status: text('status', { enum: ['active', 'locked'] }).notNull().default('active'),
     isBot: boolean('is_bot').notNull().default(false),
     signalsAccess: boolean('signals_access').notNull().default(false),
+    /** TOTP secret, encrypted (SecretBox). Set when 2FA is on. */
+    twoFactorSecret: text('two_factor_secret'),
+    /** Secret being set up, not yet confirmed with a code. */
+    twoFactorPendingSecret: text('two_factor_pending_secret'),
+    twoFactorEnabledAt: ts('two_factor_enabled_at'),
+    /** Last accepted TOTP time step — a code can be used once. */
+    twoFactorLastStep: bigint('two_factor_last_step', { mode: 'number' }),
     createdAt: ts('created_at').notNull().defaultNow(),
     updatedAt: ts('updated_at').notNull().defaultNow(),
   },
   (t) => [uniqueIndex('users_email_uq').on(t.email)],
+);
+
+/** One-time 2FA recovery codes (sha256), 10 per user. */
+export const recoveryCodes = pgTable(
+  'recovery_codes',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    codeHash: text('code_hash').notNull(),
+    usedAt: ts('used_at'),
+    createdAt: ts('created_at').notNull().defaultNow(),
+  },
+  (t) => [index('recovery_codes_user_idx').on(t.userId)],
 );
 
 export const sessions = pgTable(
@@ -57,6 +79,8 @@ export const sessions = pgTable(
     lastSeenAt: ts('last_seen_at').notNull().defaultNow(),
     expiresAt: ts('expires_at').notNull(),
     revokedAt: ts('revoked_at'),
+    /** Signed in with a second factor (or turned 2FA on in this session). Required for the admin API. */
+    mfaVerified: boolean('mfa_verified').notNull().default(false),
   },
   (t) => [uniqueIndex('sessions_token_uq').on(t.tokenHash), index('sessions_user_idx').on(t.userId)],
 );
@@ -68,7 +92,7 @@ export const verificationTokens = pgTable(
     userId: uuid('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
-    purpose: text('purpose', { enum: ['EMAIL_VERIFY', 'PASSWORD_RESET'] }).notNull(),
+    purpose: text('purpose', { enum: ['EMAIL_VERIFY', 'PASSWORD_RESET', 'LOGIN_2FA'] }).notNull(),
     tokenHash: text('token_hash').notNull(),
     expiresAt: ts('expires_at').notNull(),
     usedAt: ts('used_at'),
@@ -84,7 +108,7 @@ export const auditLogs = pgTable(
     id: bigserial('id', { mode: 'number' }).primaryKey(),
     actorId: uuid('actor_id').references(() => users.id),
     action: text('action').notNull(),
-    targetType: text('target_type'),
+    targetType: text('target_type', { enum: ['USER', 'EXCHANGE', 'SYMBOL'] }),
     targetId: text('target_id'),
     before: jsonb('before'),
     after: jsonb('after'),
