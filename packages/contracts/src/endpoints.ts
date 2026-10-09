@@ -6,12 +6,45 @@ import {
   ChangePasswordRequest,
   ForgotPasswordRequest,
   LoginRequest,
+  LoginResponse,
+  LoginTwoFactorRequest,
   OkResponse,
+  RecoveryCodes,
+  RegenerateRecoveryCodesRequest,
   RegisterRequest,
   ResetPasswordRequest,
   SessionList,
+  TwoFactorDisableRequest,
+  TwoFactorEnableRequest,
+  TwoFactorSetup,
+  TwoFactorSetupRequest,
   VerifyEmailRequest,
 } from './auth.ts';
+import {
+  AdminOverview,
+  AdminSymbol,
+  AdminUserDetail,
+  AdminUserListQuery,
+  AdminUserOrdersQuery,
+  AdminUserSummary,
+  AuditLogEntry,
+  AuditLogQuery,
+  BalanceAdjustmentRequest,
+  BalanceAdjustmentResult,
+  ExchangeSettings,
+  HaltRequest,
+  ReasonBody,
+  ReconciliationRun,
+  ResetAccountRequest,
+  ResumeRequest,
+  SetRoleRequest,
+  SignalsAccessRequest,
+  SymbolParam as AdminSymbolParam,
+  UpdateSettingsRequest,
+  UpdateSymbolRequest,
+  UserIdParam,
+} from './admin.ts';
+import type { Permission } from './permissions.ts';
 import { Candles, CandlesQuery, Depth, ExchangeInfo, LimitQuery, MarketConnection, MarketStatus, MarketTrades, Ticker } from './market.ts';
 import { Balances, FaucetClaimResult, FaucetStatus, LedgerEntry, LedgerQuery } from './wallet.ts';
 import { CancelAllResponse, HistoryQuery, Order, OrderList, PlaceOcoRequest, PlaceOrderRequest, PlaceOrderResponse, SymbolFilterQuery, Trade } from './orders.ts';
@@ -20,13 +53,18 @@ import { AlertListQuery, CreatePriceAlertRequest, PriceAlert } from './alerts.ts
 import { MarkReadRequest, Notification, NotificationListQuery, UnreadCount } from './notifications.ts';
 
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
-/** public: anyone · user: signed-in · verified: signed-in with verified email · admin: see phase 3 */
-export type AuthLevel = 'public' | 'user' | 'verified' | 'admin';
+/**
+ * public: anyone · user: signed-in · verified: signed-in with verified email ·
+ * staff: support/admin/owner with 2FA, signed in with 2FA, holding `permission`.
+ */
+export type AuthLevel = 'public' | 'user' | 'verified' | 'staff';
 
 export interface EndpointDef {
   method: HttpMethod;
   path: string;
   auth: AuthLevel;
+  /** Required for auth 'staff'. */
+  permission?: Permission;
   params?: z.ZodObject;
   query?: z.ZodType;
   body?: z.ZodType;
@@ -58,7 +96,9 @@ export const endpoints = {
 
   // ---- auth (P03)
   register: ep({ method: 'POST', path: '/api/v1/auth/register', auth: 'public', body: RegisterRequest, response: AuthUserResponse, status: 201 }),
-  login: ep({ method: 'POST', path: '/api/v1/auth/login', auth: 'public', body: LoginRequest, response: AuthUserResponse }),
+  login: ep({ method: 'POST', path: '/api/v1/auth/login', auth: 'public', body: LoginRequest, response: LoginResponse }),
+  /** Second login step for accounts with 2FA; sets the session cookie. */
+  loginTwoFactor: ep({ method: 'POST', path: '/api/v1/auth/login/2fa', auth: 'public', body: LoginTwoFactorRequest, response: AuthUserResponse }),
   logout: ep({ method: 'POST', path: '/api/v1/auth/logout', auth: 'user', body: Empty, response: OkResponse }),
   verifyEmail: ep({ method: 'POST', path: '/api/v1/auth/verify-email', auth: 'public', body: VerifyEmailRequest, response: OkResponse }),
   resendVerification: ep({ method: 'POST', path: '/api/v1/auth/resend-verification', auth: 'user', body: Empty, response: OkResponse }),
@@ -68,6 +108,10 @@ export const endpoints = {
   listSessions: ep({ method: 'GET', path: '/api/v1/auth/sessions', auth: 'user', response: SessionList }),
   revokeSession: ep({ method: 'DELETE', path: '/api/v1/auth/sessions/:sessionId', auth: 'user', params: z.object({ sessionId: z.string() }), response: OkResponse }),
   me: ep({ method: 'GET', path: '/api/v1/me', auth: 'user', response: Me }),
+  setupTwoFactor: ep({ method: 'POST', path: '/api/v1/auth/2fa/setup', auth: 'user', body: TwoFactorSetupRequest, response: TwoFactorSetup }),
+  enableTwoFactor: ep({ method: 'POST', path: '/api/v1/auth/2fa/enable', auth: 'user', body: TwoFactorEnableRequest, response: RecoveryCodes }),
+  disableTwoFactor: ep({ method: 'POST', path: '/api/v1/auth/2fa/disable', auth: 'user', body: TwoFactorDisableRequest, response: OkResponse }),
+  regenerateRecoveryCodes: ep({ method: 'POST', path: '/api/v1/auth/2fa/recovery-codes', auth: 'user', body: RegenerateRecoveryCodesRequest, response: RecoveryCodes }),
   getPreferences: ep({ method: 'GET', path: '/api/v1/me/preferences', auth: 'user', response: Preferences }),
   updatePreferences: ep({ method: 'PATCH', path: '/api/v1/me/preferences', auth: 'user', body: UpdatePreferencesRequest, response: Preferences }),
 
@@ -119,6 +163,29 @@ export const endpoints = {
   listNotifications: ep({ method: 'GET', path: '/api/v1/notifications', auth: 'user', query: NotificationListQuery.extend(PaginationQuery.shape), response: paginated(Notification) }),
   unreadNotifications: ep({ method: 'GET', path: '/api/v1/notifications/unread-count', auth: 'user', response: UnreadCount }),
   markNotificationsRead: ep({ method: 'POST', path: '/api/v1/notifications/read', auth: 'user', body: MarkReadRequest, response: UnreadCount }),
+
+  // ---- admin (P03/P05, phase 3) — staff + 2FA + permission; every change writes the audit log
+  adminOverview: ep({ method: 'GET', path: '/api/v1/admin/overview', auth: 'staff', permission: 'exchange.read', response: AdminOverview }),
+  adminListUsers: ep({ method: 'GET', path: '/api/v1/admin/users', auth: 'staff', permission: 'users.read', query: AdminUserListQuery.extend(PaginationQuery.shape), response: paginated(AdminUserSummary) }),
+  adminGetUser: ep({ method: 'GET', path: '/api/v1/admin/users/:userId', auth: 'staff', permission: 'users.read', params: UserIdParam, response: AdminUserDetail }),
+  adminUserOrders: ep({ method: 'GET', path: '/api/v1/admin/users/:userId/orders', auth: 'staff', permission: 'users.read', params: UserIdParam, query: AdminUserOrdersQuery.extend(PaginationQuery.shape), response: paginated(Order) }),
+  adminUserLedger: ep({ method: 'GET', path: '/api/v1/admin/users/:userId/ledger', auth: 'staff', permission: 'users.read', params: UserIdParam, query: LedgerQuery.extend(PaginationQuery.shape), response: paginated(LedgerEntry) }),
+  /** Locking signs the user out everywhere; their open orders stay. */
+  adminLockUser: ep({ method: 'POST', path: '/api/v1/admin/users/:userId/lock', auth: 'staff', permission: 'users.lock', params: UserIdParam, body: ReasonBody, response: AdminUserSummary }),
+  adminUnlockUser: ep({ method: 'POST', path: '/api/v1/admin/users/:userId/unlock', auth: 'staff', permission: 'users.lock', params: UserIdParam, body: ReasonBody, response: AdminUserSummary }),
+  adminSetSignalsAccess: ep({ method: 'PUT', path: '/api/v1/admin/users/:userId/signals-access', auth: 'staff', permission: 'users.signals', params: UserIdParam, body: SignalsAccessRequest, response: AdminUserSummary }),
+  adminSetRole: ep({ method: 'PUT', path: '/api/v1/admin/users/:userId/role', auth: 'staff', permission: 'users.roles', params: UserIdParam, body: SetRoleRequest, response: AdminUserSummary }),
+  adminAdjustBalance: ep({ method: 'POST', path: '/api/v1/admin/users/:userId/balance-adjustments', auth: 'staff', permission: 'balances.adjust', params: UserIdParam, body: BalanceAdjustmentRequest, response: BalanceAdjustmentResult, status: 201 }),
+  adminResetAccount: ep({ method: 'POST', path: '/api/v1/admin/users/:userId/reset', auth: 'staff', permission: 'accounts.reset', params: UserIdParam, body: ResetAccountRequest, response: AdminUserDetail }),
+  adminGetSettings: ep({ method: 'GET', path: '/api/v1/admin/exchange/settings', auth: 'staff', permission: 'exchange.read', response: ExchangeSettings }),
+  adminUpdateSettings: ep({ method: 'PATCH', path: '/api/v1/admin/exchange/settings', auth: 'staff', permission: 'exchange.configure', body: UpdateSettingsRequest, response: ExchangeSettings }),
+  adminHaltTrading: ep({ method: 'POST', path: '/api/v1/admin/exchange/halt', auth: 'staff', permission: 'exchange.halt', body: HaltRequest, response: ExchangeSettings }),
+  adminResumeTrading: ep({ method: 'POST', path: '/api/v1/admin/exchange/resume', auth: 'staff', permission: 'exchange.halt', body: ResumeRequest, response: ExchangeSettings }),
+  adminListSymbols: ep({ method: 'GET', path: '/api/v1/admin/symbols', auth: 'staff', permission: 'exchange.read', response: z.object({ items: z.array(AdminSymbol) }) }),
+  adminUpdateSymbol: ep({ method: 'PATCH', path: '/api/v1/admin/symbols/:symbol', auth: 'staff', permission: 'exchange.configure', params: AdminSymbolParam, body: UpdateSymbolRequest, response: AdminSymbol }),
+  adminAuditLogs: ep({ method: 'GET', path: '/api/v1/admin/audit-logs', auth: 'staff', permission: 'audit.read', query: AuditLogQuery.extend(PaginationQuery.shape), response: paginated(AuditLogEntry) }),
+  adminReconciliationRuns: ep({ method: 'GET', path: '/api/v1/admin/reconciliation', auth: 'staff', permission: 'reconciliation.read', query: PaginationQuery, response: paginated(ReconciliationRun) }),
+  adminRunReconciliation: ep({ method: 'POST', path: '/api/v1/admin/reconciliation/run', auth: 'staff', permission: 'reconciliation.run', body: Empty, response: ReconciliationRun }),
 } as const satisfies Record<string, EndpointDef>;
 
 export type Endpoints = typeof endpoints;

@@ -1,5 +1,5 @@
 import { and, desc, eq, gt, isNull, ne } from 'drizzle-orm';
-import type { Me, SessionInfo } from '@cex/contracts';
+import { ROLE_PERMISSIONS, type Me, type SessionInfo } from '@cex/contracts';
 import { sessions, users, verificationTokens } from '../../db/schema.ts';
 import type { Db } from '../../db/client.ts';
 import type { Config } from '../../config.ts';
@@ -33,6 +33,9 @@ export function toMe(u: UserRow): Me {
     emailVerified: u.emailVerifiedAt !== null,
     role: u.role,
     signalsAccess: u.signalsAccess,
+    // 2FA lands with the phase 3 backend (next commit).
+    twoFactorEnabled: false,
+    permissions: [...ROLE_PERMISSIONS[u.role]],
     createdAt: u.createdAt.toISOString(),
   };
 }

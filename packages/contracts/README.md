@@ -96,3 +96,13 @@ Xem [CHANGELOG.md](CHANGELOG.md). Tóm tắt cách dùng:
 | Đường entry/TP/SL trên biểu đồ | Lấy từ `openOrders` (price/stopPrice) và `order.tpsl` | Chỉ vẽ, không tính |
 
 Mock: `setMockPrice('BTCUSDT', 75000)` đẩy giá để xem stop kích hoạt, OCO hủy chéo, TP/SL tạo lệnh con, cảnh báo nổ — kèm thông báo realtime.
+
+## 6. Giai đoạn 3 — Admin + 2FA (v0.3.0)
+
+- **Đăng nhập 2 bước**: `login` có thể trả `{ twoFactorRequired: true, challengeToken }` → màn hình nhập mã (6 số từ ứng dụng xác thực, hoặc mã khôi phục dạng `abcd-1234`) → `loginTwoFactor`. Mã sai → `INVALID_TWO_FACTOR_CODE`.
+- **Bật 2FA** (Cài đặt → Bảo mật): `setupTwoFactor({ currentPassword })` → hiện QR từ `otpauthUrl` + `secret` để nhập tay → `enableTwoFactor({ code })` → hiện 10 mã khôi phục **một lần duy nhất** (nút tải/sao chép). Tắt: `disableTwoFactor` (tài khoản quản trị không tắt được → `FORBIDDEN`).
+- **App Admin** (`apps/admin`): mọi endpoint `admin*` cần vai trò support/admin/owner **đã bật 2FA và đăng nhập bằng 2FA**; thiếu → `TWO_FACTOR_REQUIRED` (hiện hướng dẫn bật 2FA). Ẩn/hiện nút theo `me.permissions`, nhưng vẫn xử lý `FORBIDDEN` từ server.
+- Mọi thao tác thay đổi dữ liệu cần `reason` (≥ 5 ký tự) → ghi vào nhật ký quản trị. Dừng/mở giao dịch cần `confirm: 'HALT'` / `'RESUME'`, reset tài khoản cần `confirm: 'RESET'` — UI bắt người dùng **gõ lại** chữ đó.
+- Cộng/trừ số dư: `amount` có dấu (`"-250.5"` = trừ). Hộp xác nhận hiển thị số dư trước/sau lấy từ `adminGetUser` (chỉ để xem trước — số thật là `result.balance`).
+- Tài khoản bot (`isBot`) → không hiện nút chỉnh; server trả `BOT_ACCOUNT_PROTECTED`.
+- Mock: `setMockRole('admin')` để vào app admin; `setMockRole('admin', false)` để xem màn hình "chưa bật 2FA"; `setMockRole('support')` để xem giới hạn quyền.

@@ -8,6 +8,8 @@ export * from './orders.ts';
 export * from './portfolio.ts';
 export * from './alerts.ts';
 export * from './notifications.ts';
+export * from './permissions.ts';
+export * from './admin.ts';
 export * from './realtime.ts';
 export * from './endpoints.ts';
 export * from './client.ts';

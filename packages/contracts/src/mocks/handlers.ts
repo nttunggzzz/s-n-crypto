@@ -4,7 +4,6 @@
  */
 import { http, HttpResponse, delay, type HttpHandler } from 'msw';
 import { endpoints, type EndpointDef, type EndpointName, type EndpointOutput } from '../endpoints.ts';
-import type { ErrorCode } from '../errors.ts';
 import { ERROR_HTTP_STATUS } from '../errors.ts';
 import type { CandleInterval, Order, PortfolioRange, Trade } from '../index.ts';
 import {
@@ -14,7 +13,6 @@ import {
   fixtureLedger,
   fixtureMarketStatus,
   fixtureMarketTrades,
-  fixtureMe,
   fixturePortfolio,
   fixturePortfolioHistory,
   fixtureSessions,
@@ -24,41 +22,14 @@ import {
 } from '../fixtures/index.ts';
 import { adjust, balanceOf, emitUser, mockStore, nextId } from './store.ts';
 import { baseOf, cancel, createOco, findList, isOpen, lockOf, mockFill, newOrder } from './engine.ts';
-
-class MockError extends Error {
-  constructor(
-    readonly code: ErrorCode,
-    message: string = code,
-    readonly details?: Record<string, unknown>,
-  ) {
-    super(message);
-  }
-}
-
-interface Req {
-  params: Record<string, string>;
-  query: URLSearchParams;
-  body: Record<string, unknown>;
-}
-
-type Resolver<N extends EndpointName> = (req: Req) => EndpointOutput<N> | Promise<EndpointOutput<N>>;
-
-const requireUser = () => {
-  if (!mockStore.signedIn) throw new MockError('UNAUTHENTICATED', 'Sign in required');
-};
-const requireVerified = () => {
-  requireUser();
-  if (mockStore.scenario === 'unverified') throw new MockError('EMAIL_NOT_VERIFIED', 'Verify your email first');
-};
+import { MockError, mockMe, now, ok, requireUser, requireVerified, type Req, type Resolver } from './common.ts';
+import { adminResolvers } from './admin.ts';
 const requireTradable = (symbol: string) => {
   if (mockStore.scenario === 'halted') throw new MockError('TRADING_HALTED', 'Trading is halted by the operator');
   if (!MOCK_PAIRS[symbol]) throw new MockError('NOT_FOUND', 'Unknown symbol');
   if (symbol === 'SUIUSDT') throw new MockError('SYMBOL_DISABLED', `${symbol} is not tradable`);
   if (symbol === 'AVAXUSDT' || symbol === 'LINKUSDT') throw new MockError('MARKET_DATA_STALE', 'Market data is not live; trading paused');
 };
-const mockMe = () => ({ ...fixtureMe, emailVerified: mockStore.scenario !== 'unverified' });
-const ok = { ok: true as const };
-const now = () => new Date().toISOString();
 const empty = () => mockStore.scenario === 'empty';
 const f8 = (n: number) => n.toFixed(8);
 const num = (v: unknown) => (v === undefined || v === null ? undefined : Number(v));
@@ -92,6 +63,9 @@ const resolvers: { [N in EndpointName]: Resolver<N> } = {
   },
   login: ({ body }) => {
     if (body.password === 'wrong') throw new MockError('UNAUTHENTICATED', 'Invalid email or password');
+    if (mockStore.twoFactorEnabled) {
+      return { twoFactorRequired: true as const, challengeToken: 'mock-challenge-0123456789', expiresAt: new Date(Date.now() + 5 * 60_000).toISOString() };
+    }
     mockStore.signedIn = true;
     return { user: mockMe() };
   },
@@ -363,6 +337,8 @@ const resolvers: { [N in EndpointName]: Resolver<N> } = {
     return { items: mockStore.notifications.filter((n) => !unreadOnly || n.readAt === null), nextCursor: null };
   },
   unreadNotifications: () => (requireUser(), { unread: mockStore.notifications.filter((n) => n.readAt === null).length }),
+  ...adminResolvers,
+
   markNotificationsRead: ({ body }) => {
     requireUser();
     const ids = body.ids as string[] | undefined;

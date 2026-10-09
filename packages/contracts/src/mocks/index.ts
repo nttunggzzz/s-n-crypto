@@ -8,8 +8,9 @@
  *   const realtime = createMockRealtimeClient();
  *   // setMockScenario('empty' | 'error' | 'halted' | 'signedOut' | 'unverified') to see every UI state
  *   // setMockPrice('BTCUSDT', 75000) to fire stops / OCO / TP-SL / price alerts on demand
+ *   // setMockRole('admin') (or 'support' | 'owner' | 'user') for the admin app; setMockRole('admin', false) = 2FA not set up
  */
 export { createMockHandlers, type MockHandlerOptions } from './handlers.ts';
 export { createMockRealtimeClient, type MockRealtimeOptions } from './realtime.ts';
-export { mockStore, resetMockStore, setMockScenario, type MockScenario } from './store.ts';
+export { mockStore, resetMockStore, setMockRole, setMockScenario, type MockScenario } from './store.ts';
 export { setMockPrice } from './engine.ts';

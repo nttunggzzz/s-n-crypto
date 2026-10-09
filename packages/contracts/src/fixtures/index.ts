@@ -4,7 +4,14 @@
  * Prices here are made-up round numbers, not market data.
  */
 import type {
+  AdminOverview,
+  AdminSymbol,
+  AdminUserDetail,
+  AdminUserSummary,
+  AuditLogEntry,
   Balances,
+  ExchangeSettings,
+  ReconciliationRun,
   Candle,
   CandleInterval,
   Depth,
@@ -167,6 +174,8 @@ export const fixtureMe: Me = {
   emailVerified: true,
   role: 'user',
   signalsAccess: false,
+  twoFactorEnabled: false,
+  permissions: [],
   createdAt: '2026-10-01T00:00:00.000Z',
 };
 
@@ -493,4 +502,79 @@ export const fixturePreferences: Preferences = {
   theme: 'system',
   locale: 'vi',
   defaultInterval: '15m',
+};
+
+// ───────────────────────────── phase 3 (admin)
+
+const U = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+
+export const fixtureAdminUsers: AdminUserSummary[] = [
+  { id: U(1), email: 'demo@example.com', name: 'Người dùng demo', role: 'user', status: 'active', emailVerified: true, twoFactorEnabled: false, signalsAccess: false, isBot: false, createdAt: '2026-10-01T00:00:00.000Z', lastSeenAt: T0 },
+  { id: U(2), email: 'trader.an@example.com', name: 'Trần An', role: 'user', status: 'active', emailVerified: true, twoFactorEnabled: true, signalsAccess: true, isBot: false, createdAt: '2026-10-02T08:00:00.000Z', lastSeenAt: '2026-10-09T02:10:00.000Z' },
+  { id: U(3), email: 'spam.bot@example.com', name: 'Spam', role: 'user', status: 'locked', emailVerified: false, twoFactorEnabled: false, signalsAccess: false, isBot: false, createdAt: '2026-10-05T12:00:00.000Z', lastSeenAt: null },
+  { id: U(4), email: 'support@example.com', name: 'Hỗ trợ', role: 'support', status: 'active', emailVerified: true, twoFactorEnabled: true, signalsAccess: false, isBot: false, createdAt: '2026-09-30T00:00:00.000Z', lastSeenAt: '2026-10-08T15:00:00.000Z' },
+  { id: U(5), email: 'admin@example.com', name: 'Quản trị', role: 'admin', status: 'active', emailVerified: true, twoFactorEnabled: true, signalsAccess: true, isBot: false, createdAt: '2026-09-30T00:00:00.000Z', lastSeenAt: T0 },
+  { id: U(6), email: 'owner@example.com', name: 'Chủ dự án', role: 'owner', status: 'active', emailVerified: true, twoFactorEnabled: true, signalsAccess: true, isBot: false, createdAt: '2026-09-29T00:00:00.000Z', lastSeenAt: '2026-10-09T01:00:00.000Z' },
+  { id: U(7), email: 'signals-bot@system.local', name: 'Signal bot', role: 'user', status: 'active', emailVerified: true, twoFactorEnabled: false, signalsAccess: false, isBot: true, createdAt: '2026-09-29T00:00:00.000Z', lastSeenAt: null },
+];
+
+export function fixtureAdminUserDetail(userId: string): AdminUserDetail | null {
+  const user = fixtureAdminUsers.find((u) => u.id === userId);
+  if (!user) return null;
+  const isDemo = user.id === U(1);
+  return {
+    user,
+    balances: isDemo ? fixtureBalances.items : [{ asset: 'USDT', available: '10000.00000000', locked: '0.00000000', total: '10000.00000000', valueUsdt: '10000.00000000' }],
+    totalValueUsdt: isDemo ? fixtureBalances.totalValueUsdt : '10000.00000000',
+    unpricedAssets: isDemo ? fixtureBalances.unpricedAssets : [],
+    openOrders: isDemo ? fixtureOpenOrders.length : 0,
+    activeSessions: user.lastSeenAt ? 1 : 0,
+    faucetTotalClaimed: '10000.00000000',
+  };
+}
+
+export const fixtureExchangeSettings: ExchangeSettings = {
+  tradingHalted: false,
+  feeRate: '0.001',
+  faucet: { asset: 'USDT', amount: '10000.00000000', cooldownHours: 24, lifetimeCap: '100000.00000000' },
+  staleThresholdMs: 10000,
+  updatedAt: '2026-10-09T00:00:00.000Z',
+};
+
+export const fixtureAdminSymbols: AdminSymbol[] = fixtureSymbols.map((s) => ({
+  ...s,
+  sourceStatus: 'TRADING',
+  adminEnabled: s.enabled,
+  openOrders: s.symbol === 'BTCUSDT' ? 3 : s.symbol === 'ETHUSDT' ? 2 : 0,
+  updatedAt: '2026-10-09T00:00:00.000Z',
+}));
+
+export const fixtureReconciliationRuns: ReconciliationRun[] = [
+  { id: '42', startedAt: '2026-10-09T02:50:00.000Z', finishedAt: '2026-10-09T02:50:00.180Z', ok: true, checkedBalances: 128, mismatches: [] },
+  {
+    id: '41',
+    startedAt: '2026-10-09T02:40:00.000Z',
+    finishedAt: '2026-10-09T02:40:00.210Z',
+    ok: false,
+    checkedBalances: 127,
+    mismatches: [{ kind: 'LEDGER_VS_BALANCE', userId: U(2), asset: 'USDT', field: 'available', expected: '9500.000000000000000000', actual: '9500.010000000000000000' }],
+  },
+];
+
+export const fixtureAuditLogs: AuditLogEntry[] = [
+  { id: '9', actor: { id: U(5), email: 'admin@example.com' }, action: 'BALANCE_ADJUST', targetType: 'USER', targetId: U(2), before: { asset: 'USDT', available: '9000.00000000' }, after: { asset: 'USDT', available: '9500.00000000' }, reason: 'Bù lỗi hiển thị phí ngày 08/10', ip: '203.0.113.5', createdAt: '2026-10-09T02:30:00.000Z' },
+  { id: '8', actor: { id: U(5), email: 'admin@example.com' }, action: 'USER_LOCK', targetType: 'USER', targetId: U(3), before: { status: 'active' }, after: { status: 'locked' }, reason: 'Tạo tài khoản hàng loạt', ip: '203.0.113.5', createdAt: '2026-10-08T10:00:00.000Z' },
+  { id: '7', actor: { id: U(6), email: 'owner@example.com' }, action: 'USER_ROLE', targetType: 'USER', targetId: U(4), before: { role: 'user' }, after: { role: 'support' }, reason: 'Nhân viên hỗ trợ mới', ip: '198.51.100.2', createdAt: '2026-09-30T09:00:00.000Z' },
+  { id: '6', actor: { id: U(6), email: 'owner@example.com' }, action: 'SETTINGS_UPDATE', targetType: 'EXCHANGE', targetId: null, before: { feeRate: '0.002' }, after: { feeRate: '0.001' }, reason: 'Giảm phí giai đoạn thử nghiệm', ip: '198.51.100.2', createdAt: '2026-09-30T08:00:00.000Z' },
+  { id: '1', actor: null, action: 'ROLE_BOOTSTRAP', targetType: 'USER', targetId: U(6), before: { role: 'user' }, after: { role: 'owner' }, reason: 'Initial owner', ip: null, createdAt: '2026-09-29T00:00:00.000Z' },
+];
+
+export const fixtureAdminOverview: AdminOverview = {
+  users: { total: 128, newLast24h: 6, locked: 1, staff: 3 },
+  orders: { open: 37, placedLast24h: 412 },
+  trades: { last24h: 655 },
+  tradingHalted: false,
+  market: fixtureMarketStatus,
+  lastReconciliation: fixtureReconciliationRuns[0]!,
+  serverTime: T0,
 };

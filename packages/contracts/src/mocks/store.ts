@@ -3,15 +3,20 @@
  * matching, fees and balances live on the server. Uses JS numbers internally; never copy
  * this math into the UI.
  */
-import type { Balance, MarketTrade, Notification, Order, OrderList, Preferences, PriceAlert, Trade, UserEvent } from '../index.ts';
+import type { AdminSymbol, AdminUserSummary, AuditLogEntry, Balance, ExchangeSettings, MarketTrade, Notification, Order, OrderList, Preferences, PriceAlert, ReconciliationRun, Role, Trade, UserEvent } from '../index.ts';
 import {
+  fixtureAdminSymbols,
+  fixtureAdminUsers,
   fixtureAlerts,
+  fixtureAuditLogs,
+  fixtureExchangeSettings,
   fixtureMyTrades,
   fixtureNotifications,
   fixtureOpenOrders,
   fixtureOrderHistory,
   fixtureOrderList,
   fixturePreferences,
+  fixtureReconciliationRuns,
   MOCK_PAIRS,
 } from '../fixtures/index.ts';
 
@@ -31,6 +36,14 @@ const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
 export const mockStore = {
   scenario: 'normal' as MockScenario,
   signedIn: true,
+  /** Role of the signed-in mock user — see setMockRole(). */
+  role: 'user' as Role,
+  twoFactorEnabled: false,
+  adminUsers: clone(fixtureAdminUsers) as AdminUserSummary[],
+  auditLogs: clone(fixtureAuditLogs) as AuditLogEntry[],
+  settings: clone(fixtureExchangeSettings) as ExchangeSettings,
+  adminSymbols: clone(fixtureAdminSymbols) as AdminSymbol[],
+  reconciliationRuns: clone(fixtureReconciliationRuns) as ReconciliationRun[],
   faucetClaimedAt: Date.parse('2026-10-09T03:00:00.000Z') as number | null,
   totalClaimed: 10000,
   balances: initialBalances(),
@@ -62,12 +75,30 @@ export function resetMockStore(scenario: MockScenario = 'normal'): void {
   mockStore.alerts = empty ? [] : clone(fixtureAlerts);
   mockStore.notifications = empty ? [] : clone(fixtureNotifications);
   mockStore.preferences = clone(fixturePreferences);
+  mockStore.adminUsers = clone(fixtureAdminUsers);
+  mockStore.auditLogs = clone(fixtureAuditLogs);
+  mockStore.settings = { ...clone(fixtureExchangeSettings), tradingHalted: scenario === 'halted' };
+  mockStore.adminSymbols = clone(fixtureAdminSymbols);
+  mockStore.reconciliationRuns = clone(fixtureReconciliationRuns);
   mockStore.nextId = 1000;
   mockStore.prices = Object.fromEntries(Object.entries(MOCK_PAIRS).map(([s, p]) => [s, p.price]));
 }
 
 export function setMockScenario(s: MockScenario): void {
+  const { role, twoFactorEnabled } = mockStore;
   resetMockStore(s);
+  mockStore.role = role;
+  mockStore.twoFactorEnabled = twoFactorEnabled;
+}
+
+/**
+ * Sign the mock user in as `role`. Staff roles get 2FA on by default (pass false to see the
+ * "enable 2FA first" screen of the admin app).
+ */
+export function setMockRole(role: Role, twoFactorEnabled = role !== 'user'): void {
+  mockStore.role = role;
+  mockStore.twoFactorEnabled = twoFactorEnabled;
+  mockStore.signedIn = true;
 }
 
 export function nextId(): string {

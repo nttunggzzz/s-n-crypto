@@ -51,8 +51,9 @@ export function route<N extends EndpointName>(
       if (level === 'verified' && opts.requireEmailVerification && !auth.user.emailVerifiedAt) {
         throw new AppError('EMAIL_NOT_VERIFIED', 'Verify your email first');
       }
-      if (level === 'admin' && auth.user.role !== 'admin' && auth.user.role !== 'owner') {
-        throw new AppError('FORBIDDEN', 'Admin only');
+      if (level === 'staff') {
+        // Admin API is declared in contracts 0.3.0; enforcement (2FA + permissions) lands in the next commit.
+        throw new AppError('TWO_FACTOR_REQUIRED', 'Admin API not available yet');
       }
     }
     const d = def as { path: string; params?: z.ZodType; query?: z.ZodType; body?: z.ZodType; response: z.ZodType; status?: number; format?: 'json' | 'csv' };

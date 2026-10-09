@@ -13,6 +13,11 @@ export const ErrorCode = z.enum([
   // account
   'EMAIL_NOT_VERIFIED',
   'ACCOUNT_LOCKED',
+  /** staff must enable 2FA (and sign in with it) before using the admin API */
+  'TWO_FACTOR_REQUIRED',
+  'INVALID_TWO_FACTOR_CODE',
+  /** the signal bot account cannot be modified */
+  'BOT_ACCOUNT_PROTECTED',
   // exchange state
   'TRADING_HALTED',
   'SYMBOL_DISABLED',
@@ -65,6 +70,9 @@ export const ERROR_HTTP_STATUS: Record<ErrorCode, number> = {
   INTERNAL_ERROR: 500,
   EMAIL_NOT_VERIFIED: 403,
   ACCOUNT_LOCKED: 403,
+  TWO_FACTOR_REQUIRED: 403,
+  INVALID_TWO_FACTOR_CODE: 400,
+  BOT_ACCOUNT_PROTECTED: 403,
   TRADING_HALTED: 409,
   SYMBOL_DISABLED: 409,
   MARKET_DATA_STALE: 503,
