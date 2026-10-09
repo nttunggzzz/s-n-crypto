@@ -1,0 +1,409 @@
+{
+  "report_name": "Phase 2 Final Strict Integrity Audit",
+  "generated_at": "2026-08-31T07:45:26.443Z",
+  "status": "COMPLETED",
+  "infrastructure_status": "OK",
+  "number_of_assets": 22,
+  "active_assets": 20,
+  "inactive_assets": 2,
+  "number_of_candles": 54000,
+  "number_of_1h_candles": 43200,
+  "number_of_4h_candles": 10800,
+  "historical_coverage": "90 Days of 1H and 4H Data",
+  "first_historical_timestamp_utc": 1780372800000,
+  "last_historical_timestamp_utc": 1788156000000,
+  "first_historical_timestamp_hcm": "2026-06-02T11:00:00+07:00",
+  "last_historical_timestamp_hcm": "2026-08-31T13:00:00+07:00",
+  "per_symbol_coverage": {
+    "BTCUSDT": {
+      "1h": {
+        "count": 2160,
+        "gaps": 0,
+        "duplicates": 0,
+        "expected": 2160,
+        "first_timestamp": 1780383600000,
+        "last_timestamp": 1788156000000
+      },
+      "4h": {
+        "count": 540,
+        "gaps": 0,
+        "duplicates": 0,
+        "expected": 540,
+        "first_timestamp": 1780372800000,
+        "last_timestamp": 1788134400000
+      }
+    },
+    "ETHUSDT": {
+      "1h": {
+        "count": 2160,
+        "gaps": 0,
+        "duplicates": 0,
+        "expected": 2160,
+        "first_timestamp": 1780383600000,
+        "last_timestamp": 1788156000000
+      },
+      "4h": {
+        "count": 540,
+        "gaps": 0,
+        "duplicates": 0,
+        "expected": 540,
+        "first_timestamp": 1780372800000,
+        "last_timestamp": 1788134400000
+      }
+    },
+    "SOLUSDT": {
+      "1h": {
+        "count": 2160,
+        "gaps": 0,
+        "duplicates": 0,
+        "expected": 2160,
+        "first_timestamp": 1780383600000,
+        "last_timestamp": 1788156000000
+      },
+      "4h": {
+        "count": 540,
+        "gaps": 0,
+        "duplicates": 0,
+        "expected": 540,
+        "first_timestamp": 1780372800000,
+        "last_timestamp": 1788134400000
+      }
+    },
+    "BNBUSDT": {
+      "1h": {
+        "count": 2160,
+        "gaps": 0,
+        "duplicates": 0,
+        "expected": 2160,
+        "first_timestamp": 1780383600000,
+        "last_timestamp": 1788156000000
+      },
+      "4h": {
+        "count": 540,
+        "gaps": 0,
+        "duplicates": 0,
+        "expected": 540,
+        "first_timestamp": 1780372800000,
+        "last_timestamp": 1788134400000
+      }
+    },
+    "XRPUSDT": {
+      "1h": {
+        "count": 2160,
+        "gaps": 0,
+        "duplicates": 0,
+        "expected": 2160,
+        "first_timestamp": 1780383600000,
+        "last_timestamp": 1788156000000
+      },
+      "4h": {
+        "count": 540,
+        "gaps": 0,
+        "duplicates": 0,
+        "expected": 540,
+        "first_timestamp": 1780372800000,
+        "last_timestamp": 1788134400000
+      }
+    },
+    "ADAUSDT": {
+      "1h": {
+        "count": 2160,
+        "gaps": 0,
+        "duplicates": 0,
+        "expected": 2160,
+        "first_timestamp": 1780383600000,
+        "last_timestamp": 1788156000000
+      },
+      "4h": {
+        "count": 540,
+        "gaps": 0,
+        "duplicates": 0,
+        "expected": 540,
+        "first_timestamp": 1780372800000,
+        "last_timestamp": 1788134400000
+      }
+    },
+    "AVAXUSDT": {
+      "1h": {
+        "count": 2160,
+        "gaps": 0,
+        "duplicates": 0,
+        "expected": 2160,
+        "first_timestamp": 1780383600000,
+        "last_timestamp": 1788156000000
+      },
+      "4h": {
+        "count": 540,
+        "gaps": 0,
+        "duplicates": 0,
+        "expected": 540,
+        "first_timestamp": 1780372800000,
+        "last_timestamp": 1788134400000
+      }
+    },
+    "DOGEUSDT": {
+      "1h": {
+        "count": 2160,
+        "gaps": 0,
+        "duplicates": 0,
+        "expected": 2160,
+        "first_timestamp": 1780383600000,
+        "last_timestamp": 1788156000000
+      },
+      "4h": {
+        "count": 540,
+        "gaps": 0,
+        "duplicates": 0,
+        "expected": 540,
+        "first_timestamp": 1780372800000,
+        "last_timestamp": 1788134400000
+      }
+    },
+    "DOTUSDT": {
+      "1h": {
+        "count": 2160,
+        "gaps": 0,
+        "duplicates": 0,
+        "expected": 2160,
+        "first_timestamp": 1780383600000,
+        "last_timestamp": 1788156000000
+      },
+      "4h": {
+        "count": 540,
+        "gaps": 0,
+        "duplicates": 0,
+        "expected": 540,
+        "first_timestamp": 1780372800000,
+        "last_timestamp": 1788134400000
+      }
+    },
+    "LINKUSDT": {
+      "1h": {
+        "count": 2160,
+        "gaps": 0,
+        "duplicates": 0,
+        "expected": 2160,
+        "first_timestamp": 1780383600000,
+        "last_timestamp": 1788156000000
+      },
+      "4h": {
+        "count": 540,
+        "gaps": 0,
+        "duplicates": 0,
+        "expected": 540,
+        "first_timestamp": 1780372800000,
+        "last_timestamp": 1788134400000
+      }
+    },
+    "POLUSDT": {
+      "1h": {
+        "count": 2160,
+        "gaps": 0,
+        "duplicates": 0,
+        "expected": 2160,
+        "first_timestamp": 1780383600000,
+        "last_timestamp": 1788156000000
+      },
+      "4h": {
+        "count": 540,
+        "gaps": 0,
+        "duplicates": 0,
+        "expected": 540,
+        "first_timestamp": 1780372800000,
+        "last_timestamp": 1788134400000
+      }
+    },
+    "SUIUSDT": {
+      "1h": {
+        "count": 2160,
+        "gaps": 0,
+        "duplicates": 0,
+        "expected": 2160,
+        "first_timestamp": 1780383600000,
+        "last_timestamp": 1788156000000
+      },
+      "4h": {
+        "count": 540,
+        "gaps": 0,
+        "duplicates": 0,
+        "expected": 540,
+        "first_timestamp": 1780372800000,
+        "last_timestamp": 1788134400000
+      }
+    },
+    "APTUSDT": {
+      "1h": {
+        "count": 2160,
+        "gaps": 0,
+        "duplicates": 0,
+        "expected": 2160,
+        "first_timestamp": 1780383600000,
+        "last_timestamp": 1788156000000
+      },
+      "4h": {
+        "count": 540,
+        "gaps": 0,
+        "duplicates": 0,
+        "expected": 540,
+        "first_timestamp": 1780372800000,
+        "last_timestamp": 1788134400000
+      }
+    },
+    "ARBUSDT": {
+      "1h": {
+        "count": 2160,
+        "gaps": 0,
+        "duplicates": 0,
+        "expected": 2160,
+        "first_timestamp": 1780383600000,
+        "last_timestamp": 1788156000000
+      },
+      "4h": {
+        "count": 540,
+        "gaps": 0,
+        "duplicates": 0,
+        "expected": 540,
+        "first_timestamp": 1780372800000,
+        "last_timestamp": 1788134400000
+      }
+    },
+    "OPUSDT": {
+      "1h": {
+        "count": 2160,
+        "gaps": 0,
+        "duplicates": 0,
+        "expected": 2160,
+        "first_timestamp": 1780383600000,
+        "last_timestamp": 1788156000000
+      },
+      "4h": {
+        "count": 540,
+        "gaps": 0,
+        "duplicates": 0,
+        "expected": 540,
+        "first_timestamp": 1780372800000,
+        "last_timestamp": 1788134400000
+      }
+    },
+    "RENDERUSDT": {
+      "1h": {
+        "count": 2160,
+        "gaps": 0,
+        "duplicates": 0,
+        "expected": 2160,
+        "first_timestamp": 1780383600000,
+        "last_timestamp": 1788156000000
+      },
+      "4h": {
+        "count": 540,
+        "gaps": 0,
+        "duplicates": 0,
+        "expected": 540,
+        "first_timestamp": 1780372800000,
+        "last_timestamp": 1788134400000
+      }
+    },
+    "INJUSDT": {
+      "1h": {
+        "count": 2160,
+        "gaps": 0,
+        "duplicates": 0,
+        "expected": 2160,
+        "first_timestamp": 1780383600000,
+        "last_timestamp": 1788156000000
+      },
+      "4h": {
+        "count": 540,
+        "gaps": 0,
+        "duplicates": 0,
+        "expected": 540,
+        "first_timestamp": 1780372800000,
+        "last_timestamp": 1788134400000
+      }
+    },
+    "TAOUSDT": {
+      "1h": {
+        "count": 2160,
+        "gaps": 0,
+        "duplicates": 0,
+        "expected": 2160,
+        "first_timestamp": 1780383600000,
+        "last_timestamp": 1788156000000
+      },
+      "4h": {
+        "count": 540,
+        "gaps": 0,
+        "duplicates": 0,
+        "expected": 540,
+        "first_timestamp": 1780372800000,
+        "last_timestamp": 1788134400000
+      }
+    },
+    "TIAUSDT": {
+      "1h": {
+        "count": 2160,
+        "gaps": 0,
+        "duplicates": 0,
+        "expected": 2160,
+        "first_timestamp": 1780383600000,
+        "last_timestamp": 1788156000000
+      },
+      "4h": {
+        "count": 540,
+        "gaps": 0,
+        "duplicates": 0,
+        "expected": 540,
+        "first_timestamp": 1780372800000,
+        "last_timestamp": 1788134400000
+      }
+    },
+    "WLDUSDT": {
+      "1h": {
+        "count": 2160,
+        "gaps": 0,
+        "duplicates": 0,
+        "expected": 2160,
+        "first_timestamp": 1780383600000,
+        "last_timestamp": 1788156000000
+      },
+      "4h": {
+        "count": 540,
+        "gaps": 0,
+        "duplicates": 0,
+        "expected": 540,
+        "first_timestamp": 1780372800000,
+        "last_timestamp": 1788134400000
+      }
+    }
+  },
+  "number_of_gaps": 0,
+  "number_of_duplicate_records": 0,
+  "number_of_out_of_range_records": 0,
+  "number_of_derivatives_snapshots": 20,
+  "derivatives_coverage_type": "LIVE_SNAPSHOT",
+  "number_of_tvl_snapshots": 15,
+  "number_of_stablecoin_snapshots": 8,
+  "replay_tests": "PASSED",
+  "deduplication_tests": "PASSED",
+  "restart_persistence_test": "PASSED",
+  "look_ahead_tests": "PASSED",
+  "timezone_tests": "PASSED",
+  "provider_status": {
+    "binance_spot": "CONFIGURED",
+    "binance_futures": "CONFIGURED",
+    "defi_llama": "CONFIGURED",
+    "onchain_indexer": "NOT_CONFIGURED"
+  },
+  "provider_latency": {
+    "binance_spot": 167,
+    "binance_futures": 88,
+    "defillama": 39
+  },
+  "provider_errors": 0,
+  "backfill_failures": 0,
+  "failed_tests": 0,
+  "remaining_blockers": [],
+  "number_of_fetched_records": 54043,
+  "number_of_backfilled_records": 54043,
+  "number_of_rejected_records": 0
+}

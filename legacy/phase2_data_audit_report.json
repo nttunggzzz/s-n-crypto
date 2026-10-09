@@ -1,0 +1,425 @@
+{
+  "candle_reconciliation": {
+    "total_candles": 48604,
+    "expected_candles_approx": 54000,
+    "symbols": {
+      "ADAUSDT": {
+        "1H_count": 2160,
+        "4H_count": 540,
+        "earliest_1H": 1780243200000,
+        "latest_1H": 1788015600000,
+        "earliest_4H": 1780243200000,
+        "latest_4H": 1788004800000,
+        "missing_1H_intervals": 0,
+        "missing_4H_intervals": 0
+      },
+      "APTUSDT": {
+        "1H_count": 2160,
+        "4H_count": 540,
+        "earliest_1H": 1780243200000,
+        "latest_1H": 1788015600000,
+        "earliest_4H": 1780243200000,
+        "latest_4H": 1788004800000,
+        "missing_1H_intervals": 0,
+        "missing_4H_intervals": 0
+      },
+      "ARBUSDT": {
+        "1H_count": 2160,
+        "4H_count": 540,
+        "earliest_1H": 1780243200000,
+        "latest_1H": 1788015600000,
+        "earliest_4H": 1780243200000,
+        "latest_4H": 1788004800000,
+        "missing_1H_intervals": 0,
+        "missing_4H_intervals": 0
+      },
+      "AVAXUSDT": {
+        "1H_count": 2160,
+        "4H_count": 540,
+        "earliest_1H": 1780243200000,
+        "latest_1H": 1788015600000,
+        "earliest_4H": 1780243200000,
+        "latest_4H": 1788004800000,
+        "missing_1H_intervals": 0,
+        "missing_4H_intervals": 0
+      },
+      "BNBUSDT": {
+        "1H_count": 2160,
+        "4H_count": 540,
+        "earliest_1H": 1780243200000,
+        "latest_1H": 1788015600000,
+        "earliest_4H": 1780243200000,
+        "latest_4H": 1788004800000,
+        "missing_1H_intervals": 0,
+        "missing_4H_intervals": 0
+      },
+      "BTCUSDT": {
+        "1H_count": 2160,
+        "4H_count": 540,
+        "earliest_1H": 1780243200000,
+        "latest_1H": 1788015600000,
+        "earliest_4H": 1780243200000,
+        "latest_4H": 1788004800000,
+        "missing_1H_intervals": 0,
+        "missing_4H_intervals": 0
+      },
+      "DOGEUSDT": {
+        "1H_count": 2160,
+        "4H_count": 540,
+        "earliest_1H": 1780243200000,
+        "latest_1H": 1788015600000,
+        "earliest_4H": 1780243200000,
+        "latest_4H": 1788004800000,
+        "missing_1H_intervals": 0,
+        "missing_4H_intervals": 0
+      },
+      "DOTUSDT": {
+        "1H_count": 2160,
+        "4H_count": 540,
+        "earliest_1H": 1780243200000,
+        "latest_1H": 1788015600000,
+        "earliest_4H": 1780243200000,
+        "latest_4H": 1788004800000,
+        "missing_1H_intervals": 0,
+        "missing_4H_intervals": 0
+      },
+      "ETHUSDT": {
+        "1H_count": 2160,
+        "4H_count": 540,
+        "earliest_1H": 1780243200000,
+        "latest_1H": 1788015600000,
+        "earliest_4H": 1780243200000,
+        "latest_4H": 1788004800000,
+        "missing_1H_intervals": 0,
+        "missing_4H_intervals": 0
+      },
+      "INJUSDT": {
+        "1H_count": 2160,
+        "4H_count": 540,
+        "earliest_1H": 1780243200000,
+        "latest_1H": 1788015600000,
+        "earliest_4H": 1780243200000,
+        "latest_4H": 1788004800000,
+        "missing_1H_intervals": 0,
+        "missing_4H_intervals": 0
+      },
+      "LINKUSDT": {
+        "1H_count": 2160,
+        "4H_count": 540,
+        "earliest_1H": 1780243200000,
+        "latest_1H": 1788015600000,
+        "earliest_4H": 1780243200000,
+        "latest_4H": 1788004800000,
+        "missing_1H_intervals": 0,
+        "missing_4H_intervals": 0
+      },
+      "MATICUSDT": {
+        "1H_count": 0,
+        "4H_count": 2,
+        "earliest_1H": null,
+        "latest_1H": null,
+        "earliest_4H": 1725912000000,
+        "latest_4H": 1725926400000,
+        "missing_1H_intervals": 0,
+        "missing_4H_intervals": 0
+      },
+      "OPUSDT": {
+        "1H_count": 2160,
+        "4H_count": 540,
+        "earliest_1H": 1780243200000,
+        "latest_1H": 1788015600000,
+        "earliest_4H": 1780243200000,
+        "latest_4H": 1788004800000,
+        "missing_1H_intervals": 0,
+        "missing_4H_intervals": 0
+      },
+      "RNDRUSDT": {
+        "1H_count": 0,
+        "4H_count": 2,
+        "earliest_1H": null,
+        "latest_1H": null,
+        "earliest_4H": 1721592000000,
+        "latest_4H": 1721606400000,
+        "missing_1H_intervals": 0,
+        "missing_4H_intervals": 0
+      },
+      "SOLUSDT": {
+        "1H_count": 2160,
+        "4H_count": 540,
+        "earliest_1H": 1780243200000,
+        "latest_1H": 1788015600000,
+        "earliest_4H": 1780243200000,
+        "latest_4H": 1788004800000,
+        "missing_1H_intervals": 0,
+        "missing_4H_intervals": 0
+      },
+      "SUIUSDT": {
+        "1H_count": 2160,
+        "4H_count": 540,
+        "earliest_1H": 1780243200000,
+        "latest_1H": 1788015600000,
+        "earliest_4H": 1780243200000,
+        "latest_4H": 1788004800000,
+        "missing_1H_intervals": 0,
+        "missing_4H_intervals": 0
+      },
+      "TAOUSDT": {
+        "1H_count": 2160,
+        "4H_count": 540,
+        "earliest_1H": 1780243200000,
+        "latest_1H": 1788015600000,
+        "earliest_4H": 1780243200000,
+        "latest_4H": 1788004800000,
+        "missing_1H_intervals": 0,
+        "missing_4H_intervals": 0
+      },
+      "TIAUSDT": {
+        "1H_count": 2160,
+        "4H_count": 540,
+        "earliest_1H": 1780243200000,
+        "latest_1H": 1788015600000,
+        "earliest_4H": 1780243200000,
+        "latest_4H": 1788004800000,
+        "missing_1H_intervals": 0,
+        "missing_4H_intervals": 0
+      },
+      "WLDUSDT": {
+        "1H_count": 2160,
+        "4H_count": 540,
+        "earliest_1H": 1780243200000,
+        "latest_1H": 1788015600000,
+        "earliest_4H": 1780243200000,
+        "latest_4H": 1788004800000,
+        "missing_1H_intervals": 0,
+        "missing_4H_intervals": 0
+      },
+      "XRPUSDT": {
+        "1H_count": 2160,
+        "4H_count": 540,
+        "earliest_1H": 1780243200000,
+        "latest_1H": 1788015600000,
+        "earliest_4H": 1780243200000,
+        "latest_4H": 1788004800000,
+        "missing_1H_intervals": 0,
+        "missing_4H_intervals": 0
+      }
+    }
+  },
+  "timestamp_audit": {
+    "earliest_candle_timestamp": 1721592000000,
+    "latest_candle_timestamp": 1788015600000,
+    "actual_elapsed_calendar_days": 768.7916666666666
+  },
+  "gap_audit": {
+    "total_missing_intervals": 0
+  },
+  "duplication_audit": {
+    "duplicate_records_count": 0
+  },
+  "derivatives_audit": {
+    "total_snapshots": 40,
+    "unique_symbols": 20,
+    "earliest_timestamp": 1788017263746,
+    "latest_timestamp": 1788017390708,
+    "symbols": {
+      "ADAUSDT": {
+        "count": 2,
+        "earliest_timestamp": 1788017272669,
+        "latest_timestamp": 1788017365540
+      },
+      "APTUSDT": {
+        "count": 2,
+        "earliest_timestamp": 1788017285174,
+        "latest_timestamp": 1788017378051
+      },
+      "ARBUSDT": {
+        "count": 2,
+        "earliest_timestamp": 1788017286958,
+        "latest_timestamp": 1788017379841
+      },
+      "AVAXUSDT": {
+        "count": 2,
+        "earliest_timestamp": 1788017274454,
+        "latest_timestamp": 1788017367321
+      },
+      "BNBUSDT": {
+        "count": 2,
+        "earliest_timestamp": 1788017269097,
+        "latest_timestamp": 1788017361967
+      },
+      "BTCUSDT": {
+        "count": 2,
+        "earliest_timestamp": 1788017263746,
+        "latest_timestamp": 1788017356581
+      },
+      "DOGEUSDT": {
+        "count": 2,
+        "earliest_timestamp": 1788017276237,
+        "latest_timestamp": 1788017369104
+      },
+      "DOTUSDT": {
+        "count": 2,
+        "earliest_timestamp": 1788017278030,
+        "latest_timestamp": 1788017370885
+      },
+      "ETHUSDT": {
+        "count": 2,
+        "earliest_timestamp": 1788017265536,
+        "latest_timestamp": 1788017358390
+      },
+      "INJUSDT": {
+        "count": 2,
+        "earliest_timestamp": 1788017292323,
+        "latest_timestamp": 1788017385317
+      },
+      "LINKUSDT": {
+        "count": 2,
+        "earliest_timestamp": 1788017279816,
+        "latest_timestamp": 1788017372672
+      },
+      "MATICUSDT": {
+        "count": 2,
+        "earliest_timestamp": 1788017281603,
+        "latest_timestamp": 1788017374461
+      },
+      "OPUSDT": {
+        "count": 2,
+        "earliest_timestamp": 1788017288740,
+        "latest_timestamp": 1788017381624
+      },
+      "RNDRUSDT": {
+        "count": 2,
+        "earliest_timestamp": 1788017290529,
+        "latest_timestamp": 1788017383536
+      },
+      "SOLUSDT": {
+        "count": 2,
+        "earliest_timestamp": 1788017267316,
+        "latest_timestamp": 1788017360177
+      },
+      "SUIUSDT": {
+        "count": 2,
+        "earliest_timestamp": 1788017283391,
+        "latest_timestamp": 1788017376241
+      },
+      "TAOUSDT": {
+        "count": 2,
+        "earliest_timestamp": 1788017294108,
+        "latest_timestamp": 1788017387129
+      },
+      "TIAUSDT": {
+        "count": 2,
+        "earliest_timestamp": 1788017295889,
+        "latest_timestamp": 1788017388920
+      },
+      "WLDUSDT": {
+        "count": 2,
+        "earliest_timestamp": 1788017297668,
+        "latest_timestamp": 1788017390708
+      },
+      "XRPUSDT": {
+        "count": 2,
+        "earliest_timestamp": 1788017270885,
+        "latest_timestamp": 1788017363755
+      }
+    }
+  },
+  "tvl_audit": {
+    "number_of_ecosystems": 4,
+    "total_snapshots": 30,
+    "ecosystems": {
+      "BITCOIN_ECOSYSTEM": {
+        "count": 2,
+        "earliest_timestamp": 1788017299535,
+        "latest_timestamp": 1788017392537
+      },
+      "ETH_L2": {
+        "count": 10,
+        "earliest_timestamp": 1788017299535,
+        "latest_timestamp": 1788017392537
+      },
+      "MODULAR_INFRA": {
+        "count": 16,
+        "earliest_timestamp": 1788017299535,
+        "latest_timestamp": 1788017392537
+      },
+      "SOLANA_ECOSYSTEM": {
+        "count": 2,
+        "earliest_timestamp": 1788017299535,
+        "latest_timestamp": 1788017392537
+      }
+    }
+  },
+  "stablecoin_audit": {
+    "number_of_entities": 8,
+    "total_snapshots": 16,
+    "entities": {
+      "BUIDL": {
+        "count": 2,
+        "earliest_timestamp": 1788017299598,
+        "latest_timestamp": 1788017392620
+      },
+      "DAI": {
+        "count": 2,
+        "earliest_timestamp": 1788017299598,
+        "latest_timestamp": 1788017392620
+      },
+      "USD1": {
+        "count": 2,
+        "earliest_timestamp": 1788017299598,
+        "latest_timestamp": 1788017392620
+      },
+      "USDC": {
+        "count": 2,
+        "earliest_timestamp": 1788017299598,
+        "latest_timestamp": 1788017392620
+      },
+      "USDG": {
+        "count": 2,
+        "earliest_timestamp": 1788017299598,
+        "latest_timestamp": 1788017392620
+      },
+      "USDS": {
+        "count": 2,
+        "earliest_timestamp": 1788017299598,
+        "latest_timestamp": 1788017392620
+      },
+      "USDT": {
+        "count": 2,
+        "earliest_timestamp": 1788017299598,
+        "latest_timestamp": 1788017392620
+      },
+      "USDe": {
+        "count": 2,
+        "earliest_timestamp": 1788017299598,
+        "latest_timestamp": 1788017392620
+      }
+    }
+  },
+  "database_engine_audit": {
+    "database_engine": "SQLite",
+    "database_file_or_connection_type": "file:./crypto_intelligence.db",
+    "migration_system": "drizzle-kit",
+    "ORM": "drizzle-orm",
+    "persistence_location": "Local File System"
+  },
+  "provider_verification": {
+    "binance_spot": {
+      "status": "OK"
+    },
+    "binance_futures": {
+      "status": "OK"
+    },
+    "defillama": {
+      "status": "OK"
+    },
+    "onchain": {
+      "status": "NOT_CONFIGURED"
+    }
+  },
+  "timezone_audit": {
+    "database_timezone": "UTC",
+    "application_timezone": "Asia/Ho_Chi_Minh",
+    "reporting_timezone": "Asia/Ho_Chi_Minh"
+  }
+}

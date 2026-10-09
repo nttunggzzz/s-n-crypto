@@ -1,0 +1,493 @@
+{
+  "auditMetadata": {
+    "systemName": "Crypto Intelligence & Trading Signal System",
+    "auditTimestamp": "2026-08-29T07:30:06-07:00",
+    "auditor": "AI System Integrity Auditor",
+    "version": "2.4",
+    "architectureType": "Full-Stack (React 18 + Node.js/Express + Deterministic Analytical Engines + Gemini 2.5 Flash)",
+    "verificationTiers": {
+      "LIVE_API": "Connected to real external production REST endpoints",
+      "REAL_COMPUTATION": "Deterministic algorithms executed directly on real OHLCV / live market data",
+      "COMPUTED_MIXED": "Valid mathematical formulas executed using a mix of real data and static/synthetic parameters",
+      "MOCK_SIMULATED": "Synthetic in-memory formulas, static arrays, or unverified mock seeds",
+      "HARDCODED": "Static constants with no dynamic calculation",
+      "UNCONFIGURED": "Feature stub or interface with no external data feed attached"
+    }
+  },
+  "metricsAudit": [
+    {
+      "metric": "BTC Price",
+      "symbol": "BTC",
+      "currentValue": "~$96,450.00",
+      "dataSource": "Binance Spot API",
+      "provider": "Binance",
+      "apiEndpoint": "https://api.binance.com/api/v3/ticker/24hr",
+      "authRequirement": "None (Public API)",
+      "requestParams": {},
+      "responseFieldsUsed": ["lastPrice", "quoteVolume", "priceChangePercent"],
+      "transformation": "parseFloat(item.lastPrice) for symbol BTCUSDT",
+      "codeLocation": "/server/dataProviders.ts:104",
+      "realData": true,
+      "freshness": "15-second server-side TTL cache",
+      "status": "LIVE_API"
+    },
+    {
+      "metric": "SOL Price",
+      "symbol": "SOL",
+      "currentValue": "~$204.50",
+      "dataSource": "Binance Spot API",
+      "provider": "Binance",
+      "apiEndpoint": "https://api.binance.com/api/v3/ticker/24hr",
+      "authRequirement": "None (Public API)",
+      "requestParams": {},
+      "responseFieldsUsed": ["lastPrice", "quoteVolume", "priceChangePercent"],
+      "transformation": "parseFloat(item.lastPrice) for symbol SOLUSDT",
+      "codeLocation": "/server/dataProviders.ts:104",
+      "realData": true,
+      "freshness": "15-second server-side TTL cache",
+      "status": "LIVE_API"
+    },
+    {
+      "metric": "UNI Price",
+      "symbol": "UNI",
+      "currentValue": "~$11.40",
+      "dataSource": "Binance Spot API",
+      "provider": "Binance",
+      "apiEndpoint": "https://api.binance.com/api/v3/ticker/24hr",
+      "authRequirement": "None (Public API)",
+      "requestParams": {},
+      "responseFieldsUsed": ["lastPrice", "quoteVolume", "priceChangePercent"],
+      "transformation": "parseFloat(item.lastPrice) for symbol UNIUSDT",
+      "codeLocation": "/server/dataProviders.ts:104",
+      "realData": true,
+      "freshness": "15-second server-side TTL cache",
+      "status": "LIVE_API"
+    },
+    {
+      "metric": "TAO Price",
+      "symbol": "TAO",
+      "currentValue": "~$565.00",
+      "dataSource": "Binance Spot API",
+      "provider": "Binance",
+      "apiEndpoint": "https://api.binance.com/api/v3/ticker/24hr",
+      "authRequirement": "None (Public API)",
+      "requestParams": {},
+      "responseFieldsUsed": ["lastPrice", "quoteVolume", "priceChangePercent"],
+      "transformation": "parseFloat(item.lastPrice) for symbol TAOUSDT",
+      "codeLocation": "/server/dataProviders.ts:104",
+      "realData": true,
+      "freshness": "15-second server-side TTL cache",
+      "status": "LIVE_API"
+    },
+    {
+      "metric": "LINK Price",
+      "symbol": "LINK",
+      "currentValue": "~$19.80",
+      "dataSource": "Binance Spot API",
+      "provider": "Binance",
+      "apiEndpoint": "https://api.binance.com/api/v3/ticker/24hr",
+      "authRequirement": "None (Public API)",
+      "requestParams": {},
+      "responseFieldsUsed": ["lastPrice", "quoteVolume", "priceChangePercent"],
+      "transformation": "parseFloat(item.lastPrice) for symbol LINKUSDT",
+      "codeLocation": "/server/dataProviders.ts:104",
+      "realData": true,
+      "freshness": "15-second server-side TTL cache",
+      "status": "LIVE_API"
+    },
+    {
+      "metric": "JUP Price",
+      "symbol": "JUP",
+      "currentValue": "~$1.14",
+      "dataSource": "Binance Spot API",
+      "provider": "Binance",
+      "apiEndpoint": "https://api.binance.com/api/v3/ticker/24hr",
+      "authRequirement": "None (Public API)",
+      "requestParams": {},
+      "responseFieldsUsed": ["lastPrice", "quoteVolume", "priceChangePercent"],
+      "transformation": "parseFloat(item.lastPrice) for symbol JUPUSDT",
+      "codeLocation": "/server/dataProviders.ts:104",
+      "realData": true,
+      "freshness": "15-second server-side TTL cache",
+      "status": "LIVE_API"
+    },
+    {
+      "metric": "Market Cap",
+      "symbol": "ALL",
+      "currentValue": "BTC ~$1.89T, SOL ~$96B, etc.",
+      "dataSource": "Computed (Binance Price * Hardcoded Circulating Supply)",
+      "provider": "Internal / Binance",
+      "apiEndpoint": "None",
+      "authRequirement": "None",
+      "requestParams": {},
+      "responseFieldsUsed": ["lastPrice"],
+      "transformation": "price * circulatingSupply (where circulating supply is stored in a static map)",
+      "codeLocation": "/server/dataProviders.ts:142",
+      "realData": false,
+      "freshness": "Derived live from price",
+      "status": "COMPUTED_MIXED"
+    },
+    {
+      "metric": "24h Volume (Spot)",
+      "symbol": "ALL",
+      "currentValue": "$120M - $3.2B depending on asset",
+      "dataSource": "Binance Spot API",
+      "provider": "Binance",
+      "apiEndpoint": "https://api.binance.com/api/v3/ticker/24hr",
+      "authRequirement": "None",
+      "requestParams": {},
+      "responseFieldsUsed": ["quoteVolume"],
+      "transformation": "parseFloat(usdtPair.quoteVolume)",
+      "codeLocation": "/server/dataProviders.ts:127",
+      "realData": true,
+      "freshness": "15-second server-side TTL cache",
+      "status": "LIVE_API"
+    },
+    {
+      "metric": "Open Interest (OI)",
+      "symbol": "ALL",
+      "currentValue": "BTC ~$3.36B, SOL ~$670M",
+      "dataSource": "Simulated In-Memory Formula",
+      "provider": "None (Mock Generator)",
+      "apiEndpoint": "None (Expected: Binance Futures /fapi/v1/openInterest or CoinGlass)",
+      "authRequirement": "None",
+      "requestParams": {},
+      "responseFieldsUsed": [],
+      "transformation": "marketCap * 0.035 * (1 + oiChange * 0.01)",
+      "codeLocation": "/server/dataProviders.ts:260,283",
+      "realData": false,
+      "freshness": "Simulated per scan",
+      "status": "MOCK_SIMULATED"
+    },
+    {
+      "metric": "24h OI Change (%)",
+      "symbol": "ALL",
+      "currentValue": "+4.2%, -2.1%, etc.",
+      "dataSource": "Pseudo-Random Seed Formula",
+      "provider": "None (Mock Generator)",
+      "apiEndpoint": "None",
+      "authRequirement": "None",
+      "requestParams": {},
+      "responseFieldsUsed": [],
+      "transformation": "((symbol.charCodeAt(0) * 13) % 25) - 8",
+      "codeLocation": "/server/dataProviders.ts:278",
+      "realData": false,
+      "freshness": "Synthetic deterministic seed",
+      "status": "MOCK_SIMULATED"
+    },
+    {
+      "metric": "Funding Rate",
+      "symbol": "ALL",
+      "currentValue": "0.0100% to 0.0125%",
+      "dataSource": "Binance Futures API",
+      "provider": "Binance Futures",
+      "apiEndpoint": "https://fapi.binance.com/fapi/v1/fundingRate?symbol={PAIR}&limit=1",
+      "authRequirement": "None",
+      "requestParams": { "symbol": "BTCUSDT", "limit": 1 },
+      "responseFieldsUsed": ["fundingRate"],
+      "transformation": "parseFloat(data[0].fundingRate)",
+      "codeLocation": "/server/dataProviders.ts:264",
+      "realData": true,
+      "freshness": "Requested live with 0.01 fallback on error",
+      "status": "LIVE_API"
+    },
+    {
+      "metric": "24h Liquidations",
+      "symbol": "ALL",
+      "currentValue": "Long ~$48M / Short ~$38M",
+      "dataSource": "Synthetic Ratio Formula",
+      "provider": "None",
+      "apiEndpoint": "None",
+      "authRequirement": "None",
+      "requestParams": {},
+      "responseFieldsUsed": [],
+      "transformation": "Longs = baseOI * 0.015, Shorts = baseOI * 0.012",
+      "codeLocation": "/server/dataProviders.ts:289-291",
+      "realData": false,
+      "freshness": "Simulated",
+      "status": "MOCK_SIMULATED"
+    },
+    {
+      "metric": "Whale Accumulation",
+      "symbol": "LINK, AAVE, SOL, TAO, ETH",
+      "currentValue": "LINK +$8.91M, AAVE +$5.71M, etc.",
+      "dataSource": "Static Mock Transaction Array",
+      "provider": "None (Expected: Arkham / Nansen / Etherscan / Solscan RPC)",
+      "apiEndpoint": "None",
+      "authRequirement": "None",
+      "requestParams": {},
+      "responseFieldsUsed": [],
+      "transformation": "Aggregated sum of simulated in-memory whale transactions",
+      "codeLocation": "/server/dataProviders.ts:303-394",
+      "realData": false,
+      "freshness": "Static array with generated relative timestamps",
+      "status": "MOCK_SIMULATED"
+    },
+    {
+      "metric": "Whale Transactions",
+      "symbol": "5 Mock Txs",
+      "currentValue": "5 Transactions listed in Whale Radar",
+      "dataSource": "Static Mock Objects in Memory",
+      "provider": "None",
+      "apiEndpoint": "None",
+      "authRequirement": "None",
+      "requestParams": {},
+      "responseFieldsUsed": [],
+      "transformation": "Static mock objects with truncated mock hashes",
+      "codeLocation": "/server/dataProviders.ts:303-394",
+      "realData": false,
+      "freshness": "Static",
+      "status": "MOCK_SIMULATED"
+    },
+    {
+      "metric": "Market Regime",
+      "symbol": "GLOBAL",
+      "currentValue": "BULLISH EXPANSION",
+      "dataSource": "Static Constant / Hardcoded Parameter",
+      "provider": "Internal",
+      "apiEndpoint": "None",
+      "authRequirement": "None",
+      "requestParams": {},
+      "responseFieldsUsed": [],
+      "transformation": "Hardcoded default `marketRegimeScore: 72` in server.ts and static UI badge in Header",
+      "codeLocation": "/server.ts:45, /src/components/Header.tsx:76",
+      "realData": false,
+      "freshness": "Static",
+      "status": "HARDCODED"
+    },
+    {
+      "metric": "Risk Sentiment & Breadth",
+      "symbol": "GLOBAL",
+      "currentValue": "RISK-ON (74% Breadth)",
+      "dataSource": "Static JSX string in Header",
+      "provider": "Internal",
+      "apiEndpoint": "None",
+      "authRequirement": "None",
+      "requestParams": {},
+      "responseFieldsUsed": [],
+      "transformation": "Hardcoded text in Header component",
+      "codeLocation": "/src/components/Header.tsx:79",
+      "realData": false,
+      "freshness": "Static",
+      "status": "HARDCODED"
+    },
+    {
+      "metric": "Confluence Score",
+      "symbol": "ALL",
+      "currentValue": "65 to 94 / 100",
+      "dataSource": "Multi-Engine Weighted Matrix Algorithm",
+      "provider": "Internal Engine",
+      "apiEndpoint": "None",
+      "authRequirement": "None",
+      "requestParams": {},
+      "responseFieldsUsed": [],
+      "transformation": "Sum of 8 weighted sub-scores (PA, SMC, RS, Deriv, Whale, Regime, OnChain, Rotation)",
+      "codeLocation": "/src/engine/setupEngine.ts:97-106",
+      "realData": false,
+      "freshness": "Calculated dynamically per scan cycle",
+      "status": "COMPUTED_MIXED"
+    },
+    {
+      "metric": "Price Action Signals (ATR, Swings)",
+      "symbol": "ALL",
+      "currentValue": "14-bar ATR, HH/HL/LH/LL swings, Consolidation bounds",
+      "dataSource": "Binance 4H Klines API",
+      "provider": "Binance",
+      "apiEndpoint": "https://api.binance.com/api/v3/klines?symbol={PAIR}&interval=4h&limit=50",
+      "authRequirement": "None",
+      "requestParams": { "symbol": "BTCUSDT", "interval": "4h", "limit": 50 },
+      "responseFieldsUsed": ["open", "high", "low", "close", "volume"],
+      "transformation": "Wilder 14-period True Range smoothing and 3-bar swing extrema",
+      "codeLocation": "/src/engine/priceActionEngine.ts",
+      "realData": true,
+      "freshness": "Calculated on live 4H OHLCV candles",
+      "status": "REAL_COMPUTATION"
+    },
+    {
+      "metric": "Smart Money Concepts (FVG, Order Blocks, BOS, CHOCH)",
+      "symbol": "ALL",
+      "currentValue": "Demand OB zones, Bullish FVGs, Structure breaks, Discount status",
+      "dataSource": "Binance 4H Klines API",
+      "provider": "Binance",
+      "apiEndpoint": "https://api.binance.com/api/v3/klines?symbol={PAIR}&interval=4h&limit=50",
+      "authRequirement": "None",
+      "requestParams": { "symbol": "BTCUSDT", "interval": "4h", "limit": 50 },
+      "responseFieldsUsed": ["open", "high", "low", "close", "volume"],
+      "transformation": "3-bar displacement gaps, volume-validated base candles, equilibrium calculation",
+      "codeLocation": "/src/engine/smcEngine.ts",
+      "realData": true,
+      "freshness": "Calculated on live 4H OHLCV candles",
+      "status": "REAL_COMPUTATION"
+    },
+    {
+      "metric": "Relative Strength (RS vs BTC / ETH)",
+      "symbol": "ALL",
+      "currentValue": "RS Beta ratios (e.g. 1.28 vs BTC), Percentile ranks",
+      "dataSource": "Binance Spot 24hr & 7d returns",
+      "provider": "Binance",
+      "apiEndpoint": "https://api.binance.com/api/v3/ticker/24hr",
+      "authRequirement": "None",
+      "requestParams": {},
+      "responseFieldsUsed": ["priceChangePercent", "lastPrice"],
+      "transformation": "Relative performance differential and percentile distribution vs benchmark",
+      "codeLocation": "/src/engine/relativeStrengthEngine.ts",
+      "realData": true,
+      "freshness": "Calculated on live spot tickers",
+      "status": "REAL_COMPUTATION"
+    },
+    {
+      "metric": "Ecosystem Sector Rotation",
+      "symbol": "8 Sectors",
+      "currentValue": "AI & DePIN, DeFi, Solana, RWA, Modular, L2s, BTC, Meme",
+      "dataSource": "Derived from Live Ticker Aggregates",
+      "provider": "Binance (Prices) + Hardcoded Sector Maps",
+      "apiEndpoint": "https://api.binance.com/api/v3/ticker/24hr",
+      "authRequirement": "None",
+      "requestParams": {},
+      "responseFieldsUsed": ["quoteVolume", "priceChangePercent"],
+      "transformation": "Volume and return summation across coin groups + momentum scoring",
+      "codeLocation": "/src/engine/rotationEngine.ts",
+      "realData": false,
+      "freshness": "Calculated dynamically per scan cycle",
+      "status": "COMPUTED_MIXED"
+    },
+    {
+      "metric": "Sector TVL",
+      "symbol": "SOL, ETH L2, DEFI, etc.",
+      "currentValue": "Solana $8.4B, ETH L2 $42B, DeFi $65B, RWA $9.1B",
+      "dataSource": "Static Lookup Constants",
+      "provider": "None (Expected: DeFiLlama /v2/chains)",
+      "apiEndpoint": "None",
+      "authRequirement": "None",
+      "requestParams": {},
+      "responseFieldsUsed": [],
+      "transformation": "Hardcoded approximate constants in rotationEngine.ts",
+      "codeLocation": "/src/engine/rotationEngine.ts:48-55",
+      "realData": false,
+      "freshness": "Static",
+      "status": "HARDCODED"
+    },
+    {
+      "metric": "Stablecoin Flows",
+      "symbol": "GLOBAL",
+      "currentValue": "Unavailable / Placeholder",
+      "dataSource": "None",
+      "provider": "None (Expected: DeFiLlama Stablecoins API)",
+      "apiEndpoint": "None",
+      "authRequirement": "None",
+      "requestParams": {},
+      "responseFieldsUsed": [],
+      "transformation": "Default neutral fallback score (50.0)",
+      "codeLocation": "/src/engine/setupEngine.ts:80",
+      "realData": false,
+      "freshness": "Unconfigured",
+      "status": "UNCONFIGURED"
+    }
+  ],
+  "technicalAnalysisAudit": {
+    "evaluationSummary": {
+      "breakOfStructure_BOS": {
+        "mode": "Deterministic Algorithm on Real Binance 4H Klines",
+        "codeLocation": "/src/engine/smcEngine.ts:130-175",
+        "description": "Scans 45 historical 4H candles for swing highs/lows and checks if subsequent candle bodies close beyond prior structure."
+      },
+      "changeOfCharacter_CHOCH": {
+        "mode": "Deterministic Algorithm on Real Binance 4H Klines",
+        "codeLocation": "/src/engine/smcEngine.ts:177-220",
+        "description": "Identifies reversal structure breaks where a downtrend's lower high is breached with displacement body close."
+      },
+      "fairValueGap_FVG": {
+        "mode": "Deterministic Algorithm on Real Binance 4H Klines",
+        "codeLocation": "/src/engine/smcEngine.ts:4-68",
+        "description": "Detects 3-bar candle imbalance where Candle[i].low > Candle[i-2].high. Inspects all subsequent candles to check mitigation."
+      },
+      "demandOrderBlock_OB": {
+        "mode": "Deterministic Algorithm on Real Binance 4H Klines",
+        "codeLocation": "/src/engine/smcEngine.ts:70-128",
+        "description": "Finds base candle before an impulsive expansion (volume > 1.2x average) and tracks whether price has tested or breached the zone."
+      },
+      "liquiditySweep": {
+        "mode": "Deterministic Algorithm on Real Binance 4H Klines",
+        "codeLocation": "/src/engine/smcEngine.ts:222-260",
+        "description": "Identifies candle wicks that pierce prior swing extremes by >0.1% but close back within the boundary."
+      },
+      "discountZone": {
+        "mode": "Deterministic Algorithm on Real Binance 4H Klines",
+        "codeLocation": "/src/engine/smcEngine.ts:262-280",
+        "description": "Calculates 50% equilibrium level of the 45-bar range; price below 50% is classified as Discount."
+      },
+      "averageTrueRange_ATR": {
+        "mode": "Deterministic Algorithm on Real Binance 4H Klines",
+        "codeLocation": "/src/engine/priceActionEngine.ts:3-19",
+        "description": "Standard 14-period Wilder ATR calculation used to determine minimum structural Stop Loss distance."
+      },
+      "relativeStrength_RS": {
+        "mode": "Deterministic Algorithm on Real Binance Spot Tickers",
+        "codeLocation": "/src/engine/relativeStrengthEngine.ts",
+        "description": "Computes 24h & 7d relative beta ratio vs BTC and ETH, calculating percentile distribution across the monitored asset universe."
+      }
+    }
+  },
+  "whaleAnalysisAudit": {
+    "status": "MOCK_SIMULATED / UNVERIFIED",
+    "details": {
+      "transactionStorage": "Static in-memory array in /server/dataProviders.ts (5 transactions).",
+      "mockHashes": [
+        "0x8f3a9...b4e2 (LINK)",
+        "0x7c12d...9a11 (AAVE)",
+        "0x4e98f...11cd (SOL)",
+        "0x1a77b...55aa (TAO)",
+        "0x99dd2...8831 (ETH)"
+      ],
+      "classificationLogic": "Implemented in /src/engine/whaleEngine.ts. Correctly separates Exchange->SmartMoney (Accumulation), MarketMaker->Exchange (Rebalance), and Contract Interactions. However, underlying data fed into it is mock.",
+      "missingConnections": [
+        "Etherscan / Solscan on-chain token transfer event scrapers",
+        "Arkham Intelligence Entity API / Nansen Webhooks",
+        "Live DEX trade filtering (Uniswap V3 / Raydium swaps vs simple internal wallet rebalancing)"
+      ]
+    }
+  },
+  "confluenceScoreAudit": {
+    "formula": "TotalScore = (MarketRegime * 0.10) + (PriceAction * 0.20) + (SMC * 0.20) + (RelativeStrength * 0.15) + (Derivatives * 0.15) + (WhaleFlow * 0.10) + (OnChain * 0.05) + (EcosystemRotation * 0.05)",
+    "weights": {
+      "marketRegime": 0.10,
+      "priceAction": 0.20,
+      "smcStructure": 0.20,
+      "relativeStrength": 0.15,
+      "derivatives": 0.15,
+      "whaleFlow": 0.10,
+      "onChain": 0.05,
+      "ecosystemRotation": 0.05
+    },
+    "normalization": "Clamped strictly between 0 and 100 points.",
+    "missingDataHandling": "Applies a neutral fallback score (50.0) when external providers are offline.",
+    "codeLocation": "/src/engine/setupEngine.ts:97-106",
+    "verdict": "Algorithm is fully deterministic and mathematical; inputs are mixed (Real TA/Klines + Real Spot/Funding + Mock Whale + Static Market Regime)."
+  },
+  "identifiedGapsAndRecommendations": {
+    "dataIntegrityDefects": [
+      {
+        "issue": "Misleading 'LIVE' / 'REAL-TIME' badges on synthetic metrics",
+        "locations": ["Header market regime indicator", "Whale Radar header", "Provider Health panel 0% error claim"],
+        "remedy": "Replace badges with explicit labels: 'SIMULATED TESTNET DATA' or 'UNCONFIGURED'."
+      },
+      {
+        "issue": "Synthetic Open Interest & Liquidation estimates",
+        "remedy": "Integrate Binance Futures public Open Interest endpoint: GET https://fapi.binance.com/fapi/v1/openInterest?symbol=..."
+      },
+      {
+        "issue": "Hardcoded TVL & Sector market cap lookups",
+        "remedy": "Integrate DeFiLlama public endpoints: GET https://api.llama.fi/v2/chains and GET https://stablecoins.llama.fi/stablecoincharts/all"
+      },
+      {
+        "issue": "Mock Whale Transactions",
+        "remedy": "Connect to live Etherscan / Solscan ERC20/SPL Transfer logs or Arkham/Nansen API for verified smart money labels."
+      }
+    ],
+    "architecturalReadiness": {
+      "backendDecoupling": "PASSED (Clean Express /api/* service routing)",
+      "aiReasoningSeparation": "PASSED (Gemini 2.5 Flash strictly acts as post-deterministic committee, no fabrication of raw numerical metrics)",
+      "typeSafety": "PASSED (Comprehensive TypeScript models in /src/types/crypto.ts)"
+    }
+  }
+}

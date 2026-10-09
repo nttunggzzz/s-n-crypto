@@ -1,0 +1,153 @@
+{
+  "phaseMetadata": {
+    "phaseName": "Phase 1 - Real Market Data Implementation & Integrity Hardening",
+    "timestamp": "2026-08-29T07:48:40-07:00",
+    "project": "Crypto Intelligence & Trading Signal System",
+    "version": "2.5.0-integrity",
+    "status": "COMPLETED"
+  },
+  "executiveSummary": {
+    "overview": "Đã hoàn thành toàn bộ Phase 1 theo tôn chỉ 'Data Integrity First'. Toàn bộ các công thức tính Open Interest giả định, thanh lý giả lập, mảng giao dịch cá voi tĩnh và trạng thái chế độ thị trường (Market Regime) hardcode đã bị loại bỏ hoàn toàn. Thay vào đó là một kiến trúc Provider Abstraction Layer chuẩn mực, kết nối dữ liệu thật từ Binance Spot, Binance Futures và DeFiLlama.",
+    "coreAchievement": "Hệ thống hiện tại minh bạch 100% về nguồn gốc dữ liệu. Không còn hiện tượng ngụy tạo dữ liệu giả để làm đẹp giao diện."
+  },
+  "changesSummary": {
+    "filesCreated": [
+      {
+        "path": "/server/providers/types.ts",
+        "purpose": "Định nghĩa chuẩn hóa (Normalized Schemas) cho MarketQuote, Candle, Derivatives, TVL, Stablecoin, WhaleEvent, MarketRegime và ProviderTelemetry."
+      },
+      {
+        "path": "/server/providers/BaseProvider.ts",
+        "purpose": "Lớp cơ sở trừu tượng hóa cho các nhà cung cấp dữ liệu với cơ chế timeout, exponential backoff retry, đo độ trễ (latency), đếm lỗi và trạng thái circuit breaker."
+      },
+      {
+        "path": "/server/providers/BinanceSpotProvider.ts",
+        "purpose": "Tích hợp Binance Spot REST API (/api/v3/ticker/24hr & /api/v3/klines) để lấy giá, volume 24h và nến OHLCV 4H thực tế."
+      },
+      {
+        "path": "/server/providers/BinanceFuturesProvider.ts",
+        "purpose": "Tích hợp Binance USD-M Futures API để lấy Open Interest thực tế (/fapi/v1/openInterest), Funding Rate 8H (/fapi/v1/fundingRate), lịch sử thay đổi OI (/futures/data/openInterestHist) và tỷ lệ Long/Short toàn cầu."
+      },
+      {
+        "path": "/server/providers/DeFiLlamaProvider.ts",
+        "purpose": "Tích hợp DeFiLlama REST API để lấy TVL thực tế theo từng chain (Solana, Base, Arbitrum, v.v.) và phân bổ nguồn cung Stablecoin toàn thị trường."
+      },
+      {
+        "path": "/server/providers/WhaleProvider.ts",
+        "purpose": "Xử lý kết nối On-chain Indexer / Arkham / Etherscan, trả về trạng thái NOT_CONFIGURED minh bạch khi chưa có khóa API, triệt tiêu 100% dữ liệu ví cá voi giả lập."
+      },
+      {
+        "path": "/server/providers/MarketRegimeEngine.ts",
+        "purpose": "Thuật toán xác định chế độ thị trường và Market Breadth (% tài sản tăng/giảm, BTC.D, biến động ATR) hoàn toàn tự động dựa trên dữ liệu realtime của 20 đồng tiền mã hóa."
+      },
+      {
+        "path": "/server/providers/ProviderHealthService.ts",
+        "purpose": "Quản lý và tổng hợp chỉ số sức khỏe của tất cả các data provider đang hoạt động."
+      },
+      {
+        "path": "/server/history/HistoryStore.ts",
+        "purpose": "Lưu trữ bộ đệm lịch sử (In-memory rolling buffer) cho nến OHLCV, biến động OI, chuỗi chế độ thị trường và TVL."
+      },
+      {
+        "path": "/phase1_implementation_summary.json",
+        "purpose": "Báo cáo tổng kết bàn giao chi tiết toàn bộ Phase 1 dưới dạng JSON."
+      }
+    ],
+    "filesModified": [
+      {
+        "path": "/server/dataProviders.ts",
+        "changes": "Tái cấu trúc thành CryptoDataService, chuyển toàn bộ việc gọi API trực tiếp sang các Provider con chuyên biệt, thêm TTL caching (10s-60s), loại bỏ các mảng whale mock."
+      },
+      {
+        "path": "/server.ts",
+        "changes": "Thêm các endpoint REST API backend: /api/crypto/regime, /api/crypto/tvl, /api/crypto/stablecoins; tích hợp MarketRegime thật vào luồng đánh giá setup tín hiệu."
+      },
+      {
+        "path": "/src/types/crypto.ts",
+        "changes": "Cập nhật interface DataQualityStatus, ProviderHealth, MarketRegimeResponse, TVLResponse, StablecoinResponse."
+      },
+      {
+        "path": "/src/App.tsx",
+        "changes": "Tải song song thêm API /api/crypto/regime và truyền dữ liệu chế độ thị trường thực tế xuống Header."
+      },
+      {
+        "path": "/src/components/Header.tsx",
+        "changes": "Gắn nhãn 'BINANCE SPOT (LIVE)', hiển thị Market Regime và Market Breadth được tính toán động (VD: 65% Breadth - 13A / 7D)."
+      },
+      {
+        "path": "/src/components/WhaleRadarView.tsx",
+        "changes": "Thay đổi giao diện hiển thị thông báo trung thực 'NOT CONFIGURED - Awaiting On-chain Indexer Credentials', không hiển thị hash ví giả."
+      },
+      {
+        "path": "/src/components/RotationView.tsx",
+        "changes": "Tích hợp TVL chain thực tế từ DeFiLlama và thống kê lượng cung Stablecoin thay cho các số liệu cố định."
+      },
+      {
+        "path": "/src/components/ProviderHealthView.tsx",
+        "changes": "Cập nhật hiển thị chi tiết độ trễ (latency ms), thời gian fetch gần nhất và trạng thái NOT_CONFIGURED rõ ràng."
+      }
+    ]
+  },
+  "keyDifferentiatorsAndStrengths": [
+    {
+      "aspect": "Tính trung thực và toàn vẹn dữ liệu (Data Integrity)",
+      "previousVersion": "Hiển thị 'Live Whale Accumulation +$8.9M', '74% Breadth', OI tính bằng 3.5% Market Cap mặc dù là số liệu giả/ước lượng.",
+      "currentVersion": "Xóa bỏ 100% số liệu giả mạo. Dữ liệu nào có API (Binance Spot, Binance Futures, DeFiLlama) thì lấy thật; dữ liệu nào chưa cấu hình (Whale Indexer) thì báo rõ 'NOT CONFIGURED'."
+    },
+    {
+      "aspect": "Kiến trúc Data Provider (Decoupled Provider Layer)",
+      "previousVersion": "Code gọi API và sinh mock data nằm lẫn lộn trong một file dataProviders.ts duy nhất.",
+      "currentVersion": "Phân tầng rõ ràng: BaseProvider -> Specific Providers (Spot, Futures, DeFiLlama, Whale) -> DataService -> Setup Engines -> REST Endpoints -> UI."
+    },
+    {
+      "aspect": "Open Interest & Derivatives Data",
+      "previousVersion": "OI USD được tính bằng công thức ngẫu nhiên: marketCap * 0.035 * (1 + delta).",
+      "currentVersion": "Lấy trực tiếp từ Binance USD-M Futures endpoint (/fapi/v1/openInterest & /futures/data/openInterestHist) cho từng hợp đồng."
+    },
+    {
+      "aspect": "Market Regime & Breadth Engine",
+      "previousVersion": "Hardcode chuỗi text 'BULLISH EXPANSION (74% Breadth)' trong JSX.",
+      "currentVersion": "Engine toán học tự động quét 20 đồng coin theo thời gian thực, đếm số lượng Advancers/Decliners, tính % Breadth, xu hướng BTC/ETH và độ biến động ATR."
+    },
+    {
+      "aspect": "Ecosystem & On-Chain TVL",
+      "previousVersion": "Bảng tra cứu TVL tĩnh (Solana = 8.4B, ETH L2 = 42B).",
+      "currentVersion": "Gọi trực tiếp DeFiLlama REST API (api.llama.fi/v2/chains) để lấy số dư TVL thực tế của từng blockchain."
+    }
+  ],
+  "remainingLimitationsAndGaps": [
+    {
+      "category": "Liquidations 24h",
+      "status": "DATA_UNAVAILABLE (Báo 0 thay vì số ảo)",
+      "reason": "Binance REST API không cung cấp tổng hợp thanh lý 24h trong một request đơn lẻ (cần WebSocket liquidation stream hoặc CoinGlass Enterprise API).",
+      "plan": "Tích hợp WebSocket listener hoặc CoinGlass API key trong giai đoạn sau."
+    },
+    {
+      "category": "On-Chain Whale Transactions",
+      "status": "NOT_CONFIGURED",
+      "reason": "Cần ARKHAM_API_KEY hoặc ETHERSCAN_API_KEY để quét log ERC-20 Transfer và phân loại ví tổ chức.",
+      "plan": "Khi người dùng cung cấp API Key qua Settings/.env, hệ thống sẽ kích hoạt luồng live indexer tự động."
+    },
+    {
+      "category": "Database Persistence",
+      "status": "In-Memory Rolling Store",
+      "reason": "Hiện lưu trữ lịch sử bằng In-memory buffer của Node.js (HistoryStore), sẽ bị reset khi server khởi động lại.",
+      "plan": "Giai đoạn sau sẽ nối với cơ sở dữ liệu bền vững (Firestore / PostgreSQL) để lưu trữ backtest dài hạn."
+    }
+  ],
+  "verifiedRealDataCoverageTable": {
+    "spotPrice": { "source": "Binance Spot API (/api/v3/ticker/24hr)", "status": "REAL_LIVE" },
+    "volume24h": { "source": "Binance Spot API (/api/v3/ticker/24hr)", "status": "REAL_LIVE" },
+    "ohlcvKlines": { "source": "Binance Spot API (/api/v3/klines 4H)", "status": "REAL_LIVE" },
+    "openInterest": { "source": "Binance USD-M Futures (/fapi/v1/openInterest)", "status": "REAL_LIVE" },
+    "fundingRate": { "source": "Binance USD-M Futures (/fapi/v1/fundingRate)", "status": "REAL_LIVE" },
+    "oiChangeHistorical": { "source": "Binance Futures Data (/futures/data/openInterestHist)", "status": "REAL_LIVE" },
+    "longShortRatio": { "source": "Binance Futures Data (/futures/data/globalLongShortAccountRatio)", "status": "REAL_LIVE" },
+    "marketRegime": { "source": "MarketRegimeEngine (Tính toán từ 20 coin thực tế)", "status": "REAL_COMPUTATION" },
+    "marketBreadth": { "source": "MarketRegimeEngine (Advancers vs Decliners thực tế)", "status": "REAL_COMPUTATION" },
+    "chainTVL": { "source": "DeFiLlama Public API (/v2/chains)", "status": "REAL_LIVE" },
+    "stablecoinSupply": { "source": "DeFiLlama Stablecoins API (/stablecoins)", "status": "REAL_LIVE" },
+    "liquidations24h": { "source": "Binance Futures / CoinGlass", "status": "UNCONFIGURED (0 Reported)" },
+    "whaleTransactions": { "source": "Arkham / Etherscan", "status": "NOT_CONFIGURED (Zero Synthetic)" }
+  }
+}

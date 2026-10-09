@@ -1,0 +1,6 @@
+{
+  "name": "Crypto Intelligence & Trading Signal System",
+  "description": "Production-grade crypto intelligence, deterministic confluence setup detector, risk engine, and AI investment committee with real market data and Telegram alerting.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

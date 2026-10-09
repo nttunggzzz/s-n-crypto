@@ -1,0 +1,16 @@
+node_modules/
+build/
+dist/
+coverage/
+.DS_Store
+*.log
+.env*
+!.env.example
+# local embedded Postgres data
+.pgdata/
+.pgdata-test/
+legacy/node_modules/
+# legacy: build output, corrupt SQLite DB and the original export archive stay local only
+legacy/dist/
+legacy/crypto_intelligence.db
+legacy/public/*.tar.gz

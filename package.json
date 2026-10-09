@@ -1,0 +1,29 @@
+{
+  "name": "cex-sim",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "workspaces": [
+    "packages/*",
+    "server",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev:server": "npm run dev -w @cex/server",
+    "db:start": "npm run db:start -w @cex/server",
+    "db:generate": "npm run db:generate -w @cex/server",
+    "db:migrate": "npm run db:migrate -w @cex/server",
+    "typecheck": "tsc -p packages/core && tsc -p packages/contracts && tsc -p server",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@types/node": "^22.14.0",
+    "tsx": "^4.21.0",
+    "typescript": "~5.8.2",
+    "vitest": "^5.0.3"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

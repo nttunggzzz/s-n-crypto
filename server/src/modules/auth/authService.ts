@@ -1,0 +1,223 @@
+import { and, desc, eq, gt, isNull, ne } from 'drizzle-orm';
+import type { Me, SessionInfo } from '@cex/contracts';
+import { sessions, users, verificationTokens } from '../../db/schema.ts';
+import type { Db } from '../../db/client.ts';
+import type { Config } from '../../config.ts';
+import { AppError, isUniqueViolation } from '../../lib/errors.ts';
+import { RateLimiter } from '../../lib/rateLimit.ts';
+import { DUMMY_HASH, hashPassword, newToken, sha256, verifyPassword } from './crypto.ts';
+import type { EmailSender } from './email.ts';
+
+export type UserRow = typeof users.$inferSelect;
+export type SessionRow = typeof sessions.$inferSelect;
+
+export interface AuthContext {
+  user: UserRow;
+  session: SessionRow;
+}
+
+export interface ClientInfo {
+  ip?: string;
+  userAgent?: string;
+}
+
+const EMAIL_VERIFY_TTL_MS = 24 * 3600_000;
+const PASSWORD_RESET_TTL_MS = 3600_000;
+const LAST_SEEN_THROTTLE_MS = 60_000;
+
+export function toMe(u: UserRow): Me {
+  return {
+    id: u.id,
+    email: u.email,
+    name: u.name,
+    emailVerified: u.emailVerifiedAt !== null,
+    role: u.role,
+    signalsAccess: u.signalsAccess,
+    createdAt: u.createdAt.toISOString(),
+  };
+}
+
+export class AuthService {
+  /** 5 failed logins per email per 15 minutes. */
+  readonly loginFailures = new RateLimiter(5, 15 * 60_000);
+
+  constructor(
+    private readonly db: Db,
+    private readonly config: Config,
+    private readonly email: EmailSender,
+    private readonly now: () => Date = () => new Date(),
+  ) {}
+
+  // ───────── sessions
+
+  private async createSession(userId: string, client: ClientInfo): Promise<{ token: string; session: SessionRow }> {
+    const token = newToken();
+    const [session] = await this.db
+      .insert(sessions)
+      .values({
+        userId,
+        tokenHash: sha256(token),
+        ip: client.ip ?? null,
+        userAgent: client.userAgent?.slice(0, 300) ?? null,
+        expiresAt: new Date(this.now().getTime() + this.config.SESSION_TTL_DAYS * 86_400_000),
+      })
+      .returning();
+    return { token, session: session! };
+  }
+
+  /** Resolves a session token (cookie or bearer). Returns null when invalid/expired/revoked. */
+  async authenticate(token: string): Promise<AuthContext | null> {
+    const rows = await this.db
+      .select({ session: sessions, user: users })
+      .from(sessions)
+      .innerJoin(users, eq(users.id, sessions.userId))
+      .where(and(eq(sessions.tokenHash, sha256(token)), isNull(sessions.revokedAt), gt(sessions.expiresAt, this.now())));
+    const row = rows[0];
+    if (!row || row.user.isBot) return null;
+    if (this.now().getTime() - row.session.lastSeenAt.getTime() > LAST_SEEN_THROTTLE_MS) {
+      await this.db.update(sessions).set({ lastSeenAt: this.now() }).where(eq(sessions.id, row.session.id));
+    }
+    return row;
+  }
+
+  // ───────── register / login
+
+  async register(input: { email: string; password: string; name: string }, client: ClientInfo) {
+    const email = input.email.trim().toLowerCase();
+    let user: UserRow;
+    try {
+      [user] = (await this.db
+        .insert(users)
+        .values({ email, name: input.name.trim(), passwordHash: await hashPassword(input.password) })
+        .returning()) as [UserRow];
+    } catch (err) {
+      if (isUniqueViolation(err, 'users_email_uq')) throw new AppError('CONFLICT', 'Email already registered', { field: 'email' });
+      throw err;
+    }
+    await this.sendVerification(user);
+    const { token } = await this.createSession(user.id, client);
+    return { user, token };
+  }
+
+  async login(input: { email: string; password: string }, client: ClientInfo) {
+    const email = input.email.trim().toLowerCase();
+    this.loginFailures.check(`email:${email}`);
+    const [user] = await this.db.select().from(users).where(eq(users.email, email));
+    const ok = await verifyPassword(input.password, user?.passwordHash ?? DUMMY_HASH);
+    if (!user || !user.passwordHash || user.isBot || !ok) {
+      try {
+        this.loginFailures.consume(`email:${email}`);
+      } catch {
+        // the next attempt will be blocked by check()
+      }
+      throw new AppError('UNAUTHENTICATED', 'Invalid email or password');
+    }
+    if (user.status === 'locked') throw new AppError('ACCOUNT_LOCKED', 'Account is locked');
+    this.loginFailures.reset(`email:${email}`);
+    const { token } = await this.createSession(user.id, client);
+    return { user, token };
+  }
+
+  async logout(sessionId: string): Promise<void> {
+    await this.db.update(sessions).set({ revokedAt: this.now() }).where(eq(sessions.id, sessionId));
+  }
+
+  // ───────── email verification / password reset
+
+  private async issueToken(userId: string, purpose: 'EMAIL_VERIFY' | 'PASSWORD_RESET', ttlMs: number): Promise<string> {
+    const token = newToken();
+    await this.db.insert(verificationTokens).values({ userId, purpose, tokenHash: sha256(token), expiresAt: new Date(this.now().getTime() + ttlMs) });
+    return token;
+  }
+
+  private async consumeToken(token: string, purpose: 'EMAIL_VERIFY' | 'PASSWORD_RESET'): Promise<string> {
+    const [row] = await this.db
+      .update(verificationTokens)
+      .set({ usedAt: this.now() })
+      .where(
+        and(
+          eq(verificationTokens.tokenHash, sha256(token)),
+          eq(verificationTokens.purpose, purpose),
+          isNull(verificationTokens.usedAt),
+          gt(verificationTokens.expiresAt, this.now()),
+        ),
+      )
+      .returning();
+    if (!row) throw new AppError('VALIDATION_ERROR', 'Invalid or expired link', { field: 'token' });
+    return row.userId;
+  }
+
+  async sendVerification(user: UserRow): Promise<void> {
+    if (user.emailVerifiedAt) return;
+    const token = await this.issueToken(user.id, 'EMAIL_VERIFY', EMAIL_VERIFY_TTL_MS);
+    await this.email.send({
+      to: user.email,
+      subject: 'Xác minh email — Sàn mô phỏng',
+      text: `Xin chào ${user.name},\n\nBấm vào liên kết để xác minh email (hết hạn sau 24 giờ):\n${this.config.APP_URL}/verify-email?token=${token}\n`,
+    });
+  }
+
+  async verifyEmail(token: string): Promise<void> {
+    const userId = await this.consumeToken(token, 'EMAIL_VERIFY');
+    await this.db.update(users).set({ emailVerifiedAt: this.now(), updatedAt: this.now() }).where(and(eq(users.id, userId), isNull(users.emailVerifiedAt)));
+  }
+
+  /** Always succeeds (no account enumeration). */
+  async forgotPassword(emailInput: string): Promise<void> {
+    const email = emailInput.trim().toLowerCase();
+    const [user] = await this.db.select().from(users).where(eq(users.email, email));
+    if (!user || !user.passwordHash || user.isBot) return;
+    const token = await this.issueToken(user.id, 'PASSWORD_RESET', PASSWORD_RESET_TTL_MS);
+    await this.email.send({
+      to: user.email,
+      subject: 'Đặt lại mật khẩu — Sàn mô phỏng',
+      text: `Bấm vào liên kết để đặt lại mật khẩu (hết hạn sau 1 giờ):\n${this.config.APP_URL}/reset-password?token=${token}\n\nNếu bạn không yêu cầu, hãy bỏ qua email này.`,
+    });
+  }
+
+  /** Sets a new password and signs out every session. */
+  async resetPassword(token: string, newPassword: string): Promise<void> {
+    const userId = await this.consumeToken(token, 'PASSWORD_RESET');
+    await this.db.update(users).set({ passwordHash: await hashPassword(newPassword), updatedAt: this.now() }).where(eq(users.id, userId));
+    await this.db.update(sessions).set({ revokedAt: this.now() }).where(and(eq(sessions.userId, userId), isNull(sessions.revokedAt)));
+  }
+
+  /** Changes the password and signs out every OTHER session. */
+  async changePassword(ctx: AuthContext, currentPassword: string, newPassword: string): Promise<void> {
+    if (!ctx.user.passwordHash || !(await verifyPassword(currentPassword, ctx.user.passwordHash))) {
+      throw new AppError('VALIDATION_ERROR', 'Current password is incorrect', { field: 'currentPassword' });
+    }
+    await this.db.update(users).set({ passwordHash: await hashPassword(newPassword), updatedAt: this.now() }).where(eq(users.id, ctx.user.id));
+    await this.db
+      .update(sessions)
+      .set({ revokedAt: this.now() })
+      .where(and(eq(sessions.userId, ctx.user.id), ne(sessions.id, ctx.session.id), isNull(sessions.revokedAt)));
+  }
+
+  async listSessions(ctx: AuthContext): Promise<SessionInfo[]> {
+    const rows = await this.db
+      .select()
+      .from(sessions)
+      .where(and(eq(sessions.userId, ctx.user.id), isNull(sessions.revokedAt), gt(sessions.expiresAt, this.now())))
+      .orderBy(desc(sessions.lastSeenAt));
+    return rows.map((s) => ({
+      id: s.id,
+      current: s.id === ctx.session.id,
+      userAgent: s.userAgent,
+      ip: s.ip,
+      createdAt: s.createdAt.toISOString(),
+      lastSeenAt: s.lastSeenAt.toISOString(),
+      expiresAt: s.expiresAt.toISOString(),
+    }));
+  }
+
+  async revokeSession(ctx: AuthContext, sessionId: string): Promise<void> {
+    if (!/^[0-9a-f-]{36}$/.test(sessionId)) throw new AppError('NOT_FOUND', 'Session not found');
+    const [row] = await this.db
+      .update(sessions)
+      .set({ revokedAt: this.now() })
+      .where(and(eq(sessions.id, sessionId), eq(sessions.userId, ctx.user.id), isNull(sessions.revokedAt)))
+      .returning();
+    if (!row) throw new AppError('NOT_FOUND', 'Session not found');
+  }
+}

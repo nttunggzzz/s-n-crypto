@@ -1,0 +1,81 @@
+import type { Response, Router } from 'express';
+import type { Config } from '../../config.ts';
+import { clientIp, route, SESSION_COOKIE, type RouteOptions } from '../../lib/http.ts';
+import { RateLimiter } from '../../lib/rateLimit.ts';
+import { verifyCaptcha } from './captcha.ts';
+import { toMe, type AuthService } from './authService.ts';
+
+export function registerAuthRoutes(router: Router, opts: RouteOptions, auth: AuthService, config: Config): void {
+  const k = config.RATE_LIMIT_SCALE;
+  const registerLimit = new RateLimiter(5 * k, 3600_000);
+  const loginLimit = new RateLimiter(20 * k, 15 * 60_000);
+  const emailLimit = new RateLimiter(5 * k, 3600_000);
+
+  const setCookie = (res: Response, token: string) =>
+    res.cookie(SESSION_COOKIE, token, {
+      httpOnly: true,
+      secure: config.isProd,
+      sameSite: 'lax',
+      path: '/',
+      maxAge: config.SESSION_TTL_DAYS * 86_400_000,
+    });
+
+  const client = (req: Parameters<typeof clientIp>[0]) => ({ ip: clientIp(req), userAgent: req.headers['user-agent'] });
+
+  route(router, opts, 'register', async ({ body, req, res }) => {
+    registerLimit.consume(`ip:${clientIp(req)}`);
+    await verifyCaptcha(config.TURNSTILE_SECRET, body.captchaToken, clientIp(req));
+    const { user, token } = await auth.register(body, client(req));
+    setCookie(res, token);
+    return { user: toMe(user) };
+  });
+
+  route(router, opts, 'login', async ({ body, req, res }) => {
+    loginLimit.consume(`ip:${clientIp(req)}`);
+    const { user, token } = await auth.login(body, client(req));
+    setCookie(res, token);
+    return { user: toMe(user) };
+  });
+
+  route(router, opts, 'logout', async ({ auth: ctx, res }) => {
+    await auth.logout(ctx.session.id);
+    res.clearCookie(SESSION_COOKIE, { path: '/' });
+    return { ok: true as const };
+  });
+
+  route(router, opts, 'verifyEmail', async ({ body }) => {
+    await auth.verifyEmail(body.token);
+    return { ok: true as const };
+  });
+
+  route(router, opts, 'resendVerification', async ({ auth: ctx }) => {
+    emailLimit.consume(`user:${ctx.user.id}`);
+    await auth.sendVerification(ctx.user);
+    return { ok: true as const };
+  });
+
+  route(router, opts, 'forgotPassword', async ({ body, req }) => {
+    emailLimit.consume(`ip:${clientIp(req)}`);
+    await auth.forgotPassword(body.email);
+    return { ok: true as const };
+  });
+
+  route(router, opts, 'resetPassword', async ({ body }) => {
+    await auth.resetPassword(body.token, body.newPassword);
+    return { ok: true as const };
+  });
+
+  route(router, opts, 'changePassword', async ({ auth: ctx, body }) => {
+    await auth.changePassword(ctx, body.currentPassword, body.newPassword);
+    return { ok: true as const };
+  });
+
+  route(router, opts, 'listSessions', async ({ auth: ctx }) => ({ items: await auth.listSessions(ctx) }));
+
+  route(router, opts, 'revokeSession', async ({ auth: ctx, params }) => {
+    await auth.revokeSession(ctx, params.sessionId);
+    return { ok: true as const };
+  });
+
+  route(router, opts, 'me', async ({ auth: ctx }) => toMe(ctx.user));
+}
