@@ -21,6 +21,10 @@ export const Balances = z.object({
 });
 export type Balances = z.infer<typeof Balances>;
 
+/** Which wallet a balance / ledger row belongs to. */
+export const WalletAccount = z.enum(['SPOT', 'FUTURES']);
+export type WalletAccount = z.infer<typeof WalletAccount>;
+
 export const LedgerEntryType = z.enum([
   'FAUCET',
   'ORDER_LOCK',
@@ -30,11 +34,21 @@ export const LedgerEntryType = z.enum([
   'FEE',
   'ADMIN_ADJUST',
   'ACCOUNT_RESET',
+  // futures (phase F)
+  /** Spot ↔ Futures wallet transfer (one row in each wallet). */
+  'TRANSFER',
+  /** Closing part of a position: margin released + PnL (both sides of the change in one row). */
+  'REALIZED_PNL',
+  'FUNDING_FEE',
+  'LIQUIDATION',
+  /** Margin added to / removed from an isolated position. */
+  'MARGIN_ADJUST',
 ]);
 export type LedgerEntryType = z.infer<typeof LedgerEntryType>;
 
 export const LedgerEntry = z.object({
   id: z.string(),
+  account: WalletAccount,
   asset: AssetCode,
   type: LedgerEntryType,
   /** Change of available balance (signed). */
@@ -44,7 +58,7 @@ export const LedgerEntry = z.object({
   availableAfter: DecimalString,
   lockedAfter: DecimalString,
   /** What caused it: an order, a trade, a faucet claim, an admin action. */
-  refType: z.enum(['ORDER', 'TRADE', 'FAUCET', 'ADMIN']).nullable(),
+  refType: z.enum(['ORDER', 'TRADE', 'FAUCET', 'ADMIN', 'TRANSFER', 'FUTURES_ORDER', 'FUTURES_POSITION']).nullable(),
   refId: z.string().nullable(),
   createdAt: IsoDateTime,
 });

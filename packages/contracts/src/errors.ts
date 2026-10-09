@@ -40,6 +40,15 @@ export const ErrorCode = z.enum([
   'INVALID_TRAILING_DELTA',
   /** too many open orders / active alerts; details.limit */
   'LIMIT_EXCEEDED',
+  // futures (phase F)
+  /** leverage can only change with no open position and no open orders on the symbol */
+  'LEVERAGE_LOCKED',
+  /** leverage above the contract's maxLeverage; details.maxLeverage */
+  'INVALID_LEVERAGE',
+  /** reduce-only order with no opposite position, or larger than it */
+  'REDUCE_ONLY_REJECTED',
+  /** removing margin would leave less than the initial margin at the mark price; details.maxRemovable */
+  'MARGIN_TOO_LOW',
   // order execution
   'INSUFFICIENT_BALANCE',
   'INSUFFICIENT_LIQUIDITY',
@@ -76,6 +85,10 @@ export const ERROR_HTTP_STATUS: Record<ErrorCode, number> = {
   TRADING_HALTED: 409,
   SYMBOL_DISABLED: 409,
   MARKET_DATA_STALE: 503,
+  LEVERAGE_LOCKED: 409,
+  INVALID_LEVERAGE: 400,
+  REDUCE_ONLY_REJECTED: 400,
+  MARGIN_TOO_LOW: 400,
   INVALID_PRICE: 400,
   PRICE_TICK_SIZE: 400,
   INVALID_QUANTITY: 400,

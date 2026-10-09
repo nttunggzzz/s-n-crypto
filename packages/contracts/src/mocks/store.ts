@@ -22,6 +22,8 @@ import {
   MOCK_PAIRS,
 } from '../fixtures/index.ts';
 
+import { initialFuturesState, type MockFuturesState } from './futuresState.ts';
+
 export type MockScenario = 'normal' | 'empty' | 'error' | 'halted' | 'signedOut' | 'unverified';
 
 type Listener = (e: UserEvent) => void;
@@ -47,6 +49,7 @@ export const mockStore = {
   adminSymbols: clone(fixtureAdminSymbols) as AdminSymbol[],
   reconciliationRuns: clone(fixtureReconciliationRuns) as ReconciliationRun[],
   assets: clone(fixtureAssets) as AssetInfo[],
+  futures: initialFuturesState() as MockFuturesState,
   announcements: clone(fixtureAdminAnnouncements) as AdminAnnouncement[],
   faucetClaimedAt: Date.parse('2026-10-09T03:00:00.000Z') as number | null,
   totalClaimed: 10000,
@@ -85,6 +88,7 @@ export function resetMockStore(scenario: MockScenario = 'normal'): void {
   mockStore.adminSymbols = clone(fixtureAdminSymbols);
   mockStore.reconciliationRuns = clone(fixtureReconciliationRuns);
   mockStore.assets = clone(fixtureAssets);
+  mockStore.futures = initialFuturesState(empty);
   mockStore.announcements = empty ? [] : clone(fixtureAdminAnnouncements);
   mockStore.nextId = 1000;
   mockStore.prices = Object.fromEntries(Object.entries(MOCK_PAIRS).map(([s, p]) => [s, p.price]));

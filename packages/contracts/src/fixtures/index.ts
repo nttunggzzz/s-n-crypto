@@ -575,10 +575,10 @@ export const fixtureMyTrades: Trade[] = [
 ];
 
 export const fixtureLedger: LedgerEntry[] = [
-  { id: '7', asset: 'BTC', type: 'FEE', deltaAvailable: '-0.00001250', deltaLocked: '0.00000000', availableAfter: '0.01248750', lockedAfter: '0.00000000', refType: 'ORDER', refId: '100', createdAt: '2026-10-09T02:00:00.000Z' },
-  { id: '6', asset: 'BTC', type: 'TRADE_CREDIT', deltaAvailable: '0.01250000', deltaLocked: '0.00000000', availableAfter: '0.01250000', lockedAfter: '0.00000000', refType: 'ORDER', refId: '100', createdAt: '2026-10-09T02:00:00.000Z' },
-  { id: '5', asset: 'USDT', type: 'TRADE_DEBIT', deltaAvailable: '-999.98750000', deltaLocked: '0.00000000', availableAfter: '9000.01250000', lockedAfter: '0.00000000', refType: 'ORDER', refId: '100', createdAt: '2026-10-09T02:00:00.000Z' },
-  { id: '1', asset: 'USDT', type: 'FAUCET', deltaAvailable: '10000.00000000', deltaLocked: '0.00000000', availableAfter: '10000.00000000', lockedAfter: '0.00000000', refType: 'FAUCET', refId: '1', createdAt: '2026-10-09T01:00:00.000Z' },
+  { id: '7', account: 'SPOT', asset: 'BTC', type: 'FEE', deltaAvailable: '-0.00001250', deltaLocked: '0.00000000', availableAfter: '0.01248750', lockedAfter: '0.00000000', refType: 'ORDER', refId: '100', createdAt: '2026-10-09T02:00:00.000Z' },
+  { id: '6', account: 'SPOT', asset: 'BTC', type: 'TRADE_CREDIT', deltaAvailable: '0.01250000', deltaLocked: '0.00000000', availableAfter: '0.01250000', lockedAfter: '0.00000000', refType: 'ORDER', refId: '100', createdAt: '2026-10-09T02:00:00.000Z' },
+  { id: '5', account: 'SPOT', asset: 'USDT', type: 'TRADE_DEBIT', deltaAvailable: '-999.98750000', deltaLocked: '0.00000000', availableAfter: '9000.01250000', lockedAfter: '0.00000000', refType: 'ORDER', refId: '100', createdAt: '2026-10-09T02:00:00.000Z' },
+  { id: '1', account: 'SPOT', asset: 'USDT', type: 'FAUCET', deltaAvailable: '10000.00000000', deltaLocked: '0.00000000', availableAfter: '10000.00000000', lockedAfter: '0.00000000', refType: 'FAUCET', refId: '1', createdAt: '2026-10-09T01:00:00.000Z' },
 ];
 
 export const fixtureSessions: SessionInfo[] = [
@@ -680,6 +680,7 @@ export const fixtureExchangeSettings: ExchangeSettings = {
   tradingHalted: false,
   feeRate: '0.001',
   faucet: { asset: 'USDT', amount: '10000.00000000', cooldownHours: 24, lifetimeCap: '100000.00000000' },
+  futures: { makerFee: '0.0002', takerFee: '0.0005', liquidationFee: '0.005' },
   staleThresholdMs: 10000,
   updatedAt: '2026-10-09T00:00:00.000Z',
 };
@@ -700,7 +701,7 @@ export const fixtureReconciliationRuns: ReconciliationRun[] = [
     finishedAt: '2026-10-09T02:40:00.210Z',
     ok: false,
     checkedBalances: 127,
-    mismatches: [{ kind: 'LEDGER_VS_BALANCE', userId: U(2), asset: 'USDT', field: 'available', expected: '9500.000000000000000000', actual: '9500.010000000000000000' }],
+    mismatches: [{ kind: 'LEDGER_VS_BALANCE', account: 'SPOT', userId: U(2), asset: 'USDT', field: 'available', expected: '9500.000000000000000000', actual: '9500.010000000000000000' }],
   },
 ];
 

@@ -25,6 +25,7 @@ import { adjust, balanceOf, emitUser, mockStore, nextId } from './store.ts';
 import { baseOf, cancel, createOco, findList, isOpen, lockOf, mockFill, newOrder } from './engine.ts';
 import { MockError, mockMe, now, ok, requireUser, requireVerified, type Req, type Resolver } from './common.ts';
 import { adminResolvers } from './admin.ts';
+import { futuresResolvers } from './futures.ts';
 const requireTradable = (symbol: string) => {
   if (mockStore.scenario === 'halted') throw new MockError('TRADING_HALTED', 'Trading is halted by the operator');
   if (!MOCK_PAIRS[symbol]) throw new MockError('NOT_FOUND', 'Unknown symbol');
@@ -356,6 +357,7 @@ const resolvers: { [N in EndpointName]: Resolver<N> } = {
   },
   unreadNotifications: () => (requireUser(), { unread: mockStore.notifications.filter((n) => n.readAt === null).length }),
   ...adminResolvers,
+  ...futuresResolvers,
 
   markNotificationsRead: ({ body }) => {
     requireUser();

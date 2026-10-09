@@ -1,5 +1,36 @@
 # Changelog — @cex/contracts
 
+## 0.5.0 — 2026-10-09 (Giai đoạn F: Futures mô phỏng)
+Hợp đồng vĩnh cửu USDT-M mô phỏng: giá Binance USDⓈ-M, ký quỹ **cô lập**, **một chiều**, đòn bẩy **1–20×**.
+
+**Thay đổi nhỏ có thể ảnh hưởng UI**
+- `LedgerEntry` thêm `account: 'SPOT' | 'FUTURES'`. Các endpoint sổ cái cũ (`ledger`, export CSV) vẫn chỉ trả ví Spot.
+- `LedgerEntryType` thêm `TRANSFER`, `REALIZED_PNL`, `FUNDING_FEE`, `LIQUIDATION`, `MARGIN_ADJUST`; `refType` thêm `TRANSFER`, `FUTURES_ORDER`, `FUTURES_POSITION`. Bảng dịch loại sổ cái của UI cần thêm các mục này.
+- `ExchangeSettings` thêm `futures: { makerFee, takerFee, liquidationFee }`; `UpdateSettingsRequest` thêm `futuresMakerFee`, `futuresTakerFee`, `futuresLiquidationFee`.
+- `ReconciliationMismatch` thêm `account` và loại `LOCKED_VS_FUTURES`.
+- `Notification` thêm 3 loại: `FUTURES_ORDER_FILLED`, `POSITION_TPSL`, `POSITION_LIQUIDATED`.
+
+**Thêm (26 endpoint, tổng 103)**
+- **Thị trường** (công khai):
+  - `futuresExchangeInfo`: 50 hợp đồng; `multiplier` = 1000 với 1000PEPE/SHIB/BONK/FLOKI; phí; `maxLeverage` 20.
+  - `futuresTickers` (kèm mark/index/funding), `futuresMarkPrice`, `futuresDepth`, `futuresMarketTrades`, `futuresCandles`, `futuresFundingHistory`, `futuresMarketStatus`.
+- **Ví:**
+  - `futuresAccount`: walletBalance, available, positionMargin, orderMargin, unrealizedPnl, equity;
+  - `futuresTransfer`: Spot ↔ Futures;
+  - `futuresLedger`.
+- **Đòn bẩy:** `futuresSymbolSettings`, `futuresSetLeverage` (`LEVERAGE_LOCKED` khi còn vị thế hoặc lệnh mở).
+- **Lệnh:**
+  - `futuresPlaceOrder` (MARKET, LIMIT GTC/IOC, `reduceOnly`, `tpsl` gắn vào vị thế);
+  - `futuresOpenOrders`, `futuresOrderHistory`, `futuresCancelOrder`, `futuresCancelAll`, `futuresMyTrades`.
+- **Vị thế:** `futuresPositions`, `futuresPositionHistory`, `futuresClosePosition` (đóng hết hoặc một phần), `futuresAdjustMargin` (+/−), `futuresSetTpSl`.
+- **Admin:** `adminFuturesSymbols`, `adminUpdateFuturesSymbol` (bật/tắt, đòn bẩy tối đa, tỷ lệ ký quỹ duy trì; ghi nhật ký `FUTURES_SYMBOL_UPDATE`).
+- **Realtime:**
+  - kênh `futures:ticker|mark|depth|trades:<SYMBOL>`, `futures:candles:<SYMBOL>:<i>`, `futures:status`;
+  - kênh `user` thêm `futuresOrder`, `futuresTrade`, `futuresPosition`, `futuresAccount`.
+- **Mã lỗi:** `LEVERAGE_LOCKED`, `INVALID_LEVERAGE`, `REDUCE_ONLY_REJECTED`, `MARGIN_TOO_LOW`.
+- **`@cex/core`:** `initialMargin`, `pnl`, `liquidationPrice`, `isLiquidatable`, `fundingPayment`, `averageEntry`, `returnOnMargin` — UI dùng để **hiển thị** lãi lỗ realtime theo kênh `futures:mark`.
+- **Mock:** đủ 26 endpoint và realtime Futures. `setMockFuturesPrice('BTCUSDT', 70000)` để thử khớp Limit, TP/SL, thanh lý; `mockSettleFunding()` để thử thanh toán funding.
+
 ## 0.4.0 — 2026-10-09 (Giai đoạn 2.5: dữ liệu cho giao diện v2)
 Chỉ **thêm**, không phá code đang chạy. Riêng mock: giờ **từ chối request sai hợp đồng** (`VALIDATION_ERROR`, 400) giống server — trước đây mock nhận mọi thứ.
 

@@ -10,6 +10,8 @@ import type { CandleInterval } from '../common.ts';
 import { fixtureCandles, fixtureDepth, fixtureMarketStatus, fixtureTicker, fmtPrice, MOCK_PAIRS } from '../fixtures/index.ts';
 import { mockStore } from './store.ts';
 import { mockProcessPrice } from './engine.ts';
+import { mockFuturesTick } from './futures.ts';
+import { fixtureFuturesCandles, fixtureFuturesDepth, fixtureFuturesTicker, fixtureMarkPrice, fmtFuturesPrice, fmtFuturesQty, MOCK_FUTURES, MOCK_FUTURES_FROZEN } from '../fixtures/futures.ts';
 
 export interface MockRealtimeOptions {
   /** Tick interval for market updates (default 1000ms). */
@@ -51,6 +53,7 @@ export function createMockRealtimeClient(opts: MockRealtimeOptions = {}): Realti
       const p = (mockStore.prices[symbol] = mockStore.prices[symbol]! * (1 + (Math.random() - 0.5) * 2 * vol));
       mockProcessPrice(symbol, p);
     }
+    mockFuturesTick();
     if (subs.has('exchange:status')) {
       const st = exchangeStatus();
       const key = JSON.stringify({ ...st, updatedAt: '' });
@@ -60,6 +63,21 @@ export function createMockRealtimeClient(opts: MockRealtimeOptions = {}): Realti
       }
     }
     for (const channel of subs.keys()) {
+      if (channel.startsWith('futures:')) {
+        const [, kind, symbol, interval] = channel.split(':');
+        if (kind === 'status') {
+          emit(channel, { ...fixtureMarketStatus, symbols: Object.keys(MOCK_FUTURES).map((s) => ({ symbol: s, status: s === 'LINKUSDT' ? 'UNAVAILABLE' : s === 'AVAXUSDT' ? 'STALE' : 'LIVE', lastUpdateAt: s === 'LINKUSDT' ? null : new Date().toISOString() })) });
+          continue;
+        }
+        if (!symbol || !MOCK_FUTURES[symbol] || MOCK_FUTURES_FROZEN.has(symbol)) continue;
+        const fp = mockStore.futures.prices[symbol]!;
+        if (kind === 'ticker') emit(channel, fixtureFuturesTicker(symbol, fp));
+        else if (kind === 'mark') emit(channel, fixtureMarkPrice(symbol, fp));
+        else if (kind === 'depth') emit(channel, fixtureFuturesDepth(symbol, fp));
+        else if (kind === 'trades') emit(channel, { id: tradeId++, price: fmtFuturesPrice(symbol, fp), qty: fmtFuturesQty(symbol, Number(MOCK_FUTURES[symbol]!.minQty) * (1 + Math.floor(Math.random() * 20))), time: Date.now(), isBuyerMaker: Math.random() < 0.5 });
+        else if (kind === 'candles') emit(channel, { ...fixtureFuturesCandles(symbol, interval as CandleInterval, fp, 1, Date.now())[0]!, close: fmtFuturesPrice(symbol, fp), closed: false });
+        continue;
+      }
       const [kind, symbol, interval] = channel.split(':');
       if (!symbol || !MOCK_PAIRS[symbol] || FROZEN.has(symbol)) continue;
       const p = mockStore.prices[symbol]!;

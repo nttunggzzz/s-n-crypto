@@ -1,7 +1,8 @@
 import { z } from 'zod';
 import { AssetCode, DecimalString, IsoDateTime, Role, SymbolCode, TimeRangeQuery } from './common.ts';
 import { AssetTag, MarketStatus, SymbolInfo } from './market.ts';
-import { Balance, LedgerEntry } from './wallet.ts';
+import { Balance, LedgerEntry, WalletAccount } from './wallet.ts';
+import { FuturesFees } from './futures.ts';
 
 /** Every admin action that changes data must say why (stored in the audit log). */
 export const Reason = z.string().trim().min(5, 'at least 5 characters').max(500);
@@ -72,6 +73,7 @@ export const ExchangeSettings = z.object({
   tradingHalted: z.boolean(),
   feeRate: DecimalString,
   faucet: z.object({ asset: AssetCode, amount: DecimalString, cooldownHours: z.number().int(), lifetimeCap: DecimalString }),
+  futures: FuturesFees,
   /** Market data older than this → STALE → no new orders, no matching. */
   staleThresholdMs: z.number().int(),
   updatedAt: IsoDateTime,
@@ -86,6 +88,10 @@ export const UpdateSettingsRequest = z
     faucetCooldownHours: z.number().int().min(0).max(24 * 30).optional(),
     faucetLifetimeCap: DecimalString.optional(),
     staleThresholdMs: z.number().int().min(2_000).max(120_000).optional(),
+    /** Futures fees, 0 … 0.01 each (liquidation fee 0 … 0.05). */
+    futuresMakerFee: DecimalString.optional(),
+    futuresTakerFee: DecimalString.optional(),
+    futuresLiquidationFee: DecimalString.optional(),
     reason: Reason,
   })
   .refine((r) => Object.keys(r).some((k) => k !== 'reason'), { message: 'change at least one setting' });
@@ -130,6 +136,7 @@ export const AuditAction = z.enum([
   'ASSET_UPDATE',
   'ANNOUNCEMENT_CREATE',
   'ANNOUNCEMENT_UPDATE',
+  'FUTURES_SYMBOL_UPDATE',
 ]);
 export type AuditAction = z.infer<typeof AuditAction>;
 
@@ -162,7 +169,9 @@ export const AuditLogQuery = z
   .extend(TimeRangeQuery.shape);
 
 export const ReconciliationMismatch = z.object({
-  kind: z.enum(['LEDGER_VS_BALANCE', 'LOCKED_VS_OPEN_ORDERS']),
+  /** LOCKED_VS_FUTURES: futures locked ≠ open futures orders' reservations + open positions' margin. */
+  kind: z.enum(['LEDGER_VS_BALANCE', 'LOCKED_VS_OPEN_ORDERS', 'LOCKED_VS_FUTURES']),
+  account: WalletAccount,
   userId: z.string(),
   asset: z.string(),
   field: z.enum(['available', 'locked']),

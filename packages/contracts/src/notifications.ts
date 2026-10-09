@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { CloseReason, DecimalString, IsoDateTime, OrderSide, OrderType, SymbolCode } from './common.ts';
+import { PositionSide } from './futures.ts';
 
 /**
  * In-app notifications for things that happen while the user is away (not for the
@@ -30,6 +31,13 @@ export const Notification = z.discriminatedUnion('type', [
   /** TP/SL could not be placed (e.g. received quantity below the pair minimum). */
   z.object({ ...base, type: z.literal('TPSL_SKIPPED'), orderId: z.string(), symbol: SymbolCode, reason: z.string() }),
   z.object({ ...base, type: z.literal('PRICE_ALERT'), alertId: z.string(), symbol: SymbolCode, condition: z.enum(['ABOVE', 'BELOW']), targetPrice: DecimalString, lastPrice: DecimalString }),
+  // futures (phase F)
+  /** A resting futures limit order finished filling. */
+  z.object({ ...base, type: z.literal('FUTURES_ORDER_FILLED'), orderId: z.string(), symbol: SymbolCode, side: OrderSide, executedQty: DecimalString, avgPrice: DecimalString }),
+  /** Position closed by its take-profit or stop-loss (mark price reached it). */
+  z.object({ ...base, type: z.literal('POSITION_TPSL'), positionId: z.string(), symbol: SymbolCode, side: PositionSide, reason: z.enum(['TAKE_PROFIT', 'STOP_LOSS']), quantity: DecimalString, price: DecimalString, realizedPnl: DecimalString }),
+  /** Position liquidated: margin + PnL fell to the maintenance margin. */
+  z.object({ ...base, type: z.literal('POSITION_LIQUIDATED'), positionId: z.string(), symbol: SymbolCode, side: PositionSide, quantity: DecimalString, markPrice: DecimalString, lostMargin: DecimalString }),
 ]);
 export type Notification = z.infer<typeof Notification>;
 export type NotificationType = Notification['type'];
