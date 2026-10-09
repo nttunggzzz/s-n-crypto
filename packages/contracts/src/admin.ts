@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { AssetCode, DecimalString, IsoDateTime, Role, SymbolCode, TimeRangeQuery } from './common.ts';
-import { MarketStatus, SymbolInfo } from './market.ts';
+import { AssetTag, MarketStatus, SymbolInfo } from './market.ts';
 import { Balance, LedgerEntry } from './wallet.ts';
 
 /** Every admin action that changes data must say why (stored in the audit log). */
@@ -127,8 +127,14 @@ export const AuditAction = z.enum([
   'TWO_FACTOR_DISABLE',
   /** role set from the server command line (first owner) */
   'ROLE_BOOTSTRAP',
+  'ASSET_UPDATE',
+  'ANNOUNCEMENT_CREATE',
+  'ANNOUNCEMENT_UPDATE',
 ]);
 export type AuditAction = z.infer<typeof AuditAction>;
+
+export const AuditTargetType = z.enum(['USER', 'EXCHANGE', 'SYMBOL', 'ASSET', 'ANNOUNCEMENT']);
+export type AuditTargetType = z.infer<typeof AuditTargetType>;
 
 /** Append-only: entries can never be edited or deleted (enforced by the database). */
 export const AuditLogEntry = z.object({
@@ -136,7 +142,7 @@ export const AuditLogEntry = z.object({
   /** null for actions run from the server command line. */
   actor: z.object({ id: z.string(), email: z.string() }).nullable(),
   action: AuditAction,
-  targetType: z.enum(['USER', 'EXCHANGE', 'SYMBOL']).nullable(),
+  targetType: AuditTargetType.nullable(),
   targetId: z.string().nullable(),
   before: z.unknown(),
   after: z.unknown(),
@@ -150,7 +156,7 @@ export const AuditLogQuery = z
   .object({
     actorId: z.string().optional(),
     action: AuditAction.optional(),
-    targetType: z.enum(['USER', 'EXCHANGE', 'SYMBOL']).optional(),
+    targetType: AuditTargetType.optional(),
     targetId: z.string().optional(),
   })
   .extend(TimeRangeQuery.shape);
@@ -188,3 +194,13 @@ export type AdminOverview = z.infer<typeof AdminOverview>;
 
 export const UserIdParam = z.object({ userId: z.uuid() });
 export const SymbolParam = z.object({ symbol: SymbolCode });
+
+export const AssetParam = z.object({ asset: AssetCode });
+
+/** PATCH coin display info; only the fields sent change. */
+export const UpdateAssetRequest = z.object({
+  name: z.string().trim().min(1).max(60).nullable().optional(),
+  tags: z.array(AssetTag).max(5).optional(),
+  description: z.string().trim().min(1).max(1000).nullable().optional(),
+  reason: Reason,
+});

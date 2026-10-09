@@ -50,7 +50,7 @@ describe('phase 3 mocks follow the contract', () => {
     await api.adminUserOrders({ params: { userId: DEMO }, query: { open: 'false' } });
     await api.adminUserLedger({ params: { userId: DEMO } });
     await api.adminGetSettings();
-    expect((await api.adminListSymbols()).items).toHaveLength(10);
+    expect((await api.adminListSymbols()).items).toHaveLength(50);
     await api.adminAuditLogs({ query: { action: 'BALANCE_ADJUST' } });
     expect((await api.adminReconciliationRuns()).items[1]!.ok).toBe(false);
   });

@@ -21,12 +21,22 @@ import {
   VerifyEmailRequest,
 } from './auth.ts';
 import {
+  AdminAnnouncement,
+  AdminAnnouncementListQuery,
+  Announcement,
+  AnnouncementIdParam,
+  AnnouncementListQuery,
+  CreateAnnouncementRequest,
+  UpdateAnnouncementRequest,
+} from './announcements.ts';
+import {
   AdminOverview,
   AdminSymbol,
   AdminUserDetail,
   AdminUserListQuery,
   AdminUserOrdersQuery,
   AdminUserSummary,
+  AssetParam,
   AuditLogEntry,
   AuditLogQuery,
   BalanceAdjustmentRequest,
@@ -40,12 +50,13 @@ import {
   SetRoleRequest,
   SignalsAccessRequest,
   SymbolParam as AdminSymbolParam,
+  UpdateAssetRequest,
   UpdateSettingsRequest,
   UpdateSymbolRequest,
   UserIdParam,
 } from './admin.ts';
 import type { Permission } from './permissions.ts';
-import { Candles, CandlesQuery, Depth, ExchangeInfo, LimitQuery, MarketConnection, MarketStatus, MarketTrades, Ticker } from './market.ts';
+import { AssetInfo, Candles, CandlesQuery, Depth, DepthQuery, ExchangeInfo, LimitQuery, MarketConnection, MarketStatus, MarketTrades, Sparklines, SparklinesQuery, Ticker } from './market.ts';
 import { Balances, FaucetClaimResult, FaucetStatus, LedgerEntry, LedgerQuery } from './wallet.ts';
 import { CancelAllResponse, HistoryQuery, Order, OrderList, PlaceOcoRequest, PlaceOrderRequest, PlaceOrderResponse, SymbolFilterQuery, Trade } from './orders.ts';
 import { Portfolio, PortfolioHistory, PortfolioRange } from './portfolio.ts';
@@ -118,10 +129,16 @@ export const endpoints = {
   // ---- market data (P04)
   exchangeInfo: ep({ method: 'GET', path: '/api/v1/market/exchange-info', auth: 'public', response: ExchangeInfo }),
   tickers: ep({ method: 'GET', path: '/api/v1/market/tickers', auth: 'public', response: z.object({ items: z.array(Ticker) }) }),
-  depth: ep({ method: 'GET', path: '/api/v1/market/depth/:symbol', auth: 'public', params: SymbolParam, query: LimitQuery, response: Depth }),
+  /** limit 1–500; > 20 adds snapshot levels below the live top 20 (see Depth). */
+  depth: ep({ method: 'GET', path: '/api/v1/market/depth/:symbol', auth: 'public', params: SymbolParam, query: DepthQuery, response: Depth }),
   marketTrades: ep({ method: 'GET', path: '/api/v1/market/trades/:symbol', auth: 'public', params: SymbolParam, query: LimitQuery, response: MarketTrades }),
   candles: ep({ method: 'GET', path: '/api/v1/market/candles/:symbol', auth: 'public', params: SymbolParam, query: CandlesQuery, response: Candles }),
   marketStatus: ep({ method: 'GET', path: '/api/v1/market/status', auth: 'public', response: MarketStatus }),
+  /** Every symbol's mini chart (cached ~60 s on the server). */
+  sparklines: ep({ method: 'GET', path: '/api/v1/market/sparklines', auth: 'public', query: SparklinesQuery, response: Sparklines }),
+
+  // ---- exchange announcements (phase 2.5)
+  announcements: ep({ method: 'GET', path: '/api/v1/announcements', auth: 'public', query: AnnouncementListQuery, response: z.object({ items: z.array(Announcement) }) }),
 
   // ---- wallet (P05)
   balances: ep({ method: 'GET', path: '/api/v1/wallet/balances', auth: 'user', response: Balances }),
@@ -186,6 +203,11 @@ export const endpoints = {
   adminAuditLogs: ep({ method: 'GET', path: '/api/v1/admin/audit-logs', auth: 'staff', permission: 'audit.read', query: AuditLogQuery.extend(PaginationQuery.shape), response: paginated(AuditLogEntry) }),
   adminReconciliationRuns: ep({ method: 'GET', path: '/api/v1/admin/reconciliation', auth: 'staff', permission: 'reconciliation.read', query: PaginationQuery, response: paginated(ReconciliationRun) }),
   adminRunReconciliation: ep({ method: 'POST', path: '/api/v1/admin/reconciliation/run', auth: 'staff', permission: 'reconciliation.run', body: Empty, response: ReconciliationRun }),
+  // phase 2.5: coin info + announcements
+  adminUpdateAsset: ep({ method: 'PATCH', path: '/api/v1/admin/assets/:asset', auth: 'staff', permission: 'exchange.configure', params: AssetParam, body: UpdateAssetRequest, response: AssetInfo }),
+  adminListAnnouncements: ep({ method: 'GET', path: '/api/v1/admin/announcements', auth: 'staff', permission: 'exchange.read', query: AdminAnnouncementListQuery.extend(PaginationQuery.shape), response: paginated(AdminAnnouncement) }),
+  adminCreateAnnouncement: ep({ method: 'POST', path: '/api/v1/admin/announcements', auth: 'staff', permission: 'content.manage', body: CreateAnnouncementRequest, response: AdminAnnouncement, status: 201 }),
+  adminUpdateAnnouncement: ep({ method: 'PATCH', path: '/api/v1/admin/announcements/:announcementId', auth: 'staff', permission: 'content.manage', params: AnnouncementIdParam, body: UpdateAnnouncementRequest, response: AdminAnnouncement }),
 } as const satisfies Record<string, EndpointDef>;
 
 export type Endpoints = typeof endpoints;

@@ -3,11 +3,13 @@
  * matching, fees and balances live on the server. Uses JS numbers internally; never copy
  * this math into the UI.
  */
-import type { AdminSymbol, AdminUserSummary, AuditLogEntry, Balance, ExchangeSettings, MarketTrade, Notification, Order, OrderList, Preferences, PriceAlert, ReconciliationRun, Role, Trade, UserEvent } from '../index.ts';
+import type { AdminAnnouncement, AdminSymbol, AdminUserSummary, AssetInfo, AuditLogEntry, Balance, ExchangeSettings, MarketTrade, Notification, Order, OrderList, Preferences, PriceAlert, ReconciliationRun, Role, Trade, UserEvent } from '../index.ts';
 import {
+  fixtureAdminAnnouncements,
   fixtureAdminSymbols,
   fixtureAdminUsers,
   fixtureAlerts,
+  fixtureAssets,
   fixtureAuditLogs,
   fixtureExchangeSettings,
   fixtureMyTrades,
@@ -44,6 +46,8 @@ export const mockStore = {
   settings: clone(fixtureExchangeSettings) as ExchangeSettings,
   adminSymbols: clone(fixtureAdminSymbols) as AdminSymbol[],
   reconciliationRuns: clone(fixtureReconciliationRuns) as ReconciliationRun[],
+  assets: clone(fixtureAssets) as AssetInfo[],
+  announcements: clone(fixtureAdminAnnouncements) as AdminAnnouncement[],
   faucetClaimedAt: Date.parse('2026-10-09T03:00:00.000Z') as number | null,
   totalClaimed: 10000,
   balances: initialBalances(),
@@ -80,6 +84,8 @@ export function resetMockStore(scenario: MockScenario = 'normal'): void {
   mockStore.settings = { ...clone(fixtureExchangeSettings), tradingHalted: scenario === 'halted' };
   mockStore.adminSymbols = clone(fixtureAdminSymbols);
   mockStore.reconciliationRuns = clone(fixtureReconciliationRuns);
+  mockStore.assets = clone(fixtureAssets);
+  mockStore.announcements = empty ? [] : clone(fixtureAdminAnnouncements);
   mockStore.nextId = 1000;
   mockStore.prices = Object.fromEntries(Object.entries(MOCK_PAIRS).map(([s, p]) => [s, p.price]));
 }

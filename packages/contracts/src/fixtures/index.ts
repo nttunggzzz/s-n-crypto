@@ -3,11 +3,14 @@
  * Never imported by the server; the UI must not load it on staging/production.
  * Prices here are made-up round numbers, not market data.
  */
+import { ASSET_CATALOG } from '../assetCatalog.ts';
 import type {
+  AdminAnnouncement,
   AdminOverview,
   AdminSymbol,
   AdminUserDetail,
   AdminUserSummary,
+  AssetInfo,
   AuditLogEntry,
   Balances,
   ExchangeSettings,
@@ -30,6 +33,8 @@ import type {
   Preferences,
   PriceAlert,
   SessionInfo,
+  SparklineRange,
+  Sparklines,
   SymbolInfo,
   Ticker,
   Trade,
@@ -57,6 +62,46 @@ export const MOCK_PAIRS: Record<string, MockPair> = {
   AVAXUSDT: { base: 'AVAX', price: 10.25, tick: '0.001', step: '0.01', minNotional: '5' },
   LINKUSDT: { base: 'LINK', price: 12.8, tick: '0.001', step: '0.01', minNotional: '5' },
   SUIUSDT: { base: 'SUI', price: 1.05, tick: '0.0001', step: '0.1', minNotional: '5' },
+  NEARUSDT: { base: 'NEAR', price: 4.8, tick: '0.001', step: '0.1', minNotional: '5' },
+  UNIUSDT: { base: 'UNI', price: 7.4, tick: '0.001', step: '0.01', minNotional: '5' },
+  ENAUSDT: { base: 'ENA', price: 0.22, tick: '0.0001', step: '0.01', minNotional: '5' },
+  TAOUSDT: { base: 'TAO', price: 280, tick: '0.1', step: '0.0001', minNotional: '5' },
+  ONDOUSDT: { base: 'ONDO', price: 0.49, tick: '0.0001', step: '0.1', minNotional: '5' },
+  PEPEUSDT: { base: 'PEPE', price: 0.0000039, tick: '0.00000001', step: '1', minNotional: '1' },
+  WLDUSDT: { base: 'WLD', price: 0.49, tick: '0.0001', step: '0.1', minNotional: '5' },
+  AAVEUSDT: { base: 'AAVE', price: 170, tick: '0.01', step: '0.001', minNotional: '5' },
+  TRXUSDT: { base: 'TRX', price: 0.33, tick: '0.0001', step: '0.1', minNotional: '5' },
+  BCHUSDT: { base: 'BCH', price: 280, tick: '0.1', step: '0.001', minNotional: '5' },
+  FETUSDT: { base: 'FET', price: 0.22, tick: '0.0001', step: '0.1', minNotional: '5' },
+  LTCUSDT: { base: 'LTC', price: 64, tick: '0.01', step: '0.001', minNotional: '5' },
+  TIAUSDT: { base: 'TIA', price: 0.48, tick: '0.0001', step: '0.01', minNotional: '5' },
+  DOTUSDT: { base: 'DOT', price: 1.2, tick: '0.001', step: '0.01', minNotional: '5' },
+  APTUSDT: { base: 'APT', price: 0.81, tick: '0.0001', step: '0.01', minNotional: '5' },
+  FILUSDT: { base: 'FIL', price: 1.1, tick: '0.0001', step: '0.01', minNotional: '5' },
+  HBARUSDT: { base: 'HBAR', price: 0.092, tick: '0.00001', step: '1', minNotional: '5' },
+  ARBUSDT: { base: 'ARB', price: 0.18, tick: '0.0001', step: '0.1', minNotional: '5' },
+  XLMUSDT: { base: 'XLM', price: 0.19, tick: '0.0001', step: '1', minNotional: '5' },
+  INJUSDT: { base: 'INJ', price: 7, tick: '0.001', step: '0.01', minNotional: '5' },
+  ATOMUSDT: { base: 'ATOM', price: 2, tick: '0.001', step: '0.01', minNotional: '5' },
+  TRUMPUSDT: { base: 'TRUMP', price: 1.8, tick: '0.001', step: '0.001', minNotional: '1' },
+  PENGUUSDT: { base: 'PENGU', price: 0.008, tick: '0.000001', step: '1', minNotional: '1' },
+  ICPUSDT: { base: 'ICP', price: 3, tick: '0.001', step: '0.01', minNotional: '5' },
+  JUPUSDT: { base: 'JUP', price: 0.36, tick: '0.0001', step: '0.1', minNotional: '5' },
+  ALGOUSDT: { base: 'ALGO', price: 0.12, tick: '0.0001', step: '1', minNotional: '5' },
+  OPUSDT: { base: 'OP', price: 0.12, tick: '0.0001', step: '0.01', minNotional: '5' },
+  VIRTUALUSDT: { base: 'VIRTUAL', price: 0.72, tick: '0.0001', step: '0.1', minNotional: '5' },
+  RENDERUSDT: { base: 'RENDER', price: 1.9, tick: '0.001', step: '0.01', minNotional: '5' },
+  CRVUSDT: { base: 'CRV', price: 0.35, tick: '0.0001', step: '0.1', minNotional: '5' },
+  LDOUSDT: { base: 'LDO', price: 0.42, tick: '0.0001', step: '0.01', minNotional: '5' },
+  POLUSDT: { base: 'POL', price: 0.099, tick: '0.00001', step: '0.1', minNotional: '5' },
+  SEIUSDT: { base: 'SEI', price: 0.066, tick: '0.00001', step: '0.1', minNotional: '5' },
+  SHIBUSDT: { base: 'SHIB', price: 0.0000054, tick: '0.00000001', step: '1', minNotional: '1' },
+  ETCUSDT: { base: 'ETC', price: 8.2, tick: '0.01', step: '0.01', minNotional: '5' },
+  WIFUSDT: { base: 'WIF', price: 0.21, tick: '0.0001', step: '0.01', minNotional: '1' },
+  BONKUSDT: { base: 'BONK', price: 0.0000033, tick: '0.00000001', step: '1', minNotional: '1' },
+  FLOKIUSDT: { base: 'FLOKI', price: 0.000027, tick: '0.00000001', step: '1', minNotional: '1' },
+  KAIAUSDT: { base: 'KAIA', price: 0.054, tick: '0.0001', step: '0.1', minNotional: '5' },
+  STXUSDT: { base: 'STX', price: 0.39, tick: '0.0001', step: '0.1', minNotional: '5' },
 };
 
 const decimals = (step: string) => (step.includes('.') ? step.split('.')[1]!.replace(/0+$/, '').length : 0);
@@ -77,12 +122,109 @@ export const fixtureSymbols: SymbolInfo[] = Object.entries(MOCK_PAIRS).map(([sym
   enabled: symbol !== 'SUIUSDT', // one disabled pair so the UI can render that state
 }));
 
+/** Coin info for every mock asset (from the real default catalog). */
+export const fixtureAssets: AssetInfo[] = [...new Set(fixtureSymbols.flatMap((s) => [s.baseAsset, s.quoteAsset]))].map(
+  (asset) => ASSET_CATALOG.find((a) => a.asset === asset) ?? { asset, name: null, tags: [], description: null },
+);
+
 export const fixtureExchangeInfo: ExchangeInfo = {
   tradingHalted: false,
   feeRate: '0.001',
   symbols: fixtureSymbols,
+  assets: fixtureAssets,
   serverTime: T0,
 };
+
+/** Deterministic wavy mini charts (fake). LINKUSDT has none (UNAVAILABLE), like its ticker. */
+export function fixtureSparklines(range: SparklineRange = '24h', prices: Record<string, number> = {}): Sparklines {
+  const n = range === '24h' ? 25 : 43;
+  return {
+    range,
+    interval: range === '24h' ? '1h' : '4h',
+    items: Object.entries(MOCK_PAIRS).map(([symbol, p], k) => {
+      if (symbol === 'LINKUSDT') return { symbol, points: [], status: 'UNAVAILABLE' as const };
+      const last = prices[symbol] ?? p.price;
+      const trend = ((k % 7) - 3) / 100; // -3%..+3% over the range
+      const points = Array.from({ length: n }, (_, i) => {
+        const t = i / (n - 1);
+        const v = last * (1 - trend * (1 - t)) * (1 + 0.012 * Math.sin(i * 0.9 + k));
+        return fmtPrice(symbol, i === n - 1 ? last : v);
+      });
+      return { symbol, points, status: symbol === 'AVAXUSDT' ? ('STALE' as const) : ('LIVE' as const) };
+    }),
+    updatedAt: T0,
+  };
+}
+
+const OWNER_REF = { id: '00000000-0000-4000-8000-000000000001', email: 'owner@example.com' };
+
+export const fixtureAdminAnnouncements: AdminAnnouncement[] = [
+  {
+    id: '3',
+    title: 'Bảo trì nguồn giá 02:00–02:30 (GMT+7) ngày 12/10',
+    body: 'Trong thời gian bảo trì, giao dịch có thể tạm dừng vài phút.\nLệnh đang chờ được giữ nguyên.',
+    level: 'MAINTENANCE',
+    pinned: true,
+    publishedAt: '2026-10-09T02:00:00.000Z',
+    expiresAt: null,
+    hidden: false,
+    createdBy: OWNER_REF,
+    createdAt: '2026-10-09T02:00:00.000Z',
+    updatedAt: '2026-10-09T02:00:00.000Z',
+  },
+  {
+    id: '2',
+    title: 'Niêm yết thêm 40 cặp giao dịch',
+    body: 'Sàn mô phỏng đã có 50 cặp USDT, gồm các nhóm Layer 1, Meme, AI và DeFi.',
+    level: 'IMPORTANT',
+    pinned: false,
+    publishedAt: '2026-10-09T01:00:00.000Z',
+    expiresAt: null,
+    hidden: false,
+    createdBy: OWNER_REF,
+    createdAt: '2026-10-09T01:00:00.000Z',
+    updatedAt: '2026-10-09T01:00:00.000Z',
+  },
+  {
+    id: '1',
+    title: 'Chào mừng đến sàn mô phỏng',
+    body: 'Nhận 10.000 USDT ảo mỗi ngày ở trang Tài sản và luyện giao dịch với giá thật.',
+    level: 'INFO',
+    pinned: false,
+    publishedAt: '2026-10-08T01:00:00.000Z',
+    expiresAt: null,
+    hidden: false,
+    createdBy: null,
+    createdAt: '2026-10-08T01:00:00.000Z',
+    updatedAt: '2026-10-08T01:00:00.000Z',
+  },
+  {
+    id: '0',
+    title: 'Đã hết hạn: bảo trì ngày 07/10',
+    body: 'Thông báo này đã hết hạn nên không còn hiện cho người dùng.',
+    level: 'MAINTENANCE',
+    pinned: true,
+    publishedAt: '2026-10-06T01:00:00.000Z',
+    expiresAt: '2026-10-07T01:00:00.000Z',
+    hidden: false,
+    createdBy: OWNER_REF,
+    createdAt: '2026-10-06T01:00:00.000Z',
+    updatedAt: '2026-10-06T01:00:00.000Z',
+  },
+  {
+    id: '4',
+    title: 'Bản nháp: giải đấu tháng 11',
+    body: 'Chưa công bố.',
+    level: 'INFO',
+    pinned: false,
+    publishedAt: null,
+    expiresAt: null,
+    hidden: false,
+    createdBy: OWNER_REF,
+    createdAt: '2026-10-09T03:00:00.000Z',
+    updatedAt: '2026-10-09T03:00:00.000Z',
+  },
+];
 
 export function fixtureTicker(symbol: string, price = MOCK_PAIRS[symbol]!.price): Ticker {
   // AVAXUSDT is STALE and LINKUSDT UNAVAILABLE so every UI state can be seen.
@@ -114,7 +256,8 @@ export function fixtureDepth(symbol: string, mid = MOCK_PAIRS[symbol]!.price, le
   const qty = (i: number) => (((i * 37) % 11) / 10 + 0.05).toFixed(decimals(MOCK_PAIRS[symbol]!.step) || 0);
   return {
     symbol,
-    bids: Array.from({ length: levels }, (_, i) => [fmtPrice(symbol, mid - tick * (i + 1) * 5), qty(i)] as [string, string]),
+    // deep books of tiny-priced coins would go below zero: stop there, like a real thin book
+    bids: Array.from({ length: levels }, (_, i) => [fmtPrice(symbol, mid - tick * (i + 1) * 5), qty(i)] as [string, string]).filter(([p]) => Number(p) > 0),
     asks: Array.from({ length: levels }, (_, i) => [fmtPrice(symbol, mid + tick * i * 5), qty(i + 3)] as [string, string]),
     status: 'LIVE',
     updatedAt: T0,

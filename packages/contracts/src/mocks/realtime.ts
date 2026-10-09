@@ -22,6 +22,12 @@ export interface MockRealtimeOptions {
 
 const FROZEN = new Set(['LINKUSDT', 'AVAXUSDT']); // UNAVAILABLE / STALE in the fixtures
 
+const exchangeStatus = () => ({
+  tradingHalted: mockStore.settings.tradingHalted || mockStore.scenario === 'halted',
+  disabledSymbols: mockStore.adminSymbols.filter((s) => !s.enabled).map((s) => s.symbol),
+  updatedAt: new Date().toISOString(),
+});
+
 export function createMockRealtimeClient(opts: MockRealtimeOptions = {}): RealtimeClient {
   const intervalMs = opts.intervalMs ?? 1000;
   const vol = opts.volatility ?? 0.001;
@@ -30,6 +36,7 @@ export function createMockRealtimeClient(opts: MockRealtimeOptions = {}): Realti
   const errorCbs = new Set<(e: { code: string; message: string; channel?: string }) => void>();
   let tradeId = 5000;
   let status: RealtimeStatus = 'open';
+  let lastExchangeStatus = '';
 
   const emit = (channel: string, data: unknown) => subs.get(channel)?.forEach((cb) => cb(data));
   const setStatus = (s: RealtimeStatus) => {
@@ -43,6 +50,14 @@ export function createMockRealtimeClient(opts: MockRealtimeOptions = {}): Realti
       if (FROZEN.has(symbol)) continue;
       const p = (mockStore.prices[symbol] = mockStore.prices[symbol]! * (1 + (Math.random() - 0.5) * 2 * vol));
       mockProcessPrice(symbol, p);
+    }
+    if (subs.has('exchange:status')) {
+      const st = exchangeStatus();
+      const key = JSON.stringify({ ...st, updatedAt: '' });
+      if (key !== lastExchangeStatus) {
+        lastExchangeStatus = key;
+        emit('exchange:status', st);
+      }
     }
     for (const channel of subs.keys()) {
       const [kind, symbol, interval] = channel.split(':');
@@ -78,6 +93,7 @@ export function createMockRealtimeClient(opts: MockRealtimeOptions = {}): Realti
       if (!set) subs.set(channel, (set = new Set()));
       set.add(onData as (d: unknown) => void);
       if (channel === 'market:status') queueMicrotask(() => onData(fixtureMarketStatus as ChannelData<C>));
+      if (channel === 'exchange:status') queueMicrotask(() => onData(exchangeStatus() as ChannelData<C>));
       return () => {
         set.delete(onData as (d: unknown) => void);
         if (set.size === 0) subs.delete(channel);

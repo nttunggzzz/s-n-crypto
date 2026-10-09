@@ -106,3 +106,25 @@ Mock: `setMockPrice('BTCUSDT', 75000)` đẩy giá để xem stop kích hoạt, 
 - Cộng/trừ số dư: `amount` có dấu (`"-250.5"` = trừ). Hộp xác nhận hiển thị số dư trước/sau lấy từ `adminGetUser` (chỉ để xem trước — số thật là `result.balance`).
 - Tài khoản bot (`isBot`) → không hiện nút chỉnh; server trả `BOT_ACCOUNT_PROTECTED`.
 - Mock: `setMockRole('admin')` để vào app admin; `setMockRole('admin', false)` để xem màn hình "chưa bật 2FA"; `setMockRole('support')` để xem giới hạn quyền.
+
+## 7. Giai đoạn 2.5 — dữ liệu cho giao diện v2 (v0.4.0)
+
+- **Tên và nhóm coin:**
+  - `exchangeInfo().assets` — nối theo `symbol.baseAsset`.
+  - Chip nhóm ngành: `ASSET_TAG_LABELS[tag][locale]`.
+  - `name: null` → hiện mã coin. `description: null` → ẩn khối mô tả.
+- **Sparkline:** gọi `sparklines()` khi mở trang Thị trường, làm mới mỗi 60 giây; vẽ bằng SVG polyline.
+  - `points` là chuỗi số, chỉ chuyển sang số thực để **vẽ**.
+  - `UNAVAILABLE` → ô trống, không vẽ đường phẳng.
+  - `STALE` → vẽ mờ.
+- **Sổ lệnh sâu:** gọi `depth({ query: { limit: 200 } })` mỗi 2–3 giây khi người dùng chọn gom giá thô (×100, ×1000). 20 mức đầu vẫn lấy từ kênh `depth:<SYMBOL>` realtime.
+- **Trạng thái sàn:** subscribe `exchange:status` một lần ở cấp app.
+  - `tradingHalted` → banner đỏ + khóa form lệnh.
+  - `disabledSymbols` → nhãn "Tạm ngưng" + khóa cặp.
+- **Thông báo:** trang chủ hiện `announcements({ query: { limit: 5 } })`.
+  - `body` là văn bản thuần: hiển thị bằng text, giữ xuống dòng (`white-space: pre-line`), **không** dùng `dangerouslySetInnerHTML`.
+  - `MAINTENANCE` → màu cảnh báo; `pinned` → ghim đầu.
+- **Admin** (app `apps/admin`):
+  - màn **Thông báo**: danh sách gồm cả bản nháp; nút Đăng, Ghim, Ẩn; ngày hết hạn;
+  - màn **Thông tin coin**: sửa tên, nhóm (tối đa 5), mô tả, có lý do;
+  - cần quyền `content.manage` / `exchange.configure`.

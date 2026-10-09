@@ -1,5 +1,28 @@
 # Changelog — @cex/contracts
 
+## 0.4.0 — 2026-10-09 (Giai đoạn 2.5: dữ liệu cho giao diện v2)
+Chỉ **thêm**, không phá code đang chạy. Riêng mock: giờ **từ chối request sai hợp đồng** (`VALIDATION_ERROR`, 400) giống server — trước đây mock nhận mọi thứ.
+
+**Thêm**
+- **50 cặp USDT** (trước 10). Danh sách ở `server/src/config.ts` (`SYMBOLS`).
+- `ExchangeInfo.assets`: thông tin coin — `name` (tên đầy đủ), `tags` (nhóm ngành), `description` (mô tả ngắn, văn bản thuần).
+  - Nhóm ngành: `AssetTag` + nhãn vi/en `ASSET_TAG_LABELS`.
+  - Dữ liệu mặc định: `ASSET_CATALOG`.
+- `sparklines({ query: { range: '24h' | '7d' } })`: biểu đồ mini cho mọi cặp.
+  - 24h = 25 điểm giá đóng nến 1h; 7d = 43 điểm nến 4h.
+  - Server cache 60 giây. Cặp không có dữ liệu → `points: []` + `UNAVAILABLE`.
+- `depth` nhận `limit` tới **500** (trước 100).
+  - 20 mức đầu là realtime.
+  - Phần sâu hơn lấy từ snapshot Binance, làm mới mỗi 1–3 giây, dùng để gom giá và vẽ biểu đồ độ sâu.
+- Kênh realtime **`exchange:status`** → `ExchangeStatus { tradingHalted, disabledSymbols, updatedAt }`. Gửi ảnh chụp khi subscribe, sau đó gửi mỗi khi admin dừng/mở giao dịch hoặc bật/tắt cặp. **Thay cho việc gọi lại `exchangeInfo` mỗi 30 giây.**
+- Thông báo của sàn: `announcements()` (công khai: đã đăng, chưa ẩn, chưa hết hạn; ghim lên đầu).
+- Admin:
+  - `adminUpdateAsset` (sửa tên/nhóm/mô tả coin, cần `reason`);
+  - `adminListAnnouncements`, `adminCreateAnnouncement`, `adminUpdateAnnouncement` — bản nháp, đăng, ghim, ẩn, hết hạn.
+  - Quyền mới: `content.manage` (admin, owner).
+  - Nhật ký: `ASSET_UPDATE`, `ANNOUNCEMENT_CREATE`, `ANNOUNCEMENT_UPDATE`; `targetType` thêm `ASSET`, `ANNOUNCEMENT` (`AuditTargetType`).
+- Mock: 50 cặp, sparkline giả, 5 thông báo mẫu (1 bản nháp, 1 đã hết hạn), `exchange:status` trong realtime mock.
+
 ## 0.3.0 — 2026-10-09 (Giai đoạn 3: Admin + 2FA)
 **Một thay đổi cần sửa UI:** `login` giờ trả về **một trong hai** dạng: `{ user }` (đăng nhập xong) **hoặc** `{ twoFactorRequired: true, challengeToken, expiresAt }` → hiện ô nhập mã 6 số rồi gọi `loginTwoFactor({ body: { challengeToken, code } })`. Kiểm tra bằng `'user' in res`.
 

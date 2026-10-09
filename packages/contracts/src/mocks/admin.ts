@@ -2,7 +2,7 @@
  * ⚠️ Mock resolvers for 2FA and the admin API — UI development only.
  * Codes: any 6 digits work except "000000" (= wrong code). Recovery codes look like "abcd-1234".
  */
-import type { AuditLogEntry, AdminUserSummary } from '../index.ts';
+import type { AdminAnnouncement, AnnouncementLevel, AssetTag, AuditLogEntry, AdminUserSummary } from '../index.ts';
 import { fixtureAdminUserDetail, fixtureLedger, fixtureOpenOrders, fixtureOrderHistory } from '../fixtures/index.ts';
 import { MockError, mockMe, now, ok, requireStaff, requireUser, type Resolver } from './common.ts';
 import { mockStore, nextId } from './store.ts';
@@ -32,7 +32,11 @@ type AdminEndpoint =
   | 'adminUpdateSymbol'
   | 'adminAuditLogs'
   | 'adminReconciliationRuns'
-  | 'adminRunReconciliation';
+  | 'adminRunReconciliation'
+  | 'adminUpdateAsset'
+  | 'adminListAnnouncements'
+  | 'adminCreateAnnouncement'
+  | 'adminUpdateAnnouncement';
 
 const checkCode = (code: unknown) => {
   const c = String(code ?? '');
@@ -236,5 +240,61 @@ export const adminResolvers: { [N in AdminEndpoint]: Resolver<N> } = {
     mockStore.reconciliationRuns.unshift(run);
     audit({ action: 'RECONCILIATION_RUN', targetType: 'EXCHANGE', targetId: null, before: null, after: { ok: true }, reason: null });
     return run;
+  },
+  adminUpdateAsset: ({ params, body }) => {
+    requireStaff('exchange.configure');
+    let a = mockStore.assets.find((x) => x.asset === params.asset);
+    if (!a) throw new MockError('NOT_FOUND', 'Unknown asset');
+    const before = { ...a };
+    a = Object.assign(a, {
+      ...(body.name !== undefined ? { name: body.name as string | null } : {}),
+      ...(body.tags !== undefined ? { tags: body.tags as AssetTag[] } : {}),
+      ...(body.description !== undefined ? { description: body.description as string | null } : {}),
+    });
+    audit({ action: 'ASSET_UPDATE', targetType: 'ASSET', targetId: a.asset, before, after: { ...a }, reason: String(body.reason) });
+    return a;
+  },
+  adminListAnnouncements: ({ query }) => {
+    requireStaff('exchange.read');
+    const all = query.get('includeHidden') === 'true';
+    return { items: mockStore.announcements.filter((a) => all || !a.hidden), nextCursor: null };
+  },
+  adminCreateAnnouncement: ({ body }) => {
+    requireStaff('content.manage');
+    const t = now();
+    const me = mockMe();
+    const a: AdminAnnouncement = {
+      id: nextId(),
+      title: String(body.title),
+      body: String(body.body),
+      level: (body.level as AnnouncementLevel | undefined) ?? 'INFO',
+      pinned: Boolean(body.pinned),
+      publishedAt: body.publish === false ? null : t,
+      expiresAt: (body.expiresAt as string | null | undefined) ?? null,
+      hidden: false,
+      createdBy: { id: me.id, email: me.email },
+      createdAt: t,
+      updatedAt: t,
+    };
+    mockStore.announcements.unshift(a);
+    audit({ action: 'ANNOUNCEMENT_CREATE', targetType: 'ANNOUNCEMENT', targetId: a.id, before: null, after: { ...a }, reason: null });
+    return a;
+  },
+  adminUpdateAnnouncement: ({ params, body }) => {
+    requireStaff('content.manage');
+    const a = mockStore.announcements.find((x) => x.id === params.announcementId);
+    if (!a) throw new MockError('NOT_FOUND', 'Announcement not found');
+    const before = { ...a };
+    if (body.title !== undefined) a.title = String(body.title);
+    if (body.body !== undefined) a.body = String(body.body);
+    if (body.level !== undefined) a.level = body.level as AnnouncementLevel;
+    if (body.pinned !== undefined) a.pinned = Boolean(body.pinned);
+    if (body.hidden !== undefined) a.hidden = Boolean(body.hidden);
+    if (body.expiresAt !== undefined) a.expiresAt = body.expiresAt as string | null;
+    if (body.published === true && a.publishedAt === null) a.publishedAt = now();
+    if (body.published === false) a.publishedAt = null;
+    a.updatedAt = now();
+    audit({ action: 'ANNOUNCEMENT_UPDATE', targetType: 'ANNOUNCEMENT', targetId: a.id, before, after: { ...a }, reason: null });
+    return a;
   },
 };

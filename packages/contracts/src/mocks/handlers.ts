@@ -16,6 +16,7 @@ import {
   fixturePortfolio,
   fixturePortfolioHistory,
   fixtureSessions,
+  fixtureSparklines,
   fixtureTickers,
   fmtPrice,
   MOCK_PAIRS,
@@ -88,7 +89,13 @@ const resolvers: { [N in EndpointName]: Resolver<N> } = {
     return mockStore.preferences;
   },
 
-  exchangeInfo: () => ({ ...fixtureExchangeInfo, tradingHalted: mockStore.scenario === 'halted', serverTime: now() }),
+  exchangeInfo: () => ({
+    ...fixtureExchangeInfo,
+    tradingHalted: mockStore.scenario === 'halted',
+    symbols: fixtureExchangeInfo.symbols.map((s) => ({ ...s, enabled: mockStore.adminSymbols.find((a) => a.symbol === s.symbol)?.enabled ?? s.enabled })),
+    assets: mockStore.assets,
+    serverTime: now(),
+  }),
   tickers: () => ({ items: fixtureTickers().map((t) => (t.lastPrice === null ? t : { ...t, lastPrice: fmtPrice(t.symbol, mockStore.prices[t.symbol]!) })) }),
   depth: ({ params, query }) => fixtureDepth(params.symbol!, mockStore.prices[params.symbol!], Number(query.get('limit') ?? 20)),
   marketTrades: ({ params }) => ({ symbol: params.symbol!, items: fixtureMarketTrades(params.symbol!), status: 'LIVE' }),
@@ -98,6 +105,17 @@ const resolvers: { [N in EndpointName]: Resolver<N> } = {
     return { symbol: params.symbol!, interval, items: fixtureCandles(params.symbol!, interval, Number(query.get('limit') ?? 200), end ? Number(end) : Date.now()) };
   },
   marketStatus: () => fixtureMarketStatus,
+  sparklines: ({ query }) => {
+    const range = query.get('range') === '7d' ? '7d' : '24h';
+    return { ...fixtureSparklines(range, mockStore.prices), updatedAt: now() };
+  },
+  announcements: ({ query }) => {
+    const limit = Number(query.get('limit') ?? 10);
+    const t = Date.now();
+    const visible = mockStore.announcements.filter((a) => !a.hidden && a.publishedAt !== null && (a.expiresAt === null || Date.parse(a.expiresAt) > t));
+    visible.sort((a, b) => Number(b.pinned) - Number(a.pinned) || Date.parse(b.publishedAt!) - Date.parse(a.publishedAt!));
+    return { items: visible.slice(0, limit).map(({ id, title, body, level, pinned, publishedAt, expiresAt }) => ({ id, title, body, level, pinned, publishedAt: publishedAt!, expiresAt })) };
+  },
 
   balances: () => {
     requireUser();
@@ -368,9 +386,21 @@ export function createMockHandlers(opts: MockHandlerOptions = {}): HttpHandler[]
       }
       try {
         const body = request.method === 'GET' || request.method === 'DELETE' ? {} : ((await request.json().catch(() => ({}))) as Record<string, unknown>);
+        // Reject what the server would reject (same VALIDATION_ERROR shape).
+        const query = new URL(request.url).searchParams;
+        for (const [schema, value] of [
+          [def.params, params],
+          [def.query, Object.fromEntries(query)],
+          [def.body, body],
+        ] as const) {
+          const check = schema?.safeParse(value);
+          if (check && !check.success) {
+            throw new MockError('VALIDATION_ERROR', 'Invalid request', { issues: check.error.issues.map((i) => ({ path: i.path.join('.'), message: i.message })) });
+          }
+        }
         const result = await (resolvers[name] as Resolver<EndpointName>)({
           params: params as Record<string, string>,
-          query: new URL(request.url).searchParams,
+          query,
           body,
         });
         if (def.format === 'csv') {
