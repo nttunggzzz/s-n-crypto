@@ -62,6 +62,33 @@ import { CancelAllResponse, HistoryQuery, Order, OrderList, PlaceOcoRequest, Pla
 import { Portfolio, PortfolioHistory, PortfolioRange } from './portfolio.ts';
 import { AlertListQuery, CreatePriceAlertRequest, PriceAlert } from './alerts.ts';
 import { MarkReadRequest, Notification, NotificationListQuery, UnreadCount } from './notifications.ts';
+import {
+  AdjustMarginRequest,
+  AdminFuturesSymbol,
+  ClosePositionRequest,
+  FundingEvent,
+  FundingHistoryQuery,
+  FuturesAccount,
+  FuturesCancelAllResponse,
+  FuturesCandlesQuery,
+  FuturesExchangeInfo,
+  FuturesHistoryQuery,
+  FuturesLedgerQuery,
+  FuturesOrder,
+  FuturesPlaceOrderRequest,
+  FuturesPosition,
+  FuturesSymbolFilterQuery,
+  FuturesSymbolSettings,
+  FuturesTicker,
+  FuturesTrade,
+  FuturesTransferRequest,
+  FuturesTransferResult,
+  MarkPrice,
+  PositionSymbolParam,
+  SetLeverageRequest,
+  SetPositionTpSlRequest,
+  UpdateFuturesSymbolRequest,
+} from './futures.ts';
 
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 /**
@@ -208,6 +235,41 @@ export const endpoints = {
   adminListAnnouncements: ep({ method: 'GET', path: '/api/v1/admin/announcements', auth: 'staff', permission: 'exchange.read', query: AdminAnnouncementListQuery.extend(PaginationQuery.shape), response: paginated(AdminAnnouncement) }),
   adminCreateAnnouncement: ep({ method: 'POST', path: '/api/v1/admin/announcements', auth: 'staff', permission: 'content.manage', body: CreateAnnouncementRequest, response: AdminAnnouncement, status: 201 }),
   adminUpdateAnnouncement: ep({ method: 'PATCH', path: '/api/v1/admin/announcements/:announcementId', auth: 'staff', permission: 'content.manage', params: AnnouncementIdParam, body: UpdateAnnouncementRequest, response: AdminAnnouncement }),
+  // phase F: futures contracts
+  adminFuturesSymbols: ep({ method: 'GET', path: '/api/v1/admin/futures/symbols', auth: 'staff', permission: 'exchange.read', response: z.object({ items: z.array(AdminFuturesSymbol) }) }),
+  adminUpdateFuturesSymbol: ep({ method: 'PATCH', path: '/api/v1/admin/futures/symbols/:symbol', auth: 'staff', permission: 'exchange.configure', params: SymbolParam, body: UpdateFuturesSymbolRequest, response: AdminFuturesSymbol }),
+
+  // ---- futures (phase F) — simulated USDT-M perpetuals, isolated margin, ≤ 20×
+  futuresExchangeInfo: ep({ method: 'GET', path: '/api/v1/futures/exchange-info', auth: 'public', response: FuturesExchangeInfo }),
+  futuresTickers: ep({ method: 'GET', path: '/api/v1/futures/market/tickers', auth: 'public', response: z.object({ items: z.array(FuturesTicker) }) }),
+  futuresMarkPrice: ep({ method: 'GET', path: '/api/v1/futures/market/mark/:symbol', auth: 'public', params: SymbolParam, response: MarkPrice }),
+  futuresDepth: ep({ method: 'GET', path: '/api/v1/futures/market/depth/:symbol', auth: 'public', params: SymbolParam, query: LimitQuery, response: Depth }),
+  futuresMarketTrades: ep({ method: 'GET', path: '/api/v1/futures/market/trades/:symbol', auth: 'public', params: SymbolParam, query: LimitQuery, response: MarketTrades }),
+  futuresCandles: ep({ method: 'GET', path: '/api/v1/futures/market/candles/:symbol', auth: 'public', params: SymbolParam, query: FuturesCandlesQuery, response: Candles }),
+  /** Funding settlements recorded by this exchange (newest first). */
+  futuresFundingHistory: ep({ method: 'GET', path: '/api/v1/futures/market/funding/:symbol', auth: 'public', params: SymbolParam, query: FundingHistoryQuery, response: z.object({ items: z.array(FundingEvent) }) }),
+  futuresMarketStatus: ep({ method: 'GET', path: '/api/v1/futures/market/status', auth: 'public', response: MarketStatus }),
+
+  futuresAccount: ep({ method: 'GET', path: '/api/v1/futures/account', auth: 'user', response: FuturesAccount }),
+  futuresTransfer: ep({ method: 'POST', path: '/api/v1/futures/transfer', auth: 'verified', body: FuturesTransferRequest, response: FuturesTransferResult }),
+  futuresLedger: ep({ method: 'GET', path: '/api/v1/futures/ledger', auth: 'user', query: FuturesLedgerQuery.extend(PaginationQuery.shape), response: paginated(LedgerEntry) }),
+  /** Every futures symbol with the user's leverage (default 10×) and margin mode. */
+  futuresSymbolSettings: ep({ method: 'GET', path: '/api/v1/futures/settings', auth: 'user', response: z.object({ items: z.array(FuturesSymbolSettings) }) }),
+  futuresSetLeverage: ep({ method: 'PUT', path: '/api/v1/futures/settings/:symbol/leverage', auth: 'verified', params: SymbolParam, body: SetLeverageRequest, response: FuturesSymbolSettings }),
+
+  futuresPlaceOrder: ep({ method: 'POST', path: '/api/v1/futures/orders', auth: 'verified', body: FuturesPlaceOrderRequest, response: FuturesOrder, status: 201 }),
+  futuresOpenOrders: ep({ method: 'GET', path: '/api/v1/futures/orders/open', auth: 'user', query: FuturesSymbolFilterQuery, response: z.object({ items: z.array(FuturesOrder) }) }),
+  futuresOrderHistory: ep({ method: 'GET', path: '/api/v1/futures/orders/history', auth: 'user', query: FuturesHistoryQuery.extend(PaginationQuery.shape), response: paginated(FuturesOrder) }),
+  futuresCancelOrder: ep({ method: 'DELETE', path: '/api/v1/futures/orders/:orderId', auth: 'user', params: OrderIdParam, response: FuturesOrder }),
+  futuresCancelAll: ep({ method: 'DELETE', path: '/api/v1/futures/orders', auth: 'user', query: FuturesSymbolFilterQuery, response: FuturesCancelAllResponse }),
+  futuresMyTrades: ep({ method: 'GET', path: '/api/v1/futures/trades', auth: 'user', query: FuturesHistoryQuery.extend(PaginationQuery.shape), response: paginated(FuturesTrade) }),
+
+  futuresPositions: ep({ method: 'GET', path: '/api/v1/futures/positions', auth: 'user', response: z.object({ items: z.array(FuturesPosition) }) }),
+  futuresPositionHistory: ep({ method: 'GET', path: '/api/v1/futures/positions/history', auth: 'user', query: FuturesHistoryQuery.extend(PaginationQuery.shape), response: paginated(FuturesPosition) }),
+  /** Market close (all, or `quantity`). Returns the closing order. */
+  futuresClosePosition: ep({ method: 'POST', path: '/api/v1/futures/positions/:symbol/close', auth: 'verified', params: PositionSymbolParam, body: ClosePositionRequest, response: FuturesOrder }),
+  futuresAdjustMargin: ep({ method: 'POST', path: '/api/v1/futures/positions/:symbol/margin', auth: 'verified', params: PositionSymbolParam, body: AdjustMarginRequest, response: FuturesPosition }),
+  futuresSetTpSl: ep({ method: 'PUT', path: '/api/v1/futures/positions/:symbol/tpsl', auth: 'verified', params: PositionSymbolParam, body: SetPositionTpSlRequest, response: FuturesPosition }),
 } as const satisfies Record<string, EndpointDef>;
 
 export type Endpoints = typeof endpoints;

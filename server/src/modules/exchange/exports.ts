@@ -80,7 +80,7 @@ export async function exportTradesCsv(db: Db, userId: string, f: RangeFilter): P
 }
 
 export async function exportLedgerCsv(db: Db, userId: string, f: { asset?: string; hideLocks: 'true' | 'false'; from?: string; to?: string }): Promise<string> {
-  const where: SQL[] = [eq(ledgerEntries.userId, userId), ...timeFilters(ledgerEntries.createdAt, f)];
+  const where: SQL[] = [eq(ledgerEntries.userId, userId), eq(ledgerEntries.account, 'SPOT'), ...timeFilters(ledgerEntries.createdAt, f)];
   if (f.asset) where.push(eq(ledgerEntries.asset, f.asset));
   if (f.hideLocks === 'true') where.push(notInArray(ledgerEntries.type, ['ORDER_LOCK', 'ORDER_UNLOCK']));
   const rows = await db

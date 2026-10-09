@@ -13,6 +13,8 @@ import { ExchangeConfig } from './modules/exchange/exchangeConfig.ts';
 import { createExchange } from './modules/exchange/index.ts';
 import { reconcile } from './modules/exchange/reconciliation.ts';
 import { RealtimeHub } from './realtime/hub.ts';
+import { createFutures } from './modules/futures/index.ts';
+import { syncFuturesFromBinance } from './modules/futures/config.ts';
 
 const config = loadConfig();
 const database = createDatabase(config.DATABASE_URL);
@@ -37,17 +39,34 @@ const market = new MarketDataService(
 );
 market.startStalenessTimer();
 const exchange = await createExchange(database.db, market, exchangeConfig);
+
+// ── futures (simulated USDT-M perpetuals): one contract per listed spot coin
+if (feedOn) {
+  try {
+    const n = await syncFuturesFromBinance(database.db, config.BINANCE_FUTURES_REST_URL, exchangeConfig.allSymbols().map((s) => s.row.baseAsset));
+    logger.info({ n }, 'futures contracts synced from Binance');
+  } catch (err) {
+    logger.error({ err }, 'could not sync futures contracts from Binance; using stored rules');
+  }
+}
+const futures = await createFutures(database.db, exchangeConfig, exchange.events, { restUrl: feedOn ? config.BINANCE_FUTURES_REST_URL : null });
+futures.market.startStalenessTimer();
 logger.info({ open: exchange.index.size() }, 'open limit orders loaded');
 
 const auth = new AuthService(database.db, config, createEmailSender(config));
 const candles = new CandleService(database.db, feedOn ? config.BINANCE_REST_URL : null);
-const app = createApp({ config, db: database.db, auth, market, exchange, candles, version: process.env.RAILWAY_GIT_COMMIT_SHA?.slice(0, 7) });
+const app = createApp({ config, db: database.db, auth, market, exchange, candles, futures, version: process.env.RAILWAY_GIT_COMMIT_SHA?.slice(0, 7) });
 const server = http.createServer(app);
-const hub = new RealtimeHub(market, exchange, auth, allowedOrigins(config));
+const hub = new RealtimeHub(market, exchange, auth, allowedOrigins(config), futures);
 hub.attach(server);
 
-const stream = feedOn ? new BinanceStream(config.BINANCE_WS_URL, market, database.db, market.symbols) : null;
+const stream = feedOn ? new BinanceStream(config.BINANCE_WS_URL, market, market.symbols, { db: database.db }) : null;
 stream?.start();
+const futuresStream = feedOn
+  ? new BinanceStream(config.BINANCE_FUTURES_WS_URL, futures.market, futures.config.all().map((c) => c.row.symbol), { kind: 'futures', onMark: (s, m) => futures.marks.ingest(s, m) })
+  : null;
+futuresStream?.start();
+await futures.engine.start();
 
 // Ledger reconciliation every 10 minutes (alerts are wired in P01).
 const reconTimer = setInterval(() => void reconcile(database.db).catch((err) => logger.error({ err }, 'reconciliation crashed')), 10 * 60_000);
@@ -60,6 +79,8 @@ server.listen(config.PORT, () => logger.info({ port: config.PORT, feed: config.M
 async function shutdown(signal: string) {
   logger.info({ signal }, 'shutting down');
   stream?.stop();
+  futuresStream?.stop();
+  futures.engine.stop();
   exchange.matcher.stop();
   exchange.portfolio.stop();
   hub.close();

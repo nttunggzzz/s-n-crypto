@@ -98,13 +98,26 @@ describe('deep order book', () => {
 });
 
 describe('Binance stream plan', () => {
-  it('splits 50 symbols over connections of at most 300 streams, never splitting a symbol', () => {
+  it('spot: 50 symbols over connections of at most 300 streams, never splitting a symbol', () => {
     const symbols = Array.from({ length: 50 }, (_, i) => `C${i}USDT`);
-    const groups = planConnections(symbols);
-    expect(groups.flat()).toEqual(symbols);
-    for (const g of groups) expect(g.flatMap(streamsFor).length).toBeLessThanOrEqual(300);
-    expect(groups).toHaveLength(2);
+    const plans = planConnections(symbols);
+    expect(plans.flatMap((p) => p.symbols)).toEqual(symbols);
+    for (const p of plans) expect([p.path, p.streams.length <= 300]).toEqual(['/stream', true]);
+    expect(plans).toHaveLength(2);
     expect(streamsFor('BTCUSDT')).toContain('btcusdt@depth20@100ms');
+  });
+
+  it('futures: order books on /public, the rest on /market, ≤ 190 streams per connection', () => {
+    const symbols = Array.from({ length: 50 }, (_, i) => `C${i}USDT`);
+    const plans = planConnections(symbols, 'futures');
+    const pub = plans.filter((p) => p.path === '/public/stream');
+    const mkt = plans.filter((p) => p.path === '/market/stream');
+    expect(pub.flatMap((p) => p.streams).every((s) => s.includes('@depth'))).toBe(true);
+    expect(mkt.flatMap((p) => p.streams).some((s) => s.includes('@depth'))).toBe(false);
+    expect(mkt.flatMap((p) => p.streams)).toContain('c0usdt@markPrice@1s');
+    expect(pub.flatMap((p) => p.streams)).toHaveLength(50);
+    expect(mkt.flatMap((p) => p.streams)).toHaveLength(450);
+    for (const p of plans) expect(p.streams.length).toBeLessThanOrEqual(190);
   });
 });
 

@@ -18,6 +18,8 @@ export class CandleService {
   constructor(
     private readonly db: Db,
     private readonly restUrl: string | null,
+    /** Futures: { path: '/fapi/v1/klines', storedFallback: false } (we only store spot candles). */
+    private readonly opts: { path?: string; storedFallback?: boolean } = {},
   ) {}
 
   async get(symbol: string, interval: CandleInterval, limit: number, endTime?: number): Promise<Candle[]> {
@@ -26,7 +28,7 @@ export class CandleService {
       const hit = this.cache.get(key);
       if (hit && Date.now() - hit.at < CACHE_MS) return hit.items;
       try {
-        const items = await fetchKlines(this.restUrl, symbol, interval, limit, endTime);
+        const items = await fetchKlines(this.restUrl, symbol, interval, limit, endTime, this.opts.path);
         this.cache.set(key, { at: Date.now(), items });
         if (this.cache.size > 500) this.cache.clear();
         return items;
@@ -34,6 +36,7 @@ export class CandleService {
         logger.warn({ err, symbol, interval }, 'binance klines failed; serving stored candles');
       }
     }
+    if (this.opts.storedFallback === false) return [];
     return this.fromDb(symbol, interval, limit, endTime);
   }
 

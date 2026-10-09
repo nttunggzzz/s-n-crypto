@@ -10,6 +10,7 @@ export * from './portfolio.ts';
 export * from './alerts.ts';
 export * from './notifications.ts';
 export * from './announcements.ts';
+export * from './futures.ts';
 export * from './permissions.ts';
 export * from './admin.ts';
 export * from './realtime.ts';

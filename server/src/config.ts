@@ -12,6 +12,9 @@ const Env = z.object({
   MARKET_FEED: z.enum(['binance', 'off']).default('binance'),
   BINANCE_REST_URL: z.string().default('https://api.binance.com'),
   BINANCE_WS_URL: z.string().default('wss://stream.binance.com:9443'),
+  /** Binance USDⓈ-M futures (simulated perpetuals). */
+  BINANCE_FUTURES_REST_URL: z.string().default('https://fapi.binance.com'),
+  BINANCE_FUTURES_WS_URL: z.string().default('wss://fstream.binance.com'),
   /** Listed pairs, in display order (50 USDT pairs; every one passes the 8-decimal rule). */
   SYMBOLS: z.string().default(
     'BTCUSDT,ETHUSDT,SOLUSDT,BNBUSDT,XRPUSDT,DOGEUSDT,ADAUSDT,AVAXUSDT,LINKUSDT,SUIUSDT,NEARUSDT,UNIUSDT,ENAUSDT,TAOUSDT,ONDOUSDT,PEPEUSDT,WLDUSDT,AAVEUSDT,TRXUSDT,BCHUSDT,FETUSDT,LTCUSDT,TIAUSDT,DOTUSDT,APTUSDT,' +

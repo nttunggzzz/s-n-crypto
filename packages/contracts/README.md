@@ -128,3 +128,23 @@ Mock: `setMockPrice('BTCUSDT', 75000)` đẩy giá để xem stop kích hoạt, 
   - màn **Thông báo**: danh sách gồm cả bản nháp; nút Đăng, Ghim, Ẩn; ngày hết hạn;
   - màn **Thông tin coin**: sửa tên, nhóm (tối đa 5), mô tả, có lý do;
   - cần quyền `content.manage` / `exchange.configure`.
+
+## 8. Futures mô phỏng (v0.5.0)
+
+**Luật sản phẩm (v1)**
+- Hợp đồng vĩnh cửu USDT-M; **ký quỹ cô lập** (mỗi vị thế có ký quỹ riêng); **một chiều** (mỗi cặp một vị thế Long *hoặc* Short); đòn bẩy 1–20×, mặc định 10×.
+- Ví Futures riêng: phải **chuyển tiền** từ Spot sang (`futuresTransfer`) trước khi giao dịch.
+- BUY mở/tăng Long hoặc giảm Short; SELL ngược lại. Lệnh ngược chiều lớn hơn vị thế sẽ đóng vị thế rồi mở chiều kia.
+- `reduceOnly`: chỉ giảm vị thế. Nút "Đóng vị thế" dùng `futuresClosePosition`.
+- TP/SL theo **mark price**, khi chạm sẽ đóng bằng lệnh Market. Thanh lý cũng theo mark price, và mất **tối đa** phần ký quỹ của vị thế (số dư không bao giờ âm).
+- Funding theo đúng mốc của Binance (thường 8 giờ): `rate > 0` thì Long trả, Short nhận; trừ hoặc cộng vào ký quỹ vị thế.
+- Phí: maker 0,02%, taker 0,05%, thanh lý 0,5%. Lấy từ `futuresExchangeInfo().fees`, không viết cứng trong UI.
+- Đổi đòn bẩy chỉ khi cặp đó không còn vị thế và lệnh mở (`LEVERAGE_LOCKED`).
+
+**Cách hiển thị**
+- **Lãi lỗ realtime:** subscribe `futures:mark:<SYMBOL>`, rồi tính bằng `pnl(side, dec(entryPrice), dec(markPrice), dec(quantity))` và `returnOnMargin` của `@cex/core`. Không tính bằng `number`. Khi `markPrice` là `null` hoặc trạng thái STALE thì hiện `—`.
+- **Giá thanh lý:** dùng `position.liquidationPrice` của server (đã làm tròn về phía cảnh báo sớm). Form đặt lệnh có thể ước tính bằng `liquidationPrice()` của core.
+- **1000PEPE:** hiển thị "1 hợp đồng = 1000 PEPE" khi `multiplier > 1`. Tên và icon lấy theo `underlyingAsset` từ `exchangeInfo().assets`.
+- **Form lệnh:** đòn bẩy (slider 1–`maxLeverage`), Mở Long / Mở Short, chỉ giảm vị thế, TP/SL, ký quỹ cần dùng = giá × khối lượng ÷ đòn bẩy (`initialMargin`) + phí ước tính.
+- **Tab dưới:** Vị thế (n) | Lệnh đang chờ | Lịch sử lệnh | Lịch sử vị thế | Funding (sổ cái loại `FUNDING_FEE`).
+- **Sự kiện realtime:** `futuresPosition` / `futuresAccount` → cập nhật ngay; thông báo `POSITION_LIQUIDATED` / `POSITION_TPSL` → hiện toast nổi bật.

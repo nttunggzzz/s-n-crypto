@@ -55,7 +55,7 @@ export function registerExchangeRoutes(router: Router, opts: RouteOptions, db: D
   route(router, opts, 'balances', async ({ auth }) => valuateBalances(await getBalances(db, auth.user.id), priceOf));
 
   route(router, opts, 'ledger', async ({ auth, query }) => {
-    const where: SQL[] = [eq(ledgerEntries.userId, auth.user.id), ...timeRange(ledgerEntries.createdAt, query)];
+    const where: SQL[] = [eq(ledgerEntries.userId, auth.user.id), eq(ledgerEntries.account, 'SPOT'), ...timeRange(ledgerEntries.createdAt, query)];
     if (query.asset) where.push(eq(ledgerEntries.asset, query.asset));
     if (query.hideLocks === 'true') where.push(notInArray(ledgerEntries.type, ['ORDER_LOCK', 'ORDER_UNLOCK']));
     const c = cursorId(query.cursor);

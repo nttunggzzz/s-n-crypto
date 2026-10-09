@@ -171,7 +171,7 @@ export const adminResolvers: { [N in AdminEndpoint]: Resolver<N> } = {
     const auditLogId = audit({ action: 'BALANCE_ADJUST', targetType: 'USER', targetId: u.id, before: { asset: body.asset, available: before.toFixed(8) }, after: { asset: body.asset, available: after }, reason: String(body.reason) });
     return {
       balance: { asset: String(body.asset), available: after, locked: '0.00000000', total: after, valueUsdt: body.asset === 'USDT' ? after : null },
-      entry: { id: nextId(), asset: String(body.asset), type: 'ADMIN_ADJUST', deltaAvailable: amount.toFixed(8), deltaLocked: '0.00000000', availableAfter: after, lockedAfter: '0.00000000', refType: 'ADMIN', refId: auditLogId, createdAt: now() },
+      entry: { id: nextId(), account: 'SPOT', asset: String(body.asset), type: 'ADMIN_ADJUST', deltaAvailable: amount.toFixed(8), deltaLocked: '0.00000000', availableAfter: after, lockedAfter: '0.00000000', refType: 'ADMIN', refId: auditLogId, createdAt: now() },
       auditLogId,
     };
   },

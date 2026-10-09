@@ -10,6 +10,8 @@ import { serializeBalance, serializeOrder, serializeOrderList, serializeTrade } 
 import { serializeNotification } from '../modules/exchange/notificationService.ts';
 import { serializeAlert } from '../modules/exchange/alertService.ts';
 import { makePriceOf } from '../modules/exchange/routes.ts';
+import type { Futures } from '../modules/futures/index.ts';
+import { serializeFuturesOrder, serializeFuturesTrade, serializePosition } from '../modules/futures/serializers.ts';
 
 interface Client {
   ws: WebSocket;
@@ -47,6 +49,7 @@ export class RealtimeHub {
     private readonly ex: Exchange,
     private readonly auth: AuthService,
     private readonly allowedOrigins: Set<string>,
+    private readonly futures?: Futures,
   ) {}
 
   attach(server: Server): void {
@@ -63,6 +66,7 @@ export class RealtimeHub {
     });
     this.wireMarket();
     this.wireExchange();
+    this.wireFutures();
     this.heartbeat = setInterval(() => {
       for (const c of this.clients) {
         if (!c.alive) {
@@ -125,6 +129,7 @@ export class RealtimeHub {
     if (client.channels.size >= MAX_CHANNELS) return { code: 'RATE_LIMITED', message: 'Too many subscriptions' };
     if (channel === 'user') return client.userId ? null : { code: 'UNAUTHENTICATED', message: 'Sign in required' };
     if (channel === 'market:status' || channel === 'exchange:status') return null;
+    if (channel.startsWith('futures:')) return this.checkFuturesChannel(channel);
     const [kind, symbol, interval] = channel.split(':');
     if (!symbol || !this.ex.config.findSymbol(symbol)) return { code: 'NOT_FOUND', message: 'Unknown channel' };
     if (kind === 'ticker' || kind === 'depth' || kind === 'trades') return interval === undefined ? null : { code: 'NOT_FOUND', message: 'Unknown channel' };
@@ -132,7 +137,37 @@ export class RealtimeHub {
     return { code: 'NOT_FOUND', message: 'Unknown channel' };
   }
 
+  private checkFuturesChannel(channel: string): { code: string; message: string } | null {
+    const notFound = { code: 'NOT_FOUND', message: 'Unknown channel' };
+    if (!this.futures) return notFound;
+    if (channel === 'futures:status') return null;
+    const [, kind, symbol, interval, extra] = channel.split(':');
+    if (extra !== undefined || !symbol || !this.futures.config.find(symbol)) return notFound;
+    if (kind === 'ticker' || kind === 'mark' || kind === 'depth' || kind === 'trades') return interval === undefined ? null : notFound;
+    if (kind === 'candles' && CandleInterval.safeParse(interval).success) return null;
+    return notFound;
+  }
+
+  private futuresTicker(symbol: string) {
+    const f = this.futures!;
+    const m = f.marks.get(symbol);
+    return { ...f.market.getTicker(symbol), markPrice: m.markPrice, indexPrice: m.indexPrice, fundingRate: m.fundingRate, nextFundingTime: m.nextFundingTime };
+  }
+
   private sendSnapshot(client: Client, channel: string): void {
+    if (channel.startsWith('futures:')) {
+      const f = this.futures!;
+      if (channel === 'futures:status') return this.event(client, channel, f.market.getMarketStatus());
+      const [, kind, symbol, interval] = channel.split(':') as [string, string, string, string | undefined];
+      if (kind === 'ticker') this.event(client, channel, this.futuresTicker(symbol));
+      else if (kind === 'mark') this.event(client, channel, f.marks.get(symbol));
+      else if (kind === 'depth') this.event(client, channel, f.market.getDepth(symbol));
+      else if (kind === 'candles') {
+        const c = f.market.getFormingCandle(symbol, interval as CandleInterval);
+        if (c) this.event(client, channel, c);
+      }
+      return;
+    }
     const [kind, symbol, interval] = channel.split(':');
     if (channel === 'market:status') return this.event(client, channel, this.market.getMarketStatus());
     if (channel === 'exchange:status') return this.event(client, channel, this.ex.config.exchangeStatus());
@@ -189,6 +224,28 @@ export class RealtimeHub {
     this.market.on('status', () => this.broadcast('market:status', () => this.market.getMarketStatus()));
   }
 
+  private wireFutures(): void {
+    const f = this.futures;
+    if (!f) return;
+    f.market.on('depth', (symbol) => this.throttled(`futures:depth:${symbol}`, DEPTH_THROTTLE_MS, () => f.market.getDepth(symbol)));
+    f.market.on('ticker', (symbol) => this.throttled(`futures:ticker:${symbol}`, TICKER_THROTTLE_MS, () => this.futuresTicker(symbol)));
+    f.market.on('trade', (symbol, trade) => this.broadcast(`futures:trades:${symbol}`, () => trade));
+    f.market.on('candle', (symbol, interval, candle) => this.broadcast(`futures:candles:${symbol}:${interval}`, () => candle));
+    f.market.on('status', () => this.broadcast('futures:status', () => f.market.getMarketStatus()));
+    f.marks.on('mark', (symbol) => this.broadcast(`futures:mark:${symbol}`, () => f.marks.get(symbol)));
+    f.events.on('order', (userId, o) => this.toUser(userId, { kind: 'futuresOrder', order: serializeFuturesOrder(o) }));
+    f.events.on('trade', (userId, t) => this.toUser(userId, { kind: 'futuresTrade', trade: serializeFuturesTrade(t) }));
+    f.events.on('position', (userId, p) => this.toUser(userId, { kind: 'futuresPosition', position: serializePosition(p, f.config.find(p.symbol), f.marks.liveMark(p.symbol)) }));
+    f.events.on('notification', (userId, n) => this.toUser(userId, { kind: 'notification', notification: serializeNotification(n) }));
+    f.events.on('account', (userId) => {
+      if (![...this.clients].some((c) => c.userId === userId && c.channels.has('user'))) return;
+      void f.service
+        .account(userId)
+        .then((account) => this.toUser(userId, { kind: 'futuresAccount', account }))
+        .catch((err) => logger.warn({ err }, 'futures account push failed'));
+    });
+  }
+
   private toUser(userId: string, data: unknown): void {
     for (const c of this.clients) if (c.userId === userId && c.channels.has('user')) this.event(c, 'user', data);
   }
@@ -202,6 +259,7 @@ export class RealtimeHub {
     this.ex.events.on('orderList', (userId, l, legs) => this.toUser(userId, { kind: 'orderList', orderList: serializeOrderList(l, legs) }));
     this.ex.events.on('notification', (userId, n) => this.toUser(userId, { kind: 'notification', notification: serializeNotification(n) }));
     this.ex.events.on('alert', (userId, a) => this.toUser(userId, { kind: 'alert', alert: serializeAlert(a) }));
-    this.ex.events.on('balance', (userId, b) => this.toUser(userId, { kind: 'balance', balance: serializeBalance(b.asset, b.available, b.locked, priceOf) }));
+    // spot wallet only; the futures wallet is pushed as `futuresAccount`
+    this.ex.events.on('balance', (userId, b) => b.account === 'SPOT' && this.toUser(userId, { kind: 'balance', balance: serializeBalance(b.asset, b.available, b.locked, priceOf) }));
   }
 }

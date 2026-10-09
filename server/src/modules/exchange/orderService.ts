@@ -606,7 +606,7 @@ export class OrderService {
       const [bal] = await tx
         .select()
         .from(balances)
-        .where(and(eq(balances.userId, parent.userId), eq(balances.asset, sym.row.baseAsset)))
+        .where(and(eq(balances.userId, parent.userId), eq(balances.account, 'SPOT'), eq(balances.asset, sym.row.baseAsset)))
         .for('update');
       // The user may have sold part of a partial fill meanwhile: protect only what is still there.
       qty = minDec(net, floorToStep(bal ? dec(bal.available) : ZERO, sym.step));

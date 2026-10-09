@@ -178,6 +178,9 @@ export const exchangeSettings = pgTable(
     faucetCooldownHours: integer('faucet_cooldown_hours').notNull().default(24),
     faucetLifetimeCap: amount('faucet_lifetime_cap').notNull().default('100000'),
     staleThresholdMs: integer('stale_threshold_ms').notNull().default(10_000),
+    futuresMakerFee: amount('futures_maker_fee').notNull().default('0.0002'),
+    futuresTakerFee: amount('futures_taker_fee').notNull().default('0.0005'),
+    futuresLiquidationFee: amount('futures_liquidation_fee').notNull().default('0.005'),
     updatedAt: ts('updated_at').notNull().defaultNow(),
   },
   (t) => [check('exchange_settings_singleton', sql`${t.id} = 1`)],
@@ -185,28 +188,47 @@ export const exchangeSettings = pgTable(
 
 // ───────────────────────────── ledger (P05)
 
+/** SPOT wallet and FUTURES wallet (USDT margin). Every balance row and ledger row belongs to one. */
+export const ACCOUNTS = ['SPOT', 'FUTURES'] as const;
+export type Account = (typeof ACCOUNTS)[number];
+
 export const balances = pgTable(
   'balances',
   {
     userId: uuid('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
+    account: text('account', { enum: ACCOUNTS }).notNull().default('SPOT'),
     asset: text('asset').notNull(),
     available: amount('available').notNull().default('0'),
     locked: amount('locked').notNull().default('0'),
     updatedAt: ts('updated_at').notNull().defaultNow(),
   },
   (t) => [
-    primaryKey({ columns: [t.userId, t.asset] }),
+    primaryKey({ columns: [t.userId, t.account, t.asset] }),
     // Last line of defence: a balance can never go negative.
     check('balances_available_nonneg', sql`${t.available} >= 0`),
     check('balances_locked_nonneg', sql`${t.locked} >= 0`),
   ],
 );
 
-export const LEDGER_TYPES = ['FAUCET', 'ORDER_LOCK', 'ORDER_UNLOCK', 'TRADE_DEBIT', 'TRADE_CREDIT', 'FEE', 'ADMIN_ADJUST', 'ACCOUNT_RESET'] as const;
+export const LEDGER_TYPES = [
+  'FAUCET',
+  'ORDER_LOCK',
+  'ORDER_UNLOCK',
+  'TRADE_DEBIT',
+  'TRADE_CREDIT',
+  'FEE',
+  'ADMIN_ADJUST',
+  'ACCOUNT_RESET',
+  'TRANSFER',
+  'REALIZED_PNL',
+  'FUNDING_FEE',
+  'LIQUIDATION',
+  'MARGIN_ADJUST',
+] as const;
 export type LedgerType = (typeof LEDGER_TYPES)[number];
-export const REF_TYPES = ['ORDER', 'TRADE', 'FAUCET', 'ADMIN'] as const;
+export const REF_TYPES = ['ORDER', 'TRADE', 'FAUCET', 'ADMIN', 'TRANSFER', 'FUTURES_ORDER', 'FUTURES_POSITION'] as const;
 export type RefType = (typeof REF_TYPES)[number];
 
 /** Append-only (enforced by trigger). sum(deltas) per (user, asset) must equal the balance row. */
@@ -217,6 +239,7 @@ export const ledgerEntries = pgTable(
     userId: uuid('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
+    account: text('account', { enum: ACCOUNTS }).notNull().default('SPOT'),
     asset: text('asset').notNull(),
     type: text('type', { enum: LEDGER_TYPES }).notNull(),
     deltaAvailable: amount('delta_available').notNull(),
@@ -227,7 +250,7 @@ export const ledgerEntries = pgTable(
     refId: text('ref_id'),
     createdAt: ts('created_at').notNull().defaultNow(),
   },
-  (t) => [index('ledger_user_idx').on(t.userId, t.id), index('ledger_user_asset_idx').on(t.userId, t.asset, t.id)],
+  (t) => [index('ledger_user_idx').on(t.userId, t.id), index('ledger_user_asset_idx').on(t.userId, t.asset, t.id), index('ledger_user_account_idx').on(t.userId, t.account, t.id)],
 );
 
 export const faucetClaims = pgTable(
@@ -481,4 +504,188 @@ export const candles = pgTable(
     observedAt: ts('observed_at').notNull().defaultNow(),
   },
   (t) => [primaryKey({ columns: [t.symbol, t.interval, t.openTime] })],
+);
+
+// ───────────────────────────── futures (phase F): USDT-M perpetuals, isolated margin, one-way mode
+
+/** Contract rules from Binance USDⓈ-M exchangeInfo + admin switches. */
+export const futuresSymbols = pgTable('futures_symbols', {
+  symbol: text('symbol').primaryKey(),
+  /** e.g. BTC, 1000PEPE */
+  baseAsset: text('base_asset').notNull(),
+  quoteAsset: text('quote_asset').notNull(),
+  /** the coin behind it, e.g. PEPE (for name/icon) */
+  underlyingAsset: text('underlying_asset').notNull(),
+  multiplier: integer('multiplier').notNull().default(1),
+  tickSize: amount('tick_size').notNull(),
+  stepSize: amount('step_size').notNull(),
+  minQty: amount('min_qty').notNull(),
+  maxQty: amount('max_qty').notNull(),
+  minNotional: amount('min_notional').notNull(),
+  enabled: boolean('enabled').notNull().default(true),
+  sourceStatus: text('source_status').notNull(),
+  maxLeverage: integer('max_leverage').notNull().default(20),
+  maintenanceMarginRate: amount('maintenance_margin_rate').notNull().default('0.005'),
+  sortOrder: integer('sort_order').notNull().default(0),
+  updatedAt: ts('updated_at').notNull().defaultNow(),
+});
+
+/**
+ * The user's settings per contract — and the per-(user, symbol) lock: every futures operation on a
+ * symbol locks this row FIRST (SELECT … FOR UPDATE), so they run one at a time.
+ */
+export const futuresUserSymbols = pgTable(
+  'futures_user_symbols',
+  {
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    symbol: text('symbol').notNull(),
+    leverage: integer('leverage').notNull().default(10),
+    marginMode: text('margin_mode', { enum: ['ISOLATED', 'CROSS'] }).notNull().default('ISOLATED'),
+    updatedAt: ts('updated_at').notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.symbol] }), check('futures_leverage_range', sql`${t.leverage} between 1 and 20`)],
+);
+
+export const FUTURES_POSITION_CLOSE_REASONS = ['USER', 'TAKE_PROFIT', 'STOP_LOSS', 'LIQUIDATION', 'ADMIN'] as const;
+
+export const futuresPositions = pgTable(
+  'futures_positions',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    symbol: text('symbol').notNull(),
+    side: text('side', { enum: ['LONG', 'SHORT'] }).notNull(),
+    status: text('status', { enum: ['OPEN', 'CLOSED'] }).notNull().default('OPEN'),
+    marginMode: text('margin_mode', { enum: ['ISOLATED', 'CROSS'] }).notNull().default('ISOLATED'),
+    quantity: amount('quantity').notNull(),
+    maxQuantity: amount('max_quantity').notNull(),
+    entryPrice: amount('entry_price').notNull(),
+    leverage: integer('leverage').notNull(),
+    /** Isolated margin — part of the FUTURES USDT `locked` balance. */
+    margin: amount('margin').notNull(),
+    realizedPnl: amount('realized_pnl').notNull().default('0'),
+    fees: amount('fees').notNull().default('0'),
+    funding: amount('funding').notNull().default('0'),
+    closedQuantity: amount('closed_quantity').notNull().default('0'),
+    closedNotional: amount('closed_notional').notNull().default('0'),
+    takeProfitPrice: amount('take_profit_price'),
+    stopLossPrice: amount('stop_loss_price'),
+    closeReason: text('close_reason', { enum: FUTURES_POSITION_CLOSE_REASONS }),
+    openedAt: ts('opened_at').notNull().defaultNow(),
+    closedAt: ts('closed_at'),
+    updatedAt: ts('updated_at').notNull().defaultNow(),
+  },
+  (t) => [
+    // one-way mode: at most one open position per user and symbol
+    uniqueIndex('futures_positions_one_open').on(t.userId, t.symbol).where(sql`${t.status} = 'OPEN'`),
+    index('futures_positions_open_symbol_idx').on(t.symbol).where(sql`${t.status} = 'OPEN'`),
+    index('futures_positions_user_idx').on(t.userId, t.id),
+    check('futures_positions_qty_nonneg', sql`${t.quantity} >= 0`),
+    check('futures_positions_margin_nonneg', sql`${t.margin} >= 0`),
+  ],
+);
+
+export const FUTURES_ORDER_PURPOSES = ['TRADE', 'CLOSE', 'TAKE_PROFIT', 'STOP_LOSS', 'LIQUIDATION', 'ADMIN'] as const;
+
+export const futuresOrders = pgTable(
+  'futures_orders',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    clientOrderId: text('client_order_id').notNull(),
+    symbol: text('symbol').notNull(),
+    side: text('side', { enum: ['BUY', 'SELL'] }).notNull(),
+    type: text('type', { enum: ['MARKET', 'LIMIT'] }).notNull(),
+    purpose: text('purpose', { enum: FUTURES_ORDER_PURPOSES }).notNull().default('TRADE'),
+    timeInForce: text('time_in_force', { enum: ['GTC', 'IOC'] }),
+    price: amount('price'),
+    quantity: amount('quantity').notNull(),
+    executedQty: amount('executed_qty').notNull().default('0'),
+    /** Σ price × qty of fills (avg = executedNotional / executedQty). */
+    executedNotional: amount('executed_notional').notNull().default('0'),
+    reduceOnly: boolean('reduce_only').notNull().default(false),
+    leverage: integer('leverage').notNull(),
+    status: text('status', { enum: ORDER_STATUSES }).notNull(),
+    /** Initial margin reserved for the not-yet-filled quantity (part of FUTURES locked). */
+    marginLocked: amount('margin_locked').notNull().default('0'),
+    /** Fee reserved for the not-yet-filled quantity, at the taker rate (part of FUTURES locked). */
+    feeLocked: amount('fee_locked').notNull().default('0'),
+    fee: amount('fee').notNull().default('0'),
+    realizedPnl: amount('realized_pnl').notNull().default('0'),
+    /** TP/SL to set on the position when this order opens/increases it. */
+    takeProfitPrice: amount('take_profit_price'),
+    stopLossPrice: amount('stop_loss_price'),
+    closeReason: text('close_reason'),
+    createdAt: ts('created_at').notNull().defaultNow(),
+    updatedAt: ts('updated_at').notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('futures_orders_client_id').on(t.userId, t.clientOrderId),
+    index('futures_orders_user_idx').on(t.userId, t.id),
+    index('futures_orders_open_idx').on(t.symbol, t.side, t.price).where(sql`${t.status} in ('NEW', 'PARTIALLY_FILLED')`),
+    check('futures_orders_exec_le_qty', sql`${t.executedQty} <= ${t.quantity}`),
+    check('futures_orders_locks_nonneg', sql`${t.marginLocked} >= 0 and ${t.feeLocked} >= 0`),
+  ],
+);
+
+export const futuresTrades = pgTable(
+  'futures_trades',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    orderId: bigint('order_id', { mode: 'number' })
+      .notNull()
+      .references(() => futuresOrders.id),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    positionId: bigint('position_id', { mode: 'number' }),
+    symbol: text('symbol').notNull(),
+    side: text('side', { enum: ['BUY', 'SELL'] }).notNull(),
+    price: amount('price').notNull(),
+    quantity: amount('quantity').notNull(),
+    quoteQty: amount('quote_qty').notNull(),
+    fee: amount('fee').notNull(),
+    liquidity: text('liquidity', { enum: ['MAKER', 'TAKER'] }).notNull(),
+    realizedPnl: amount('realized_pnl').notNull().default('0'),
+    createdAt: ts('created_at').notNull().defaultNow(),
+  },
+  (t) => [index('futures_trades_user_idx').on(t.userId, t.id), index('futures_trades_order_idx').on(t.orderId)],
+);
+
+/** One row per settled funding time and symbol (rate and mark used). */
+export const futuresFundingEvents = pgTable(
+  'futures_funding_events',
+  {
+    symbol: text('symbol').notNull(),
+    fundingTime: ts('funding_time').notNull(),
+    rate: amount('rate').notNull(),
+    markPrice: amount('mark_price').notNull(),
+    createdAt: ts('created_at').notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.symbol, t.fundingTime] })],
+);
+
+/** Idempotency of funding: a position is paid at most once per funding time. */
+export const futuresFundingPayments = pgTable(
+  'futures_funding_payments',
+  {
+    positionId: bigint('position_id', { mode: 'number' })
+      .notNull()
+      .references(() => futuresPositions.id),
+    fundingTime: ts('funding_time').notNull(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    symbol: text('symbol').notNull(),
+    /** + received, − paid */
+    amount: amount('amount').notNull(),
+    createdAt: ts('created_at').notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.positionId, t.fundingTime] })],
 );

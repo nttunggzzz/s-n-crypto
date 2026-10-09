@@ -36,6 +36,13 @@
       "when": 1791549853020,
       "tag": "0004_phase25_assets_announcements",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1791552324797,
+      "tag": "0005_phaseF_futures",
+      "breakpoints": true
     }
   ]
 }

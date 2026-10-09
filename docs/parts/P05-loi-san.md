@@ -45,6 +45,7 @@ Phần quan trọng nhất của dự án: số dư **luôn đúng tuyệt đố
 - [x] Giai đoạn 2: lệnh nâng cao, OCO, TP/SL, trailing, danh mục, lịch sử, CSV, cảnh báo giá, thông báo
 - [x] Giai đoạn 3: API admin
 - [ ] Giai đoạn 5: nhật ký & thống kê
+- [x] Giai đoạn F: Futures mô phỏng — ví riêng, ký quỹ cô lập, đòn bẩy ≤ 20×, thanh lý, funding, đối soát 2 ví
 
 ## Xong khi
 Test tự động bao phủ: số dư không bao giờ âm; tổng sổ cái = số dư; hủy đúng lúc khớp → chỉ một trong hai xảy ra; OCO một bên khớp → bên kia hủy; chạy lại cùng sự kiện giá 2 lần → không khớp 2 lần.

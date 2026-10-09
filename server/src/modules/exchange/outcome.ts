@@ -23,7 +23,7 @@ export class Outcome {
   }
 
   addBalances(states: Iterable<BalanceState>): void {
-    for (const b of states) this.balances.set(`${b.userId}|${b.asset}`, b);
+    for (const b of states) this.balances.set(`${b.userId}|${b.account}|${b.asset}`, b);
   }
 
   /** Index sync + realtime events. Call after commit. */

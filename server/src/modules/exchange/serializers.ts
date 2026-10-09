@@ -77,6 +77,7 @@ export function serializeTrade(t: TradeRow): Trade {
 export function serializeLedger(e: typeof ledgerEntries.$inferSelect): LedgerEntry {
   return {
     id: String(e.id),
+    account: e.account,
     asset: e.asset,
     type: e.type,
     deltaAvailable: fx(e.deltaAvailable),

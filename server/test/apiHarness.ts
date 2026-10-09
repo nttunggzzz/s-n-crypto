@@ -32,9 +32,9 @@ export class ApiHarness {
     const config = loadConfig({ NODE_ENV: 'test', MARKET_FEED: 'off', APP_URL: 'http://localhost:5173', RATE_LIMIT_SCALE: '100' });
     this.env = await createTestEnv();
     const auth = new AuthService(this.env.database.db, config, this.mail, this.authNow);
-    const app = createApp({ config, db: this.env.database.db, auth, market: this.env.market, exchange: this.env.ex, candles: new CandleService(this.env.database.db, null), depthSnapshots: new DepthSnapshots(opts.depthFetcher ?? null) });
+    const app = createApp({ config, db: this.env.database.db, auth, market: this.env.market, exchange: this.env.ex, candles: new CandleService(this.env.database.db, null), depthSnapshots: new DepthSnapshots(opts.depthFetcher ?? null), futures: this.env.futures });
     this.server = http.createServer(app);
-    this.hub = new RealtimeHub(this.env.market, this.env.ex, auth, allowedOrigins(config));
+    this.hub = new RealtimeHub(this.env.market, this.env.ex, auth, allowedOrigins(config), this.env.futures);
     this.hub.attach(this.server);
     await new Promise<void>((r) => this.server.listen(0, r));
     this.base = `http://127.0.0.1:${(this.server.address() as AddressInfo).port}`;
