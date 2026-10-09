@@ -1,6 +1,6 @@
 # Thiết kế: Futures mô phỏng (hợp đồng vĩnh cửu USDT-M)
 
-Ngày 2026-10-09 · Claude Code · Trạng thái: **đã duyệt 2026-10-09 — đang làm** (đòn bẩy tối đa 20×, ký quỹ cô lập trước, Futures làm trước Giai đoạn 2.6)
+Ngày 2026-10-09 · Claude Code · Trạng thái: **v1 backend xong 2026-10-09** ([báo cáo](../reports/2026-10-09-backend-futures.md)) — đòn bẩy tối đa 20×, ký quỹ cô lập; chênh so với bảng dưới: lệnh Stop-Market riêng để v2 (đã có TP/SL theo vị thế)
 
 Chủ dự án chọn thêm Futures (2026-10-09). Đây là hạng mục lớn nhất từ trước tới nay, khoảng Giai đoạn 1 + 2 cộng lại, vì có thêm đòn bẩy, ký quỹ, funding và thanh lý. Vẫn là **tiền ảo**: người dùng không khớp lệnh với nhau, giá lấy từ thị trường Futures thật của Binance.
 

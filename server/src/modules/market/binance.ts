@@ -91,10 +91,11 @@ export function klineToCandle(k: RawKline, now: number): Candle {
   };
 }
 
-export async function fetchKlines(restUrl: string, symbol: string, interval: CandleInterval, limit: number, endTime?: number): Promise<Candle[]> {
+/** `path`: /api/v3/klines (spot) or /fapi/v1/klines (USDⓈ-M futures) — same response format. */
+export async function fetchKlines(restUrl: string, symbol: string, interval: CandleInterval, limit: number, endTime?: number, path = '/api/v3/klines'): Promise<Candle[]> {
   const qs = new URLSearchParams({ symbol, interval, limit: String(limit) });
   if (endTime !== undefined) qs.set('endTime', String(endTime - 1));
-  const res = await fetch(`${restUrl}/api/v3/klines?${qs}`);
+  const res = await fetch(`${restUrl}${path}?${qs}`);
   if (!res.ok) throw new Error(`klines HTTP ${res.status}`);
   const rows = (await res.json()) as RawKline[];
   const now = Date.now();
@@ -108,53 +109,97 @@ interface StreamEnvelope {
   data: Record<string, unknown>;
 }
 
-/** Binance allows 1024 streams per connection; we stay well below to spread the load. */
-const STREAMS_PER_CONNECTION = 300;
+/** Streams per connection: Binance allows 1024 (spot) and 200 (USDⓈ-M futures); we stay below. */
+const STREAMS_PER_CONNECTION = { spot: 300, futures: 190 } as const;
+export type StreamKind = keyof typeof STREAMS_PER_CONNECTION;
+
+export interface MarkUpdate {
+  markPrice: string;
+  indexPrice: string;
+  fundingRate: string;
+  nextFundingTime: number;
+  eventTime: number;
+}
 /** Params per SUBSCRIBE message; Binance accepts at most 5 incoming messages per second. */
 const SUBSCRIBE_BATCH = 100;
 const SUBSCRIBE_GAP_MS = 250;
 
-export function streamsFor(symbol: string): string[] {
+export function streamsFor(symbol: string, kind: StreamKind = 'spot'): string[] {
   const l = symbol.toLowerCase();
-  return [`${l}@ticker`, `${l}@depth20@100ms`, `${l}@aggTrade`, ...INTERVALS.map((i) => `${l}@kline_${i}`)];
+  const base = [`${l}@ticker`, `${l}@depth20@100ms`, `${l}@aggTrade`, ...INTERVALS.map((i) => `${l}@kline_${i}`)];
+  return kind === 'futures' ? [...base, `${l}@markPrice@1s`] : base;
 }
 
-/** Splits symbols into connections; a symbol's streams always share one connection. */
-export function planConnections(symbols: string[], perConnection = STREAMS_PER_CONNECTION): string[][] {
-  const groups: string[][] = [];
-  let cur: string[] = [];
-  let count = 0;
+/**
+ * Endpoint of a stream. Spot: /stream. USDⓈ-M futures (Binance split them in 2026): order books on
+ * /public/stream, everything else (trades, mark price, ticker, klines) on /market/stream — the old
+ * /stream only serves order books any more.
+ */
+export function endpointFor(stream: string, kind: StreamKind): string {
+  if (kind === 'spot') return '/stream';
+  return stream.includes('@depth') ? '/public/stream' : '/market/stream';
+}
+
+export interface ConnectionPlan {
+  path: string;
+  symbols: string[];
+  streams: string[];
+}
+
+/** Splits streams into connections per endpoint; within an endpoint a symbol's streams share one connection. */
+export function planConnections(symbols: string[], kind: StreamKind = 'spot', perConnection: number = STREAMS_PER_CONNECTION[kind]): ConnectionPlan[] {
+  const byPath = new Map<string, Map<string, string[]>>();
   for (const s of symbols) {
-    const n = streamsFor(s).length;
-    if (cur.length && count + n > perConnection) {
-      groups.push(cur);
-      cur = [];
-      count = 0;
+    for (const stream of streamsFor(s, kind)) {
+      const path = endpointFor(stream, kind);
+      const m = byPath.get(path) ?? new Map<string, string[]>();
+      byPath.set(path, m);
+      m.set(s, [...(m.get(s) ?? []), stream]);
     }
-    cur.push(s);
-    count += n;
   }
-  if (cur.length) groups.push(cur);
-  return groups;
+  const plans: ConnectionPlan[] = [];
+  for (const [path, bySymbol] of byPath) {
+    let cur: ConnectionPlan = { path, symbols: [], streams: [] };
+    for (const [s, streams] of bySymbol) {
+      if (cur.symbols.length && cur.streams.length + streams.length > perConnection) {
+        plans.push(cur);
+        cur = { path, symbols: [], streams: [] };
+      }
+      cur.symbols.push(s);
+      cur.streams.push(...streams);
+    }
+    if (cur.symbols.length) plans.push(cur);
+  }
+  return plans;
+}
+
+export interface StreamOptions {
+  /** spot (default) or USDⓈ-M futures (adds markPrice@1s, smaller connections). */
+  kind?: StreamKind;
+  /** Closed candles are stored for spot only (the signal engine reads them); null = don't store. */
+  db?: Db | null;
+  onMark?: (symbol: string, m: MarkUpdate) => void;
 }
 
 /**
  * Binance market streams for all symbols (24h ticker, top-20 depth at 100ms, aggregated trades,
- * klines for every chart interval), over as many connections as needed. Each connection
- * subscribes with SUBSCRIBE messages, reconnects with exponential backoff, and rotates every
- * 23h (Binance closes at 24h). If one connection drops only its symbols go STALE.
+ * klines for every chart interval; futures also mark price + funding), over as many connections as
+ * needed. Each connection subscribes with SUBSCRIBE messages, reconnects with exponential backoff,
+ * and rotates every 23h (Binance closes at 24h). If one connection drops only its symbols go STALE.
  */
 export class BinanceStream {
   private readonly conns: StreamConnection[];
+  private readonly kind: StreamKind;
 
   constructor(
     wsUrl: string,
     private readonly market: MarketDataService,
-    db: Db,
     symbolList: string[],
+    private readonly opts: StreamOptions = {},
   ) {
-    const handle = (msg: StreamEnvelope) => this.handle(msg, db);
-    this.conns = planConnections(symbolList).map((group, i) => new StreamConnection(i, wsUrl, group, handle, () => this.refreshConnection()));
+    this.kind = opts.kind ?? 'spot';
+    const handle = (msg: StreamEnvelope) => this.handle(msg);
+    this.conns = planConnections(symbolList, this.kind).map((plan, i) => new StreamConnection(`${this.kind}#${i}${plan.path}`, `${wsUrl}${plan.path}`, plan.streams, handle, () => this.refreshConnection()));
   }
 
   start(): void {
@@ -171,12 +216,15 @@ export class BinanceStream {
     this.market.setConnection(states.every((s) => s === 'CONNECTED') ? 'CONNECTED' : states.every((s) => s === 'DISCONNECTED') ? 'DISCONNECTED' : 'CONNECTING');
   }
 
-  private handle(msg: StreamEnvelope, db: Db): void {
+  private handle(msg: StreamEnvelope): void {
     const [sym, kind] = msg.stream.split('@') as [string, string];
     const symbol = sym.toUpperCase();
     const d = msg.data;
     if (kind === 'depth20') {
-      this.market.ingestDepth(symbol, d.bids as [string, string][], d.asks as [string, string][]);
+      // spot partial depth: bids/asks · futures: b/a
+      this.market.ingestDepth(symbol, (d.bids ?? d.b) as [string, string][], (d.asks ?? d.a) as [string, string][]);
+    } else if (kind === 'markPrice') {
+      this.opts.onMark?.(symbol, { markPrice: d.p as string, indexPrice: d.i as string, fundingRate: d.r as string, nextFundingTime: d.T as number, eventTime: d.E as number });
     } else if (kind === 'aggTrade') {
       this.market.ingestTrade(symbol, { id: d.a as number, price: d.p as string, qty: d.q as string, time: d.T as number, isBuyerMaker: d.m as boolean });
     } else if (kind === 'ticker') {
@@ -197,7 +245,7 @@ export class BinanceStream {
       const k = d.k as { t: number; T: number; i: CandleInterval; o: string; h: string; l: string; c: string; v: string; q: string; n: number; x: boolean };
       const candle: Candle = { openTime: k.t, closeTime: k.T, open: k.o, high: k.h, low: k.l, close: k.c, volume: k.v, quoteVolume: k.q, closed: k.x };
       this.market.ingestCandle(symbol, k.i, candle);
-      if (k.x) void storeClosed(db, symbol, k.i, candle, k.n);
+      if (k.x && this.opts.db) void storeClosed(this.opts.db, symbol, k.i, candle, k.n);
     }
   }
 }
@@ -237,9 +285,10 @@ class StreamConnection {
   private subTimers: NodeJS.Timeout[] = [];
 
   constructor(
-    private readonly index: number,
-    private readonly wsUrl: string,
-    private readonly symbols: string[],
+    private readonly index: string,
+    /** Full endpoint URL, e.g. wss://stream.binance.com:9443/stream */
+    private readonly url: string,
+    private readonly streams: string[],
     private readonly onMessage: (msg: StreamEnvelope) => void,
     private readonly onState: () => void,
   ) {}
@@ -269,17 +318,17 @@ class StreamConnection {
 
   private connect(): void {
     this.setState('CONNECTING');
-    const ws = new WebSocket(`${this.wsUrl}/stream`);
+    const ws = new WebSocket(this.url);
     this.ws = ws;
     ws.on('open', () => {
       this.attempt = 0;
-      const streams = this.symbols.flatMap(streamsFor);
+      const streams = this.streams;
       for (let i = 0; i * SUBSCRIBE_BATCH < streams.length; i++) {
         const params = streams.slice(i * SUBSCRIBE_BATCH, (i + 1) * SUBSCRIBE_BATCH);
         this.subTimers.push(setTimeout(() => ws.readyState === ws.OPEN && ws.send(JSON.stringify({ method: 'SUBSCRIBE', params, id: i + 1 })), i * SUBSCRIBE_GAP_MS));
       }
       this.setState('CONNECTED');
-      logger.info({ connection: this.index, symbols: this.symbols.length, streams: streams.length }, 'binance stream connected');
+      logger.info({ connection: this.index, streams: streams.length }, 'binance stream connected');
       clearTimeout(this.rotateTimer);
       this.rotateTimer = setTimeout(() => ws.close(), 23 * 3600_000);
     });

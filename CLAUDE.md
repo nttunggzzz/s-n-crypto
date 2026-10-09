@@ -22,6 +22,8 @@ server/
   src/modules/market Binance WS (nhiều kết nối, SUBSCRIBE) / REST, MarketDataService (LIVE/STALE), nến,
                      assets (thông tin coin), depthSnapshots (sổ lệnh sâu), sparklines
   src/modules/content announcementService (thông báo của sàn)
+  src/modules/futures Futures mô phỏng: config (hợp đồng), markData (mark/funding), service (ví, lệnh, vị thế,
+                     thanh lý, funding), engine (chạy theo sự kiện thị trường), routes
   src/modules/exchange  ledger, orderService (mọi loại lệnh, OCO, TP/SL), matcher, openOrderIndex,
                         positions (giá vốn), portfolio, alerts, notifications, preferences, exports (CSV),
                         faucet, reconciliation, routes
@@ -58,6 +60,12 @@ npm run admin:set-role -- <email> owner   # tạo owner đầu tiên (ghi audit 
 14. **Database phải là UTF8** (tiếng Việt). Script PostgreSQL nhúng tự tạo UTF8 và từ chối DB khác bảng mã.
 15. **Khớp lệnh chỉ dùng 20 mức realtime** (`MarketDataService`). Sổ lệnh sâu (`DepthSnapshots`, REST) và sparkline chỉ để **hiển thị**,
     có cache + giới hạn trọng số Binance (tổng IP 6000/phút; sổ lệnh sâu ≤ 1200). Không gọi REST Binance trong đường khớp lệnh.
+16. **Hai ví, một sổ cái**: `balances`/`ledger_entries` có cột `account` (`SPOT` | `FUTURES`). Code Spot luôn lọc `account = 'SPOT'`
+    (`getBalances` mặc định SPOT). Futures: `locked` của FUTURES/USDT = Σ (`marginLocked` + `feeLocked`) lệnh mở + Σ `margin` vị thế mở — đối soát kiểm tra đúng đẳng thức này.
+17. **Futures**: mọi thao tác trên (user, symbol) khóa dòng `futures_user_symbols` **trước tiên** (kể cả khớp lệnh, TP/SL, thanh lý, funding).
+    Thanh lý/TP/SL dùng **mark price LIVE**; mark STALE hoặc sàn dừng → không thanh lý, không khớp. Lỗ tối đa = ký quỹ vị thế (không bao giờ âm số dư).
+    Funding idempotent theo (vị thế, mốc thời gian) — bảng `futures_funding_payments`.
+18. **Binance Futures WebSocket**: sổ lệnh ở `/public/stream`, còn lại (trade, markPrice, ticker, kline) ở `/market/stream`; `/stream` cũ chỉ còn sổ lệnh.
 
 ## Khi thêm tính năng
 1. Hợp đồng (schema + endpoint + fixture + resolver mock — `createMockHandlers` bắt buộc có resolver cho mọi endpoint, thiếu sẽ lỗi typecheck).

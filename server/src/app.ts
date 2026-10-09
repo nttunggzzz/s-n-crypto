@@ -12,6 +12,8 @@ import type { CandleService } from './modules/market/candleService.ts';
 import { binanceDepthFetcher, DepthSnapshots } from './modules/market/depthSnapshots.ts';
 import { SparklineService } from './modules/market/sparklines.ts';
 import { AnnouncementService } from './modules/content/announcementService.ts';
+import type { Futures } from './modules/futures/index.ts';
+import { registerFuturesRoutes } from './modules/futures/routes.ts';
 import { registerMarketRoutes } from './modules/market/routes.ts';
 import type { Exchange } from './modules/exchange/index.ts';
 import { registerExchangeRoutes } from './modules/exchange/routes.ts';
@@ -27,6 +29,8 @@ export interface AppDeps {
   candles: CandleService;
   /** Deep order books; default: Binance REST when the feed is on, none otherwise. */
   depthSnapshots?: DepthSnapshots;
+  /** Simulated futures (phase F). */
+  futures?: Futures;
   version?: string;
 }
 
@@ -109,7 +113,8 @@ export function createApp(deps: AppDeps) {
   const news = new AnnouncementService(deps.db);
   route(router, opts, 'announcements', async ({ query }) => ({ items: await news.listPublic(query.limit) }));
   registerExchangeRoutes(router, opts, deps.db, deps.exchange, deps.market, config.RATE_LIMIT_SCALE);
-  registerAdminRoutes(router, opts, new AdminService(deps.db, deps.exchange, deps.market), news, config.RATE_LIMIT_SCALE);
+  registerAdminRoutes(router, opts, new AdminService(deps.db, deps.exchange, deps.market, deps.futures), news, config.RATE_LIMIT_SCALE);
+  if (deps.futures) registerFuturesRoutes(router, opts, deps.db, deps.futures, deps.market, config.RATE_LIMIT_SCALE);
   app.use(router);
 
   app.use('/api', (_req: Request, _res: Response, next: NextFunction) => next(new AppError('NOT_FOUND', 'No such endpoint')));

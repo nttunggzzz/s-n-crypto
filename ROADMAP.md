@@ -1,7 +1,7 @@
 # ROADMAP — Sàn giao dịch ảo + Web tín hiệu
 
-> Trạng thái: **ĐANG LÀM** — backend GĐ 0–3 + 2.5 xong (chạy local, chưa lên cloud); giao diện GĐ1 xong, đang làm lại theo phong cách OKX (v2). Cập nhật: 2026-10-09
-> Báo cáo mới nhất: [docs/reports/2026-10-09-backend-gd25.md](docs/reports/2026-10-09-backend-gd25.md) · trước đó: [GĐ3](docs/reports/2026-10-09-backend-gd3.md), [GĐ2](docs/reports/2026-10-09-backend-gd2.md), [GĐ0–1](docs/reports/2026-10-09-backend-gd0-gd1.md)
+> Trạng thái: **ĐANG LÀM** — backend GĐ 0–3 + 2.5 + **F (Futures)** xong (chạy local, chưa lên cloud); giao diện GĐ1 xong, đang làm lại theo phong cách OKX (v2). Cập nhật: 2026-10-09
+> Báo cáo mới nhất: [docs/reports/2026-10-09-backend-futures.md](docs/reports/2026-10-09-backend-futures.md) · trước đó: [GĐ2.5](docs/reports/2026-10-09-backend-gd25.md), [GĐ3](docs/reports/2026-10-09-backend-gd3.md), [GĐ2](docs/reports/2026-10-09-backend-gd2.md), [GĐ0–1](docs/reports/2026-10-09-backend-gd0-gd1.md)
 > Dự án thử nghiệm cá nhân. Phần kinh doanh (thu phí, thanh toán…) để sau — xem [Backlog](#backlog-để-sau).
 > Chi tiết từng phần: [docs/parts/README.md](docs/parts/README.md)
 
@@ -100,8 +100,12 @@
 - [ ] P08: Giao diện cho các mục trên
 
 ### Giai đoạn F — Futures mô phỏng (đã duyệt 2026-10-09: tối đa 20×, ký quỹ cô lập trước; **làm trước GĐ 2.6**)
-- [ ] P04/P05: Hợp đồng vĩnh cửu USDT-M theo giá Binance Futures (mark price, funding), đòn bẩy, ký quỹ, thanh lý — thiết kế: [docs/proposals/2026-10-09-futures-mo-phong.md](docs/proposals/2026-10-09-futures-mo-phong.md)
-- [ ] P08: Giao diện Futures
+- [x] P04: 50 hợp đồng vĩnh cửu USDT-M (Binance USDⓈ-M: sổ lệnh, giao dịch, nến, mark/index, funding) — luồng `/public` + `/market`
+- [x] P05: Ví Futures + chuyển Spot↔Futures (sổ cái chung, cột `account`), đòn bẩy 1–20×, lệnh Market/Limit/reduce-only, vị thế cô lập một chiều (đảo chiều), TP/SL theo mark, thêm/bớt ký quỹ, **thanh lý**, **funding**, đối soát cả 2 ví, Admin (hợp đồng, phí, reset)
+- [x] P02: Hợp đồng 0.5.0 + mock đầy đủ
+- [ ] P05 v2: ký quỹ chéo (cross), hedge mode, lệnh Stop-Market/Trailing riêng cho Futures
+- [ ] P08: Giao diện Futures — [PROMPT-05](docs/antigravity/PROMPT-05-giao-dien-futures.md)
+- Thiết kế: [docs/proposals/2026-10-09-futures-mo-phong.md](docs/proposals/2026-10-09-futures-mo-phong.md)
 
 ### Giai đoạn 4 — Engine tín hiệu (chạy ngầm)
 - [ ] P06: Chuyển & sửa engine cũ (nến đã đóng, đủ lịch sử, bỏ số liệu bịa, sửa hướng/R:R/SHORT), lưu nến, phiên bản engine, **bot tự vào lệnh bằng OCO**, backtest trung thực + walk-forward

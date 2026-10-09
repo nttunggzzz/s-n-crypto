@@ -22,6 +22,7 @@ import { AppError } from '../../lib/errors.ts';
 import type { MarketDataService } from '../market/marketData.ts';
 import type { UserRow } from '../auth/authService.ts';
 import type { Exchange } from '../exchange/index.ts';
+import type { Futures } from '../futures/index.ts';
 import { applyBalanceChanges, getBalances } from '../exchange/ledger.ts';
 import { reconcile } from '../exchange/reconciliation.ts';
 import { makePriceOf } from '../exchange/routes.ts';
@@ -62,7 +63,8 @@ export function serializeRun(r: typeof reconciliationRuns.$inferSelect): Reconci
     finishedAt: r.finishedAt.toISOString(),
     ok: r.ok,
     checkedBalances: r.checkedBalances,
-    mismatches: r.mismatches as ReconciliationRun['mismatches'],
+    // runs stored before the futures wallet existed have no `account`: they were all SPOT
+    mismatches: (r.mismatches as Omit<ReconciliationRun['mismatches'][number], 'account'>[]).map((m) => ({ account: 'SPOT' as const, ...m })),
   };
 }
 
@@ -77,6 +79,7 @@ export class AdminService {
     private readonly db: Db,
     private readonly ex: Exchange,
     private readonly market: MarketDataService,
+    private readonly futures?: Futures,
   ) {
     this.priceOf = makePriceOf(market);
   }
@@ -303,11 +306,11 @@ export class AdminService {
     if (amount.isZero() || !hasAtMostScale(amount, AMOUNT_SCALE)) throw new AppError('VALIDATION_ERROR', 'amount must be non-zero with at most 8 decimals', { field: 'amount' });
 
     const result = await this.db.transaction(async (tx) => {
-      await tx.insert(balances).values({ userId: id, asset }).onConflictDoNothing();
+      await tx.insert(balances).values({ userId: id, account: 'SPOT', asset }).onConflictDoNothing();
       const [row] = await tx
         .select()
         .from(balances)
-        .where(and(eq(balances.userId, id), eq(balances.asset, asset)))
+        .where(and(eq(balances.userId, id), eq(balances.account, 'SPOT'), eq(balances.asset, asset)))
         .for('update');
       const available = dec(row!.available);
       const after = available.add(amount);
@@ -344,6 +347,7 @@ export class AdminService {
   async resetAccount(actor: Actor, id: string, reason: string): Promise<AdminUserDetail> {
     const u = await this.loadUser(id);
     this.guardTarget(actor, u);
+    await this.futures?.service.resetUser(id);
     await this.ex.orders.cancelAll(id, undefined, 'ADMIN');
     const changed = await this.db.transaction(async (tx) => {
       const [open] = await tx
@@ -358,14 +362,14 @@ export class AdminService {
         action: 'ACCOUNT_RESET',
         targetType: 'USER',
         targetId: id,
-        before: { balances: rows.filter((r) => dec(r.available).gt(0)).map((r) => ({ asset: r.asset, available: toFixedStr(dec(r.available)) })) },
+        before: { balances: rows.filter((r) => dec(r.available).gt(0)).map((r) => ({ account: r.account, asset: r.asset, available: toFixedStr(dec(r.available)) })) },
         after: { balances: [] },
         reason,
         ip: actor.ip,
       });
       const changes = rows
         .filter((r) => dec(r.available).gt(0))
-        .map((r) => ({ userId: id, asset: r.asset, type: 'ACCOUNT_RESET' as const, deltaAvailable: dec(r.available).neg(), refType: 'ADMIN' as const, refId: String(auditId) }));
+        .map((r) => ({ userId: id, account: r.account, asset: r.asset, type: 'ACCOUNT_RESET' as const, deltaAvailable: dec(r.available).neg(), refType: 'ADMIN' as const, refId: String(auditId) }));
       const state = changes.length ? await applyBalanceChanges(tx, changes) : new Map();
       await tx.delete(faucetClaims).where(eq(faucetClaims.userId, id));
       await tx.delete(positions).where(eq(positions.userId, id));
@@ -384,6 +388,7 @@ export class AdminService {
       tradingHalted: s.tradingHalted,
       feeRate: dec(s.feeRate).toFixed(),
       faucet: { asset: s.faucetAsset, amount: toFixedStr(dec(s.faucetAmount)), cooldownHours: s.faucetCooldownHours, lifetimeCap: toFixedStr(dec(s.faucetLifetimeCap)) },
+      futures: { makerFee: dec(s.futuresMakerFee).toFixed(), takerFee: dec(s.futuresTakerFee).toFixed(), liquidationFee: dec(s.futuresLiquidationFee).toFixed() },
       staleThresholdMs: s.staleThresholdMs,
       updatedAt: s.updatedAt.toISOString(),
     };
@@ -391,7 +396,17 @@ export class AdminService {
 
   async updateSettings(
     actor: Actor,
-    p: { feeRate?: string; faucetAmount?: string; faucetCooldownHours?: number; faucetLifetimeCap?: string; staleThresholdMs?: number; reason: string },
+    p: {
+      feeRate?: string;
+      faucetAmount?: string;
+      faucetCooldownHours?: number;
+      faucetLifetimeCap?: string;
+      staleThresholdMs?: number;
+      futuresMakerFee?: string;
+      futuresTakerFee?: string;
+      futuresLiquidationFee?: string;
+      reason: string;
+    },
   ): Promise<ExchangeSettings> {
     const set: Partial<typeof exchangeSettings.$inferInsert> = {};
     const amountField = (v: string, field: string, allowZero = false) => {
@@ -408,6 +423,14 @@ export class AdminService {
     if (p.faucetLifetimeCap !== undefined) set.faucetLifetimeCap = amountField(p.faucetLifetimeCap, 'faucetLifetimeCap');
     if (p.faucetCooldownHours !== undefined) set.faucetCooldownHours = p.faucetCooldownHours;
     if (p.staleThresholdMs !== undefined) set.staleThresholdMs = p.staleThresholdMs;
+    const futuresFee = (v: string, field: string, max: string) => {
+      const f = amountField(v, field, true);
+      if (dec(f).gt(max)) throw new AppError('VALIDATION_ERROR', `${field} must be at most ${max}`, { field });
+      return f;
+    };
+    if (p.futuresMakerFee !== undefined) set.futuresMakerFee = futuresFee(p.futuresMakerFee, 'futuresMakerFee', '0.01');
+    if (p.futuresTakerFee !== undefined) set.futuresTakerFee = futuresFee(p.futuresTakerFee, 'futuresTakerFee', '0.01');
+    if (p.futuresLiquidationFee !== undefined) set.futuresLiquidationFee = futuresFee(p.futuresLiquidationFee, 'futuresLiquidationFee', '0.05');
     const before = this.settings();
     await this.db.transaction(async (tx) => {
       await tx

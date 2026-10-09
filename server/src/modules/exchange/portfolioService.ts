@@ -103,7 +103,8 @@ export class PortfolioService {
       .select({ userId: balances.userId, asset: balances.asset, available: balances.available, locked: balances.locked })
       .from(balances)
       .innerJoin(users, eq(users.id, balances.userId))
-      .where(eq(users.isBot, false));
+      // spot wallet only (futures equity is shown on the futures account)
+      .where(and(eq(users.isBot, false), eq(balances.account, 'SPOT')));
     const byUser = new Map<string, { total: Dec; complete: boolean }>();
     for (const r of rows) {
       const qty = dec(r.available).add(dec(r.locked));
