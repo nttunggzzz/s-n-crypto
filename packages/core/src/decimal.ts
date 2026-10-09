@@ -49,6 +49,12 @@ export function floorToStep(value: Dec, step: Dec): Dec {
   return value.div(step).floor().mul(step);
 }
 
+/** Smallest multiple of `step` that is >= value (value >= 0). */
+export function ceilToStep(value: Dec, step: Dec): Dec {
+  if (step.lte(0)) throw new Error('step must be > 0');
+  return value.div(step).ceil().mul(step);
+}
+
 export function isMultipleOfStep(value: Dec, step: Dec): boolean {
   if (step.lte(0)) return true;
   return value.mod(step).isZero();

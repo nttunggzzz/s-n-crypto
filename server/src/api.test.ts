@@ -2,7 +2,7 @@ import http from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
-import { ApiError, createApiClient, type ApiClient, type ServerMessage } from '@cex/contracts';
+import { ApiError, createApiClient, UserEvent, type ApiClient, type ServerMessage } from '@cex/contracts';
 import { loadConfig } from './config.ts';
 import { createApp, allowedOrigins } from './app.ts';
 import { AuthService } from './modules/auth/authService.ts';
@@ -232,5 +232,98 @@ describe('API', () => {
     const userEvents = messages.filter((m) => m.type === 'event' && m.channel === 'user').map((m) => (m as { data: { kind: string } }).data.kind);
     expect(userEvents).toEqual(expect.arrayContaining(['order', 'balance']));
     expect(messages.some((m) => m.type === 'event' && m.channel === 'ticker:BTCUSDT')).toBe(true);
+  });
+});
+
+describe('API phase 2', () => {
+  const lastPrice = async (p: string) => {
+    marketTrade(env, 'BTCUSDT', p);
+    await env.ex.matcher.idle('BTCUSDT');
+  };
+
+  it('TP/SL, OCO, stops, portfolio and CSV exports follow the contract', async () => {
+    const { b } = await signedUpUser();
+    await b.faucetClaim();
+    await lastPrice('100.00');
+
+    const buy = await b.placeOrder({ body: { symbol: 'BTCUSDT', side: 'BUY', type: 'MARKET', quantity: '1', tpsl: { takeProfitPrice: '110', stopLossPrice: '95' } } });
+    expect(buy.order.tpsl).toMatchObject({ state: 'PLACED', takeProfitPrice: '110.00000000' });
+    const lists = await b.openOrderLists();
+    expect(lists.items).toHaveLength(1);
+    const list = lists.items[0]!;
+    expect(list.orders.map((o) => [o.type, o.quantity, o.parentOrderId])).toEqual([
+      ['LIMIT', '0.99900000', buy.order.id],
+      ['STOP_MARKET', '0.99900000', buy.order.id],
+    ]);
+    expect((await b.getOrderList({ params: { listId: list.id } })).id).toBe(list.id);
+
+    const stop = await b.placeOrder({ body: { symbol: 'BTCUSDT', side: 'BUY', type: 'STOP_LIMIT', stopPrice: '105', price: '106', quantity: '0.1' } });
+    expect(stop.order).toMatchObject({ triggerState: 'WAITING', triggerDirection: 'UP', price: '106.00000000' });
+    await expectApiError(b.placeOco({ body: { symbol: 'BTCUSDT', side: 'SELL', quantity: '0.1', price: '99', stopPrice: '95' } }), 'INVALID_OCO_PRICES', 400);
+    await expectApiError(b.placeOrder({ body: { symbol: 'BTCUSDT', side: 'SELL', type: 'TRAILING_STOP_MARKET', trailingDeltaBips: 5, quantity: '0.1' } }), 'VALIDATION_ERROR', 400);
+
+    const canceled = await b.cancelOrderList({ params: { listId: list.id } });
+    expect(canceled.listStatus).toBe('ALL_DONE');
+    expect(canceled.orders.every((o) => o.status === 'CANCELED' && o.closeReason === 'USER_CANCELED')).toBe(true);
+    await expectApiError(b.getOrderList({ params: { listId: '999999' } }), 'NOT_FOUND', 404);
+
+    const p = await b.portfolio();
+    expect(p.positions.find((x) => x.asset === 'BTC')).toMatchObject({ quantity: '0.99900000', costBasis: '100.50000000' });
+    expect((await b.portfolioHistory({ query: { range: '7d' } })).range).toBe('7d');
+
+    const hist = await b.orderHistory({ query: { from: new Date(Date.now() - 60_000).toISOString() } });
+    expect(hist.items.length).toBeGreaterThanOrEqual(3);
+    expect((await b.orderHistory({ query: { to: '2020-01-01T00:00:00.000Z' } })).items).toEqual([]);
+
+    const csv = await b.exportTrades({ query: { symbol: 'BTCUSDT' } });
+    expect(csv.startsWith('\uFEFF')).toBe(true); // BOM for Excel (trim() would strip it)
+    const lines = csv.trim().split('\r\n');
+    expect(lines[0]).toBe('tradeId,orderId,time_utc,time_gmt7,symbol,side,price,quantity,quoteQty,fee,feeAsset,liquidity,realizedPnl');
+    expect(lines).toHaveLength(3); // header + 2 fills of the market buy
+    const raw = await fetch(`${base}/api/v1/export/orders.csv`, { headers: { cookie: b.cookie() } });
+    expect(raw.headers.get('content-type')).toContain('text/csv');
+    expect(raw.headers.get('content-disposition')).toContain('orders.csv');
+    expect((await b.exportLedger()).split('\r\n')[0]).toContain('entryId');
+    expect((await reconcile(env.database.db, false)).mismatches).toEqual([]);
+  });
+
+  it('alerts, notifications and preferences', async () => {
+    const { b } = await signedUpUser();
+    await lastPrice('100.00');
+    const a = await b.createAlert({ body: { symbol: 'BTCUSDT', condition: 'ABOVE', targetPrice: '104', note: 'test' } });
+    await expectApiError(b.createAlert({ body: { symbol: 'BTCUSDT', condition: 'BELOW', targetPrice: '101' } }), 'INVALID_PRICE', 400);
+    await lastPrice('104.50');
+    expect((await b.listAlerts({ query: { status: 'TRIGGERED' } })).items.map((x) => x.id)).toEqual([a.id]);
+    expect((await b.unreadNotifications()).unread).toBe(1);
+    const n = await b.listNotifications({ query: { unreadOnly: 'true' } });
+    expect(n.items[0]).toMatchObject({ type: 'PRICE_ALERT', alertId: a.id, lastPrice: '104.50000000', readAt: null });
+    expect((await b.markNotificationsRead({ body: { ids: [n.items[0]!.id] } })).unread).toBe(0);
+    const del = await b.deleteAlert({ params: { alertId: a.id } });
+    expect(del.status).toBe('TRIGGERED'); // already fired: delete is a no-op
+
+    expect((await b.getPreferences()).locale).toBe('vi');
+    const prefs = await b.updatePreferences({ body: { favorites: ['ETHUSDT', 'BTCUSDT', 'NOPEUSDT'], upColor: 'RED' } });
+    expect(prefs).toMatchObject({ favorites: ['ETHUSDT', 'BTCUSDT'], upColor: 'RED', confirmOrders: true });
+  });
+
+  it('realtime: OCO and notification events reach the user channel', async () => {
+    const { b } = await signedUpUser();
+    await b.faucetClaim();
+    await lastPrice('100.00');
+    await b.placeOrder({ body: { symbol: 'BTCUSDT', side: 'BUY', type: 'MARKET', quantity: '0.5' } });
+    const ws = new WebSocket(base.replace('http', 'ws') + '/ws', { headers: { cookie: b.cookie() } });
+    const kinds: string[] = [];
+    ws.on('message', (d) => {
+      const m = JSON.parse(String(d)) as ServerMessage;
+      if (m.type === 'event' && m.channel === 'user') kinds.push(UserEvent.parse(m.data).kind);
+    });
+    await new Promise((r) => ws.once('open', r));
+    ws.send(JSON.stringify({ type: 'subscribe', channel: 'user' }));
+    await new Promise((r) => setTimeout(r, 100));
+    await b.placeOco({ body: { symbol: 'BTCUSDT', side: 'SELL', quantity: '0.1', price: '110', stopPrice: '95' } });
+    await lastPrice('95.00');
+    await new Promise((r) => setTimeout(r, 200));
+    ws.close();
+    expect(kinds).toEqual(expect.arrayContaining(['orderList', 'order', 'trade', 'balance', 'notification']));
   });
 });

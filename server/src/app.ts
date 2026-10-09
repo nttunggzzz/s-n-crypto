@@ -92,7 +92,7 @@ export function createApp(deps: AppDeps) {
   }));
   registerAuthRoutes(router, opts, deps.auth, config);
   registerMarketRoutes(router, opts, deps.market, deps.exchange.config, deps.candles);
-  registerExchangeRoutes(router, opts, deps.db, deps.exchange, deps.market);
+  registerExchangeRoutes(router, opts, deps.db, deps.exchange, deps.market, config.RATE_LIMIT_SCALE);
   app.use(router);
 
   app.use('/api', (_req: Request, _res: Response, next: NextFunction) => next(new AppError('NOT_FOUND', 'No such endpoint')));

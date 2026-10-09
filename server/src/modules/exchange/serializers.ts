@@ -1,10 +1,11 @@
-import type { Balance, LedgerEntry, Order, Trade } from '@cex/contracts';
+import type { Balance, LedgerEntry, Order, OrderList, Trade } from '@cex/contracts';
 import { dec, toFixedStr, type Dec } from '@cex/core';
 import type { ledgerEntries } from '../../db/schema.ts';
-import type { OrderRow, TradeRow } from './events.ts';
+import type { OrderListRow, OrderRow, TradeRow } from './events.ts';
 
 const fx = (s: string) => toFixedStr(dec(s));
 const fxn = (s: string | null) => (s === null ? null : fx(s));
+const idn = (n: number | null) => (n === null ? null : String(n));
 
 export function serializeOrder(o: OrderRow): Order {
   const executed = dec(o.executedQty);
@@ -24,18 +25,35 @@ export function serializeOrder(o: OrderRow): Order {
     executedQty: toFixedStr(executed),
     cumulativeQuoteQty: toFixedStr(cum),
     avgPrice: executed.gt(0) ? toFixedStr(cum.div(executed)) : null,
-    triggerState: null,
-    triggerDirection: null,
-    triggeredAt: null,
-    trailingDeltaBips: null,
-    activationPrice: null,
-    trailingReferencePrice: null,
-    orderListId: null,
-    parentOrderId: null,
-    tpsl: null,
-    closeReason: null,
+    triggerState: o.triggerState,
+    triggerDirection: o.triggerDirection,
+    triggeredAt: o.triggeredAt?.toISOString() ?? null,
+    trailingDeltaBips: o.trailingDeltaBips,
+    activationPrice: fxn(o.activationPrice),
+    trailingReferencePrice: fxn(o.trailingReferencePrice),
+    orderListId: idn(o.orderListId),
+    parentOrderId: idn(o.parentOrderId),
+    tpsl: o.tpsl,
+    closeReason: o.closeReason,
     createdAt: o.createdAt.toISOString(),
     updatedAt: o.updatedAt.toISOString(),
+  };
+}
+
+/** Legs ordered [limit leg, stop leg]. */
+export function serializeOrderList(l: OrderListRow, legs: OrderRow[]): OrderList {
+  const sorted = [...legs].sort((a, b) => (a.type === 'LIMIT' ? -1 : b.type === 'LIMIT' ? 1 : a.id - b.id));
+  return {
+    id: String(l.id),
+    clientListId: l.clientListId,
+    symbol: l.symbol,
+    side: l.side,
+    contingencyType: l.contingencyType,
+    listStatus: l.listStatus,
+    orders: sorted.map(serializeOrder),
+    parentOrderId: idn(l.parentOrderId),
+    createdAt: l.createdAt.toISOString(),
+    updatedAt: l.updatedAt.toISOString(),
   };
 }
 
@@ -51,7 +69,7 @@ export function serializeTrade(t: TradeRow): Trade {
     fee: fx(t.fee),
     feeAsset: t.feeAsset,
     liquidity: t.liquidity,
-    realizedPnl: null,
+    realizedPnl: fxn(t.realizedPnl),
     createdAt: t.createdAt.toISOString(),
   };
 }

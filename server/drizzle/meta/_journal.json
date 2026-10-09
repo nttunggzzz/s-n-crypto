@@ -15,6 +15,13 @@
       "when": 1791519239949,
       "tag": "0001_append_only_guards",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791533916924,
+      "tag": "0002_phase2_orders_portfolio",
+      "breakpoints": true
     }
   ]
 }

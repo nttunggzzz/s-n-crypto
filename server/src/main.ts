@@ -50,6 +50,8 @@ stream?.start();
 // Ledger reconciliation every 10 minutes (alerts are wired in P01).
 const reconTimer = setInterval(() => void reconcile(database.db).catch((err) => logger.error({ err }, 'reconciliation crashed')), 10 * 60_000);
 reconTimer.unref();
+// Hourly account-value snapshots for the portfolio chart.
+exchange.portfolio.startHourly();
 
 server.listen(config.PORT, () => logger.info({ port: config.PORT, feed: config.MARKET_FEED }, 'server listening'));
 
@@ -57,6 +59,7 @@ async function shutdown(signal: string) {
   logger.info({ signal }, 'shutting down');
   stream?.stop();
   exchange.matcher.stop();
+  exchange.portfolio.stop();
   hub.close();
   server.close();
   await database.close();

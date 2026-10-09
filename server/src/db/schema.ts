@@ -196,6 +196,41 @@ export const faucetClaims = pgTable(
 
 export const ORDER_STATUSES = ['NEW', 'PARTIALLY_FILLED', 'FILLED', 'CANCELED', 'REJECTED', 'EXPIRED'] as const;
 export const OPEN_STATUSES = ['NEW', 'PARTIALLY_FILLED'] as const;
+export const ORDER_TYPES = ['MARKET', 'LIMIT', 'STOP_MARKET', 'STOP_LIMIT', 'TRAILING_STOP_MARKET'] as const;
+export const CLOSE_REASONS = ['USER_CANCELED', 'OCO_SIBLING', 'IOC_REMAINDER', 'ADMIN'] as const;
+
+/** TP/SL attached to a BUY order (stored on the parent). */
+export interface TpSlData {
+  takeProfitPrice: string | null;
+  stopLossPrice: string | null;
+  stopLossLimitPrice: string | null;
+  state: 'PENDING' | 'PLACED' | 'SKIPPED';
+  childOrderListId: string | null;
+  childOrderIds: string[];
+  skippedReason: string | null;
+}
+
+/** OCO: two orders sharing one reservation (held by whichever leg is live). */
+export const orderLists = pgTable(
+  'order_lists',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    clientListId: text('client_list_id').notNull(),
+    symbol: text('symbol')
+      .notNull()
+      .references(() => symbols.symbol),
+    side: text('side', { enum: ['BUY', 'SELL'] }).notNull(),
+    contingencyType: text('contingency_type', { enum: ['OCO'] }).notNull(),
+    listStatus: text('list_status', { enum: ['EXECUTING', 'ALL_DONE'] }).notNull(),
+    parentOrderId: bigint('parent_order_id', { mode: 'number' }),
+    createdAt: ts('created_at').notNull().defaultNow(),
+    updatedAt: ts('updated_at').notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('order_lists_client_id_uq').on(t.userId, t.clientListId), index('order_lists_user_idx').on(t.userId, t.id)],
+);
 
 export const orders = pgTable(
   'orders',
@@ -209,10 +244,11 @@ export const orders = pgTable(
       .notNull()
       .references(() => symbols.symbol),
     side: text('side', { enum: ['BUY', 'SELL'] }).notNull(),
-    type: text('type', { enum: ['MARKET', 'LIMIT', 'STOP_MARKET', 'STOP_LIMIT'] }).notNull(),
+    type: text('type', { enum: ORDER_TYPES }).notNull(),
     timeInForce: text('time_in_force', { enum: ['GTC', 'IOC'] }),
     status: text('status', { enum: ORDER_STATUSES }).notNull(),
     price: amount('price'),
+    /** Trigger price; for trailing stops the current (moving) trigger level. */
     stopPrice: amount('stop_price'),
     quantity: amount('quantity'),
     quoteOrderQty: amount('quote_order_qty'),
@@ -221,6 +257,18 @@ export const orders = pgTable(
     /** Asset reserved by this order and the amount still reserved. */
     lockedAsset: text('locked_asset'),
     lockedAmount: amount('locked_amount').notNull().default('0'),
+    /** BUY by quantity: USDT reserved per unit of remaining quantity (limit price, or max of both OCO prices). */
+    lockPrice: amount('lock_price'),
+    triggerState: text('trigger_state', { enum: ['WAITING', 'TRIGGERED'] }),
+    triggerDirection: text('trigger_direction', { enum: ['UP', 'DOWN'] }),
+    triggeredAt: ts('triggered_at'),
+    trailingDeltaBips: integer('trailing_delta_bips'),
+    activationPrice: amount('activation_price'),
+    trailingReferencePrice: amount('trailing_reference_price'),
+    orderListId: bigint('order_list_id', { mode: 'number' }).references(() => orderLists.id),
+    parentOrderId: bigint('parent_order_id', { mode: 'number' }),
+    tpsl: jsonb('tpsl').$type<TpSlData>(),
+    closeReason: text('close_reason', { enum: CLOSE_REASONS }),
     createdAt: ts('created_at').notNull().defaultNow(),
     updatedAt: ts('updated_at').notNull().defaultNow(),
   },
@@ -230,6 +278,8 @@ export const orders = pgTable(
     index('orders_open_idx')
       .on(t.symbol, t.status)
       .where(sql`${t.status} in ('NEW', 'PARTIALLY_FILLED')`),
+    index('orders_list_idx').on(t.orderListId),
+    index('orders_parent_idx').on(t.parentOrderId),
     check('orders_locked_nonneg', sql`${t.lockedAmount} >= 0`),
   ],
 );
@@ -252,12 +302,102 @@ export const trades = pgTable(
     fee: amount('fee').notNull(),
     feeAsset: text('fee_asset').notNull(),
     liquidity: text('liquidity', { enum: ['MAKER', 'TAKER'] }).notNull(),
+    /** SELL only: USDT received after fee minus quantity × average cost; null if no cost basis. */
+    realizedPnl: amount('realized_pnl'),
     /** Time of the Binance market event that caused this fill (audit trail). */
     marketEventAt: ts('market_event_at'),
     createdAt: ts('created_at').notNull().defaultNow(),
   },
   (t) => [index('trades_user_idx').on(t.userId, t.id), index('trades_order_idx').on(t.orderId)],
 );
+
+/**
+ * Average-cost book per (user, base asset), updated in the same transaction as each fill.
+ * quantity follows trades only (not faucet/admin moves); avgCost is null when quantity is 0.
+ */
+export const positions = pgTable(
+  'positions',
+  {
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    asset: text('asset').notNull(),
+    quantity: amount('quantity').notNull().default('0'),
+    avgCost: amount('avg_cost'),
+    realizedPnl: amount('realized_pnl').notNull().default('0'),
+    updatedAt: ts('updated_at').notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.asset] })],
+);
+
+/** Hourly account value. `time` = hour bucket (UTC); value null when an asset had no live price. */
+export const portfolioSnapshots = pgTable(
+  'portfolio_snapshots',
+  {
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    time: ts('time').notNull(),
+    totalValueUsdt: amount('total_value_usdt'),
+    takenAt: ts('taken_at').notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.userId, t.time] })],
+);
+
+export const priceAlerts = pgTable(
+  'price_alerts',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    symbol: text('symbol')
+      .notNull()
+      .references(() => symbols.symbol),
+    condition: text('condition', { enum: ['ABOVE', 'BELOW'] }).notNull(),
+    targetPrice: amount('target_price').notNull(),
+    note: text('note'),
+    status: text('status', { enum: ['ACTIVE', 'TRIGGERED', 'CANCELED'] }).notNull().default('ACTIVE'),
+    triggeredPrice: amount('triggered_price'),
+    triggeredAt: ts('triggered_at'),
+    createdAt: ts('created_at').notNull().defaultNow(),
+  },
+  (t) => [
+    index('price_alerts_user_idx').on(t.userId, t.id),
+    index('price_alerts_active_idx')
+      .on(t.symbol)
+      .where(sql`${t.status} = 'ACTIVE'`),
+  ],
+);
+
+export const notifications = pgTable(
+  'notifications',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    type: text('type').notNull(),
+    /** Type-specific fields of the contract Notification (without id/type/readAt/createdAt). */
+    payload: jsonb('payload').notNull(),
+    readAt: ts('read_at'),
+    createdAt: ts('created_at').notNull().defaultNow(),
+  },
+  (t) => [
+    index('notifications_user_idx').on(t.userId, t.id),
+    index('notifications_unread_idx')
+      .on(t.userId)
+      .where(sql`${t.readAt} is null`),
+  ],
+);
+
+export const userPreferences = pgTable('user_preferences', {
+  userId: uuid('user_id')
+    .primaryKey()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  data: jsonb('data').notNull(),
+  updatedAt: ts('updated_at').notNull().defaultNow(),
+});
 
 export const reconciliationRuns = pgTable('reconciliation_runs', {
   id: bigserial('id', { mode: 'number' }).primaryKey(),

@@ -55,7 +55,7 @@ export function route<N extends EndpointName>(
         throw new AppError('FORBIDDEN', 'Admin only');
       }
     }
-    const d = def as { params?: z.ZodType; query?: z.ZodType; body?: z.ZodType; response: z.ZodType; status?: number };
+    const d = def as { path: string; params?: z.ZodType; query?: z.ZodType; body?: z.ZodType; response: z.ZodType; status?: number; format?: 'json' | 'csv' };
     const ctx = {
       params: d.params ? d.params.parse(req.params) : undefined,
       query: d.query ? d.query.parse(req.query) : undefined,
@@ -71,6 +71,10 @@ export function route<N extends EndpointName>(
         logger.error({ endpoint: name, issues: check.error.issues }, 'response does not match contract');
         throw new Error(`response of ${name} does not match its contract`);
       }
+    }
+    if (d.format === 'csv') {
+      res.status(200).type('text/csv; charset=utf-8').attachment(d.path.split('/').pop()!).send(result);
+      return;
     }
     res.status(d.status ?? 200).json(result);
   });

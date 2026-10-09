@@ -19,7 +19,9 @@ server/
   src/lib            http.ts (route() theo hợp đồng), errors.ts, rateLimit.ts
   src/modules/auth   phiên cookie/bearer, xác minh email, quên/đổi mật khẩu
   src/modules/market Binance WS/REST, MarketDataService (LIVE/STALE), nến
-  src/modules/exchange  ledger, orderService, matcher, faucet, reconciliation, routes
+  src/modules/exchange  ledger, orderService (mọi loại lệnh, OCO, TP/SL), matcher, openOrderIndex,
+                        positions (giá vốn), portfolio, alerts, notifications, preferences, exports (CSV),
+                        faucet, reconciliation, routes
   src/realtime       WebSocket /ws
   test/              globalSetup (PostgreSQL nhúng :5434), helpers
 legacy/              code AI Studio cũ
@@ -46,6 +48,8 @@ npm run db:generate   # sau khi sửa server/src/db/schema.ts
 8. Mọi endpoint khai báo trong `packages/contracts/src/endpoints.ts` và đăng ký bằng `route()` — dev/test tự kiểm tra response khớp schema.
 9. Dữ liệu người dùng luôn lọc theo `userId` của phiên; không thấy → 404 (không phải 403).
 10. Không báo "xong/PASSED" khi chưa chạy test thật; ghi rõ lệnh đã chạy và kết quả.
+11. **OCO**: tiền khóa nằm trên **đúng một** chân đang sống (chân LIMIT; khi chân STOP kích hoạt thì chuyển sang chân STOP). Mọi thao tác trên một chân phải khóa **cả nhóm** qua `lockGroup()` theo thứ tự id.
+12. Mọi thay đổi trạng thái lệnh chạy trong `commit()` của OrderService: chỉ mục trong bộ nhớ + sự kiện realtime chỉ áp dụng **sau khi** transaction commit (`Outcome`).
 
 ## Khi thêm tính năng
 1. Hợp đồng (schema + endpoint + fixture + resolver mock — `createMockHandlers` bắt buộc có resolver cho mọi endpoint, thiếu sẽ lỗi typecheck).

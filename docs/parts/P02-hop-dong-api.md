@@ -29,7 +29,7 @@ Một nguồn sự thật duy nhất cho mọi dữ liệu đi giữa backend v�
 ## Checklist
 - [x] Giai đoạn 0: khung package, quy ước, client, mock MSW, ví dụ 1 endpoint (`GET /api/v1/health`)
 - [x] Giai đoạn 1: auth, ví, thị trường, lệnh Market/Limit, realtime (29 endpoint + 6 kênh WS) — *chưa sinh OpenAPI*
-- [ ] Giai đoạn 2: lệnh nâng cao, OCO, danh mục, lịch sử, cảnh báo giá, thông báo
+- [x] Giai đoạn 2: lệnh nâng cao, OCO, danh mục, lịch sử, cảnh báo giá, thông báo (v0.2.0 — xem `packages/contracts/CHANGELOG.md`)
 - [ ] Giai đoạn 3: toàn bộ API admin
 - [ ] Giai đoạn 5: nhật ký & thống kê
 - [ ] Giai đoạn 6: tín hiệu

@@ -6,7 +6,9 @@ import { parseCookieHeader, readSessionToken } from '../lib/http.ts';
 import type { AuthService } from '../modules/auth/authService.ts';
 import type { MarketDataService } from '../modules/market/marketData.ts';
 import type { Exchange } from '../modules/exchange/index.ts';
-import { serializeBalance, serializeOrder, serializeTrade } from '../modules/exchange/serializers.ts';
+import { serializeBalance, serializeOrder, serializeOrderList, serializeTrade } from '../modules/exchange/serializers.ts';
+import { serializeNotification } from '../modules/exchange/notificationService.ts';
+import { serializeAlert } from '../modules/exchange/alertService.ts';
 import { makePriceOf } from '../modules/exchange/routes.ts';
 
 interface Client {
@@ -185,6 +187,9 @@ export class RealtimeHub {
     const priceOf = makePriceOf(this.market);
     this.ex.events.on('order', (userId, o) => this.toUser(userId, { kind: 'order', order: serializeOrder(o) }));
     this.ex.events.on('trade', (userId, t) => this.toUser(userId, { kind: 'trade', trade: serializeTrade(t) }));
+    this.ex.events.on('orderList', (userId, l, legs) => this.toUser(userId, { kind: 'orderList', orderList: serializeOrderList(l, legs) }));
+    this.ex.events.on('notification', (userId, n) => this.toUser(userId, { kind: 'notification', notification: serializeNotification(n) }));
+    this.ex.events.on('alert', (userId, a) => this.toUser(userId, { kind: 'alert', alert: serializeAlert(a) }));
     this.ex.events.on('balance', (userId, b) => this.toUser(userId, { kind: 'balance', balance: serializeBalance(b.asset, b.available, b.locked, priceOf) }));
   }
 }

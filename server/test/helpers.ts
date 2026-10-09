@@ -33,7 +33,8 @@ export interface TestEnv {
 
 export async function resetDb(database: Database): Promise<void> {
   await database.db.execute(sql`
-    TRUNCATE trades, orders, ledger_entries, balances, faucet_claims, sessions, verification_tokens,
+    TRUNCATE trades, orders, order_lists, ledger_entries, balances, positions, portfolio_snapshots, price_alerts,
+             notifications, user_preferences, faucet_claims, sessions, verification_tokens,
              audit_logs, reconciliation_runs, candles, symbols, users RESTART IDENTITY CASCADE`);
   await database.db.execute(sql`
     UPDATE exchange_settings SET trading_halted = false, fee_rate = '0.001', faucet_asset = 'USDT',

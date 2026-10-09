@@ -1,7 +1,7 @@
 # ROADMAP — Sàn giao dịch ảo + Web tín hiệu
 
-> Trạng thái: **ĐANG LÀM** — backend Giai đoạn 0–1 phần lớn đã xong (chạy local, chưa lên cloud). Cập nhật: 2026-10-09
-> Báo cáo mới nhất: [docs/reports/2026-10-09-backend-gd0-gd1.md](docs/reports/2026-10-09-backend-gd0-gd1.md)
+> Trạng thái: **ĐANG LÀM** — backend Giai đoạn 0–2 xong (chạy local, chưa lên cloud); giao diện đang làm. Cập nhật: 2026-10-09
+> Báo cáo mới nhất: [docs/reports/2026-10-09-backend-gd2.md](docs/reports/2026-10-09-backend-gd2.md) · trước đó: [GĐ0–1](docs/reports/2026-10-09-backend-gd0-gd1.md)
 > Dự án thử nghiệm cá nhân. Phần kinh doanh (thu phí, thanh toán…) để sau — xem [Backlog](#backlog-để-sau).
 > Chi tiết từng phần: [docs/parts/README.md](docs/parts/README.md)
 
@@ -73,7 +73,8 @@
 **Xong khi:** đăng ký → nạp tiền → mua Market → đặt Limit → tự khớp; số dư đúng tuyệt đối; test tranh chấp (hủy đúng lúc khớp) không trừ tiền 2 lần.
 
 ### Giai đoạn 2 — Sàn ảo đầy đủ → **M2**
-- [ ] P05: Stop-Limit, Stop-Market, **OCO**, **TP/SL gắn kèm lệnh**, trailing stop, GTC/IOC; giá vốn trung bình, lãi/lỗ chưa chốt/đã chốt, giá trị tài sản theo thời gian; xuất CSV; cảnh báo giá; thông báo trong app
+- [x] P05: Stop-Limit, Stop-Market, **OCO**, **TP/SL gắn kèm lệnh**, trailing stop, GTC/IOC; giá vốn trung bình, lãi/lỗ chưa chốt/đã chốt, giá trị tài sản theo thời gian; xuất CSV; cảnh báo giá; thông báo trong app (+ cài đặt người dùng, máy tính khối lượng trong `@cex/core`)
+- [x] P02: Hợp đồng 0.2.0 cho toàn bộ mục trên + mock
 - [ ] P08: Form lệnh nâng cao, đường entry/TP/SL trên biểu đồ, chỉ báo (MA, EMA, RSI, Volume), nhiều khung thời gian, danh mục, lịch sử khớp, máy tính khối lượng theo % rủi ro, yêu thích, tìm kiếm, cài đặt
 
 **Xong khi:** mua kèm TP/SL → chạm TP → SL tự hủy → lãi/lỗ và giá vốn đúng.
