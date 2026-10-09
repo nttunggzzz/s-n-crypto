@@ -1,7 +1,8 @@
+import { EventEmitter } from 'node:events';
 import { asc, eq } from 'drizzle-orm';
 import { dec, stepDecimals, type Dec, type SymbolRules, AMOUNT_SCALE } from '@cex/core';
-import type { SymbolInfo } from '@cex/contracts';
-import { exchangeSettings, symbols } from '../../db/schema.ts';
+import type { AssetInfo, AssetTag, ExchangeStatus, SymbolInfo } from '@cex/contracts';
+import { assets, exchangeSettings, symbols } from '../../db/schema.ts';
 import type { Db } from '../../db/client.ts';
 import { AppError } from '../../lib/errors.ts';
 
@@ -16,14 +17,19 @@ export interface LoadedSymbol {
 }
 
 /**
- * Cached exchange settings + symbol rules. Single server instance, so the cache is
- * refreshed by calling reload() after any admin change.
+ * Cached exchange settings + symbol rules + coin info. Single server instance, so the cache is
+ * refreshed by calling reload() after any admin change; `changed` fires after every reload.
  */
-export class ExchangeConfig {
+export class ExchangeConfig extends EventEmitter<{ changed: [] }> {
   private settingsRow!: SettingsRow;
   private symbolMap = new Map<string, LoadedSymbol>();
+  private assetMap = new Map<string, AssetInfo>();
+  private lastStatusKey = '';
+  private statusChangedAt = new Date();
 
-  constructor(private readonly db: Db) {}
+  constructor(private readonly db: Db) {
+    super();
+  }
 
   async reload(): Promise<void> {
     const [s] = await this.db.select().from(exchangeSettings).where(eq(exchangeSettings.id, 1));
@@ -45,6 +51,14 @@ export class ExchangeConfig {
       map.set(row.symbol, { row, rules, tick: dec(row.tickSize), step: dec(row.stepSize) });
     }
     this.symbolMap = map;
+    const assetRows = await this.db.select().from(assets);
+    this.assetMap = new Map(assetRows.map((a) => [a.asset, { asset: a.asset, name: a.name, tags: a.tags as AssetTag[], description: a.description }]));
+    const key = this.statusKey();
+    if (key !== this.lastStatusKey) {
+      this.lastStatusKey = key;
+      this.statusChangedAt = new Date();
+    }
+    this.emit('changed');
   }
 
   get settings(): SettingsRow {
@@ -76,6 +90,37 @@ export class ExchangeConfig {
       throw new AppError('SYMBOL_DISABLED', `${symbol} is not tradable`);
     }
     return s;
+  }
+
+  /** Coin info for every asset used by the listed pairs (base and quote), in symbol order. */
+  assetInfos(): AssetInfo[] {
+    const seen = new Set<string>();
+    for (const s of this.symbolMap.values()) seen.add(s.row.baseAsset).add(s.row.quoteAsset);
+    return [...seen].map((asset) => this.assetInfo(asset));
+  }
+
+  assetInfo(asset: string): AssetInfo {
+    return this.assetMap.get(asset) ?? { asset, name: null, tags: [], description: null };
+  }
+
+  /** True when the asset is used by a listed pair or has stored info. */
+  knowsAsset(asset: string): boolean {
+    return this.assetMap.has(asset) || this.allSymbols().some((s) => s.row.baseAsset === asset || s.row.quoteAsset === asset);
+  }
+
+  exchangeStatus(): ExchangeStatus {
+    return { tradingHalted: this.tradingHalted, disabledSymbols: this.disabledSymbols(), updatedAt: this.statusChangedAt.toISOString() };
+  }
+
+  /** Changes only when the halt switch or the set of disabled pairs changes. */
+  statusKey(): string {
+    return JSON.stringify([this.tradingHalted, this.disabledSymbols()]);
+  }
+
+  private disabledSymbols(): string[] {
+    return this.allSymbols()
+      .filter((s) => !this.toSymbolInfo(s).enabled)
+      .map((s) => s.row.symbol);
   }
 
   toSymbolInfo(s: LoadedSymbol): SymbolInfo {

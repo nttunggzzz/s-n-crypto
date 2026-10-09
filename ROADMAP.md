@@ -1,7 +1,7 @@
 # ROADMAP — Sàn giao dịch ảo + Web tín hiệu
 
-> Trạng thái: **ĐANG LÀM** — backend Giai đoạn 0–3 xong (chạy local, chưa lên cloud); giao diện đang làm. Cập nhật: 2026-10-09
-> Báo cáo mới nhất: [docs/reports/2026-10-09-backend-gd3.md](docs/reports/2026-10-09-backend-gd3.md) · trước đó: [GĐ2](docs/reports/2026-10-09-backend-gd2.md), [GĐ0–1](docs/reports/2026-10-09-backend-gd0-gd1.md)
+> Trạng thái: **ĐANG LÀM** — backend GĐ 0–3 + 2.5 xong (chạy local, chưa lên cloud); giao diện GĐ1 xong, đang làm lại theo phong cách OKX (v2). Cập nhật: 2026-10-09
+> Báo cáo mới nhất: [docs/reports/2026-10-09-backend-gd25.md](docs/reports/2026-10-09-backend-gd25.md) · trước đó: [GĐ3](docs/reports/2026-10-09-backend-gd3.md), [GĐ2](docs/reports/2026-10-09-backend-gd2.md), [GĐ0–1](docs/reports/2026-10-09-backend-gd0-gd1.md)
 > Dự án thử nghiệm cá nhân. Phần kinh doanh (thu phí, thanh toán…) để sau — xem [Backlog](#backlog-để-sau).
 > Chi tiết từng phần: [docs/parts/README.md](docs/parts/README.md)
 
@@ -22,7 +22,7 @@
 | DB local & test | PostgreSQL thật chạy nhúng (`embedded-postgres`), không cần Docker |
 | Frontend | React + Vite + Tailwind, mobile-first, tiếng Việt mặc định, sáng/tối |
 | App mobile | PWA → đóng gói bằng Capacitor |
-| Cặp giao dịch | BTC, ETH, SOL, BNB, XRP, DOGE, ADA, AVAX, LINK, SUI (/USDT) |
+| Cặp giao dịch | 50 cặp USDT (danh sách: `SYMBOLS` trong `server/src/config.ts`) — trước 2026-10-09 là 10 cặp |
 | Nạp tiền ảo | 10.000 USDT/lần, 1 lần/24h, trần 100.000 USDT (Admin chỉnh được) |
 | Phí giao dịch | 0,1% |
 | Múi giờ hiển thị | GMT+7 (dữ liệu lưu UTC) |
@@ -85,6 +85,24 @@
 - [x] P02: Hợp đồng 0.3.0 + mock (giả lập vai trò)
 - [ ] P09: Giao diện Admin cho tất cả mục trên + tình trạng hệ thống + thống kê cơ bản
 
+### Giai đoạn 2.5 — Giao diện v2 phong cách OKX + mở rộng thị trường (chủ dự án yêu cầu 2026-10-09)
+- [x] P04: 50 cặp USDT, luồng Binance chia nhiều kết nối; thông tin coin (tên, nhóm ngành, mô tả); sparkline 24h/7 ngày; sổ lệnh sâu tới 500 mức (chỉ hiển thị); realtime `exchange:status`
+- [x] P05: Thông báo của sàn (Admin đăng/ghim/ẩn, có nhật ký); Admin sửa thông tin coin
+- [x] P02: Hợp đồng 0.4.0 + mock (mock giờ kiểm tra đầu vào như server)
+- [ ] P07/P08: Giao diện v2 — [PROMPT-04](docs/antigravity/PROMPT-04-giao-dien-v2-phong-cach-okx.md)
+- Đề xuất & lựa chọn: [docs/proposals/2026-10-09-tinh-nang-nhu-san-lon.md](docs/proposals/2026-10-09-tinh-nang-nhu-san-lon.md)
+
+### Giai đoạn 2.6 — Tính năng kiểu sàn lớn (đã chọn 2026-10-09)
+- [ ] P05: **Bot lưới Spot** (Grid)
+- [ ] P05: **Mua định kỳ** (DCA)
+- [ ] P05: **Phân tích lãi lỗ** — lịch PnL theo ngày, lũy kế, tỷ lệ thắng, theo coin (gộp phần thống kê của Giai đoạn 5)
+- [ ] P03: **Hồ sơ + bảo mật kiểu OKX** — biệt danh, ảnh đại diện, UID; mã chống lừa đảo trong email, lịch sử đăng nhập, cảnh báo thiết bị mới
+- [ ] P08: Giao diện cho các mục trên
+
+### Giai đoạn F — Futures mô phỏng (đã chọn 2026-10-09, cần duyệt thiết kế trước khi làm)
+- [ ] P04/P05: Hợp đồng vĩnh cửu USDT-M theo giá Binance Futures (mark price, funding), đòn bẩy, ký quỹ, thanh lý — thiết kế: [docs/proposals/2026-10-09-futures-mo-phong.md](docs/proposals/2026-10-09-futures-mo-phong.md)
+- [ ] P08: Giao diện Futures
+
 ### Giai đoạn 4 — Engine tín hiệu (chạy ngầm)
 - [ ] P06: Chuyển & sửa engine cũ (nến đã đóng, đủ lịch sử, bỏ số liệu bịa, sửa hướng/R:R/SHORT), lưu nến, phiên bản engine, **bot tự vào lệnh bằng OCO**, backtest trung thực + walk-forward
 - [ ] P09: Trang "Hiệu quả tín hiệu", cấu hình engine
@@ -124,4 +142,5 @@
 ## Backlog để sau
 
 - Phần kinh doanh: thu phí gói tín hiệu, cổng thanh toán, RevenueCat, giá gói, giải đấu & bảng xếp hạng, affiliate, marketing, tư vấn pháp lý.
-- Futures, người dùng khớp lệnh với nhau, API cho bot của người dùng, nạp/rút tiền thật (không làm).
+- Người dùng khớp lệnh với nhau, API cho bot của người dùng, nạp/rút tiền thật (không làm). *Futures mô phỏng đã chuyển lên Giai đoạn F theo yêu cầu 2026-10-09.*
+- Chưa chọn (2026-10-09): Chuyển đổi nhanh (Convert), TWAP/Iceberg, Earn mô phỏng, bậc phí VIP, bảng xếp hạng/giải đấu.

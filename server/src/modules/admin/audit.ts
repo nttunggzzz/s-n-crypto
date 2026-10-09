@@ -1,4 +1,4 @@
-import type { AuditAction } from '@cex/contracts';
+import type { AuditAction, AuditTargetType } from '@cex/contracts';
 import { auditLogs } from '../../db/schema.ts';
 import type { DbOrTx } from '../../db/client.ts';
 
@@ -6,7 +6,7 @@ export interface AuditInput {
   /** null = server command line. */
   actorId: string | null;
   action: AuditAction;
-  targetType?: 'USER' | 'EXCHANGE' | 'SYMBOL' | null;
+  targetType?: AuditTargetType | null;
   targetId?: string | null;
   before?: unknown;
   after?: unknown;

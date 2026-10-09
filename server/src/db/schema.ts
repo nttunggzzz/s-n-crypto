@@ -108,7 +108,7 @@ export const auditLogs = pgTable(
     id: bigserial('id', { mode: 'number' }).primaryKey(),
     actorId: uuid('actor_id').references(() => users.id),
     action: text('action').notNull(),
-    targetType: text('target_type', { enum: ['USER', 'EXCHANGE', 'SYMBOL'] }),
+    targetType: text('target_type', { enum: ['USER', 'EXCHANGE', 'SYMBOL', 'ASSET', 'ANNOUNCEMENT'] }),
     targetId: text('target_id'),
     before: jsonb('before'),
     after: jsonb('after'),
@@ -137,6 +137,34 @@ export const symbols = pgTable('symbols', {
   sortOrder: integer('sort_order').notNull().default(0),
   updatedAt: ts('updated_at').notNull().defaultNow(),
 });
+
+/** Coin display info (name, sector tags, description). Seeded from ASSET_CATALOG; admins edit it. */
+export const assets = pgTable('assets', {
+  asset: text('asset').primaryKey(),
+  name: text('name'),
+  tags: text('tags').array().notNull().default(sql`'{}'::text[]`),
+  description: text('description'),
+  updatedAt: ts('updated_at').notNull().defaultNow(),
+});
+
+/** Exchange news. publishedAt null = draft; hidden = soft-deleted (kept for the audit log). */
+export const announcements = pgTable(
+  'announcements',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    title: text('title').notNull(),
+    body: text('body').notNull(),
+    level: text('level', { enum: ['INFO', 'IMPORTANT', 'MAINTENANCE'] }).notNull(),
+    pinned: boolean('pinned').notNull().default(false),
+    publishedAt: ts('published_at'),
+    expiresAt: ts('expires_at'),
+    hidden: boolean('hidden').notNull().default(false),
+    createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: ts('created_at').notNull().defaultNow(),
+    updatedAt: ts('updated_at').notNull().defaultNow(),
+  },
+  (t) => [index('announcements_public_idx').on(t.pinned, t.publishedAt).where(sql`${t.hidden} = false and ${t.publishedAt} is not null`)],
+);
 
 /** Single row (id = 1). */
 export const exchangeSettings = pgTable(

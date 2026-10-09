@@ -19,7 +19,9 @@ server/
   src/lib            http.ts (route() theo hợp đồng), errors.ts, rateLimit.ts
   src/modules/auth   phiên cookie/bearer, xác minh email, quên/đổi mật khẩu, 2FA TOTP (totp.ts, SecretBox)
   src/modules/admin  adminService (mọi thao tác admin + audit), routes, audit.ts
-  src/modules/market Binance WS/REST, MarketDataService (LIVE/STALE), nến
+  src/modules/market Binance WS (nhiều kết nối, SUBSCRIBE) / REST, MarketDataService (LIVE/STALE), nến,
+                     assets (thông tin coin), depthSnapshots (sổ lệnh sâu), sparklines
+  src/modules/content announcementService (thông báo của sàn)
   src/modules/exchange  ledger, orderService (mọi loại lệnh, OCO, TP/SL), matcher, openOrderIndex,
                         positions (giá vốn), portfolio, alerts, notifications, preferences, exports (CSV),
                         faucet, reconciliation, routes
@@ -54,6 +56,8 @@ npm run admin:set-role -- <email> owner   # tạo owner đầu tiên (ghi audit 
 12. Mọi thay đổi trạng thái lệnh chạy trong `commit()` của OrderService: chỉ mục trong bộ nhớ + sự kiện realtime chỉ áp dụng **sau khi** transaction commit (`Outcome`).
 13. **Admin**: quyền khai báo ở `packages/contracts/src/permissions.ts`; endpoint `auth: 'staff'` cần vai trò staff + 2FA bật + phiên đăng nhập bằng 2FA (`sessions.mfa_verified`) + `permission`. Mọi thay đổi admin ghi `writeAudit()` **trong cùng transaction**; tài khoản bot không ai sửa được.
 14. **Database phải là UTF8** (tiếng Việt). Script PostgreSQL nhúng tự tạo UTF8 và từ chối DB khác bảng mã.
+15. **Khớp lệnh chỉ dùng 20 mức realtime** (`MarketDataService`). Sổ lệnh sâu (`DepthSnapshots`, REST) và sparkline chỉ để **hiển thị**,
+    có cache + giới hạn trọng số Binance (tổng IP 6000/phút; sổ lệnh sâu ≤ 1200). Không gọi REST Binance trong đường khớp lệnh.
 
 ## Khi thêm tính năng
 1. Hợp đồng (schema + endpoint + fixture + resolver mock — `createMockHandlers` bắt buộc có resolver cho mọi endpoint, thiếu sẽ lỗi typecheck).

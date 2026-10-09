@@ -2,6 +2,7 @@ import http from 'node:http';
 import { loadConfig } from './config.ts';
 import { logger } from './logger.ts';
 import { createDatabase, runMigrations } from './db/client.ts';
+import { seedAssets } from './modules/market/assets.ts';
 import { createApp, allowedOrigins } from './app.ts';
 import { AuthService } from './modules/auth/authService.ts';
 import { createEmailSender } from './modules/auth/email.ts';
@@ -16,6 +17,7 @@ import { RealtimeHub } from './realtime/hub.ts';
 const config = loadConfig();
 const database = createDatabase(config.DATABASE_URL);
 await runMigrations(database.db);
+await seedAssets(database.db);
 
 const feedOn = config.MARKET_FEED === 'binance';
 if (feedOn) {

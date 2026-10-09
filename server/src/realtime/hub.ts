@@ -33,6 +33,14 @@ export class RealtimeHub {
   private readonly lastSent = new Map<string, number>();
   private readonly pendingSend = new Map<string, NodeJS.Timeout>();
   private heartbeat: NodeJS.Timeout | undefined;
+  private lastStatusKey = '';
+  private readonly onConfigChanged = () => {
+    // reload() runs after every admin change; push only when halt / disabled pairs actually changed
+    const key = this.ex.config.statusKey();
+    if (key === this.lastStatusKey) return;
+    this.lastStatusKey = key;
+    this.broadcast('exchange:status', () => this.ex.config.exchangeStatus());
+  };
 
   constructor(
     private readonly market: MarketDataService,
@@ -70,6 +78,7 @@ export class RealtimeHub {
 
   close(): void {
     clearInterval(this.heartbeat);
+    this.ex.config.off('changed', this.onConfigChanged);
     for (const c of this.clients) c.ws.terminate();
     this.wss.close();
   }
@@ -115,7 +124,7 @@ export class RealtimeHub {
   private checkChannel(channel: string, client: Client): { code: string; message: string } | null {
     if (client.channels.size >= MAX_CHANNELS) return { code: 'RATE_LIMITED', message: 'Too many subscriptions' };
     if (channel === 'user') return client.userId ? null : { code: 'UNAUTHENTICATED', message: 'Sign in required' };
-    if (channel === 'market:status') return null;
+    if (channel === 'market:status' || channel === 'exchange:status') return null;
     const [kind, symbol, interval] = channel.split(':');
     if (!symbol || !this.ex.config.findSymbol(symbol)) return { code: 'NOT_FOUND', message: 'Unknown channel' };
     if (kind === 'ticker' || kind === 'depth' || kind === 'trades') return interval === undefined ? null : { code: 'NOT_FOUND', message: 'Unknown channel' };
@@ -126,6 +135,7 @@ export class RealtimeHub {
   private sendSnapshot(client: Client, channel: string): void {
     const [kind, symbol, interval] = channel.split(':');
     if (channel === 'market:status') return this.event(client, channel, this.market.getMarketStatus());
+    if (channel === 'exchange:status') return this.event(client, channel, this.ex.config.exchangeStatus());
     if (!symbol) return;
     if (kind === 'ticker') this.event(client, channel, this.market.getTicker(symbol));
     else if (kind === 'depth') this.event(client, channel, this.market.getDepth(symbol));
@@ -184,6 +194,8 @@ export class RealtimeHub {
   }
 
   private wireExchange(): void {
+    this.lastStatusKey = this.ex.config.statusKey();
+    this.ex.config.on('changed', this.onConfigChanged);
     const priceOf = makePriceOf(this.market);
     this.ex.events.on('order', (userId, o) => this.toUser(userId, { kind: 'order', order: serializeOrder(o) }));
     this.ex.events.on('trade', (userId, t) => this.toUser(userId, { kind: 'trade', trade: serializeTrade(t) }));

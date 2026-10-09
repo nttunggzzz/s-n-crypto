@@ -1,7 +1,8 @@
 import { and, desc, eq, gte, inArray, lt, lte, notInArray, sql, type SQL } from 'drizzle-orm';
-import type { AdminOverview, AdminSymbol, AdminUserDetail, AdminUserSummary, AuditLogEntry, ExchangeSettings, ReconciliationRun, Role } from '@cex/contracts';
+import type { AdminOverview, AdminSymbol, AdminUserDetail, AdminUserSummary, AssetInfo, AssetTag, AuditLogEntry, AuditTargetType, ExchangeSettings, ReconciliationRun, Role } from '@cex/contracts';
 import { AMOUNT_SCALE, dec, hasAtMostScale, toFixedStr } from '@cex/core';
 import {
+  assets,
   auditLogs,
   balances,
   exchangeSettings,
@@ -47,7 +48,7 @@ function decodeCursor(c: string): { t: Date; id: string } {
   if (!id || Number.isNaN(d.getTime())) throw new AppError('VALIDATION_ERROR', 'Invalid cursor');
   return { t: d, id };
 }
-function idCursor(cursor: string | undefined): number | undefined {
+export function idCursor(cursor: string | undefined): number | undefined {
   if (cursor === undefined) return undefined;
   const n = Number(cursor);
   if (!Number.isSafeInteger(n) || n <= 0) throw new AppError('VALIDATION_ERROR', 'Invalid cursor');
@@ -481,7 +482,7 @@ export class AdminService {
 
   // ───────── audit & reconciliation
 
-  async auditLogs(q: { actorId?: string; action?: string; targetType?: 'USER' | 'EXCHANGE' | 'SYMBOL'; targetId?: string; from?: string; to?: string; cursor?: string; limit: number }) {
+  async auditLogs(q: { actorId?: string; action?: string; targetType?: AuditTargetType; targetId?: string; from?: string; to?: string; cursor?: string; limit: number }) {
     const where: SQL[] = [];
     if (q.actorId) where.push(eq(auditLogs.actorId, q.actorId));
     if (q.action) where.push(eq(auditLogs.action, q.action));
@@ -526,6 +527,25 @@ export class AdminService {
     const more = rows.length > limit;
     const page = more ? rows.slice(0, limit) : rows;
     return { items: page.map(serializeRun), nextCursor: more ? String(page[page.length - 1]!.id) : null };
+  }
+
+  /** Coin display info (name, tags, description). Upserts the row; audited with before/after. */
+  async updateAsset(actor: Actor, asset: string, patch: { name?: string | null; tags?: AssetTag[]; description?: string | null }, reason: string): Promise<AssetInfo> {
+    if (!this.ex.config.knowsAsset(asset)) throw new AppError('NOT_FOUND', `Unknown asset ${asset}`);
+    await this.db.transaction(async (tx) => {
+      const [cur] = await tx.select().from(assets).where(eq(assets.asset, asset)).for('update');
+      const before = cur ? { name: cur.name, tags: cur.tags, description: cur.description } : null;
+      const next = {
+        name: patch.name !== undefined ? patch.name : (cur?.name ?? null),
+        tags: patch.tags ? [...new Set(patch.tags)] : (cur?.tags ?? []),
+        description: patch.description !== undefined ? patch.description : (cur?.description ?? null),
+      };
+      const t = new Date();
+      await tx.insert(assets).values({ asset, ...next, updatedAt: t }).onConflictDoUpdate({ target: assets.asset, set: { ...next, updatedAt: t } });
+      await writeAudit(tx, { actorId: actor.user.id, action: 'ASSET_UPDATE', targetType: 'ASSET', targetId: asset, before, after: next, reason, ip: actor.ip });
+    });
+    await this.ex.config.reload();
+    return this.ex.config.assetInfo(asset);
   }
 
   async runReconciliation(actor: Actor): Promise<ReconciliationRun> {

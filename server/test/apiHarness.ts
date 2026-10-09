@@ -9,6 +9,7 @@ import { AuthService } from '../src/modules/auth/authService.ts';
 import { LogEmailSender } from '../src/modules/auth/email.ts';
 import { base32Decode, hotp, totpStep } from '../src/modules/auth/totp.ts';
 import { CandleService } from '../src/modules/market/candleService.ts';
+import { DepthSnapshots, type DepthFetcher } from '../src/modules/market/depthSnapshots.ts';
 import { RealtimeHub } from '../src/realtime/hub.ts';
 import { createTestEnv, type TestEnv } from './helpers.ts';
 
@@ -26,11 +27,12 @@ export class ApiHarness {
   skewMs = 0;
   authNow = () => new Date(Date.now() + this.skewMs);
 
-  async start(): Promise<void> {
+  /** Optional fake Binance REST order book for deep-depth tests. */
+  async start(opts: { depthFetcher?: DepthFetcher } = {}): Promise<void> {
     const config = loadConfig({ NODE_ENV: 'test', MARKET_FEED: 'off', APP_URL: 'http://localhost:5173', RATE_LIMIT_SCALE: '100' });
     this.env = await createTestEnv();
     const auth = new AuthService(this.env.database.db, config, this.mail, this.authNow);
-    const app = createApp({ config, db: this.env.database.db, auth, market: this.env.market, exchange: this.env.ex, candles: new CandleService(this.env.database.db, null) });
+    const app = createApp({ config, db: this.env.database.db, auth, market: this.env.market, exchange: this.env.ex, candles: new CandleService(this.env.database.db, null), depthSnapshots: new DepthSnapshots(opts.depthFetcher ?? null) });
     this.server = http.createServer(app);
     this.hub = new RealtimeHub(this.env.market, this.env.ex, auth, allowedOrigins(config));
     this.hub.attach(this.server);

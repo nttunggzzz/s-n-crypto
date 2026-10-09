@@ -20,6 +20,8 @@ Chỉ báo kỹ thuật (thuộc `packages/core`/P06), logic khớp lệnh (P05)
 ## Checklist
 - [x] Giai đoạn 1: kết nối Binance, phát lại qua WS, sổ lệnh, giao dịch gần đây, nến, `exchangeInfo`, phát hiện giá cũ, tự kết nối lại — *chưa có cảnh báo Telegram (P01)*
 - [x] Giai đoạn 2: nhiều khung thời gian (1m → 1D), lịch sử nến dài cho biểu đồ (phân trang bằng `endTime`)
+- [x] Giai đoạn 2.5: 50 cặp (luồng chia nhiều kết nối, SUBSCRIBE), thông tin coin, sparkline, sổ lệnh sâu ≤ 500 mức (chỉ hiển thị, giới hạn trọng số), realtime `exchange:status`
+- [ ] Giai đoạn F: dữ liệu Binance Futures (mark/index/funding) — [thiết kế](../proposals/2026-10-09-futures-mo-phong.md)
 - [ ] Giai đoạn 4: backfill nến lịch sử cho engine tín hiệu, kiểm tra không thiếu/không trùng
 
 ## Xong khi
