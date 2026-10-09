@@ -99,7 +99,7 @@
 - [ ] P03: **Hồ sơ + bảo mật kiểu OKX** — biệt danh, ảnh đại diện, UID; mã chống lừa đảo trong email, lịch sử đăng nhập, cảnh báo thiết bị mới
 - [ ] P08: Giao diện cho các mục trên
 
-### Giai đoạn F — Futures mô phỏng (đã chọn 2026-10-09, cần duyệt thiết kế trước khi làm)
+### Giai đoạn F — Futures mô phỏng (đã duyệt 2026-10-09: tối đa 20×, ký quỹ cô lập trước; **làm trước GĐ 2.6**)
 - [ ] P04/P05: Hợp đồng vĩnh cửu USDT-M theo giá Binance Futures (mark price, funding), đòn bẩy, ký quỹ, thanh lý — thiết kế: [docs/proposals/2026-10-09-futures-mo-phong.md](docs/proposals/2026-10-09-futures-mo-phong.md)
 - [ ] P08: Giao diện Futures
 

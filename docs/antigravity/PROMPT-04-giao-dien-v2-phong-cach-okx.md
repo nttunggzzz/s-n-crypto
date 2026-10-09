@@ -67,7 +67,7 @@ Chỉ dùng màu cho 3 việc: **tăng/giảm**, **hành động chính**, **tr�
 ## 3. Khung ứng dụng
 **Header 56px**, gồm:
 - Logo + nhãn "Mô phỏng".
-- Menu: Thị trường · Giao dịch ▾ (Spot; sau này thêm Chuyển đổi, Bot) · Tài sản · Tín hiệu (mờ, "Sắp có").
+- Menu: Thị trường · Giao dịch ▾ (Spot · **Futures** — mờ, "Sắp có"; sau này thêm Bot lưới, Mua định kỳ) · Tài sản · Tín hiệu (mờ, "Sắp có").
 - Bên phải:
   - ô tìm kiếm `Ctrl+K`;
   - chuông thông báo có số chưa đọc (PROMPT-02);
@@ -273,3 +273,15 @@ Chạy `git merge main` rồi đọc `packages/contracts/CHANGELOG.md` (mục 0.
 **Bổ sung cho PROMPT-03 (app Admin):** thêm 2 màn hình (chi tiết ở README mục 7):
 - **Thông báo**: danh sách gồm bản nháp; tạo/sửa; nút Đăng, Ghim, Ẩn; ngày hết hạn.
 - **Thông tin coin**: sửa tên, nhóm ngành (tối đa 5), mô tả, có lý do.
+
+## 13. Chuẩn bị cho Futures (làm tiếp ngay sau file này — PROMPT-05)
+Chủ dự án đã chọn làm **Futures mô phỏng trước** (hợp đồng vĩnh cửu USDT-M, đòn bẩy tối đa **20×**, ký quỹ **cô lập** trước). Claude đang làm hợp đồng API + mock; khi có, sẽ có PROMPT-05.
+
+Để không phải làm lại, các component của trang Giao dịch Spot cần **tái dùng được** cho Futures:
+- **Thanh ticker** nhận thêm ô: Giá đánh dấu (mark), Giá chỉ số (index), Funding / đếm ngược.
+- **Form lệnh** có chỗ cho: chọn đòn bẩy (1–20×, slider), chế độ ký quỹ, nút **Mở Long / Mở Short** thay cho Mua/Bán, checkbox "Chỉ giảm vị thế", và dòng "Giá thanh lý ước tính".
+- **Khối dưới** (tab có số đếm) thêm được tab **Vị thế (n)** và **Lịch sử vị thế**.
+- **Trang Tài sản** chia tab **Spot | Futures**, có nút **Chuyển tiền** giữa hai ví.
+- **Biểu đồ** vẽ thêm được đường giá vào, giá thanh lý và TP/SL của vị thế.
+
+Chưa cần làm màn Futures. Chỉ cần thiết kế component đủ linh hoạt (nhận props), không cứng cho riêng Spot.

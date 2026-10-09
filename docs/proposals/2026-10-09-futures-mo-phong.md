@@ -1,6 +1,6 @@
 # Thiết kế: Futures mô phỏng (hợp đồng vĩnh cửu USDT-M)
 
-Ngày 2026-10-09 · Claude Code · Trạng thái: **chờ chủ dự án duyệt 3 câu hỏi ở mục 6**
+Ngày 2026-10-09 · Claude Code · Trạng thái: **đã duyệt 2026-10-09 — đang làm** (đòn bẩy tối đa 20×, ký quỹ cô lập trước, Futures làm trước Giai đoạn 2.6)
 
 Chủ dự án chọn thêm Futures (2026-10-09). Đây là hạng mục lớn nhất từ trước tới nay, khoảng Giai đoạn 1 + 2 cộng lại, vì có thêm đòn bẩy, ký quỹ, funding và thanh lý. Vẫn là **tiền ảo**: người dùng không khớp lệnh với nhau, giá lấy từ thị trường Futures thật của Binance.
 
@@ -55,7 +55,7 @@ Chủ dự án chọn thêm Futures (2026-10-09). Đây là hạng mục lớn n
 5. Funding, thanh lý, TP/SL vị thế, reduce-only.
 6. Test tranh chấp + đối soát + chạy thật với giá Binance → báo cáo.
 
-## 6. Cần chủ dự án quyết
-1. **Đòn bẩy tối đa:** 20× (khuyên dùng cho sàn luyện tập) hay cao như Binance (tới 125×)?
-2. **Bắt đầu với ký quỹ cô lập**, ký quỹ chéo làm sau — đồng ý không?
-3. **Thứ tự:** làm Futures trước, hay Bot lưới + Mua định kỳ + Phân tích lãi lỗ + Hồ sơ/bảo mật (Giai đoạn 2.6) trước?
+## 6. Quyết định của chủ dự án (2026-10-09)
+1. **Đòn bẩy tối đa 20×** (Admin có thể hạ trần theo từng cặp, không vượt 20×).
+2. **Ký quỹ cô lập trước**, ký quỹ chéo làm sau.
+3. **Futures làm trước** Giai đoạn 2.6 (Bot lưới, Mua định kỳ, Phân tích lãi lỗ, Hồ sơ + bảo mật).
