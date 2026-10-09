@@ -149,7 +149,7 @@ describe('validation and exchange state', () => {
     await env.database.db.update(exchangeSettings).set({ tradingHalted: true });
     await env.ex.config.reload();
     await expectCode(place(u, { symbol: 'BTCUSDT', side: 'BUY', type: 'MARKET', quantity: '0.1' }), 'TRADING_HALTED');
-    expect(await env.ex.matcher.processWindow('BTCUSDT', dec('80'), dec('80'), env.clock.date())).toBe(0);
+    expect((await env.ex.matcher.processWindow('BTCUSDT', dec('80'), dec('80'), env.clock.date())).filled).toBe(0);
     const [o] = await env.database.db.select().from(orders).where(eq(orders.id, r.order.id));
     expect(o!.status).toBe('NEW');
   });
@@ -247,8 +247,8 @@ describe('limit orders', () => {
     const u = await fundedUser();
     await place(u, { symbol: 'BTCUSDT', side: 'BUY', type: 'LIMIT', quantity: '0.1', price: '90' });
     const at = env.clock.date();
-    expect(await env.ex.matcher.processWindow('BTCUSDT', dec('89'), dec('89'), at)).toBe(1);
-    expect(await env.ex.matcher.processWindow('BTCUSDT', dec('89'), dec('89'), at)).toBe(0);
+    expect((await env.ex.matcher.processWindow('BTCUSDT', dec('89'), dec('89'), at)).filled).toBe(1);
+    expect((await env.ex.matcher.processWindow('BTCUSDT', dec('89'), dec('89'), at)).filled).toBe(0);
     // even if the index were stale, fillResting is idempotent
     const [o] = await env.database.db.select().from(orders);
     expect(await env.ex.orders.fillResting(o!.id, at)).toBeNull();

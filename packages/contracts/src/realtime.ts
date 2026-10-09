@@ -1,7 +1,9 @@
 import { z } from 'zod';
-import { Candle, Depth, MarketStatus, MarketTrade, Ticker } from './market.ts';
+import { Candle, Depth, ExchangeStatus, MarketStatus, MarketTrade, Ticker } from './market.ts';
 import { Balance } from './wallet.ts';
-import { Order, Trade } from './orders.ts';
+import { Order, OrderList, Trade } from './orders.ts';
+import { Notification } from './notifications.ts';
+import { PriceAlert } from './alerts.ts';
 
 /**
  * WebSocket: connect to `/ws` (same origin; the session cookie authenticates the `user` channel).
@@ -12,6 +14,8 @@ import { Order, Trade } from './orders.ts';
  *   trades:<SYMBOL>            -> MarketTrade       (each public trade)
  *   candles:<SYMBOL>:<interval>-> Candle            (forming + closed candles)
  *   market:status              -> MarketStatus      (on change)
+ *   exchange:status            -> ExchangeStatus    (snapshot on subscribe, then on admin change:
+ *                                                    trading halted/resumed, pair enabled/disabled)
  *   user                       -> UserEvent         (requires sign-in)
  */
 export const ClientMessage = z.discriminatedUnion('type', [
@@ -25,6 +29,11 @@ export const UserEvent = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('order'), order: Order }),
   z.object({ kind: z.literal('trade'), trade: Trade }),
   z.object({ kind: z.literal('balance'), balance: Balance }),
+  /** OCO state changed (a leg filled/triggered/canceled). */
+  z.object({ kind: z.literal('orderList'), orderList: OrderList }),
+  z.object({ kind: z.literal('notification'), notification: Notification }),
+  /** A price alert changed status (e.g. TRIGGERED). */
+  z.object({ kind: z.literal('alert'), alert: PriceAlert }),
 ]);
 export type UserEvent = z.infer<typeof UserEvent>;
 
@@ -44,6 +53,7 @@ export const ChannelPayload = {
   trades: MarketTrade,
   candles: Candle,
   'market:status': MarketStatus,
+  'exchange:status': ExchangeStatus,
   user: UserEvent,
 } as const;
 
@@ -57,13 +67,16 @@ export type ChannelData<C extends string> = C extends `ticker:${string}`
         ? Candle
         : C extends 'market:status'
           ? MarketStatus
-          : C extends 'user'
-            ? UserEvent
-            : unknown;
+          : C extends 'exchange:status'
+            ? ExchangeStatus
+            : C extends 'user'
+              ? UserEvent
+              : unknown;
 
 export function payloadSchemaFor(channel: string): z.ZodTypeAny | null {
   if (channel === 'user') return UserEvent;
   if (channel === 'market:status') return MarketStatus;
+  if (channel === 'exchange:status') return ExchangeStatus;
   const prefix = channel.split(':')[0];
   switch (prefix) {
     case 'ticker':

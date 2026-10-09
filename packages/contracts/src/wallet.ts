@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { AssetCode, DecimalString, IsoDateTime } from './common.ts';
+import { AssetCode, DecimalString, IsoDateTime, TimeRangeQuery } from './common.ts';
 
 export const Balance = z.object({
   asset: AssetCode,
@@ -50,11 +50,13 @@ export const LedgerEntry = z.object({
 });
 export type LedgerEntry = z.infer<typeof LedgerEntry>;
 
-export const LedgerQuery = z.object({
-  asset: AssetCode.optional(),
-  /** Hide ORDER_LOCK / ORDER_UNLOCK rows (default true for a cleaner history). */
-  hideLocks: z.enum(['true', 'false']).default('true'),
-});
+export const LedgerQuery = z
+  .object({
+    asset: AssetCode.optional(),
+    /** Hide ORDER_LOCK / ORDER_UNLOCK rows (default true for a cleaner history). */
+    hideLocks: z.enum(['true', 'false']).default('true'),
+  })
+  .extend(TimeRangeQuery.shape);
 
 export const FaucetStatus = z.object({
   asset: AssetCode,

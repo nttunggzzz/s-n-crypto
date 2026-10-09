@@ -13,6 +13,11 @@ export const ErrorCode = z.enum([
   // account
   'EMAIL_NOT_VERIFIED',
   'ACCOUNT_LOCKED',
+  /** staff must enable 2FA (and sign in with it) before using the admin API */
+  'TWO_FACTOR_REQUIRED',
+  'INVALID_TWO_FACTOR_CODE',
+  /** the signal bot account cannot be modified */
+  'BOT_ACCOUNT_PROTECTED',
   // exchange state
   'TRADING_HALTED',
   'SYMBOL_DISABLED',
@@ -25,6 +30,16 @@ export const ErrorCode = z.enum([
   'QUANTITY_TOO_SMALL',
   'QUANTITY_TOO_LARGE',
   'NOTIONAL_TOO_SMALL',
+  // advanced orders (phase 2)
+  /** stop price on the wrong side of the market (would trigger immediately) */
+  'INVALID_STOP_PRICE',
+  /** OCO prices must satisfy SELL: price > last > stopPrice, BUY: price < last < stopPrice */
+  'INVALID_OCO_PRICES',
+  /** take-profit must be above and stop-loss below the entry */
+  'INVALID_TPSL',
+  'INVALID_TRAILING_DELTA',
+  /** too many open orders / active alerts; details.limit */
+  'LIMIT_EXCEEDED',
   // order execution
   'INSUFFICIENT_BALANCE',
   'INSUFFICIENT_LIQUIDITY',
@@ -55,6 +70,9 @@ export const ERROR_HTTP_STATUS: Record<ErrorCode, number> = {
   INTERNAL_ERROR: 500,
   EMAIL_NOT_VERIFIED: 403,
   ACCOUNT_LOCKED: 403,
+  TWO_FACTOR_REQUIRED: 403,
+  INVALID_TWO_FACTOR_CODE: 400,
+  BOT_ACCOUNT_PROTECTED: 403,
   TRADING_HALTED: 409,
   SYMBOL_DISABLED: 409,
   MARKET_DATA_STALE: 503,
@@ -65,6 +83,11 @@ export const ERROR_HTTP_STATUS: Record<ErrorCode, number> = {
   QUANTITY_TOO_SMALL: 400,
   QUANTITY_TOO_LARGE: 400,
   NOTIONAL_TOO_SMALL: 400,
+  INVALID_STOP_PRICE: 400,
+  INVALID_OCO_PRICES: 400,
+  INVALID_TPSL: 400,
+  INVALID_TRAILING_DELTA: 400,
+  LIMIT_EXCEEDED: 409,
   INSUFFICIENT_BALANCE: 400,
   INSUFFICIENT_LIQUIDITY: 400,
   DUPLICATE_CLIENT_ORDER_ID: 409,

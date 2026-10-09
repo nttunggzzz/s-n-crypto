@@ -15,7 +15,8 @@
     "db:migrate": "npm run db:migrate -w @cex/server",
     "typecheck": "tsc -p packages/core && tsc -p packages/contracts && tsc -p server",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "admin:set-role": "npm run admin:set-role -w @cex/server --"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

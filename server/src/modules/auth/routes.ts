@@ -32,10 +32,26 @@ export function registerAuthRoutes(router: Router, opts: RouteOptions, auth: Aut
 
   route(router, opts, 'login', async ({ body, req, res }) => {
     loginLimit.consume(`ip:${clientIp(req)}`);
-    const { user, token } = await auth.login(body, client(req));
+    const r = await auth.login(body, client(req));
+    if (r.kind === 'challenge') return { twoFactorRequired: true as const, challengeToken: r.challengeToken, expiresAt: r.expiresAt.toISOString() };
+    setCookie(res, r.token);
+    return { user: toMe(r.user) };
+  });
+
+  route(router, opts, 'loginTwoFactor', async ({ body, req, res }) => {
+    loginLimit.consume(`ip:${clientIp(req)}`);
+    const { user, token } = await auth.loginTwoFactor(body.challengeToken, body.code, client(req));
     setCookie(res, token);
     return { user: toMe(user) };
   });
+
+  route(router, opts, 'setupTwoFactor', async ({ auth: ctx, body }) => auth.setupTwoFactor(ctx, body.currentPassword));
+  route(router, opts, 'enableTwoFactor', async ({ auth: ctx, body, req }) => ({ recoveryCodes: await auth.enableTwoFactor(ctx, body.code, clientIp(req)) }));
+  route(router, opts, 'disableTwoFactor', async ({ auth: ctx, body, req }) => {
+    await auth.disableTwoFactor(ctx, body.currentPassword, body.code, clientIp(req));
+    return { ok: true as const };
+  });
+  route(router, opts, 'regenerateRecoveryCodes', async ({ auth: ctx, body }) => ({ recoveryCodes: await auth.regenerateRecoveryCodes(ctx, body.code) }));
 
   route(router, opts, 'logout', async ({ auth: ctx, res }) => {
     await auth.logout(ctx.session.id);

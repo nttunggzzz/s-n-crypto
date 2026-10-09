@@ -42,8 +42,8 @@ Phần quan trọng nhất của dự án: số dư **luôn đúng tuyệt đố
 
 ## Checklist
 - [x] Giai đoạn 1: sổ cái, nạp tiền ảo, Market/Limit, hủy lệnh, khớp mô phỏng, phí, đối soát
-- [ ] Giai đoạn 2: lệnh nâng cao, OCO, TP/SL, trailing, danh mục, lịch sử, CSV, cảnh báo giá, thông báo
-- [ ] Giai đoạn 3: API admin
+- [x] Giai đoạn 2: lệnh nâng cao, OCO, TP/SL, trailing, danh mục, lịch sử, CSV, cảnh báo giá, thông báo
+- [x] Giai đoạn 3: API admin
 - [ ] Giai đoạn 5: nhật ký & thống kê
 
 ## Xong khi

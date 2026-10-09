@@ -1,0 +1,206 @@
+import { z } from 'zod';
+import { AssetCode, DecimalString, IsoDateTime, Role, SymbolCode, TimeRangeQuery } from './common.ts';
+import { AssetTag, MarketStatus, SymbolInfo } from './market.ts';
+import { Balance, LedgerEntry } from './wallet.ts';
+
+/** Every admin action that changes data must say why (stored in the audit log). */
+export const Reason = z.string().trim().min(5, 'at least 5 characters').max(500);
+
+export const AdminUserSummary = z.object({
+  id: z.string(),
+  email: z.string(),
+  name: z.string(),
+  role: Role,
+  status: z.enum(['active', 'locked']),
+  emailVerified: z.boolean(),
+  twoFactorEnabled: z.boolean(),
+  signalsAccess: z.boolean(),
+  /** Signal bot account: balances and status cannot be changed by anyone. */
+  isBot: z.boolean(),
+  createdAt: IsoDateTime,
+  /** Most recent activity of any session; null if never signed in. */
+  lastSeenAt: IsoDateTime.nullable(),
+});
+export type AdminUserSummary = z.infer<typeof AdminUserSummary>;
+
+export const AdminUserListQuery = z.object({
+  /** Matches email (contains) or exact user id. */
+  q: z.string().trim().max(254).optional(),
+  role: Role.optional(),
+  status: z.enum(['active', 'locked']).optional(),
+});
+
+export const AdminUserDetail = z.object({
+  user: AdminUserSummary,
+  balances: z.array(Balance),
+  totalValueUsdt: DecimalString,
+  unpricedAssets: z.array(AssetCode),
+  openOrders: z.number().int(),
+  activeSessions: z.number().int(),
+  faucetTotalClaimed: DecimalString,
+});
+export type AdminUserDetail = z.infer<typeof AdminUserDetail>;
+
+export const AdminUserOrdersQuery = z.object({ open: z.enum(['true', 'false']).default('true') });
+
+export const ReasonBody = z.object({ reason: Reason });
+export const SignalsAccessRequest = z.object({ enabled: z.boolean(), reason: Reason });
+/** Owner only. Nobody can change their own role; the last owner cannot be demoted; bots cannot get a role. */
+export const SetRoleRequest = z.object({ role: Role, reason: Reason });
+
+/** amount > 0 credits, < 0 debits the available balance. A debit larger than available → INSUFFICIENT_BALANCE. */
+export const BalanceAdjustmentRequest = z.object({
+  asset: AssetCode,
+  amount: DecimalString.refine((s) => /[1-9]/.test(s), 'must not be zero').refine((s) => !s.includes('.') || s.split('.')[1]!.length <= 8, 'at most 8 decimals'),
+  reason: Reason,
+});
+export const BalanceAdjustmentResult = z.object({
+  /** Balance after the adjustment. */
+  balance: Balance,
+  entry: LedgerEntry,
+  auditLogId: z.string(),
+});
+export type BalanceAdjustmentResult = z.infer<typeof BalanceAdjustmentResult>;
+
+/**
+ * Cancels all open orders, sets every balance to 0 (ledger ACCOUNT_RESET), clears faucet history,
+ * cost basis and value history. `confirm` must be the literal "RESET".
+ */
+export const ResetAccountRequest = z.object({ reason: Reason, confirm: z.literal('RESET') });
+
+export const ExchangeSettings = z.object({
+  tradingHalted: z.boolean(),
+  feeRate: DecimalString,
+  faucet: z.object({ asset: AssetCode, amount: DecimalString, cooldownHours: z.number().int(), lifetimeCap: DecimalString }),
+  /** Market data older than this → STALE → no new orders, no matching. */
+  staleThresholdMs: z.number().int(),
+  updatedAt: IsoDateTime,
+});
+export type ExchangeSettings = z.infer<typeof ExchangeSettings>;
+
+export const UpdateSettingsRequest = z
+  .object({
+    /** 0 … 0.01 (1%) */
+    feeRate: DecimalString.optional(),
+    faucetAmount: DecimalString.optional(),
+    faucetCooldownHours: z.number().int().min(0).max(24 * 30).optional(),
+    faucetLifetimeCap: DecimalString.optional(),
+    staleThresholdMs: z.number().int().min(2_000).max(120_000).optional(),
+    reason: Reason,
+  })
+  .refine((r) => Object.keys(r).some((k) => k !== 'reason'), { message: 'change at least one setting' });
+
+/** Two-step confirmation: the UI makes the admin type the word, the server checks it too. */
+export const HaltRequest = z.object({ reason: Reason, confirm: z.literal('HALT') });
+export const ResumeRequest = z.object({ reason: Reason, confirm: z.literal('RESUME') });
+
+export const AdminSymbol = SymbolInfo.extend({
+  /** Status reported by Binance (TRADING, BREAK…). A pair is tradable only if TRADING and enabled. */
+  sourceStatus: z.string(),
+  /** Admin switch. */
+  adminEnabled: z.boolean(),
+  openOrders: z.number().int(),
+  updatedAt: IsoDateTime,
+});
+export type AdminSymbol = z.infer<typeof AdminSymbol>;
+
+export const UpdateSymbolRequest = z.object({
+  enabled: z.boolean(),
+  /** When disabling: also cancel every open order on the pair (closeReason ADMIN). */
+  cancelOpenOrders: z.boolean().default(false),
+  reason: Reason,
+});
+
+export const AuditAction = z.enum([
+  'USER_LOCK',
+  'USER_UNLOCK',
+  'USER_SIGNALS_ACCESS',
+  'USER_ROLE',
+  'BALANCE_ADJUST',
+  'ACCOUNT_RESET',
+  'SETTINGS_UPDATE',
+  'TRADING_HALT',
+  'TRADING_RESUME',
+  'SYMBOL_UPDATE',
+  'RECONCILIATION_RUN',
+  'TWO_FACTOR_ENABLE',
+  'TWO_FACTOR_DISABLE',
+  /** role set from the server command line (first owner) */
+  'ROLE_BOOTSTRAP',
+  'ASSET_UPDATE',
+  'ANNOUNCEMENT_CREATE',
+  'ANNOUNCEMENT_UPDATE',
+]);
+export type AuditAction = z.infer<typeof AuditAction>;
+
+export const AuditTargetType = z.enum(['USER', 'EXCHANGE', 'SYMBOL', 'ASSET', 'ANNOUNCEMENT']);
+export type AuditTargetType = z.infer<typeof AuditTargetType>;
+
+/** Append-only: entries can never be edited or deleted (enforced by the database). */
+export const AuditLogEntry = z.object({
+  id: z.string(),
+  /** null for actions run from the server command line. */
+  actor: z.object({ id: z.string(), email: z.string() }).nullable(),
+  action: AuditAction,
+  targetType: AuditTargetType.nullable(),
+  targetId: z.string().nullable(),
+  before: z.unknown(),
+  after: z.unknown(),
+  reason: z.string().nullable(),
+  ip: z.string().nullable(),
+  createdAt: IsoDateTime,
+});
+export type AuditLogEntry = z.infer<typeof AuditLogEntry>;
+
+export const AuditLogQuery = z
+  .object({
+    actorId: z.string().optional(),
+    action: AuditAction.optional(),
+    targetType: AuditTargetType.optional(),
+    targetId: z.string().optional(),
+  })
+  .extend(TimeRangeQuery.shape);
+
+export const ReconciliationMismatch = z.object({
+  kind: z.enum(['LEDGER_VS_BALANCE', 'LOCKED_VS_OPEN_ORDERS']),
+  userId: z.string(),
+  asset: z.string(),
+  field: z.enum(['available', 'locked']),
+  expected: z.string(),
+  actual: z.string(),
+});
+
+export const ReconciliationRun = z.object({
+  id: z.string(),
+  startedAt: IsoDateTime,
+  finishedAt: IsoDateTime,
+  ok: z.boolean(),
+  checkedBalances: z.number().int(),
+  mismatches: z.array(ReconciliationMismatch),
+});
+export type ReconciliationRun = z.infer<typeof ReconciliationRun>;
+
+export const AdminOverview = z.object({
+  users: z.object({ total: z.number().int(), newLast24h: z.number().int(), locked: z.number().int(), staff: z.number().int() }),
+  orders: z.object({ open: z.number().int(), placedLast24h: z.number().int() }),
+  trades: z.object({ last24h: z.number().int() }),
+  tradingHalted: z.boolean(),
+  market: MarketStatus,
+  /** null until the first run. */
+  lastReconciliation: ReconciliationRun.nullable(),
+  serverTime: IsoDateTime,
+});
+export type AdminOverview = z.infer<typeof AdminOverview>;
+
+export const UserIdParam = z.object({ userId: z.uuid() });
+export const SymbolParam = z.object({ symbol: SymbolCode });
+
+export const AssetParam = z.object({ asset: AssetCode });
+
+/** PATCH coin display info; only the fields sent change. */
+export const UpdateAssetRequest = z.object({
+  name: z.string().trim().min(1).max(60).nullable().optional(),
+  tags: z.array(AssetTag).max(5).optional(),
+  description: z.string().trim().min(1).max(1000).nullable().optional(),
+  reason: Reason,
+});

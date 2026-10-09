@@ -28,14 +28,24 @@ interface BinanceSymbol {
   filters: BinanceFilter[];
 }
 
+async function fetchExchangeInfo(restUrl: string, wanted: string[]): Promise<BinanceSymbol[]> {
+  const res = await fetch(`${restUrl}/api/v3/exchangeInfo?symbols=${encodeURIComponent(JSON.stringify(wanted))}`);
+  if (res.ok) return ((await res.json()) as { symbols: BinanceSymbol[] }).symbols;
+  // One unknown symbol (delisted / renamed) fails the whole filtered request: load all and pick.
+  if (res.status !== 400) throw new Error(`exchangeInfo HTTP ${res.status}`);
+  const all = await fetch(`${restUrl}/api/v3/exchangeInfo?permissions=SPOT`);
+  if (!all.ok) throw new Error(`exchangeInfo HTTP ${all.status}`);
+  const set = new Set(wanted);
+  return ((await all.json()) as { symbols: BinanceSymbol[] }).symbols.filter((x) => set.has(x.symbol));
+}
+
 /** Upserts trading rules from Binance exchangeInfo. Never touches the admin `enabled` flag. */
 export async function syncSymbolsFromBinance(db: Db, restUrl: string, wanted: string[]): Promise<number> {
-  const url = `${restUrl}/api/v3/exchangeInfo?symbols=${encodeURIComponent(JSON.stringify(wanted))}`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`exchangeInfo HTTP ${res.status}`);
-  const data = (await res.json()) as { symbols: BinanceSymbol[] };
+  const found = await fetchExchangeInfo(restUrl, wanted);
+  const missing = wanted.filter((w) => !found.some((f) => f.symbol === w));
+  if (missing.length) logger.warn({ missing }, 'symbols not found on Binance; skipped');
   let n = 0;
-  for (const s of data.symbols) {
+  for (const s of found) {
     const f = (t: string) => s.filters.find((x) => x.filterType === t);
     const price = f('PRICE_FILTER');
     const lot = f('LOT_SIZE');
@@ -98,74 +108,70 @@ interface StreamEnvelope {
   data: Record<string, unknown>;
 }
 
+/** Binance allows 1024 streams per connection; we stay well below to spread the load. */
+const STREAMS_PER_CONNECTION = 300;
+/** Params per SUBSCRIBE message; Binance accepts at most 5 incoming messages per second. */
+const SUBSCRIBE_BATCH = 100;
+const SUBSCRIBE_GAP_MS = 250;
+
+export function streamsFor(symbol: string): string[] {
+  const l = symbol.toLowerCase();
+  return [`${l}@ticker`, `${l}@depth20@100ms`, `${l}@aggTrade`, ...INTERVALS.map((i) => `${l}@kline_${i}`)];
+}
+
+/** Splits symbols into connections; a symbol's streams always share one connection. */
+export function planConnections(symbols: string[], perConnection = STREAMS_PER_CONNECTION): string[][] {
+  const groups: string[][] = [];
+  let cur: string[] = [];
+  let count = 0;
+  for (const s of symbols) {
+    const n = streamsFor(s).length;
+    if (cur.length && count + n > perConnection) {
+      groups.push(cur);
+      cur = [];
+      count = 0;
+    }
+    cur.push(s);
+    count += n;
+  }
+  if (cur.length) groups.push(cur);
+  return groups;
+}
+
 /**
- * One combined Binance stream for all symbols: 24h ticker, top-20 depth (100ms),
- * aggregated trades and klines for every chart interval.
- * Reconnects with exponential backoff, and proactively every 23h (Binance closes at 24h).
+ * Binance market streams for all symbols (24h ticker, top-20 depth at 100ms, aggregated trades,
+ * klines for every chart interval), over as many connections as needed. Each connection
+ * subscribes with SUBSCRIBE messages, reconnects with exponential backoff, and rotates every
+ * 23h (Binance closes at 24h). If one connection drops only its symbols go STALE.
  */
 export class BinanceStream {
-  private ws: WebSocket | null = null;
-  private attempt = 0;
-  private stopped = false;
-  private rotateTimer: NodeJS.Timeout | undefined;
+  private readonly conns: StreamConnection[];
 
   constructor(
-    private readonly wsUrl: string,
+    wsUrl: string,
     private readonly market: MarketDataService,
-    private readonly db: Db,
-    private readonly symbolList: string[],
-  ) {}
-
-  private url(): string {
-    const streams = this.symbolList.flatMap((s) => {
-      const l = s.toLowerCase();
-      return [`${l}@ticker`, `${l}@depth20@100ms`, `${l}@aggTrade`, ...INTERVALS.map((i) => `${l}@kline_${i}`)];
-    });
-    return `${this.wsUrl}/stream?streams=${streams.join('/')}`;
+    db: Db,
+    symbolList: string[],
+  ) {
+    const handle = (msg: StreamEnvelope) => this.handle(msg, db);
+    this.conns = planConnections(symbolList).map((group, i) => new StreamConnection(i, wsUrl, group, handle, () => this.refreshConnection()));
   }
 
   start(): void {
-    this.stopped = false;
-    this.connect();
+    for (const c of this.conns) c.start();
   }
 
   stop(): void {
-    this.stopped = true;
-    clearTimeout(this.rotateTimer);
-    this.ws?.close();
+    for (const c of this.conns) c.stop();
     this.market.setConnection('DISCONNECTED');
   }
 
-  private connect(): void {
-    this.market.setConnection('CONNECTING');
-    const ws = new WebSocket(this.url());
-    this.ws = ws;
-    ws.on('open', () => {
-      this.attempt = 0;
-      this.market.setConnection('CONNECTED');
-      logger.info({ symbols: this.symbolList.length }, 'binance stream connected');
-      clearTimeout(this.rotateTimer);
-      this.rotateTimer = setTimeout(() => ws.close(), 23 * 3600_000);
-    });
-    ws.on('message', (buf) => {
-      try {
-        this.handle(JSON.parse(buf.toString()) as StreamEnvelope);
-      } catch (err) {
-        logger.warn({ err }, 'bad binance message');
-      }
-    });
-    ws.on('error', (err) => logger.warn({ err: err.message }, 'binance stream error'));
-    ws.on('close', () => {
-      clearTimeout(this.rotateTimer);
-      if (this.stopped) return;
-      this.market.setConnection('CONNECTING');
-      const delay = Math.min(30_000, 1000 * 2 ** this.attempt++);
-      logger.warn({ delay }, 'binance stream closed; reconnecting');
-      setTimeout(() => this.connect(), delay);
-    });
+  private refreshConnection(): void {
+    const states = this.conns.map((c) => c.state);
+    this.market.setConnection(states.every((s) => s === 'CONNECTED') ? 'CONNECTED' : states.every((s) => s === 'DISCONNECTED') ? 'DISCONNECTED' : 'CONNECTING');
   }
 
-  private handle(msg: StreamEnvelope): void {
+  private handle(msg: StreamEnvelope, db: Db): void {
     const [sym, kind] = msg.stream.split('@') as [string, string];
     const symbol = sym.toUpperCase();
     const d = msg.data;
@@ -191,31 +197,109 @@ export class BinanceStream {
       const k = d.k as { t: number; T: number; i: CandleInterval; o: string; h: string; l: string; c: string; v: string; q: string; n: number; x: boolean };
       const candle: Candle = { openTime: k.t, closeTime: k.T, open: k.o, high: k.h, low: k.l, close: k.c, volume: k.v, quoteVolume: k.q, closed: k.x };
       this.market.ingestCandle(symbol, k.i, candle);
-      if (k.x) void this.storeClosed(symbol, k.i, candle, k.n);
+      if (k.x) void storeClosed(db, symbol, k.i, candle, k.n);
     }
   }
+}
 
-  /** Only closed candles are stored; idempotent (PK symbol+interval+openTime). */
-  private async storeClosed(symbol: string, interval: CandleInterval, c: Candle, tradeCount: number): Promise<void> {
-    try {
-      await this.db
-        .insert(candles)
-        .values({
-          symbol,
-          interval,
-          openTime: new Date(c.openTime),
-          closeTime: new Date(c.closeTime),
-          open: c.open,
-          high: c.high,
-          low: c.low,
-          close: c.close,
-          volume: c.volume,
-          quoteVolume: c.quoteVolume,
-          tradeCount,
-        })
-        .onConflictDoNothing();
-    } catch (err) {
-      logger.error({ err, symbol, interval }, 'failed to store candle');
-    }
+/** Only closed candles are stored; idempotent (PK symbol+interval+openTime). */
+async function storeClosed(db: Db, symbol: string, interval: CandleInterval, c: Candle, tradeCount: number): Promise<void> {
+  try {
+    await db
+      .insert(candles)
+      .values({
+        symbol,
+        interval,
+        openTime: new Date(c.openTime),
+        closeTime: new Date(c.closeTime),
+        open: c.open,
+        high: c.high,
+        low: c.low,
+        close: c.close,
+        volume: c.volume,
+        quoteVolume: c.quoteVolume,
+        tradeCount,
+      })
+      .onConflictDoNothing();
+  } catch (err) {
+    logger.error({ err, symbol, interval }, 'failed to store candle');
+  }
+}
+
+type ConnState = 'CONNECTING' | 'CONNECTED' | 'DISCONNECTED';
+
+class StreamConnection {
+  state: ConnState = 'DISCONNECTED';
+  private ws: WebSocket | null = null;
+  private attempt = 0;
+  private stopped = false;
+  private rotateTimer: NodeJS.Timeout | undefined;
+  private subTimers: NodeJS.Timeout[] = [];
+
+  constructor(
+    private readonly index: number,
+    private readonly wsUrl: string,
+    private readonly symbols: string[],
+    private readonly onMessage: (msg: StreamEnvelope) => void,
+    private readonly onState: () => void,
+  ) {}
+
+  start(): void {
+    this.stopped = false;
+    this.connect();
+  }
+
+  stop(): void {
+    this.stopped = true;
+    this.clearTimers();
+    this.ws?.close();
+    this.setState('DISCONNECTED');
+  }
+
+  private setState(s: ConnState): void {
+    this.state = s;
+    this.onState();
+  }
+
+  private clearTimers(): void {
+    clearTimeout(this.rotateTimer);
+    for (const t of this.subTimers) clearTimeout(t);
+    this.subTimers = [];
+  }
+
+  private connect(): void {
+    this.setState('CONNECTING');
+    const ws = new WebSocket(`${this.wsUrl}/stream`);
+    this.ws = ws;
+    ws.on('open', () => {
+      this.attempt = 0;
+      const streams = this.symbols.flatMap(streamsFor);
+      for (let i = 0; i * SUBSCRIBE_BATCH < streams.length; i++) {
+        const params = streams.slice(i * SUBSCRIBE_BATCH, (i + 1) * SUBSCRIBE_BATCH);
+        this.subTimers.push(setTimeout(() => ws.readyState === ws.OPEN && ws.send(JSON.stringify({ method: 'SUBSCRIBE', params, id: i + 1 })), i * SUBSCRIBE_GAP_MS));
+      }
+      this.setState('CONNECTED');
+      logger.info({ connection: this.index, symbols: this.symbols.length, streams: streams.length }, 'binance stream connected');
+      clearTimeout(this.rotateTimer);
+      this.rotateTimer = setTimeout(() => ws.close(), 23 * 3600_000);
+    });
+    ws.on('message', (buf) => {
+      try {
+        const msg = JSON.parse(buf.toString()) as StreamEnvelope & { result?: unknown; error?: unknown };
+        if (msg.stream) this.onMessage(msg);
+        else if (msg.error) logger.error({ connection: this.index, error: msg.error }, 'binance subscribe failed');
+      } catch (err) {
+        logger.warn({ err }, 'bad binance message');
+      }
+    });
+    ws.on('error', (err) => logger.warn({ connection: this.index, err: err.message }, 'binance stream error'));
+    ws.on('close', () => {
+      this.clearTimers();
+      if (this.stopped) return;
+      this.setState('CONNECTING');
+      const delay = Math.min(30_000, 1000 * 2 ** this.attempt++);
+      logger.warn({ connection: this.index, delay }, 'binance stream closed; reconnecting');
+      setTimeout(() => this.connect(), delay);
+    });
   }
 }

@@ -29,8 +29,9 @@ Một nguồn sự thật duy nhất cho mọi dữ liệu đi giữa backend v�
 ## Checklist
 - [x] Giai đoạn 0: khung package, quy ước, client, mock MSW, ví dụ 1 endpoint (`GET /api/v1/health`)
 - [x] Giai đoạn 1: auth, ví, thị trường, lệnh Market/Limit, realtime (29 endpoint + 6 kênh WS) — *chưa sinh OpenAPI*
-- [ ] Giai đoạn 2: lệnh nâng cao, OCO, danh mục, lịch sử, cảnh báo giá, thông báo
-- [ ] Giai đoạn 3: toàn bộ API admin
+- [x] Giai đoạn 2: lệnh nâng cao, OCO, danh mục, lịch sử, cảnh báo giá, thông báo (v0.2.0 — xem `packages/contracts/CHANGELOG.md`)
+- [x] Giai đoạn 3: toàn bộ API admin (v0.3.0) + 2FA
+- [x] Giai đoạn 2.5: v0.4.0 — thông tin coin, sparkline, sổ lệnh sâu, `exchange:status`, thông báo của sàn (77 endpoint); mock kiểm tra đầu vào như server
 - [ ] Giai đoạn 5: nhật ký & thống kê
 - [ ] Giai đoạn 6: tín hiệu
 

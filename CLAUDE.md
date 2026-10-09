@@ -17,9 +17,14 @@ server/
   drizzle/           migrations (0001 = trigger chặn UPDATE/DELETE trên ledger_entries, audit_logs)
   src/db             schema.ts (Postgres), client.ts
   src/lib            http.ts (route() theo hợp đồng), errors.ts, rateLimit.ts
-  src/modules/auth   phiên cookie/bearer, xác minh email, quên/đổi mật khẩu
-  src/modules/market Binance WS/REST, MarketDataService (LIVE/STALE), nến
-  src/modules/exchange  ledger, orderService, matcher, faucet, reconciliation, routes
+  src/modules/auth   phiên cookie/bearer, xác minh email, quên/đổi mật khẩu, 2FA TOTP (totp.ts, SecretBox)
+  src/modules/admin  adminService (mọi thao tác admin + audit), routes, audit.ts
+  src/modules/market Binance WS (nhiều kết nối, SUBSCRIBE) / REST, MarketDataService (LIVE/STALE), nến,
+                     assets (thông tin coin), depthSnapshots (sổ lệnh sâu), sparklines
+  src/modules/content announcementService (thông báo của sàn)
+  src/modules/exchange  ledger, orderService (mọi loại lệnh, OCO, TP/SL), matcher, openOrderIndex,
+                        positions (giá vốn), portfolio, alerts, notifications, preferences, exports (CSV),
+                        faucet, reconciliation, routes
   src/realtime       WebSocket /ws
   test/              globalSetup (PostgreSQL nhúng :5434), helpers
 legacy/              code AI Studio cũ
@@ -33,6 +38,7 @@ npm run dev:server    # API :8080, đọc .env (copy từ .env.example)
 npm test              # vitest — tự bật PostgreSQL thật trên :5434
 npm run typecheck
 npm run db:generate   # sau khi sửa server/src/db/schema.ts
+npm run admin:set-role -- <email> owner   # tạo owner đầu tiên (ghi audit ROLE_BOOTSTRAP)
 ```
 
 ## Bất biến (KHÔNG được phá)
@@ -46,6 +52,12 @@ npm run db:generate   # sau khi sửa server/src/db/schema.ts
 8. Mọi endpoint khai báo trong `packages/contracts/src/endpoints.ts` và đăng ký bằng `route()` — dev/test tự kiểm tra response khớp schema.
 9. Dữ liệu người dùng luôn lọc theo `userId` của phiên; không thấy → 404 (không phải 403).
 10. Không báo "xong/PASSED" khi chưa chạy test thật; ghi rõ lệnh đã chạy và kết quả.
+11. **OCO**: tiền khóa nằm trên **đúng một** chân đang sống (chân LIMIT; khi chân STOP kích hoạt thì chuyển sang chân STOP). Mọi thao tác trên một chân phải khóa **cả nhóm** qua `lockGroup()` theo thứ tự id.
+12. Mọi thay đổi trạng thái lệnh chạy trong `commit()` của OrderService: chỉ mục trong bộ nhớ + sự kiện realtime chỉ áp dụng **sau khi** transaction commit (`Outcome`).
+13. **Admin**: quyền khai báo ở `packages/contracts/src/permissions.ts`; endpoint `auth: 'staff'` cần vai trò staff + 2FA bật + phiên đăng nhập bằng 2FA (`sessions.mfa_verified`) + `permission`. Mọi thay đổi admin ghi `writeAudit()` **trong cùng transaction**; tài khoản bot không ai sửa được.
+14. **Database phải là UTF8** (tiếng Việt). Script PostgreSQL nhúng tự tạo UTF8 và từ chối DB khác bảng mã.
+15. **Khớp lệnh chỉ dùng 20 mức realtime** (`MarketDataService`). Sổ lệnh sâu (`DepthSnapshots`, REST) và sparkline chỉ để **hiển thị**,
+    có cache + giới hạn trọng số Binance (tổng IP 6000/phút; sổ lệnh sâu ≤ 1200). Không gọi REST Binance trong đường khớp lệnh.
 
 ## Khi thêm tính năng
 1. Hợp đồng (schema + endpoint + fixture + resolver mock — `createMockHandlers` bắt buộc có resolver cho mọi endpoint, thiếu sẽ lỗi typecheck).

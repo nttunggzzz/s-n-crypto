@@ -1,5 +1,5 @@
 import { ApiErrorBody, ApiError } from './errors.ts';
-import { buildPath, endpoints, type EndpointInput, type EndpointName, type EndpointOutput } from './endpoints.ts';
+import { buildPath, endpoints, type EndpointDef, type EndpointInput, type EndpointName, type EndpointOutput } from './endpoints.ts';
 
 export interface ApiClientOptions {
   /** Origin of the API, e.g. "https://staging.example.com". Empty = same origin. */
@@ -39,7 +39,8 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
       body: hasBody ? JSON.stringify(input.body ?? {}) : undefined,
     });
     const text = await res.text();
-    const json: unknown = text ? JSON.parse(text) : null;
+    const isJson = (res.headers.get('content-type') ?? '').includes('application/json');
+    const json: unknown = text && isJson ? JSON.parse(text) : null;
     if (!res.ok) {
       const parsed = ApiErrorBody.safeParse(json);
       if (parsed.success) {
@@ -48,6 +49,8 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
       }
       throw new ApiError(res.status, 'INTERNAL_ERROR', `HTTP ${res.status}`);
     }
+    // fetch's text() drops the UTF-8 BOM; keep it so a saved file opens correctly in Excel.
+    if ((def as EndpointDef).format === 'csv') return (text.startsWith('\uFEFF') ? text : '\uFEFF' + text) as EndpointOutput<N>;
     if (options.validateResponses) return def.response.parse(json) as EndpointOutput<N>;
     return json as EndpointOutput<N>;
   }
@@ -57,4 +60,15 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
     (client as Record<string, unknown>)[name] = (...args: unknown[]) => (call as (n: EndpointName, ...a: unknown[]) => unknown)(name, ...args);
   }
   return client;
+}
+
+/**
+ * URL of a CSV export for a plain download link, e.g.
+ * <a href={exportUrl('exportTrades', { symbol: 'BTCUSDT' })} download>. The session cookie authenticates it.
+ */
+export function exportUrl(name: 'exportOrders' | 'exportTrades' | 'exportLedger', query: Record<string, string | undefined> = {}, baseUrl = ''): string {
+  const qs = new URLSearchParams();
+  for (const [k, v] of Object.entries(query)) if (v !== undefined) qs.set(k, v);
+  const s = qs.toString();
+  return baseUrl + endpoints[name].path + (s ? `?${s}` : '');
 }

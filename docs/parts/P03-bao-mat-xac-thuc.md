@@ -33,7 +33,7 @@ Một tài khoản dùng cho cả sàn và web tín hiệu; mỗi người chỉ
 
 ## Checklist
 - [x] Giai đoạn 1: tài khoản người dùng, phiên, rate limit, xác minh email — *captcha Turnstile & email Resend có code, chờ khóa API*
-- [ ] Giai đoạn 3: vai trò & quyền, 2FA admin, nhật ký quản trị, cờ `signals_access`, API quản lý người dùng (tìm, xem, khóa/mở)
+- [x] Giai đoạn 3: vai trò & quyền, 2FA admin (TOTP, mã khôi phục; tùy chọn cho người dùng), nhật ký quản trị, cờ `signals_access`, API quản lý người dùng (tìm, xem, khóa/mở)
 - [ ] Giai đoạn 7: kiểm tra bảo mật tổng thể, xóa tài khoản, chính sách quyền riêng tư, token cho app mobile
 
 ## Xong khi

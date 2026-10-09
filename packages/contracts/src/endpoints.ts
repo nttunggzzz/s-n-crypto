@@ -1,41 +1,98 @@
 import { z } from 'zod';
 import { Empty, IsoDateTime, PaginationQuery, SymbolCode, paginated } from './common.ts';
-import { Me } from './account.ts';
+import { Me, Preferences, UpdatePreferencesRequest } from './account.ts';
 import {
   AuthUserResponse,
   ChangePasswordRequest,
   ForgotPasswordRequest,
   LoginRequest,
+  LoginResponse,
+  LoginTwoFactorRequest,
   OkResponse,
+  RecoveryCodes,
+  RegenerateRecoveryCodesRequest,
   RegisterRequest,
   ResetPasswordRequest,
   SessionList,
+  TwoFactorDisableRequest,
+  TwoFactorEnableRequest,
+  TwoFactorSetup,
+  TwoFactorSetupRequest,
   VerifyEmailRequest,
 } from './auth.ts';
-import { Candles, CandlesQuery, Depth, ExchangeInfo, LimitQuery, MarketConnection, MarketStatus, MarketTrades, Ticker } from './market.ts';
+import {
+  AdminAnnouncement,
+  AdminAnnouncementListQuery,
+  Announcement,
+  AnnouncementIdParam,
+  AnnouncementListQuery,
+  CreateAnnouncementRequest,
+  UpdateAnnouncementRequest,
+} from './announcements.ts';
+import {
+  AdminOverview,
+  AdminSymbol,
+  AdminUserDetail,
+  AdminUserListQuery,
+  AdminUserOrdersQuery,
+  AdminUserSummary,
+  AssetParam,
+  AuditLogEntry,
+  AuditLogQuery,
+  BalanceAdjustmentRequest,
+  BalanceAdjustmentResult,
+  ExchangeSettings,
+  HaltRequest,
+  ReasonBody,
+  ReconciliationRun,
+  ResetAccountRequest,
+  ResumeRequest,
+  SetRoleRequest,
+  SignalsAccessRequest,
+  SymbolParam as AdminSymbolParam,
+  UpdateAssetRequest,
+  UpdateSettingsRequest,
+  UpdateSymbolRequest,
+  UserIdParam,
+} from './admin.ts';
+import type { Permission } from './permissions.ts';
+import { AssetInfo, Candles, CandlesQuery, Depth, DepthQuery, ExchangeInfo, LimitQuery, MarketConnection, MarketStatus, MarketTrades, Sparklines, SparklinesQuery, Ticker } from './market.ts';
 import { Balances, FaucetClaimResult, FaucetStatus, LedgerEntry, LedgerQuery } from './wallet.ts';
-import { CancelAllResponse, Order, PlaceOrderRequest, PlaceOrderResponse, SymbolFilterQuery, Trade } from './orders.ts';
+import { CancelAllResponse, HistoryQuery, Order, OrderList, PlaceOcoRequest, PlaceOrderRequest, PlaceOrderResponse, SymbolFilterQuery, Trade } from './orders.ts';
+import { Portfolio, PortfolioHistory, PortfolioRange } from './portfolio.ts';
+import { AlertListQuery, CreatePriceAlertRequest, PriceAlert } from './alerts.ts';
+import { MarkReadRequest, Notification, NotificationListQuery, UnreadCount } from './notifications.ts';
 
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
-/** public: anyone · user: signed-in · verified: signed-in with verified email · admin: see phase 3 */
-export type AuthLevel = 'public' | 'user' | 'verified' | 'admin';
+/**
+ * public: anyone · user: signed-in · verified: signed-in with verified email ·
+ * staff: support/admin/owner with 2FA, signed in with 2FA, holding `permission`.
+ */
+export type AuthLevel = 'public' | 'user' | 'verified' | 'staff';
 
 export interface EndpointDef {
   method: HttpMethod;
   path: string;
   auth: AuthLevel;
+  /** Required for auth 'staff'. */
+  permission?: Permission;
   params?: z.ZodObject;
   query?: z.ZodType;
   body?: z.ZodType;
   response: z.ZodType;
   /** HTTP status on success (default 200). */
   status?: number;
+  /** 'csv': the body is a CSV file (UTF-8 with BOM) and the client returns it as a string. */
+  format?: 'json' | 'csv';
 }
 
 const ep = <const T extends EndpointDef>(d: T): T => d;
 
 const SymbolParam = z.object({ symbol: SymbolCode });
 const OrderIdParam = z.object({ orderId: z.string().min(1) });
+const ListIdParam = z.object({ listId: z.string().min(1) });
+const AlertIdParam = z.object({ alertId: z.string().min(1) });
+const Csv = z.string();
 
 export const HealthResponse = z.object({
   status: z.literal('ok'),
@@ -50,7 +107,9 @@ export const endpoints = {
 
   // ---- auth (P03)
   register: ep({ method: 'POST', path: '/api/v1/auth/register', auth: 'public', body: RegisterRequest, response: AuthUserResponse, status: 201 }),
-  login: ep({ method: 'POST', path: '/api/v1/auth/login', auth: 'public', body: LoginRequest, response: AuthUserResponse }),
+  login: ep({ method: 'POST', path: '/api/v1/auth/login', auth: 'public', body: LoginRequest, response: LoginResponse }),
+  /** Second login step for accounts with 2FA; sets the session cookie. */
+  loginTwoFactor: ep({ method: 'POST', path: '/api/v1/auth/login/2fa', auth: 'public', body: LoginTwoFactorRequest, response: AuthUserResponse }),
   logout: ep({ method: 'POST', path: '/api/v1/auth/logout', auth: 'user', body: Empty, response: OkResponse }),
   verifyEmail: ep({ method: 'POST', path: '/api/v1/auth/verify-email', auth: 'public', body: VerifyEmailRequest, response: OkResponse }),
   resendVerification: ep({ method: 'POST', path: '/api/v1/auth/resend-verification', auth: 'user', body: Empty, response: OkResponse }),
@@ -60,14 +119,26 @@ export const endpoints = {
   listSessions: ep({ method: 'GET', path: '/api/v1/auth/sessions', auth: 'user', response: SessionList }),
   revokeSession: ep({ method: 'DELETE', path: '/api/v1/auth/sessions/:sessionId', auth: 'user', params: z.object({ sessionId: z.string() }), response: OkResponse }),
   me: ep({ method: 'GET', path: '/api/v1/me', auth: 'user', response: Me }),
+  setupTwoFactor: ep({ method: 'POST', path: '/api/v1/auth/2fa/setup', auth: 'user', body: TwoFactorSetupRequest, response: TwoFactorSetup }),
+  enableTwoFactor: ep({ method: 'POST', path: '/api/v1/auth/2fa/enable', auth: 'user', body: TwoFactorEnableRequest, response: RecoveryCodes }),
+  disableTwoFactor: ep({ method: 'POST', path: '/api/v1/auth/2fa/disable', auth: 'user', body: TwoFactorDisableRequest, response: OkResponse }),
+  regenerateRecoveryCodes: ep({ method: 'POST', path: '/api/v1/auth/2fa/recovery-codes', auth: 'user', body: RegenerateRecoveryCodesRequest, response: RecoveryCodes }),
+  getPreferences: ep({ method: 'GET', path: '/api/v1/me/preferences', auth: 'user', response: Preferences }),
+  updatePreferences: ep({ method: 'PATCH', path: '/api/v1/me/preferences', auth: 'user', body: UpdatePreferencesRequest, response: Preferences }),
 
   // ---- market data (P04)
   exchangeInfo: ep({ method: 'GET', path: '/api/v1/market/exchange-info', auth: 'public', response: ExchangeInfo }),
   tickers: ep({ method: 'GET', path: '/api/v1/market/tickers', auth: 'public', response: z.object({ items: z.array(Ticker) }) }),
-  depth: ep({ method: 'GET', path: '/api/v1/market/depth/:symbol', auth: 'public', params: SymbolParam, query: LimitQuery, response: Depth }),
+  /** limit 1–500; > 20 adds snapshot levels below the live top 20 (see Depth). */
+  depth: ep({ method: 'GET', path: '/api/v1/market/depth/:symbol', auth: 'public', params: SymbolParam, query: DepthQuery, response: Depth }),
   marketTrades: ep({ method: 'GET', path: '/api/v1/market/trades/:symbol', auth: 'public', params: SymbolParam, query: LimitQuery, response: MarketTrades }),
   candles: ep({ method: 'GET', path: '/api/v1/market/candles/:symbol', auth: 'public', params: SymbolParam, query: CandlesQuery, response: Candles }),
   marketStatus: ep({ method: 'GET', path: '/api/v1/market/status', auth: 'public', response: MarketStatus }),
+  /** Every symbol's mini chart (cached ~60 s on the server). */
+  sparklines: ep({ method: 'GET', path: '/api/v1/market/sparklines', auth: 'public', query: SparklinesQuery, response: Sparklines }),
+
+  // ---- exchange announcements (phase 2.5)
+  announcements: ep({ method: 'GET', path: '/api/v1/announcements', auth: 'public', query: AnnouncementListQuery, response: z.object({ items: z.array(Announcement) }) }),
 
   // ---- wallet (P05)
   balances: ep({ method: 'GET', path: '/api/v1/wallet/balances', auth: 'user', response: Balances }),
@@ -78,11 +149,65 @@ export const endpoints = {
   // ---- orders (P05)
   placeOrder: ep({ method: 'POST', path: '/api/v1/orders', auth: 'verified', body: PlaceOrderRequest, response: PlaceOrderResponse, status: 201 }),
   openOrders: ep({ method: 'GET', path: '/api/v1/orders/open', auth: 'user', query: SymbolFilterQuery, response: z.object({ items: z.array(Order) }) }),
-  orderHistory: ep({ method: 'GET', path: '/api/v1/orders/history', auth: 'user', query: SymbolFilterQuery.extend(PaginationQuery.shape), response: paginated(Order) }),
+  orderHistory: ep({ method: 'GET', path: '/api/v1/orders/history', auth: 'user', query: HistoryQuery.extend(PaginationQuery.shape), response: paginated(Order) }),
   getOrder: ep({ method: 'GET', path: '/api/v1/orders/:orderId', auth: 'user', params: OrderIdParam, response: Order }),
   cancelOrder: ep({ method: 'DELETE', path: '/api/v1/orders/:orderId', auth: 'user', params: OrderIdParam, response: Order }),
   cancelAllOrders: ep({ method: 'DELETE', path: '/api/v1/orders', auth: 'user', query: SymbolFilterQuery, response: CancelAllResponse }),
-  myTrades: ep({ method: 'GET', path: '/api/v1/trades', auth: 'user', query: SymbolFilterQuery.extend(PaginationQuery.shape), response: paginated(Trade) }),
+  myTrades: ep({ method: 'GET', path: '/api/v1/trades', auth: 'user', query: HistoryQuery.extend(PaginationQuery.shape), response: paginated(Trade) }),
+
+  // ---- OCO order lists (P05, phase 2)
+  placeOco: ep({ method: 'POST', path: '/api/v1/order-lists/oco', auth: 'verified', body: PlaceOcoRequest, response: OrderList, status: 201 }),
+  openOrderLists: ep({ method: 'GET', path: '/api/v1/order-lists/open', auth: 'user', query: SymbolFilterQuery, response: z.object({ items: z.array(OrderList) }) }),
+  getOrderList: ep({ method: 'GET', path: '/api/v1/order-lists/:listId', auth: 'user', params: ListIdParam, response: OrderList }),
+  /** Cancels both legs. Canceling one leg with cancelOrder also cancels the whole list. */
+  cancelOrderList: ep({ method: 'DELETE', path: '/api/v1/order-lists/:listId', auth: 'user', params: ListIdParam, response: OrderList }),
+
+  // ---- portfolio (P05, phase 2)
+  portfolio: ep({ method: 'GET', path: '/api/v1/portfolio', auth: 'user', response: Portfolio }),
+  portfolioHistory: ep({ method: 'GET', path: '/api/v1/portfolio/history', auth: 'user', query: z.object({ range: PortfolioRange.default('7d') }), response: PortfolioHistory }),
+
+  // ---- CSV exports (max 10,000 rows, newest first; times in UTC and GMT+7)
+  exportOrders: ep({ method: 'GET', path: '/api/v1/export/orders.csv', auth: 'user', query: HistoryQuery, response: Csv, format: 'csv' }),
+  exportTrades: ep({ method: 'GET', path: '/api/v1/export/trades.csv', auth: 'user', query: HistoryQuery, response: Csv, format: 'csv' }),
+  exportLedger: ep({ method: 'GET', path: '/api/v1/export/ledger.csv', auth: 'user', query: LedgerQuery, response: Csv, format: 'csv' }),
+
+  // ---- price alerts
+  listAlerts: ep({ method: 'GET', path: '/api/v1/alerts', auth: 'user', query: AlertListQuery, response: z.object({ items: z.array(PriceAlert) }) }),
+  createAlert: ep({ method: 'POST', path: '/api/v1/alerts', auth: 'user', body: CreatePriceAlertRequest, response: PriceAlert, status: 201 }),
+  deleteAlert: ep({ method: 'DELETE', path: '/api/v1/alerts/:alertId', auth: 'user', params: AlertIdParam, response: PriceAlert }),
+
+  // ---- in-app notifications
+  listNotifications: ep({ method: 'GET', path: '/api/v1/notifications', auth: 'user', query: NotificationListQuery.extend(PaginationQuery.shape), response: paginated(Notification) }),
+  unreadNotifications: ep({ method: 'GET', path: '/api/v1/notifications/unread-count', auth: 'user', response: UnreadCount }),
+  markNotificationsRead: ep({ method: 'POST', path: '/api/v1/notifications/read', auth: 'user', body: MarkReadRequest, response: UnreadCount }),
+
+  // ---- admin (P03/P05, phase 3) — staff + 2FA + permission; every change writes the audit log
+  adminOverview: ep({ method: 'GET', path: '/api/v1/admin/overview', auth: 'staff', permission: 'exchange.read', response: AdminOverview }),
+  adminListUsers: ep({ method: 'GET', path: '/api/v1/admin/users', auth: 'staff', permission: 'users.read', query: AdminUserListQuery.extend(PaginationQuery.shape), response: paginated(AdminUserSummary) }),
+  adminGetUser: ep({ method: 'GET', path: '/api/v1/admin/users/:userId', auth: 'staff', permission: 'users.read', params: UserIdParam, response: AdminUserDetail }),
+  adminUserOrders: ep({ method: 'GET', path: '/api/v1/admin/users/:userId/orders', auth: 'staff', permission: 'users.read', params: UserIdParam, query: AdminUserOrdersQuery.extend(PaginationQuery.shape), response: paginated(Order) }),
+  adminUserLedger: ep({ method: 'GET', path: '/api/v1/admin/users/:userId/ledger', auth: 'staff', permission: 'users.read', params: UserIdParam, query: LedgerQuery.extend(PaginationQuery.shape), response: paginated(LedgerEntry) }),
+  /** Locking signs the user out everywhere; their open orders stay. */
+  adminLockUser: ep({ method: 'POST', path: '/api/v1/admin/users/:userId/lock', auth: 'staff', permission: 'users.lock', params: UserIdParam, body: ReasonBody, response: AdminUserSummary }),
+  adminUnlockUser: ep({ method: 'POST', path: '/api/v1/admin/users/:userId/unlock', auth: 'staff', permission: 'users.lock', params: UserIdParam, body: ReasonBody, response: AdminUserSummary }),
+  adminSetSignalsAccess: ep({ method: 'PUT', path: '/api/v1/admin/users/:userId/signals-access', auth: 'staff', permission: 'users.signals', params: UserIdParam, body: SignalsAccessRequest, response: AdminUserSummary }),
+  adminSetRole: ep({ method: 'PUT', path: '/api/v1/admin/users/:userId/role', auth: 'staff', permission: 'users.roles', params: UserIdParam, body: SetRoleRequest, response: AdminUserSummary }),
+  adminAdjustBalance: ep({ method: 'POST', path: '/api/v1/admin/users/:userId/balance-adjustments', auth: 'staff', permission: 'balances.adjust', params: UserIdParam, body: BalanceAdjustmentRequest, response: BalanceAdjustmentResult, status: 201 }),
+  adminResetAccount: ep({ method: 'POST', path: '/api/v1/admin/users/:userId/reset', auth: 'staff', permission: 'accounts.reset', params: UserIdParam, body: ResetAccountRequest, response: AdminUserDetail }),
+  adminGetSettings: ep({ method: 'GET', path: '/api/v1/admin/exchange/settings', auth: 'staff', permission: 'exchange.read', response: ExchangeSettings }),
+  adminUpdateSettings: ep({ method: 'PATCH', path: '/api/v1/admin/exchange/settings', auth: 'staff', permission: 'exchange.configure', body: UpdateSettingsRequest, response: ExchangeSettings }),
+  adminHaltTrading: ep({ method: 'POST', path: '/api/v1/admin/exchange/halt', auth: 'staff', permission: 'exchange.halt', body: HaltRequest, response: ExchangeSettings }),
+  adminResumeTrading: ep({ method: 'POST', path: '/api/v1/admin/exchange/resume', auth: 'staff', permission: 'exchange.halt', body: ResumeRequest, response: ExchangeSettings }),
+  adminListSymbols: ep({ method: 'GET', path: '/api/v1/admin/symbols', auth: 'staff', permission: 'exchange.read', response: z.object({ items: z.array(AdminSymbol) }) }),
+  adminUpdateSymbol: ep({ method: 'PATCH', path: '/api/v1/admin/symbols/:symbol', auth: 'staff', permission: 'exchange.configure', params: AdminSymbolParam, body: UpdateSymbolRequest, response: AdminSymbol }),
+  adminAuditLogs: ep({ method: 'GET', path: '/api/v1/admin/audit-logs', auth: 'staff', permission: 'audit.read', query: AuditLogQuery.extend(PaginationQuery.shape), response: paginated(AuditLogEntry) }),
+  adminReconciliationRuns: ep({ method: 'GET', path: '/api/v1/admin/reconciliation', auth: 'staff', permission: 'reconciliation.read', query: PaginationQuery, response: paginated(ReconciliationRun) }),
+  adminRunReconciliation: ep({ method: 'POST', path: '/api/v1/admin/reconciliation/run', auth: 'staff', permission: 'reconciliation.run', body: Empty, response: ReconciliationRun }),
+  // phase 2.5: coin info + announcements
+  adminUpdateAsset: ep({ method: 'PATCH', path: '/api/v1/admin/assets/:asset', auth: 'staff', permission: 'exchange.configure', params: AssetParam, body: UpdateAssetRequest, response: AssetInfo }),
+  adminListAnnouncements: ep({ method: 'GET', path: '/api/v1/admin/announcements', auth: 'staff', permission: 'exchange.read', query: AdminAnnouncementListQuery.extend(PaginationQuery.shape), response: paginated(AdminAnnouncement) }),
+  adminCreateAnnouncement: ep({ method: 'POST', path: '/api/v1/admin/announcements', auth: 'staff', permission: 'content.manage', body: CreateAnnouncementRequest, response: AdminAnnouncement, status: 201 }),
+  adminUpdateAnnouncement: ep({ method: 'PATCH', path: '/api/v1/admin/announcements/:announcementId', auth: 'staff', permission: 'content.manage', params: AnnouncementIdParam, body: UpdateAnnouncementRequest, response: AdminAnnouncement }),
 } as const satisfies Record<string, EndpointDef>;
 
 export type Endpoints = typeof endpoints;

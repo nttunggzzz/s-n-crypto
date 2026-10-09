@@ -9,9 +9,14 @@ import type { AuthService } from './modules/auth/authService.ts';
 import { registerAuthRoutes } from './modules/auth/routes.ts';
 import type { MarketDataService } from './modules/market/marketData.ts';
 import type { CandleService } from './modules/market/candleService.ts';
+import { binanceDepthFetcher, DepthSnapshots } from './modules/market/depthSnapshots.ts';
+import { SparklineService } from './modules/market/sparklines.ts';
+import { AnnouncementService } from './modules/content/announcementService.ts';
 import { registerMarketRoutes } from './modules/market/routes.ts';
 import type { Exchange } from './modules/exchange/index.ts';
 import { registerExchangeRoutes } from './modules/exchange/routes.ts';
+import { AdminService } from './modules/admin/adminService.ts';
+import { registerAdminRoutes } from './modules/admin/routes.ts';
 
 export interface AppDeps {
   config: Config;
@@ -20,6 +25,8 @@ export interface AppDeps {
   market: MarketDataService;
   exchange: Exchange;
   candles: CandleService;
+  /** Deep order books; default: Binance REST when the feed is on, none otherwise. */
+  depthSnapshots?: DepthSnapshots;
   version?: string;
 }
 
@@ -91,8 +98,18 @@ export function createApp(deps: AppDeps) {
     market: deps.market.connection,
   }));
   registerAuthRoutes(router, opts, deps.auth, config);
-  registerMarketRoutes(router, opts, deps.market, deps.exchange.config, deps.candles);
-  registerExchangeRoutes(router, opts, deps.db, deps.exchange, deps.market);
+  const exConfig = deps.exchange.config;
+  registerMarketRoutes(router, opts, {
+    market: deps.market,
+    config: exConfig,
+    candles: deps.candles,
+    depthSnapshots: deps.depthSnapshots ?? new DepthSnapshots(config.MARKET_FEED === 'binance' ? binanceDepthFetcher(config.BINANCE_REST_URL) : null),
+    sparklines: new SparklineService(deps.candles, deps.market, () => exConfig.allSymbols().map((s) => s.row.symbol)),
+  });
+  const news = new AnnouncementService(deps.db);
+  route(router, opts, 'announcements', async ({ query }) => ({ items: await news.listPublic(query.limit) }));
+  registerExchangeRoutes(router, opts, deps.db, deps.exchange, deps.market, config.RATE_LIMIT_SCALE);
+  registerAdminRoutes(router, opts, new AdminService(deps.db, deps.exchange, deps.market), news, config.RATE_LIMIT_SCALE);
   app.use(router);
 
   app.use('/api', (_req: Request, _res: Response, next: NextFunction) => next(new AppError('NOT_FOUND', 'No such endpoint')));

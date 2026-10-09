@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 import { createDatabase, type Database } from '../src/db/client.ts';
 import { symbols, users } from '../src/db/schema.ts';
+import { seedAssets } from '../src/modules/market/assets.ts';
 import { MarketDataService } from '../src/modules/market/marketData.ts';
 import { ExchangeConfig } from '../src/modules/exchange/exchangeConfig.ts';
 import { createExchange, type Exchange } from '../src/modules/exchange/index.ts';
@@ -33,12 +34,14 @@ export interface TestEnv {
 
 export async function resetDb(database: Database): Promise<void> {
   await database.db.execute(sql`
-    TRUNCATE trades, orders, ledger_entries, balances, faucet_claims, sessions, verification_tokens,
-             audit_logs, reconciliation_runs, candles, symbols, users RESTART IDENTITY CASCADE`);
+    TRUNCATE trades, orders, order_lists, ledger_entries, balances, positions, portfolio_snapshots, price_alerts,
+             notifications, user_preferences, faucet_claims, sessions, verification_tokens,
+             audit_logs, reconciliation_runs, candles, symbols, assets, announcements, users RESTART IDENTITY CASCADE`);
   await database.db.execute(sql`
     UPDATE exchange_settings SET trading_halted = false, fee_rate = '0.001', faucet_asset = 'USDT',
       faucet_amount = '10000', faucet_cooldown_hours = 24, faucet_lifetime_cap = '100000', stale_threshold_ms = 10000`);
   await database.db.insert(symbols).values(TEST_SYMBOLS);
+  await seedAssets(database.db);
 }
 
 export async function createTestEnv(poolSize = 10): Promise<TestEnv> {
