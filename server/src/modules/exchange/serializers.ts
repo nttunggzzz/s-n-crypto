@@ -24,6 +24,16 @@ export function serializeOrder(o: OrderRow): Order {
     executedQty: toFixedStr(executed),
     cumulativeQuoteQty: toFixedStr(cum),
     avgPrice: executed.gt(0) ? toFixedStr(cum.div(executed)) : null,
+    triggerState: null,
+    triggerDirection: null,
+    triggeredAt: null,
+    trailingDeltaBips: null,
+    activationPrice: null,
+    trailingReferencePrice: null,
+    orderListId: null,
+    parentOrderId: null,
+    tpsl: null,
+    closeReason: null,
     createdAt: o.createdAt.toISOString(),
     updatedAt: o.updatedAt.toISOString(),
   };
@@ -41,6 +51,7 @@ export function serializeTrade(t: TradeRow): Trade {
     fee: fx(t.fee),
     feeAsset: t.feeAsset,
     liquidity: t.liquidity,
+    realizedPnl: null,
     createdAt: t.createdAt.toISOString(),
   };
 }

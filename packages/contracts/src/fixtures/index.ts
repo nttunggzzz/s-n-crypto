@@ -3,7 +3,30 @@
  * Never imported by the server; the UI must not load it on staging/production.
  * Prices here are made-up round numbers, not market data.
  */
-import type { Balances, Candle, CandleInterval, Depth, ExchangeInfo, FaucetStatus, LedgerEntry, MarketStatus, MarketTrade, Me, Order, SessionInfo, SymbolInfo, Ticker, Trade } from '../index.ts';
+import type {
+  Balances,
+  Candle,
+  CandleInterval,
+  Depth,
+  ExchangeInfo,
+  FaucetStatus,
+  LedgerEntry,
+  MarketStatus,
+  MarketTrade,
+  Me,
+  Notification,
+  Order,
+  OrderList,
+  Portfolio,
+  PortfolioHistory,
+  PortfolioRange,
+  Preferences,
+  PriceAlert,
+  SessionInfo,
+  SymbolInfo,
+  Ticker,
+  Trade,
+} from '../index.ts';
 
 const T0 = '2026-10-09T03:00:00.000Z';
 
@@ -149,12 +172,12 @@ export const fixtureMe: Me = {
 
 export const fixtureBalances: Balances = {
   items: [
-    { asset: 'BTC', available: '0.01211787', locked: '0.00000000', total: '0.01211787', valueUsdt: '969.42960000' },
-    { asset: 'ETH', available: '0.50000000', locked: '0.25000000', total: '0.75000000', valueUsdt: '1875.00000000' },
+    { asset: 'BTC', available: '0.00359391', locked: '0.01248000', total: '0.01607391', valueUsdt: '1285.91280000' },
+    { asset: 'ETH', available: '0.25000000', locked: '0.50000000', total: '0.75000000', valueUsdt: '1875.00000000' },
     { asset: 'LINK', available: '3.00000000', locked: '0.00000000', total: '3.00000000', valueUsdt: null },
-    { asset: 'USDT', available: '7155.57040000', locked: '500.00000000', total: '7655.57040000', valueUsdt: '7655.57040000' },
+    { asset: 'USDT', available: '6955.59040000', locked: '699.98000000', total: '7655.57040000', valueUsdt: '7655.57040000' },
   ],
-  totalValueUsdt: '10500.00000000',
+  totalValueUsdt: '10816.48320000',
   unpricedAssets: ['LINK'],
 };
 
@@ -168,8 +191,117 @@ export const fixtureFaucetStatus: FaucetStatus = {
   nextAvailableAt: '2026-10-10T03:00:00.000Z',
 };
 
+/** New Order fields (phase 2) for plain orders. */
+export const ORDER_DEFAULTS = {
+  triggerState: null,
+  triggerDirection: null,
+  triggeredAt: null,
+  trailingDeltaBips: null,
+  activationPrice: null,
+  trailingReferencePrice: null,
+  orderListId: null,
+  parentOrderId: null,
+  tpsl: null,
+  closeReason: null,
+} satisfies Partial<Order>;
+
+const ocoLegTp: Order = {
+  ...ORDER_DEFAULTS,
+  id: '103',
+  clientOrderId: 'tpsl-100-tp',
+  symbol: 'BTCUSDT',
+  side: 'SELL',
+  type: 'LIMIT',
+  timeInForce: 'GTC',
+  status: 'NEW',
+  price: '84000.00000000',
+  stopPrice: null,
+  quantity: '0.01248000',
+  quoteOrderQty: null,
+  executedQty: '0.00000000',
+  cumulativeQuoteQty: '0.00000000',
+  avgPrice: null,
+  orderListId: '7',
+  parentOrderId: '100',
+  createdAt: '2026-10-09T02:00:01.000Z',
+  updatedAt: '2026-10-09T02:00:01.000Z',
+};
+
+const ocoLegSl: Order = {
+  ...ocoLegTp,
+  id: '104',
+  clientOrderId: 'tpsl-100-sl',
+  type: 'STOP_MARKET',
+  timeInForce: null,
+  price: null,
+  stopPrice: '76000.00000000',
+  triggerState: 'WAITING',
+  triggerDirection: 'DOWN',
+};
+
+/** OCO created from the TP/SL of order 100. */
+export const fixtureOrderList: OrderList = {
+  id: '7',
+  clientListId: 'tpsl-100',
+  symbol: 'BTCUSDT',
+  side: 'SELL',
+  contingencyType: 'OCO',
+  listStatus: 'EXECUTING',
+  orders: [ocoLegTp, ocoLegSl],
+  parentOrderId: '100',
+  createdAt: '2026-10-09T02:00:01.000Z',
+  updatedAt: '2026-10-09T02:00:01.000Z',
+};
+
 export const fixtureOpenOrders: Order[] = [
+  ocoLegTp,
+  ocoLegSl,
   {
+    ...ORDER_DEFAULTS,
+    id: '106',
+    clientOrderId: 'web-106',
+    symbol: 'SOLUSDT',
+    side: 'BUY',
+    type: 'TRAILING_STOP_MARKET',
+    timeInForce: null,
+    status: 'NEW',
+    price: null,
+    stopPrice: '111.75500000',
+    quantity: null,
+    quoteOrderQty: '200.00000000',
+    executedQty: '0.00000000',
+    cumulativeQuoteQty: '0.00000000',
+    avgPrice: null,
+    triggerState: 'WAITING',
+    triggerDirection: 'UP',
+    trailingDeltaBips: 300,
+    trailingReferencePrice: '108.50000000',
+    createdAt: '2026-10-09T02:50:00.000Z',
+    updatedAt: '2026-10-09T02:55:00.000Z',
+  },
+  {
+    ...ORDER_DEFAULTS,
+    id: '105',
+    clientOrderId: 'web-105',
+    symbol: 'ETHUSDT',
+    side: 'SELL',
+    type: 'STOP_LIMIT',
+    timeInForce: 'GTC',
+    status: 'NEW',
+    price: '2290.00000000',
+    stopPrice: '2300.00000000',
+    quantity: '0.25000000',
+    quoteOrderQty: null,
+    executedQty: '0.00000000',
+    cumulativeQuoteQty: '0.00000000',
+    avgPrice: null,
+    triggerState: 'WAITING',
+    triggerDirection: 'DOWN',
+    createdAt: '2026-10-09T02:45:00.000Z',
+    updatedAt: '2026-10-09T02:45:00.000Z',
+  },
+  {
+    ...ORDER_DEFAULTS,
     id: '102',
     clientOrderId: 'web-102',
     symbol: 'ETHUSDT',
@@ -188,6 +320,7 @@ export const fixtureOpenOrders: Order[] = [
     updatedAt: '2026-10-09T02:40:00.000Z',
   },
   {
+    ...ORDER_DEFAULTS,
     id: '101',
     clientOrderId: 'web-101',
     symbol: 'BTCUSDT',
@@ -209,8 +342,18 @@ export const fixtureOpenOrders: Order[] = [
 
 export const fixtureOrderHistory: Order[] = [
   {
+    ...ORDER_DEFAULTS,
     id: '100',
     clientOrderId: 'web-100',
+    tpsl: {
+      takeProfitPrice: '84000.00000000',
+      stopLossPrice: '76000.00000000',
+      stopLossLimitPrice: null,
+      state: 'PLACED',
+      childOrderListId: '7',
+      childOrderIds: ['103', '104'],
+      skippedReason: null,
+    },
     symbol: 'BTCUSDT',
     side: 'BUY',
     type: 'MARKET',
@@ -227,6 +370,7 @@ export const fixtureOrderHistory: Order[] = [
     updatedAt: '2026-10-09T02:00:00.000Z',
   },
   {
+    ...ORDER_DEFAULTS,
     id: '99',
     clientOrderId: 'web-99',
     symbol: 'SOLUSDT',
@@ -234,6 +378,7 @@ export const fixtureOrderHistory: Order[] = [
     type: 'LIMIT',
     timeInForce: 'GTC',
     status: 'CANCELED',
+    closeReason: 'USER_CANCELED',
     price: '100.00000000',
     stopPrice: null,
     quantity: '1.00000000',
@@ -258,6 +403,7 @@ export const fixtureMyTrades: Trade[] = [
     fee: '0.00000359',
     feeAsset: 'BTC',
     liquidity: 'MAKER',
+    realizedPnl: null,
     createdAt: '2026-10-09T02:35:00.000Z',
   },
   {
@@ -271,6 +417,7 @@ export const fixtureMyTrades: Trade[] = [
     fee: '0.00001250',
     feeAsset: 'BTC',
     liquidity: 'TAKER',
+    realizedPnl: null,
     createdAt: '2026-10-09T02:00:00.000Z',
   },
 ];
@@ -286,3 +433,64 @@ export const fixtureSessions: SessionInfo[] = [
   { id: '00000000-0000-4000-8000-0000000000a1', current: true, userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)', ip: '203.0.113.10', createdAt: '2026-10-09T01:00:00.000Z', lastSeenAt: T0, expiresAt: '2026-11-08T01:00:00.000Z' },
   { id: '00000000-0000-4000-8000-0000000000a2', current: false, userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)', ip: '198.51.100.7', createdAt: '2026-10-05T08:00:00.000Z', lastSeenAt: '2026-10-08T22:00:00.000Z', expiresAt: '2026-11-04T08:00:00.000Z' },
 ];
+
+// ───────────────────────────── phase 2
+
+export const fixturePortfolio: Portfolio = {
+  positions: [
+    { asset: 'BTC', quantity: '0.01607391', avgCost: '79632.61583522', costBasis: '1280.00750000', marketPrice: '80000.00000000', marketValue: '1285.91280000', unrealizedPnl: '5.90530000', unrealizedPnlPercent: '0.46', realizedPnl: '0.00000000', allocationPercent: '11.89' },
+    { asset: 'ETH', quantity: '0.75000000', avgCost: '2380.50000000', costBasis: '1785.37500000', marketPrice: '2500.00000000', marketValue: '1875.00000000', unrealizedPnl: '89.62500000', unrealizedPnlPercent: '5.02', realizedPnl: '42.17000000', allocationPercent: '17.33' },
+    { asset: 'LINK', quantity: '3.00000000', avgCost: '12.10000000', costBasis: '36.30000000', marketPrice: null, marketValue: null, unrealizedPnl: null, unrealizedPnlPercent: null, realizedPnl: '0.00000000', allocationPercent: null },
+    { asset: 'USDT', quantity: '7655.57040000', avgCost: null, costBasis: null, marketPrice: '1.00000000', marketValue: '7655.57040000', unrealizedPnl: null, unrealizedPnlPercent: null, realizedPnl: '0.00000000', allocationPercent: '70.78' },
+  ],
+  totalValueUsdt: '10816.48320000',
+  totalUnrealizedPnl: '95.53030000',
+  totalRealizedPnl: '42.17000000',
+  totalFeesUsdt: '3.71000000',
+  unpricedAssets: ['LINK'],
+  asOf: T0,
+};
+
+const RANGE_STEPS: Record<PortfolioRange, { hours: number; stepHours: number }> = {
+  '24h': { hours: 24, stepHours: 1 },
+  '7d': { hours: 168, stepHours: 1 },
+  '30d': { hours: 720, stepHours: 24 },
+  '90d': { hours: 2160, stepHours: 24 },
+  all: { hours: 2160, stepHours: 24 },
+};
+
+/** Fake equity curve; one point is null to show the "incomplete snapshot" state. */
+export function fixturePortfolioHistory(range: PortfolioRange, end = Date.parse(T0)): PortfolioHistory {
+  const { hours, stepHours } = RANGE_STEPS[range];
+  const n = Math.floor(hours / stepHours) + 1;
+  const stepMs = stepHours * 3_600_000;
+  const last = Math.floor(end / stepMs) * stepMs;
+  return {
+    range,
+    points: Array.from({ length: n }, (_, i) => ({
+      time: new Date(last - (n - 1 - i) * stepMs).toISOString(),
+      totalValueUsdt: i === Math.floor(n / 3) ? null : (10000 + 600 * Math.sin(i / 7) + i * (800 / n)).toFixed(8),
+    })),
+  };
+}
+
+export const fixtureAlerts: PriceAlert[] = [
+  { id: '12', symbol: 'BTCUSDT', condition: 'ABOVE', targetPrice: '85000.00000000', note: 'Phá đỉnh tuần', status: 'ACTIVE', triggeredPrice: null, triggeredAt: null, createdAt: '2026-10-09T01:30:00.000Z' },
+  { id: '11', symbol: 'ETHUSDT', condition: 'BELOW', targetPrice: '2450.00000000', note: null, status: 'TRIGGERED', triggeredPrice: '2449.98000000', triggeredAt: '2026-10-08T20:10:00.000Z', createdAt: '2026-10-08T09:00:00.000Z' },
+];
+
+export const fixtureNotifications: Notification[] = [
+  { id: '34', type: 'ORDER_FILLED', orderId: '98', symbol: 'ETHUSDT', side: 'SELL', orderType: 'LIMIT', executedQty: '0.20000000', avgPrice: '2600.00000000', readAt: null, createdAt: '2026-10-09T02:58:00.000Z' },
+  { id: '33', type: 'TPSL_PLACED', orderId: '100', symbol: 'BTCUSDT', quantity: '0.01248000', orderListId: '7', childOrderIds: ['103', '104'], readAt: null, createdAt: '2026-10-09T02:00:01.000Z' },
+  { id: '32', type: 'STOP_TRIGGERED', orderId: '97', symbol: 'SOLUSDT', side: 'SELL', orderType: 'STOP_MARKET', stopPrice: '105.00000000', lastPrice: '104.99000000', readAt: '2026-10-08T21:00:00.000Z', createdAt: '2026-10-08T20:40:00.000Z' },
+  { id: '31', type: 'PRICE_ALERT', alertId: '11', symbol: 'ETHUSDT', condition: 'BELOW', targetPrice: '2450.00000000', lastPrice: '2449.98000000', readAt: '2026-10-08T21:00:00.000Z', createdAt: '2026-10-08T20:10:00.000Z' },
+];
+
+export const fixturePreferences: Preferences = {
+  favorites: ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'],
+  confirmOrders: true,
+  upColor: 'GREEN',
+  theme: 'system',
+  locale: 'vi',
+  defaultInterval: '15m',
+};

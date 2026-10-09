@@ -58,6 +58,10 @@ export class OrderService {
       throw new AppError('MARKET_DATA_STALE', `Market data for ${input.symbol} is not live; trading paused`);
     }
     const clientOrderId = input.clientOrderId ?? randomUUID().replace(/-/g, '');
+    // Phase 2 order types are declared in the contract; the engine lands in the next commit.
+    if ((input.type !== 'MARKET' && input.type !== 'LIMIT') || ('tpsl' in input && input.tpsl)) {
+      throw new AppError('VALIDATION_ERROR', `${input.type} / TP-SL is not available yet`);
+    }
     try {
       const result = input.type === 'MARKET' ? await this.placeMarket(userId, sym, input, clientOrderId) : await this.placeLimit(userId, sym, input, clientOrderId);
       if (isOpen(result.order.status)) this.index.add(result.order);

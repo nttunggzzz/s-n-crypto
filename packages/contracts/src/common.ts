@@ -19,9 +19,33 @@ export const AssetCode = z.string().regex(/^[A-Z0-9]{2,12}$/);
 export const OrderSide = z.enum(['BUY', 'SELL']);
 export type OrderSide = z.infer<typeof OrderSide>;
 
-/** STOP_MARKET / STOP_LIMIT arrive in phase 2. */
-export const OrderType = z.enum(['MARKET', 'LIMIT', 'STOP_MARKET', 'STOP_LIMIT']);
+export const OrderType = z.enum(['MARKET', 'LIMIT', 'STOP_MARKET', 'STOP_LIMIT', 'TRAILING_STOP_MARKET']);
 export type OrderType = z.infer<typeof OrderType>;
+
+/** Stop / trailing orders: WAITING until the trigger price is reached, then TRIGGERED. null for other types. */
+export const TriggerState = z.enum(['WAITING', 'TRIGGERED']);
+export type TriggerState = z.infer<typeof TriggerState>;
+
+/** UP: triggers when the last price rises to >= stopPrice. DOWN: when it falls to <= stopPrice. */
+export const TriggerDirection = z.enum(['UP', 'DOWN']);
+export type TriggerDirection = z.infer<typeof TriggerDirection>;
+
+/** Why an order ended CANCELED / EXPIRED. */
+export const CloseReason = z.enum([
+  'USER_CANCELED',
+  /** the other leg of its OCO filled or triggered */
+  'OCO_SIBLING',
+  /** IOC remainder, or a triggered stop-market that the visible book could not fully fill */
+  'IOC_REMAINDER',
+  'ADMIN',
+]);
+export type CloseReason = z.infer<typeof CloseReason>;
+
+/** Optional ISO time range filter for history and exports. */
+export const TimeRangeQuery = z.object({
+  from: z.iso.datetime().optional(),
+  to: z.iso.datetime().optional(),
+});
 
 export const TimeInForce = z.enum(['GTC', 'IOC']);
 export type TimeInForce = z.infer<typeof TimeInForce>;

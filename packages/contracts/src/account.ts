@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { IsoDateTime, Role } from './common.ts';
+import { CandleInterval, IsoDateTime, Role, SymbolCode } from './common.ts';
 
 /** The signed-in user. Auth itself (sign-up, sign-in, sessions…) lives under /api/v1/auth — see auth.ts. */
 export const Me = z.object({
@@ -13,3 +13,29 @@ export const Me = z.object({
   createdAt: IsoDateTime,
 });
 export type Me = z.infer<typeof Me>;
+
+/** Per-user UI preferences stored on the server (same on web and app). */
+export const Preferences = z.object({
+  /** Favorite pairs, in display order. */
+  favorites: z.array(SymbolCode).max(30),
+  /** Show a confirmation dialog before placing orders. */
+  confirmOrders: z.boolean(),
+  /** GREEN: green = up/buy (default) · RED: red = up (East-Asian convention). */
+  upColor: z.enum(['GREEN', 'RED']),
+  theme: z.enum(['system', 'light', 'dark']),
+  locale: z.enum(['vi', 'en']),
+  defaultInterval: CandleInterval,
+});
+export type Preferences = z.infer<typeof Preferences>;
+
+/** PATCH: only the fields sent are changed. */
+export const UpdatePreferencesRequest = Preferences.partial();
+
+export const DEFAULT_PREFERENCES: Preferences = {
+  favorites: [],
+  confirmOrders: true,
+  upColor: 'GREEN',
+  theme: 'system',
+  locale: 'vi',
+  defaultInterval: '15m',
+};

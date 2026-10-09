@@ -1,23 +1,30 @@
 /**
  * ⚠️ Mock realtime client (same interface as createRealtimeClient) — UI development only.
- * Emits fake ticker/depth/trades/candle updates around the mock prices, and `user` events
- * produced by the mock handlers (orders, trades, balances).
+ * Every tick moves the mock prices a little, runs the mock engine (stop triggers, OCO,
+ * TP/SL children, price alerts) and emits ticker/depth/trades/candle updates plus the
+ * `user` events produced by the mock handlers/engine.
  */
 import type { ChannelData } from '../realtime.ts';
 import type { RealtimeClient, RealtimeStatus } from '../realtimeClient.ts';
 import type { CandleInterval } from '../common.ts';
 import { fixtureCandles, fixtureDepth, fixtureMarketStatus, fixtureTicker, fmtPrice, MOCK_PAIRS } from '../fixtures/index.ts';
 import { mockStore } from './store.ts';
+import { mockProcessPrice } from './engine.ts';
 
 export interface MockRealtimeOptions {
   /** Tick interval for market updates (default 1000ms). */
   intervalMs?: number;
   /** Simulate a dropped connection every N ms (0 = never). */
   dropEveryMs?: number;
+  /** Max relative move per tick (default 0.001 = 0.1%). */
+  volatility?: number;
 }
+
+const FROZEN = new Set(['LINKUSDT', 'AVAXUSDT']); // UNAVAILABLE / STALE in the fixtures
 
 export function createMockRealtimeClient(opts: MockRealtimeOptions = {}): RealtimeClient {
   const intervalMs = opts.intervalMs ?? 1000;
+  const vol = opts.volatility ?? 0.001;
   const subs = new Map<string, Set<(d: unknown) => void>>();
   const statusCbs = new Set<(s: RealtimeStatus) => void>();
   const errorCbs = new Set<(e: { code: string; message: string; channel?: string }) => void>();
@@ -32,10 +39,15 @@ export function createMockRealtimeClient(opts: MockRealtimeOptions = {}): Realti
 
   const timer = setInterval(() => {
     if (status !== 'open') return;
+    for (const symbol of Object.keys(MOCK_PAIRS)) {
+      if (FROZEN.has(symbol)) continue;
+      const p = (mockStore.prices[symbol] = mockStore.prices[symbol]! * (1 + (Math.random() - 0.5) * 2 * vol));
+      mockProcessPrice(symbol, p);
+    }
     for (const channel of subs.keys()) {
       const [kind, symbol, interval] = channel.split(':');
-      if (!symbol || !MOCK_PAIRS[symbol] || symbol === 'LINKUSDT' || symbol === 'AVAXUSDT') continue;
-      const p = (mockStore.prices[symbol] = mockStore.prices[symbol]! * (1 + (Math.random() - 0.5) / 500));
+      if (!symbol || !MOCK_PAIRS[symbol] || FROZEN.has(symbol)) continue;
+      const p = mockStore.prices[symbol]!;
       if (kind === 'ticker') emit(channel, fixtureTicker(symbol, p));
       else if (kind === 'depth') emit(channel, fixtureDepth(symbol, p));
       else if (kind === 'trades') emit(channel, { id: tradeId++, price: fmtPrice(symbol, p), qty: (Math.random() / 10).toFixed(4), time: Date.now(), isBuyerMaker: Math.random() < 0.5 });

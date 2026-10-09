@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { Empty, IsoDateTime, PaginationQuery, SymbolCode, paginated } from './common.ts';
-import { Me } from './account.ts';
+import { Me, Preferences, UpdatePreferencesRequest } from './account.ts';
 import {
   AuthUserResponse,
   ChangePasswordRequest,
@@ -14,7 +14,10 @@ import {
 } from './auth.ts';
 import { Candles, CandlesQuery, Depth, ExchangeInfo, LimitQuery, MarketConnection, MarketStatus, MarketTrades, Ticker } from './market.ts';
 import { Balances, FaucetClaimResult, FaucetStatus, LedgerEntry, LedgerQuery } from './wallet.ts';
-import { CancelAllResponse, Order, PlaceOrderRequest, PlaceOrderResponse, SymbolFilterQuery, Trade } from './orders.ts';
+import { CancelAllResponse, HistoryQuery, Order, OrderList, PlaceOcoRequest, PlaceOrderRequest, PlaceOrderResponse, SymbolFilterQuery, Trade } from './orders.ts';
+import { Portfolio, PortfolioHistory, PortfolioRange } from './portfolio.ts';
+import { AlertListQuery, CreatePriceAlertRequest, PriceAlert } from './alerts.ts';
+import { MarkReadRequest, Notification, NotificationListQuery, UnreadCount } from './notifications.ts';
 
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 /** public: anyone · user: signed-in · verified: signed-in with verified email · admin: see phase 3 */
@@ -30,12 +33,17 @@ export interface EndpointDef {
   response: z.ZodType;
   /** HTTP status on success (default 200). */
   status?: number;
+  /** 'csv': the body is a CSV file (UTF-8 with BOM) and the client returns it as a string. */
+  format?: 'json' | 'csv';
 }
 
 const ep = <const T extends EndpointDef>(d: T): T => d;
 
 const SymbolParam = z.object({ symbol: SymbolCode });
 const OrderIdParam = z.object({ orderId: z.string().min(1) });
+const ListIdParam = z.object({ listId: z.string().min(1) });
+const AlertIdParam = z.object({ alertId: z.string().min(1) });
+const Csv = z.string();
 
 export const HealthResponse = z.object({
   status: z.literal('ok'),
@@ -60,6 +68,8 @@ export const endpoints = {
   listSessions: ep({ method: 'GET', path: '/api/v1/auth/sessions', auth: 'user', response: SessionList }),
   revokeSession: ep({ method: 'DELETE', path: '/api/v1/auth/sessions/:sessionId', auth: 'user', params: z.object({ sessionId: z.string() }), response: OkResponse }),
   me: ep({ method: 'GET', path: '/api/v1/me', auth: 'user', response: Me }),
+  getPreferences: ep({ method: 'GET', path: '/api/v1/me/preferences', auth: 'user', response: Preferences }),
+  updatePreferences: ep({ method: 'PATCH', path: '/api/v1/me/preferences', auth: 'user', body: UpdatePreferencesRequest, response: Preferences }),
 
   // ---- market data (P04)
   exchangeInfo: ep({ method: 'GET', path: '/api/v1/market/exchange-info', auth: 'public', response: ExchangeInfo }),
@@ -78,11 +88,37 @@ export const endpoints = {
   // ---- orders (P05)
   placeOrder: ep({ method: 'POST', path: '/api/v1/orders', auth: 'verified', body: PlaceOrderRequest, response: PlaceOrderResponse, status: 201 }),
   openOrders: ep({ method: 'GET', path: '/api/v1/orders/open', auth: 'user', query: SymbolFilterQuery, response: z.object({ items: z.array(Order) }) }),
-  orderHistory: ep({ method: 'GET', path: '/api/v1/orders/history', auth: 'user', query: SymbolFilterQuery.extend(PaginationQuery.shape), response: paginated(Order) }),
+  orderHistory: ep({ method: 'GET', path: '/api/v1/orders/history', auth: 'user', query: HistoryQuery.extend(PaginationQuery.shape), response: paginated(Order) }),
   getOrder: ep({ method: 'GET', path: '/api/v1/orders/:orderId', auth: 'user', params: OrderIdParam, response: Order }),
   cancelOrder: ep({ method: 'DELETE', path: '/api/v1/orders/:orderId', auth: 'user', params: OrderIdParam, response: Order }),
   cancelAllOrders: ep({ method: 'DELETE', path: '/api/v1/orders', auth: 'user', query: SymbolFilterQuery, response: CancelAllResponse }),
-  myTrades: ep({ method: 'GET', path: '/api/v1/trades', auth: 'user', query: SymbolFilterQuery.extend(PaginationQuery.shape), response: paginated(Trade) }),
+  myTrades: ep({ method: 'GET', path: '/api/v1/trades', auth: 'user', query: HistoryQuery.extend(PaginationQuery.shape), response: paginated(Trade) }),
+
+  // ---- OCO order lists (P05, phase 2)
+  placeOco: ep({ method: 'POST', path: '/api/v1/order-lists/oco', auth: 'verified', body: PlaceOcoRequest, response: OrderList, status: 201 }),
+  openOrderLists: ep({ method: 'GET', path: '/api/v1/order-lists/open', auth: 'user', query: SymbolFilterQuery, response: z.object({ items: z.array(OrderList) }) }),
+  getOrderList: ep({ method: 'GET', path: '/api/v1/order-lists/:listId', auth: 'user', params: ListIdParam, response: OrderList }),
+  /** Cancels both legs. Canceling one leg with cancelOrder also cancels the whole list. */
+  cancelOrderList: ep({ method: 'DELETE', path: '/api/v1/order-lists/:listId', auth: 'user', params: ListIdParam, response: OrderList }),
+
+  // ---- portfolio (P05, phase 2)
+  portfolio: ep({ method: 'GET', path: '/api/v1/portfolio', auth: 'user', response: Portfolio }),
+  portfolioHistory: ep({ method: 'GET', path: '/api/v1/portfolio/history', auth: 'user', query: z.object({ range: PortfolioRange.default('7d') }), response: PortfolioHistory }),
+
+  // ---- CSV exports (max 10,000 rows, newest first; times in UTC and GMT+7)
+  exportOrders: ep({ method: 'GET', path: '/api/v1/export/orders.csv', auth: 'user', query: HistoryQuery, response: Csv, format: 'csv' }),
+  exportTrades: ep({ method: 'GET', path: '/api/v1/export/trades.csv', auth: 'user', query: HistoryQuery, response: Csv, format: 'csv' }),
+  exportLedger: ep({ method: 'GET', path: '/api/v1/export/ledger.csv', auth: 'user', query: LedgerQuery, response: Csv, format: 'csv' }),
+
+  // ---- price alerts
+  listAlerts: ep({ method: 'GET', path: '/api/v1/alerts', auth: 'user', query: AlertListQuery, response: z.object({ items: z.array(PriceAlert) }) }),
+  createAlert: ep({ method: 'POST', path: '/api/v1/alerts', auth: 'user', body: CreatePriceAlertRequest, response: PriceAlert, status: 201 }),
+  deleteAlert: ep({ method: 'DELETE', path: '/api/v1/alerts/:alertId', auth: 'user', params: AlertIdParam, response: PriceAlert }),
+
+  // ---- in-app notifications
+  listNotifications: ep({ method: 'GET', path: '/api/v1/notifications', auth: 'user', query: NotificationListQuery.extend(PaginationQuery.shape), response: paginated(Notification) }),
+  unreadNotifications: ep({ method: 'GET', path: '/api/v1/notifications/unread-count', auth: 'user', response: UnreadCount }),
+  markNotificationsRead: ep({ method: 'POST', path: '/api/v1/notifications/read', auth: 'user', body: MarkReadRequest, response: UnreadCount }),
 } as const satisfies Record<string, EndpointDef>;
 
 export type Endpoints = typeof endpoints;

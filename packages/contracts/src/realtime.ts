@@ -1,7 +1,9 @@
 import { z } from 'zod';
 import { Candle, Depth, MarketStatus, MarketTrade, Ticker } from './market.ts';
 import { Balance } from './wallet.ts';
-import { Order, Trade } from './orders.ts';
+import { Order, OrderList, Trade } from './orders.ts';
+import { Notification } from './notifications.ts';
+import { PriceAlert } from './alerts.ts';
 
 /**
  * WebSocket: connect to `/ws` (same origin; the session cookie authenticates the `user` channel).
@@ -25,6 +27,11 @@ export const UserEvent = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('order'), order: Order }),
   z.object({ kind: z.literal('trade'), trade: Trade }),
   z.object({ kind: z.literal('balance'), balance: Balance }),
+  /** OCO state changed (a leg filled/triggered/canceled). */
+  z.object({ kind: z.literal('orderList'), orderList: OrderList }),
+  z.object({ kind: z.literal('notification'), notification: Notification }),
+  /** A price alert changed status (e.g. TRIGGERED). */
+  z.object({ kind: z.literal('alert'), alert: PriceAlert }),
 ]);
 export type UserEvent = z.infer<typeof UserEvent>;
 

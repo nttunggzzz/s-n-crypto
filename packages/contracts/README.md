@@ -74,3 +74,25 @@ Xem đủ mọi trạng thái màn hình bằng `setMockScenario(...)` từ `@ce
 - Phí ước tính trong form = `feeRate` × giá trị, ghi rõ "ước tính". Số thật lấy từ `fills[].fee`.
 - Tổng tài sản: dùng `totalValueUsdt`; nếu `unpricedAssets` không rỗng → ghi chú "chưa tính X (không có giá)".
 - Lỗi theo `code` (ví dụ `INSUFFICIENT_BALANCE`, `NOTIONAL_TOO_SMALL`, `FAUCET_COOLDOWN` có `details.nextAvailableAt`, `RATE_LIMITED` có `details.retryAfterSeconds`).
+
+## 5. Giai đoạn 2 — lệnh nâng cao, danh mục, cảnh báo, thông báo (v0.2.0)
+
+Xem [CHANGELOG.md](CHANGELOG.md). Tóm tắt cách dùng:
+
+| Tính năng | Gửi gì | Ghi chú hiển thị |
+|---|---|---|
+| Stop-Market | `type: 'STOP_MARKET', stopPrice` + SELL `quantity` / BUY `quoteOrderQty` | Đang chờ: `triggerState = 'WAITING'`, hướng `triggerDirection` (UP/DOWN). Stop nằm sai phía giá hiện tại → `INVALID_STOP_PRICE` |
+| Stop-Limit | `type: 'STOP_LIMIT', stopPrice, price, quantity` | Sau kích hoạt (`TRIGGERED`) thành lệnh Limit đang chờ |
+| Trailing stop | `type: 'TRAILING_STOP_MARKET', trailingDeltaBips` (10–2000; 100 = 1%), `activationPrice?` | `stopPrice` & `trailingReferencePrice` thay đổi theo giá (nhận qua sự kiện `order`) |
+| OCO | `placeOco({ body: { side, quantity, price, stopPrice, stopLimitPrice? } })` | SELL: `price > giá hiện tại > stopPrice`; BUY: ngược lại và bắt buộc `stopLimitPrice`. Hai lệnh có cùng `orderListId` — gom thành 1 dòng. Hủy 1 chân = hủy cả cặp |
+| TP/SL khi mua | thêm `tpsl: { takeProfitPrice?, stopLossPrice?, stopLossLimitPrice? }` vào MARKET/LIMIT **BUY** | `order.tpsl.state`: PENDING → PLACED (xem `childOrderListId`/`childOrderIds`) hoặc SKIPPED (`skippedReason`) |
+| Danh mục | `portfolio()` | Giá vốn, lãi/lỗ chưa chốt (null khi không có giá), đã chốt, phân bổ %. **Không tự tính** |
+| Biểu đồ tài sản | `portfolioHistory({ query: { range } })` | Điểm `null` = thời điểm thiếu giá → vẽ đứt đoạn, không nối bằng 0. Lịch sử bắt đầu từ khi server bắt đầu chụp số liệu |
+| Xuất CSV | `<a href={exportUrl('exportTrades', { symbol, from, to })} download>` | Tối đa 10.000 dòng |
+| Cảnh báo giá | `createAlert`, `listAlerts`, `deleteAlert` | Tối đa 50 cảnh báo ACTIVE (`LIMIT_EXCEEDED`). Đã chạm sẵn → `INVALID_PRICE` |
+| Thông báo | `listNotifications`, `unreadNotifications`, `markNotificationsRead` + sự kiện `user` `kind: 'notification'` | Dựng câu chữ từ `type` + các trường (i18n), không có text sẵn từ server |
+| Cài đặt | `getPreferences`, `updatePreferences` (PATCH) | Yêu thích, hộp xác nhận lệnh, màu tăng/giảm, giao diện, ngôn ngữ, khung nến mặc định |
+| Máy tính khối lượng | `positionSizeForRisk({ equity, riskPercent, entryPrice, stopPrice, stepSize, feeRate })` từ `@cex/core` | Gợi ý cho ô nhập; giới hạn theo số dư khả dụng |
+| Đường entry/TP/SL trên biểu đồ | Lấy từ `openOrders` (price/stopPrice) và `order.tpsl` | Chỉ vẽ, không tính |
+
+Mock: `setMockPrice('BTCUSDT', 75000)` đẩy giá để xem stop kích hoạt, OCO hủy chéo, TP/SL tạo lệnh con, cảnh báo nổ — kèm thông báo realtime.
