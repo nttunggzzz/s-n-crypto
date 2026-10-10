@@ -2,7 +2,7 @@ import { and, asc, count, desc, eq, inArray, sql } from 'drizzle-orm';
 import type { GridBot, GridPreview } from '@cex/contracts';
 import { ZERO, ceilToStep, dec, floorToStep, maxDec, minDec, toFixedStr, type Dec } from '@cex/core';
 import { gridBotCells, gridBots, notifications, OPEN_STATUSES, orders, trades } from '../../db/schema.ts';
-import type { Db } from '../../db/client.ts';
+import type { Db, Tx } from '../../db/client.ts';
 import { AppError } from '../../lib/errors.ts';
 import { logger } from '../../logger.ts';
 import type { Exchange } from '../exchange/index.ts';
@@ -11,7 +11,7 @@ import type { LoadedSymbol } from '../exchange/exchangeConfig.ts';
 import type { MarketDataService } from '../market/marketData.ts';
 import type { BotsEvents } from './events.ts';
 
-type BotRow = typeof gridBots.$inferSelect;
+export type BotRow = typeof gridBots.$inferSelect;
 type CellRow = typeof gridBotCells.$inferSelect;
 type OrderRow = typeof orders.$inferSelect;
 
@@ -206,6 +206,16 @@ export class GridService {
     });
   }
 
+  /** Admin stop (reason ADMIN): `audit` runs in the transaction that stops the bot (invariant 13). */
+  async adminStop(userId: string, botId: number, sellBase: boolean, audit: (tx: Tx, bot: BotRow) => Promise<unknown>): Promise<GridBot> {
+    const b = await this.own(userId, botId);
+    if (b.status !== 'RUNNING') throw new AppError('CONFLICT', 'The bot is not running');
+    return this.enqueue(botId, async () => {
+      if (!(await this.halt(botId, 'STOPPED', 'ADMIN', sellBase, audit))) throw new AppError('CONFLICT', 'The bot is not running');
+      return this.view(botId);
+    });
+  }
+
   async stop(userId: string, botId: number, sellBase: boolean): Promise<GridBot> {
     const b = await this.own(userId, botId);
     if (b.status !== 'RUNNING') throw new AppError('CONFLICT', 'The bot is not running');
@@ -215,14 +225,18 @@ export class GridService {
     });
   }
 
-  /** Stops a bot: no more placements, cancel its open orders, optionally sell what it holds. */
-  private async halt(botId: number, status: 'STOPPED' | 'ERROR', reason: string, sellBase = false): Promise<void> {
-    const [b] = await this.db
-      .update(gridBots)
-      .set({ status, stopReason: reason, stoppedAt: this.now(), updatedAt: this.now() })
-      .where(and(eq(gridBots.id, botId), inArray(gridBots.status, ['STARTING', 'RUNNING'])))
-      .returning();
-    if (!b) return;
+  /** Stops a bot: no more placements, cancel its open orders, optionally sell what it holds. false = it was not running. */
+  private async halt(botId: number, status: 'STOPPED' | 'ERROR', reason: string, sellBase = false, audit?: (tx: Tx, bot: BotRow) => Promise<unknown>): Promise<boolean> {
+    const b = await this.db.transaction(async (tx) => {
+      const [row] = await tx
+        .update(gridBots)
+        .set({ status, stopReason: reason, stoppedAt: this.now(), updatedAt: this.now() })
+        .where(and(eq(gridBots.id, botId), inArray(gridBots.status, ['STARTING', 'RUNNING'])))
+        .returning();
+      if (row && audit) await audit(tx, row);
+      return row;
+    });
+    if (!b) return false;
     const open = await this.db
       .select({ id: orders.id })
       .from(orders)
@@ -250,6 +264,7 @@ export class GridService {
       .returning();
     this.events.emit('notification', b.userId, row!);
     this.events.emit('gridBot', b.userId, await this.view(botId));
+    return true;
   }
 
   /** Market-sells the bot's base (never more than the wallet has free). Returns the base sold and the quote received. */
@@ -283,7 +298,7 @@ export class GridService {
     const [b] = await this.db.select().from(gridBots).where(eq(gridBots.id, botId));
     if (!b || b.status !== 'RUNNING') return;
     const sym = this.ex.config.findSymbol(b.symbol);
-    if (!sym) return this.halt(botId, 'ERROR', 'SYMBOL_REMOVED');
+    if (!sym) return void (await this.halt(botId, 'ERROR', 'SYMBOL_REMOVED'));
     const cells = await this.db.select().from(gridBotCells).where(eq(gridBotCells.botId, botId)).orderBy(asc(gridBotCells.idx));
     let changed = false;
     for (const cell of cells) {
@@ -295,7 +310,7 @@ export class GridService {
           changed = true;
         } else {
           // canceled / expired by someone else than the bot (admin, account reset…)
-          return this.halt(botId, 'ERROR', o.closeReason === 'ADMIN' ? 'ADMIN' : 'ORDER_CANCELED');
+          return void (await this.halt(botId, 'ERROR', o.closeReason === 'ADMIN' ? 'ADMIN' : 'ORDER_CANCELED'));
         }
       }
     }

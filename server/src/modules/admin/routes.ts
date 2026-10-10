@@ -18,6 +18,11 @@ export function registerAdminRoutes(router: Router, opts: RouteOptions, admin: A
   route(router, opts, 'adminGetUser', async ({ params }) => admin.getUser(params.userId));
   route(router, opts, 'adminUserOrders', async ({ params, query }) => admin.userOrders(params.userId, query.open === 'true', query.cursor, query.limit));
   route(router, opts, 'adminUserLedger', async ({ params, query }) => admin.userLedger(params.userId, query));
+  route(router, opts, 'adminUserFuturesPositions', async ({ params, query }) => admin.userFuturesPositions(params.userId, query.open === 'true', query.cursor, query.limit));
+  route(router, opts, 'adminUserBots', async ({ params }) => admin.userBots(params.userId));
+  route(router, opts, 'adminUserLoginHistory', async ({ params, query }) => admin.userLoginHistory(params.userId, query.cursor, query.limit));
+  route(router, opts, 'adminStopGridBot', async ({ auth, req, params, body }) => admin.stopGridBot(actor(auth, req), params.userId, params.botId, body.reason, body.sellBase));
+  route(router, opts, 'adminCancelDcaPlan', async ({ auth, req, params, body }) => admin.cancelDcaPlan(actor(auth, req), params.userId, params.planId, body.reason));
 
   route(router, opts, 'adminLockUser', async ({ auth, req, params, body }) => admin.setStatus(actor(auth, req), params.userId, 'locked', body.reason));
   route(router, opts, 'adminUnlockUser', async ({ auth, req, params, body }) => admin.setStatus(actor(auth, req), params.userId, 'active', body.reason));

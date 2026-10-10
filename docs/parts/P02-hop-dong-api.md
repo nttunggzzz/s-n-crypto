@@ -31,6 +31,7 @@ Một nguồn sự thật duy nhất cho mọi dữ liệu đi giữa backend v�
 - [x] Giai đoạn 1: auth, ví, thị trường, lệnh Market/Limit, realtime (29 endpoint + 6 kênh WS) — *chưa sinh OpenAPI*
 - [x] Giai đoạn 2: lệnh nâng cao, OCO, danh mục, lịch sử, cảnh báo giá, thông báo (v0.2.0 — xem `packages/contracts/CHANGELOG.md`)
 - [x] Giai đoạn 3: toàn bộ API admin (v0.3.0) + 2FA
+- [x] Admin cho 2.6 + Futures: v0.7.0 — tìm theo UID, Futures / bot / lịch sử đăng nhập của người dùng, dừng bot có nhật ký (5 endpoint, tổng 124)
 - [x] Giai đoạn 2.6: v0.6.0 — hồ sơ + bảo mật, phân tích lãi lỗ, DCA, bot lưới (16 endpoint, tổng 119; sự kiện `dcaPlan`/`gridBot`; mock đủ)
 - [x] Giai đoạn F: v0.5.0 — Futures mô phỏng (26 endpoint, tổng 103; kênh realtime `futures:*`; mock đủ)
 - [x] Giai đoạn 2.5: v0.4.0 — thông tin coin, sparkline, sổ lệnh sâu, `exchange:status`, thông báo của sàn (77 endpoint); mock kiểm tra đầu vào như server
