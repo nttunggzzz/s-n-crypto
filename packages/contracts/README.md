@@ -185,3 +185,23 @@ Mock: `setMockPrice('BTCUSDT', 75000)` đẩy giá để xem stop kích hoạt, 
 - **Chi tiết người dùng:** thẻ ví Futures (`detail.futures`) và số bot (`detail.bots`); tab Futures (`adminUserFuturesPositions`), Bot (`adminUserBots`), Đăng nhập (`adminUserLoginHistory`).
 - **Dừng bot / hủy kế hoạch:** chỉ hiện khi có quyền `bots.manage`. Hộp xác nhận có ô lý do (≥ 5 ký tự); dừng bot lưới có lựa chọn "bán coin bot đang giữ". Sau khi xong, nhật ký quản trị có dòng `GRID_BOT_STOP` / `DCA_PLAN_CANCEL`.
 
+## 11. Hàm tiện ích cho giao diện (v0.9.0)
+Dùng các hàm này thay vì tự viết (chi tiết và ví dụ trong `src/helpers.ts`):
+```ts
+import { createTickerStore, resolveFuturesSymbol, countdown, spotTradeBlock, TRADE_BLOCK_LABELS, createPager, saveTextFile } from '@cex/contracts';
+
+// giá: MỘT store cho cả app (tạo một lần, cạnh realtime client)
+const prices = createTickerStore(rt);                       // 'futures' → futures:tickers
+prices.seed((await api.tickers()).items);
+const useTicker = (s: string) => useSyncExternalStore((cb) => prices.subscribe(cb, s), () => prices.get(s));
+
+// /futures/PEPEUSDT → /futures/1000PEPEUSDT
+const sym = resolveFuturesSymbol(param, futuresInfo.symbols, exchangeInfo.symbols) ?? 'BTCUSDT';
+
+countdown(mark.nextFundingTime);                            // "03:59:12" | null → hiện "—"
+const block = spotTradeBlock(symbol, exchangeStatus, ticker); // null → cho đặt lệnh; khác → TRADE_BLOCK_LABELS[block]
+
+const pager = createPager((cursor) => api.orderHistory({ query: { symbol, cursor, limit: 50 } }));
+saveTextFile(await api.exportLedger({ query: {} }), 'so-cai.csv');
+```
+

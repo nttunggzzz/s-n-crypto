@@ -1,5 +1,15 @@
 # Changelog — @cex/contracts
 
+## 0.9.0 — 2026-10-10 (Hàm tiện ích cho giao diện)
+Chỉ thêm. Các hàm không phụ thuộc React, có test, cho những chỗ REVIEW-03 thấy giao diện tự viết và dễ sai.
+Hàm nào giữ trạng thái thì có `subscribe` + hàm đọc, dùng thẳng với `useSyncExternalStore`.
+- `createTickerStore(rt, 'spot' | 'futures')`: một kênh `tickers` / `futures:tickers` cho cả app; `get(symbol)`, `all()`, `subscribe(cb, symbol?)`, `seed(restItems)`.
+- `resolveFuturesSymbol(requested, contracts, spotPairs)` (PEPEUSDT → 1000PEPEUSDT), `spotSymbolFor(contract, …)`.
+- `countdown(nextFundingTime)` → `"HH:MM:SS"` | `null`.
+- `spotTradeBlock(symbol, exchangeStatus, ticker)`, `futuresTradeBlock(status, contract, mark)` → `'HALTED' | 'PAIR_DISABLED' | 'PRICE_STALE' | null`, nhãn `TRADE_BLOCK_LABELS`.
+- `createPager(fetchPage)`: "Xem thêm" theo `nextCursor` (chặn bấm 2 lần, `reset()` khi đổi bộ lọc).
+- `saveTextFile(text, filename)`: tải CSV từ `exportLedger` / `exportOrders` / `exportTrades`.
+
 ## 0.8.0 — 2026-10-10 (Realtime: một kênh cho giá mọi cặp)
 Sửa lỗi tích hợp tìm thấy khi đối chiếu giao diện ([REVIEW-03](../../docs/antigravity/REVIEW-03-doi-chieu-giao-dien-tinh-nang.md)):
 giao diện đăng ký 50 kênh `ticker:<SYMBOL>` cộng các kênh khác, vượt giới hạn 50 kênh mỗi kết nối, nên server từ chối 4–5 kênh và giá các cặp đó đứng im.
