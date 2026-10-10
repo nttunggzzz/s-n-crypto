@@ -13,7 +13,7 @@ export const BottomNav: React.FC<BottomNavProps> = ({ currentPath, onNavigate })
   const navItems = [
     { label: 'Thị trường', path: '/markets', icon: <BarChart2Icon size={20} /> },
     { label: 'Giao dịch', path: `/trade/${activeSymbol}`, icon: <TrendingUpIcon size={20} /> },
-    { label: 'Ví', path: '/wallet', icon: <WalletIcon size={20} /> },
+    { label: 'Tài sản', path: '/assets', icon: <WalletIcon size={20} /> },
     { label: 'Tài khoản', path: '/settings', icon: <UserIcon size={20} /> },
   ];
 

@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { useMarket } from '../context/MarketContext';
 import { Button, Badge, BrandLogo } from '@cex/ui';
 import { NotificationCenter } from './NotificationCenter.tsx';
+import { AvatarIcon } from './AvatarIcon.tsx';
 import { 
   Search, Bell, Moon, Globe, ChevronDown, 
   Wallet, History, CreditCard, Settings, Shield, LogOut, Copy, X, LayoutPanelLeft, User
@@ -29,8 +30,8 @@ export const Header: React.FC<HeaderProps> = ({ currentPath, onNavigate }) => {
 
   const copyUid = (e: React.MouseEvent) => {
     e.stopPropagation();
-    if (user?.id) {
-      navigator.clipboard.writeText(user.id);
+    if (user?.uid) {
+      navigator.clipboard.writeText(user.uid);
     }
   };
 
@@ -183,17 +184,17 @@ export const Header: React.FC<HeaderProps> = ({ currentPath, onNavigate }) => {
                 <div className="relative group h-full flex items-center ml-1">
                   <button 
                     onClick={() => onNavigate('/settings')}
-                    className="w-7 h-7 rounded-full bg-[var(--panel-2,#141416)] border border-[var(--line,#1d1e21)] flex items-center justify-center text-[var(--text,#f4f4f5)] text-[11px] font-bold"
+                    className="flex items-center cursor-pointer"
                   >
-                    {user?.email?.charAt(0).toUpperCase() || <User size={14} />}
+                    <AvatarIcon avatarId={user?.avatar} size={28} fallbackText={user?.name || user?.email || 'U'} />
                   </button>
                   
                   <div className="absolute top-full right-0 mt-0 w-64 py-1 bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)] rounded-[var(--radius-lg,10px)] shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
                     <div className="px-4 py-3 border-b border-[var(--line,#1d1e21)] flex flex-col gap-1">
-                      <div className="text-[13px] text-[var(--text,#f4f4f5)] font-medium truncate">{user?.email}</div>
+                      <div className="text-[13px] text-[var(--text,#f4f4f5)] font-medium truncate">{user?.name || user?.email}</div>
                       <div className="text-[11px] text-[var(--text-3,#63636b)] flex items-center gap-1.5 font-mono">
-                        UID: {user?.id?.slice(0,8) || 'unknown'}
-                        <button onClick={copyUid} className="hover:text-[var(--text,#f4f4f5)]">
+                        UID: {user?.uid || '—'}
+                        <button onClick={copyUid} className="hover:text-[var(--text,#f4f4f5)] cursor-pointer" title="Sao chép UID">
                           <Copy size={12} />
                         </button>
                       </div>

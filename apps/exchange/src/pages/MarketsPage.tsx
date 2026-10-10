@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useMarket } from '../context/MarketContext.tsx';
+import { useAuth } from '../context/AuthContext.tsx';
+import { getApiClient } from '../services/api.ts';
 import {
   Table,
   TableHeader,
@@ -27,9 +29,29 @@ export interface MarketsPageProps {
 
 export const MarketsPage: React.FC<MarketsPageProps> = ({ onNavigate }) => {
   const { symbols, tickers, isLoading, error, refreshMarketData, setActiveSymbol } = useMarket();
+  const { isAuthenticated } = useAuth();
+  const api = getApiClient();
+
   const [search, setSearch] = useState('');
   const [activeTab, setActiveTab] = useState<'favorites' | 'all' | 'new'>('all');
   const [favorites, setFavorites] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      api.getPreferences()
+        .then((pref) => {
+          if (Array.isArray(pref.favorites)) {
+            setFavorites(pref.favorites);
+          }
+        })
+        .catch(() => {});
+    } else {
+      try {
+        const stored = localStorage.getItem('cex_favorites');
+        if (stored) setFavorites(JSON.parse(stored));
+      } catch {}
+    }
+  }, [isAuthenticated, api]);
 
   const filteredSymbols = symbols.filter((s) => {
     const q = search.trim().toUpperCase();
@@ -48,9 +70,18 @@ export const MarketsPage: React.FC<MarketsPageProps> = ({ onNavigate }) => {
 
   const toggleFavorite = (e: React.MouseEvent, symbol: string) => {
     e.stopPropagation();
-    setFavorites(prev => 
-      prev.includes(symbol) ? prev.filter(s => s !== symbol) : [...prev, symbol]
-    );
+    setFavorites((prev) => {
+      const next = prev.includes(symbol)
+        ? prev.filter((s) => s !== symbol)
+        : [...prev, symbol].slice(0, 30);
+      
+      if (isAuthenticated) {
+        api.updatePreferences({ body: { favorites: next } }).catch(() => {});
+      } else {
+        localStorage.setItem('cex_favorites', JSON.stringify(next));
+      }
+      return next;
+    });
   };
 
   return (

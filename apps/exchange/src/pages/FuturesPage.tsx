@@ -9,6 +9,7 @@ import type {
   FundingEvent,
   FuturesTrade,
   FuturesSymbolInfo,
+  UserEvent,
 } from '@cex/contracts';
 import { ApiError } from '@cex/contracts';
 import { getApiClient } from '../services/api.ts';
@@ -208,17 +209,11 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
     let unsubUser: (() => void) | undefined;
     if (isAuthenticated) {
       unsubUser = realtimeClient.subscribe('user', (event: unknown) => {
-        const ev = event as {
-          kind: string;
-          account?: FuturesAccount;
-          position?: FuturesPosition;
-          order?: FuturesOrder;
-          notification?: any;
-        };
+        const ev = event as UserEvent;
 
-        if (ev.kind === 'futures:account' && ev.account) {
+        if (ev.kind === 'futuresAccount') {
           setAccount(ev.account);
-        } else if (ev.kind === 'futures:position' && ev.position) {
+        } else if (ev.kind === 'futuresPosition') {
           const p = ev.position;
           setPositions((prev) => {
             if (p.status === 'CLOSED') return prev.filter((item) => item.id !== p.id);
@@ -226,7 +221,7 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
             if (exists) return prev.map((item) => (item.id === p.id ? p : item));
             return [p, ...prev];
           });
-        } else if (ev.kind === 'futures:order' && ev.order) {
+        } else if (ev.kind === 'futuresOrder') {
           const ord = ev.order;
           if (ord.status === 'NEW' || ord.status === 'PARTIALLY_FILLED') {
             setOpenOrders((prev) => {
@@ -237,7 +232,7 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
           } else {
             setOpenOrders((prev) => prev.filter((o) => o.id !== ord.id));
           }
-        } else if (ev.kind === 'notification' && ev.notification) {
+        } else if (ev.kind === 'notification') {
           if (ev.notification.type === 'POSITION_LIQUIDATED') {
             toastError(
               `Vị thế ${ev.notification.side} ${ev.notification.quantity} ${ev.notification.symbol} đã bị thanh lý ở ${ev.notification.markPrice} — mất ${ev.notification.lostMargin} USDT ký quỹ!`
@@ -288,13 +283,15 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
   const calculatedQty = useMemo(() => {
     if (!quantity) return ZERO;
     try {
+      const step = currentSymbolInfo?.stepSize || '0.001';
       if (unitMode === 'coin') return dec(quantity);
       if (refPrice.gt(0)) {
-        return roundDown(dec(quantity).mul(currentLeverage).div(refPrice), 4);
+        const raw = dec(quantity).mul(currentLeverage).div(refPrice);
+        return floorToStep(raw, dec(step));
       }
     } catch {}
     return ZERO;
-  }, [quantity, unitMode, refPrice, currentLeverage]);
+  }, [quantity, unitMode, refPrice, currentLeverage, currentSymbolInfo]);
 
   const requiredMargin = useMemo(() => {
     if (calculatedQty.lte(0) || refPrice.lte(0)) return ZERO;
@@ -304,22 +301,24 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
     return ZERO;
   }, [calculatedQty, refPrice, currentLeverage]);
 
-  // Est Liquidation Price (assuming mmr = 0.005)
+  // Est Liquidation Price (using maintenanceMarginRate from symbol info)
   const estLiqLong = useMemo(() => {
     if (calculatedQty.lte(0) || refPrice.lte(0) || requiredMargin.lte(0)) return null;
     try {
-      return liquidationPrice('LONG', refPrice, calculatedQty, requiredMargin, dec('0.005'));
+      const mmr = currentSymbolInfo?.maintenanceMarginRate ? dec(currentSymbolInfo.maintenanceMarginRate) : dec('0.005');
+      return liquidationPrice('LONG', refPrice, calculatedQty, requiredMargin, mmr);
     } catch {}
     return null;
-  }, [refPrice, calculatedQty, requiredMargin]);
+  }, [refPrice, calculatedQty, requiredMargin, currentSymbolInfo]);
 
   const estLiqShort = useMemo(() => {
     if (calculatedQty.lte(0) || refPrice.lte(0) || requiredMargin.lte(0)) return null;
     try {
-      return liquidationPrice('SHORT', refPrice, calculatedQty, requiredMargin, dec('0.005'));
+      const mmr = currentSymbolInfo?.maintenanceMarginRate ? dec(currentSymbolInfo.maintenanceMarginRate) : dec('0.005');
+      return liquidationPrice('SHORT', refPrice, calculatedQty, requiredMargin, mmr);
     } catch {}
     return null;
-  }, [refPrice, calculatedQty, requiredMargin]);
+  }, [refPrice, calculatedQty, requiredMargin, currentSymbolInfo]);
 
   // Submit Order (Open Long / Open Short)
   const handlePlaceOrder = async (orderSide: 'BUY' | 'SELL') => {
@@ -542,12 +541,16 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
           <div className="flex flex-col xl:flex-row gap-1 h-[480px]">
             {/* Chart Area */}
             <div className="flex-1 min-w-0">
-              <CandlestickChart symbol={symbol} />
+              <CandlestickChart
+                symbol={symbol}
+                marketType="futures"
+                futuresPosition={currentPosition}
+              />
             </div>
 
             {/* Orderbook & Trades */}
             <div className="w-full xl:w-[280px] h-[480px]">
-              <Orderbook symbol={symbol} onSelectPrice={setPrice} />
+              <Orderbook symbol={symbol} marketType="futures" onSelectPrice={setPrice} />
             </div>
           </div>
 
@@ -901,8 +904,9 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
                 const val = Number(e.target.value);
                 setSliderValue(val);
                 if (account?.available && refPrice.gt(0)) {
+                  const step = currentSymbolInfo?.stepSize || '0.001';
                   const maxAffordable = dec(account.available).mul(currentLeverage).div(refPrice);
-                  const q = floorToStep(maxAffordable.mul(dec((val / 100).toString())), dec('0.0001'));
+                  const q = floorToStep(maxAffordable.mul(dec((val / 100).toString())), dec(step));
                   setQuantity(unitMode === 'coin' ? q.toString() : roundDown(q.mul(refPrice), 2).toString());
                 }
               }}

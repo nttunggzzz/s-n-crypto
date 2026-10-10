@@ -12,7 +12,7 @@ import {
   type UTCTimestamp,
   type IPriceLine,
 } from 'lightweight-charts';
-import type { Candle, CandleInterval, Order } from '@cex/contracts';
+import type { Candle, CandleInterval, Order, FuturesPosition } from '@cex/contracts';
 import { ASSET_TAG_LABELS } from '@cex/contracts';
 import { getApiClient } from '../../services/api.ts';
 import { useMarket } from '../../context/MarketContext.tsx';
@@ -21,13 +21,19 @@ import { Skeleton, formatDecimal } from '@cex/ui';
 
 export interface CandlestickChartProps {
   symbol: string;
+  marketType?: 'spot' | 'futures';
+  futuresPosition?: FuturesPosition | null;
 }
 
 const INTERVALS: CandleInterval[] = ['1m', '5m', '15m', '1h', '4h', '1d'];
 
 type ChartType = 'candles' | 'line' | 'area';
 
-export const CandlestickChart: React.FC<CandlestickChartProps> = ({ symbol }) => {
+export const CandlestickChart: React.FC<CandlestickChartProps> = ({
+  symbol,
+  marketType = 'spot',
+  futuresPosition,
+}) => {
   const [activeTab, setActiveTab] = useState<'chart' | 'info'>('chart');
   const [interval, setIntervalState] = useState<CandleInterval>('15m');
   const [chartType, setChartType] = useState<ChartType>('candles');
@@ -109,10 +115,15 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ symbol }) =>
     async function fetchCandles() {
       setLoading(true);
       try {
-        const res = await api.candles({
-          params: { symbol },
-          query: { interval, limit: 150 },
-        });
+        const res = marketType === 'futures'
+          ? await api.futuresCandles({
+              params: { symbol },
+              query: { interval, limit: 150 },
+            })
+          : await api.candles({
+              params: { symbol },
+              query: { interval, limit: 150 },
+            });
         if (active) {
           setCandles(res.items);
         }
@@ -127,7 +138,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ symbol }) =>
     return () => {
       active = false;
     };
-  }, [api, symbol, interval]);
+  }, [api, symbol, interval, marketType]);
 
   // Countdown timer for current candle close
   useEffect(() => {
@@ -309,6 +320,9 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ symbol }) =>
     if (mainSeries) {
       orderPriceLinesRef.current = [];
 
+      const tick = activeSymbolInfo?.tickSize || '0.01';
+      const priceDecimals = tick.includes('.') ? (tick.split('.')[1]?.length ?? 2) : 2;
+
       // 1. Avg Cost line from portfolio
       if (avgCost) {
         const costLine = mainSeries.createPriceLine({
@@ -317,12 +331,67 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ symbol }) =>
           lineWidth: 2,
           lineStyle: 1, // Dotted
           axisLabelVisible: true,
-          title: `Giá vốn ${formatDecimal(avgCost)}`,
+          title: `Giá vốn ${formatDecimal(avgCost, { decimals: priceDecimals })}`,
         });
         orderPriceLinesRef.current.push(costLine);
       }
 
-      // 2. Open orders lines
+      // 2. Futures Position lines
+      if (marketType === 'futures' && futuresPosition) {
+        // Entry Price (white solid)
+        if (futuresPosition.entryPrice) {
+          const entryLine = mainSeries.createPriceLine({
+            price: parseFloat(futuresPosition.entryPrice),
+            color: '#ffffff',
+            lineWidth: 1,
+            lineStyle: 0,
+            axisLabelVisible: true,
+            title: `Giá vào ${formatDecimal(futuresPosition.entryPrice, { decimals: priceDecimals })}`,
+          });
+          orderPriceLinesRef.current.push(entryLine);
+        }
+
+        // Liquidation Price (red dashed)
+        if (futuresPosition.liquidationPrice) {
+          const liqLine = mainSeries.createPriceLine({
+            price: parseFloat(futuresPosition.liquidationPrice),
+            color: '#f2475f',
+            lineWidth: 1,
+            lineStyle: 2,
+            axisLabelVisible: true,
+            title: `Giá thanh lý ${formatDecimal(futuresPosition.liquidationPrice, { decimals: priceDecimals })}`,
+          });
+          orderPriceLinesRef.current.push(liqLine);
+        }
+
+        // Take Profit (green)
+        if (futuresPosition.takeProfitPrice) {
+          const tpLine = mainSeries.createPriceLine({
+            price: parseFloat(futuresPosition.takeProfitPrice),
+            color: '#1fc27a',
+            lineWidth: 1,
+            lineStyle: 0,
+            axisLabelVisible: true,
+            title: `TP ${formatDecimal(futuresPosition.takeProfitPrice, { decimals: priceDecimals })}`,
+          });
+          orderPriceLinesRef.current.push(tpLine);
+        }
+
+        // Stop Loss (red)
+        if (futuresPosition.stopLossPrice) {
+          const slLine = mainSeries.createPriceLine({
+            price: parseFloat(futuresPosition.stopLossPrice),
+            color: '#f2475f',
+            lineWidth: 1,
+            lineStyle: 0,
+            axisLabelVisible: true,
+            title: `SL ${formatDecimal(futuresPosition.stopLossPrice, { decimals: priceDecimals })}`,
+          });
+          orderPriceLinesRef.current.push(slLine);
+        }
+      }
+
+      // 3. Open orders lines
       if (openOrders.length > 0) {
         openOrders.forEach((ord) => {
           // Limit Price
@@ -428,13 +497,13 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ symbol }) =>
       chart.remove();
       chartRef.current = null;
     };
-  }, [candles, chartType, showIndicators, openOrders, avgCost, activeTab]);
+  }, [candles, chartType, showIndicators, openOrders, avgCost, activeTab, futuresPosition, marketType]);
 
   // Realtime candle updates listener
   useEffect(() => {
     if (!realtimeClient) return;
 
-    const channel = `candles:${symbol}:${interval}`;
+    const channel = marketType === 'futures' ? `futures:candles:${symbol}:${interval}` : `candles:${symbol}:${interval}`;
     const unsub = realtimeClient.subscribe(channel, (event: unknown) => {
       const ev = event as { candle?: Candle };
       if (!ev.candle) return;
@@ -463,10 +532,26 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({ symbol }) =>
           color: parseFloat(c.close) >= parseFloat(c.open) ? 'rgba(31, 194, 122, 0.35)' : 'rgba(242, 71, 95, 0.35)',
         });
       }
+
+      // Update legend data if chart is active
+      const o = parseFloat(c.open);
+      const h = parseFloat(c.high);
+      const l = parseFloat(c.low);
+      const cl = parseFloat(c.close);
+      const chgPct = ((cl - o) / (o || 1)) * 100;
+      setLegendData({
+        open: o,
+        high: h,
+        low: l,
+        close: cl,
+        change: chgPct,
+        amplitude: ((h - l) / (l || 1)) * 100,
+        volume: parseFloat(c.volume),
+      });
     });
 
     return () => unsub();
-  }, [realtimeClient, symbol, interval]);
+  }, [realtimeClient, symbol, interval, marketType]);
 
   return (
     <div className="flex flex-col bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)] rounded-[var(--radius-lg,10px)] overflow-hidden h-[420px] select-none">

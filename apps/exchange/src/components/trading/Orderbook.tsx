@@ -7,6 +7,7 @@ import { PriceText, Skeleton, formatDecimal } from '@cex/ui';
 
 export interface OrderbookProps {
   symbol: string;
+  marketType?: 'spot' | 'futures';
   onSelectPrice: (price: string) => void;
 }
 
@@ -44,7 +45,7 @@ const groupOrderbook = (
   return result;
 };
 
-export const Orderbook: React.FC<OrderbookProps> = ({ symbol, onSelectPrice }) => {
+export const Orderbook: React.FC<OrderbookProps> = ({ symbol, marketType = 'spot', onSelectPrice }) => {
   const [depth, setDepth] = useState<Depth | null>(null);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'all' | 'buy' | 'sell'>('all');
@@ -58,9 +59,10 @@ export const Orderbook: React.FC<OrderbookProps> = ({ symbol, onSelectPrice }) =
     let active = true;
     let timer: number;
     async function fetchDepth() {
-      if (!activeSymbolInfo) return;
       try {
-        const res = await api.depth({ params: { symbol }, query: { limit: groupMode > 1 ? 200 : 20 } });
+        const res = marketType === 'futures'
+          ? await api.futuresDepth({ params: { symbol }, query: { limit: groupMode > 1 ? 200 : 20 } })
+          : await api.depth({ params: { symbol }, query: { limit: groupMode > 1 ? 200 : 20 } });
         if (active) setDepth(res);
       } catch {
         if (active && !depth) setDepth(null);
@@ -79,19 +81,20 @@ export const Orderbook: React.FC<OrderbookProps> = ({ symbol, onSelectPrice }) =
       active = false;
       window.clearInterval(timer);
     };
-  }, [api, symbol, groupMode, activeSymbolInfo]);
+  }, [api, symbol, groupMode, marketType]);
 
   useEffect(() => {
     if (!realtimeClient || groupMode > 1) return; // if grouping, we use polling for now
-    const unsub = realtimeClient.subscribe(`depth:${symbol}`, (data: Depth) => {
-      setDepth(data);
+    const channel = marketType === 'futures' ? `futures:depth:${symbol}` : `depth:${symbol}`;
+    const unsub = realtimeClient.subscribe(channel, (data: unknown) => {
+      setDepth(data as Depth);
     });
     return () => unsub();
-  }, [realtimeClient, symbol, groupMode]);
+  }, [realtimeClient, symbol, groupMode, marketType]);
 
   const { asksWithBars, bidsWithBars, ratioAsk = 50, ratioBid = 50 } = useMemo(() => {
-    if (!depth || !activeSymbolInfo) return { asksWithBars: [], bidsWithBars: [], ratioAsk: 50, ratioBid: 50 };
-    const tickSize = activeSymbolInfo.tickSize;
+    if (!depth) return { asksWithBars: [], bidsWithBars: [], ratioAsk: 50, ratioBid: 50 };
+    const tickSize = activeSymbolInfo?.tickSize || '0.01';
 
     const asksGrouped = groupOrderbook(depth.asks, tickSize, groupMode, true);
     const bidsGrouped = groupOrderbook(depth.bids, tickSize, groupMode, false);
@@ -186,7 +189,11 @@ export const Orderbook: React.FC<OrderbookProps> = ({ symbol, onSelectPrice }) =
               {asksWithBars.map((item, idx) => (
                 <div
                   key={`ask-${idx}`}
-                  onClick={() => onSelectPrice(item.price)}
+                  onClick={() => {
+                    const tick = activeSymbolInfo?.tickSize;
+                    const p = tick ? floorToStep(dec(item.price), dec(tick)).toString() : item.price;
+                    onSelectPrice(p);
+                  }}
                   className="relative grid grid-cols-2 px-3 py-0.5 cursor-pointer hover:bg-[var(--panel-2,#141416)] text-[11.5px]"
                   title={`Tổng ${formatDecimal(item.total.toString(), {decimals:4})} ${activeSymbolInfo?.baseAsset} | ~${formatDecimal((item.total * parseFloat(item.price)).toString(), {decimals:2})} USDT`}
                 >
@@ -221,7 +228,11 @@ export const Orderbook: React.FC<OrderbookProps> = ({ symbol, onSelectPrice }) =
               {bidsWithBars.map((item, idx) => (
                 <div
                   key={`bid-${idx}`}
-                  onClick={() => onSelectPrice(item.price)}
+                  onClick={() => {
+                    const tick = activeSymbolInfo?.tickSize;
+                    const p = tick ? floorToStep(dec(item.price), dec(tick)).toString() : item.price;
+                    onSelectPrice(p);
+                  }}
                   className="relative grid grid-cols-2 px-3 py-0.5 cursor-pointer hover:bg-[var(--panel-2,#141416)] text-[11.5px]"
                   title={`Tổng ${formatDecimal(item.total.toString(), {decimals:4})} ${activeSymbolInfo?.baseAsset} | ~${formatDecimal((item.total * parseFloat(item.price)).toString(), {decimals:2})} USDT`}
                 >

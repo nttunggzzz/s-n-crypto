@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import type { SessionInfo } from '@cex/contracts';
+import type { SessionInfo, AvatarId } from '@cex/contracts';
 import { ApiError } from '@cex/contracts';
 import { getApiClient } from '../services/api.ts';
 import { getErrorMessage } from '../services/errors.ts';
 import { useAuth } from '../context/AuthContext.tsx';
+import { AvatarIcon, AVATAR_LIST } from '../components/AvatarIcon.tsx';
 import {
   Card,
   Input,
@@ -19,18 +20,31 @@ import {
   EmptyState,
 } from '@cex/ui';
 
-import { User, Shield, Settings } from 'lucide-react';
+import { User, Shield, Settings, Copy, Check } from 'lucide-react';
 
 export interface SettingsPageProps {
   onNavigate: (path: string) => void;
 }
 
 export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate }) => {
-  const { user, isAuthenticated, logout } = useAuth();
+  const { user, isAuthenticated, logout, refreshUser } = useAuth();
   const { success, error: toastError } = useToast();
   const api = getApiClient();
 
   const [activeTab, setActiveTab] = useState<'profile' | 'security' | 'preferences'>('profile');
+
+  // Profile states
+  const [nameInput, setNameInput] = useState(user?.name || '');
+  const [updatingName, setUpdatingName] = useState(false);
+  const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
+  const [updatingAvatar, setUpdatingAvatar] = useState(false);
+  const [copiedUid, setCopiedUid] = useState(false);
+
+  useEffect(() => {
+    if (user?.name) {
+      setNameInput(user.name);
+    }
+  }, [user?.name]);
 
   // Change password states
   const [currentPassword, setCurrentPassword] = useState('');
@@ -224,38 +238,167 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate }) => {
           <div className="space-y-6 max-w-2xl">
             <h2 className="text-lg font-bold text-[var(--text,#f4f4f5)] mb-6 pb-2 border-b border-[var(--line,#1d1e21)]">Hồ sơ cá nhân</h2>
             
-            <div className="flex items-center gap-6 mb-8">
-              <div className="w-20 h-20 rounded-full bg-[var(--panel-2,#141416)] border border-[var(--line,#1d1e21)] flex items-center justify-center text-2xl font-bold text-[var(--text-2,#a1a1aa)]">
-                {user?.email?.charAt(0).toUpperCase()}
+            {/* Avatar & Display Name */}
+            <div className="flex flex-col sm:flex-row sm:items-center gap-6 mb-8 p-4 rounded-[var(--radius-lg,12px)] bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)]">
+              <div className="relative">
+                <AvatarIcon
+                  avatarId={user?.avatar}
+                  size={72}
+                  fallbackText={user?.name || user?.email || 'U'}
+                />
               </div>
-              <div className="flex flex-col gap-2">
-                <Button variant="secondary" size="sm">Đổi ảnh đại diện</Button>
-                <span className="text-[10px] text-[var(--text-3,#63636b)]">JPG, PNG, GIF tối đa 2MB</span>
+              <div className="flex flex-col gap-2 flex-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-base font-bold text-[var(--text,#f4f4f5)]">{user?.name || 'Chưa đặt tên'}</span>
+                  {user?.avatar && (
+                    <Badge variant="info" size="sm">
+                      {AVATAR_LIST.find((a) => a.id === user.avatar)?.name || user.avatar}
+                    </Badge>
+                  )}
+                </div>
+                <div className="flex items-center gap-3">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setAvatarPickerOpen(!avatarPickerOpen)}
+                  >
+                    {avatarPickerOpen ? 'Đóng bộ chọn' : 'Đổi ảnh đại diện'}
+                  </Button>
+                </div>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+            {/* Avatar Picker Grid */}
+            {avatarPickerOpen && (
+              <div className="p-4 rounded-[var(--radius-lg,12px)] bg-[var(--panel-2,#141416)] border border-[var(--line,#1d1e21)] space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-[var(--text-2,#a1a1aa)]">
+                    Chọn biểu tượng đại diện (12 nhân vật biểu trưng crypto)
+                  </span>
+                </div>
+                <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-3">
+                  {AVATAR_LIST.map((av) => {
+                    const isSelected = user?.avatar === av.id;
+                    return (
+                      <button
+                        key={av.id}
+                        type="button"
+                        disabled={updatingAvatar}
+                        onClick={async () => {
+                          setUpdatingAvatar(true);
+                          try {
+                            await api.updateProfile({ body: { avatar: av.id } });
+                            await refreshUser();
+                            success(`Đã đổi avatar thành "${av.name}"`);
+                            setAvatarPickerOpen(false);
+                          } catch {
+                            toastError('Không thể cập nhật ảnh đại diện.');
+                          } finally {
+                            setUpdatingAvatar(false);
+                          }
+                        }}
+                        className={`flex flex-col items-center gap-1.5 p-2 rounded-lg border transition-all cursor-pointer ${
+                          isSelected
+                            ? 'border-[var(--accent,#818cf8)] bg-[var(--accent,#818cf8)]/10 shadow-sm'
+                            : 'border-[var(--line,#1d1e21)] hover:border-[var(--text-3,#63636b)] hover:bg-[var(--panel,#0a0a0b)]'
+                        }`}
+                      >
+                        <AvatarIcon avatarId={av.id} size={44} />
+                        <span className="text-[11px] text-[var(--text-2,#a1a1aa)] font-medium text-center line-clamp-1">
+                          {av.name.split(' ')[0]}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Account Details Form */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 bg-[var(--panel,#0a0a0b)] p-5 rounded-[var(--radius-lg,12px)] border border-[var(--line,#1d1e21)]">
               <div>
                 <label className="block text-xs font-semibold text-[var(--text-2,#a1a1aa)] mb-1">Email đăng nhập</label>
-                <div className="text-sm font-medium text-[var(--text,#f4f4f5)]">{user?.email}</div>
+                <div className="text-sm font-medium text-[var(--text,#f4f4f5)] flex items-center gap-2">
+                  <span>{user?.email}</span>
+                  {user?.emailVerified && (
+                    <Badge variant="success" size="sm">Đã xác minh</Badge>
+                  )}
+                </div>
               </div>
               <div>
                 <label className="block text-xs font-semibold text-[var(--text-2,#a1a1aa)] mb-1">UID Tài khoản</label>
-                <div className="text-sm font-medium text-[var(--text-2,#a1a1aa)]">{user?.id}</div>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-mono font-bold text-[var(--text,#f4f4f5)]">{user?.uid || '—'}</span>
+                  {user?.uid && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        navigator.clipboard.writeText(user.uid);
+                        setCopiedUid(true);
+                        success('Đã sao chép UID!');
+                        setTimeout(() => setCopiedUid(false), 2000);
+                      }}
+                      className="p-1 rounded hover:bg-[var(--panel-2,#141416)] text-[var(--text-3,#63636b)] hover:text-white transition-colors"
+                      title="Sao chép UID"
+                    >
+                      {copiedUid ? <Check size={14} className="text-[var(--up,#1fc27a)]" /> : <Copy size={14} />}
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              {/* Display Name Edit */}
+              <div className="sm:col-span-2 pt-2 border-t border-[var(--line,#1d1e21)]">
+                <form
+                  onSubmit={async (e) => {
+                    e.preventDefault();
+                    if (!nameInput.trim()) return;
+                    setUpdatingName(true);
+                    try {
+                      await api.updateProfile({ body: { name: nameInput.trim() } });
+                      await refreshUser();
+                      success('Đã cập nhật tên hiển thị!');
+                    } catch {
+                      toastError('Không thể cập nhật tên hiển thị.');
+                    } finally {
+                      setUpdatingName(false);
+                    }
+                  }}
+                  className="flex flex-col sm:flex-row items-end gap-3"
+                >
+                  <div className="flex-1 w-full">
+                    <Input
+                      label="Tên hiển thị"
+                      value={nameInput}
+                      onChange={(e) => setNameInput(e.target.value)}
+                      placeholder="Nhập tên hiển thị..."
+                    />
+                  </div>
+                  <Button
+                    type="submit"
+                    variant="secondary"
+                    loading={updatingName}
+                    disabled={nameInput.trim() === user?.name}
+                    className="shrink-0"
+                  >
+                    Lưu tên
+                  </Button>
+                </form>
               </div>
             </div>
 
+            {/* Social / Telegram */}
             <div className="pt-6 border-t border-[var(--line,#1d1e21)]">
-              <h3 className="text-sm font-bold text-[var(--text,#f4f4f5)] mb-4">Liên kết mxh</h3>
+              <h3 className="text-sm font-bold text-[var(--text,#f4f4f5)] mb-4">Liên kết mạng xã hội</h3>
               <div className="flex items-center justify-between p-4 rounded-[var(--radius-lg,12px)] border border-[var(--line,#1d1e21)] bg-[var(--panel,#0a0a0b)]">
                 <div className="flex items-center gap-3">
                   <div className="w-8 h-8 bg-[#2AABEE]/20 text-[#2AABEE] rounded-full flex items-center justify-center font-bold">T</div>
                   <div>
                     <div className="text-sm font-semibold text-[var(--text,#f4f4f5)]">Telegram</div>
-                    <div className="text-xs text-[var(--text-3,#63636b)]">Chưa liên kết</div>
+                    <div className="text-xs text-[var(--text-3,#63636b)]">Nhận thông báo biến động và lệnh khớp qua Telegram</div>
                   </div>
                 </div>
-                <Button variant="outline" size="sm">Liên kết</Button>
+                <Badge variant="secondary" size="sm">Sắp có</Badge>
               </div>
             </div>
           </div>

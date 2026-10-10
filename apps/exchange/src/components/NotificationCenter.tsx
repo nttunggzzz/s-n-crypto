@@ -103,6 +103,55 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({ onNaviga
           desc: `Giá hiện tại ${notif.lastPrice} USDT đã ${notif.condition === 'ABOVE' ? 'vượt trên' : 'xuống dưới'} mức mục tiêu ${notif.targetPrice} USDT.`,
           link: `/trade/${notif.symbol}`,
         };
+      case 'FUTURES_ORDER_FILLED':
+        return {
+          icon: <CheckCircle size={16} className="text-[var(--up,#1fc27a)]" />,
+          title: `Khớp lệnh Futures ${notif.symbol}`,
+          desc: `Lệnh ${notif.side === 'BUY' ? 'Mua' : 'Bán'} đã khớp ${notif.executedQty} với giá TB ${notif.avgPrice} USDT.`,
+          link: `/futures/${notif.symbol}`,
+        };
+      case 'POSITION_TPSL':
+        return {
+          icon: <CheckCheck size={16} className="text-[var(--up,#1fc27a)]" />,
+          title: `TP/SL vị thế ${notif.symbol}`,
+          desc: `${notif.reason === 'TAKE_PROFIT' ? 'Chốt lời' : 'Cắt lỗ'} đã khớp ở ${notif.price}, lãi lỗ ${Number(notif.realizedPnl) >= 0 ? '+' : ''}${notif.realizedPnl} USDT.`,
+          link: `/futures/${notif.symbol}`,
+        };
+      case 'POSITION_LIQUIDATED':
+        return {
+          icon: <AlertCircle size={16} className="text-[var(--down,#f2475f)]" />,
+          title: `Thanh lý vị thế ${notif.symbol}`,
+          desc: `Vị thế ${notif.side} ${notif.quantity} ${notif.symbol} đã bị thanh lý ở ${notif.markPrice} — mất ${notif.lostMargin} USDT ký quỹ.`,
+          link: `/futures/${notif.symbol}`,
+        };
+      case 'NEW_DEVICE_LOGIN':
+        return {
+          icon: <AlertTriangle size={16} className="text-[var(--warn,#f5b544)]" />,
+          title: `Đăng nhập thiết bị mới`,
+          desc: `Đăng nhập từ thiết bị mới: ${notif.device || 'Trình duyệt'} (IP ${notif.ip || 'chưa rõ'}). Không phải bạn? Đổi mật khẩu ngay.`,
+          link: `/settings`,
+        };
+      case 'DCA_EXECUTED':
+        return {
+          icon: <CheckCircle size={16} className="text-[var(--up,#1fc27a)]" />,
+          title: `Mua định kỳ ${notif.symbol}`,
+          desc: `Mua định kỳ: đã mua ${notif.baseBought} giá ${notif.price} (${notif.quoteSpent} USDT).`,
+          link: `/bots?tab=dca`,
+        };
+      case 'DCA_SKIPPED':
+        return {
+          icon: <AlertCircle size={16} className="text-[var(--warn,#f5b544)]" />,
+          title: `Bỏ qua mua định kỳ ${notif.symbol}`,
+          desc: `Mua định kỳ ${notif.symbol} bị bỏ qua: ${notif.reason === 'INSUFFICIENT_BALANCE' ? 'Không đủ USDT' : notif.reason}.`,
+          link: `/bots?tab=dca`,
+        };
+      case 'GRID_BOT_STOPPED':
+        return {
+          icon: <AlertCircle size={16} className="text-[var(--accent,#818cf8)]" />,
+          title: `Bot lưới ${notif.symbol} đã dừng`,
+          desc: `Bot lưới ${notif.symbol} đã dừng (${notif.reason}), lãi lưới +${notif.gridProfit} USDT.`,
+          link: `/bots?tab=grid`,
+        };
       default:
         return {
           icon: <Bell size={16} className="text-[var(--text-3,#63636b)]" />,

@@ -510,8 +510,8 @@ export const VerifyEmailPage: React.FC<AuthPageProps> = ({ onNavigate }) => {
             <p className="text-xs text-[var(--color-text-secondary,#9ca3af)] mb-6">
               Tài khoản của bạn đã được kích hoạt đầy đủ quyền giao dịch và nạp tiền Faucet.
             </p>
-            <Button variant="primary" onClick={() => onNavigate('/wallet')}>
-              Đến trang Ví nạp tiền
+            <Button variant="primary" onClick={() => onNavigate('/assets')}>
+              Đến trang Tài sản & Ví
             </Button>
           </div>
         ) : (

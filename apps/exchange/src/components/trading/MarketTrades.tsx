@@ -6,9 +6,10 @@ import { Skeleton, formatDecimal } from '@cex/ui';
 
 export interface MarketTradesProps {
   symbol: string;
+  marketType?: 'spot' | 'futures';
 }
 
-export const MarketTrades: React.FC<MarketTradesProps> = ({ symbol }) => {
+export const MarketTrades: React.FC<MarketTradesProps> = ({ symbol, marketType = 'spot' }) => {
   const [trades, setTrades] = useState<MarketTrade[]>([]);
   const [loading, setLoading] = useState(true);
   const api = getApiClient();
@@ -19,7 +20,9 @@ export const MarketTrades: React.FC<MarketTradesProps> = ({ symbol }) => {
     async function fetchTrades() {
       setLoading(true);
       try {
-        const res = await api.marketTrades({ params: { symbol }, query: { limit: 25 } });
+        const res = marketType === 'futures'
+          ? await api.futuresMarketTrades({ params: { symbol }, query: { limit: 25 } })
+          : await api.marketTrades({ params: { symbol }, query: { limit: 25 } });
         if (active) setTrades(res.items);
       } catch {
         if (active) setTrades([]);
@@ -32,15 +35,17 @@ export const MarketTrades: React.FC<MarketTradesProps> = ({ symbol }) => {
     return () => {
       active = false;
     };
-  }, [api, symbol]);
+  }, [api, symbol, marketType]);
 
   useEffect(() => {
     if (!realtimeClient) return;
-    const unsub = realtimeClient.subscribe(`trades:${symbol}`, (newTrade: MarketTrade) => {
+    const channel = marketType === 'futures' ? `futures:trades:${symbol}` : `trades:${symbol}`;
+    const unsub = realtimeClient.subscribe(channel, (data: unknown) => {
+      const newTrade = data as MarketTrade;
       setTrades((prev) => [newTrade, ...prev.slice(0, 24)]);
     });
     return () => unsub();
-  }, [realtimeClient, symbol]);
+  }, [realtimeClient, symbol, marketType]);
 
   return (
     <div className="flex flex-col h-full bg-[var(--color-bg-surface,#111319)] border border-[var(--color-border-subtle,#1e212b)] rounded-[var(--radius-lg,12px)] overflow-hidden text-xs">

@@ -76,12 +76,31 @@ export const OrderForm: React.FC<OrderFormProps> = ({
   const [validationError, setValidationError] = useState<string | null>(null);
   const [sliderValue, setSliderValue] = useState<number>(0);
 
+  const formattedLastPrice = useMemo(() => {
+    if (!activeTicker?.lastPrice) return '0.00';
+    if (!activeSymbolInfo?.tickSize) return activeTicker.lastPrice;
+    try {
+      return floorToStep(dec(activeTicker.lastPrice), dec(activeSymbolInfo.tickSize)).toString();
+    } catch {
+      return activeTicker.lastPrice;
+    }
+  }, [activeTicker?.lastPrice, activeSymbolInfo?.tickSize]);
+
   // Sync selected price from Orderbook clicks
   useEffect(() => {
     if (selectedPrice && (orderType === 'LIMIT' || orderType === 'STOP_LIMIT' || orderType === 'OCO')) {
-      setPrice(selectedPrice);
+      if (activeSymbolInfo?.tickSize) {
+        try {
+          const snapped = floorToStep(dec(selectedPrice), dec(activeSymbolInfo.tickSize)).toString();
+          setPrice(snapped);
+        } catch {
+          setPrice(selectedPrice);
+        }
+      } else {
+        setPrice(selectedPrice);
+      }
     }
-  }, [selectedPrice, orderType]);
+  }, [selectedPrice, orderType, activeSymbolInfo]);
 
   // Load preferences
   useEffect(() => {
@@ -105,6 +124,12 @@ export const OrderForm: React.FC<OrderFormProps> = ({
 
   useEffect(() => {
     fetchBalances();
+    setPrice('');
+    setQuantity('');
+    setQuoteOrderQty('');
+    setStopPrice('');
+    setStopLimitPrice('');
+    setValidationError(null);
   }, [isAuthenticated, symbol]);
 
   // Listen to realtime balance updates & custom refresh event
@@ -175,7 +200,10 @@ export const OrderForm: React.FC<OrderFormProps> = ({
             return;
           }
           if (!price && activeTicker?.lastPrice) {
-            setPrice(activeTicker.lastPrice);
+            const snapped = activeSymbolInfo?.tickSize
+              ? floorToStep(dec(activeTicker.lastPrice), dec(activeSymbolInfo.tickSize)).toString()
+              : activeTicker.lastPrice;
+            setPrice(snapped);
           }
           const calculatedQty = floorToStep(availableUsdt.mul(pct).div(currentPrice), step);
           setQuantity(calculatedQty.toString());
@@ -704,7 +732,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({
               onValueChange={setStopPrice}
               maxDecimals={activeSymbolInfo?.pricePrecision}
               unit={quoteAsset}
-              placeholder={activeTicker?.lastPrice || '0.00'}
+              placeholder={formattedLastPrice}
             />
             {stopDirectionHint && (
               <div className="flex items-center gap-1 text-[10px] text-[var(--color-accent-primary,#818cf8)] mt-1 px-1">
@@ -754,7 +782,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({
             onValueChange={(v) => { setPrice(v); handleQuantityChange(quantity); }}
             maxDecimals={activeSymbolInfo?.pricePrecision}
             unit={quoteAsset}
-            placeholder={activeTicker?.lastPrice || '0.00'}
+            placeholder={formattedLastPrice}
           />
         )}
 

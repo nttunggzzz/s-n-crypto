@@ -60,7 +60,10 @@ const AppContent: React.FC = () => {
     if (currentPath === '/portfolio') {
       return <PortfolioPage onNavigate={navigate} />;
     }
-    if (currentPath === '/assets') {
+    if (currentPath === '/assets' || currentPath === '/wallet') {
+      if (currentPath === '/wallet') {
+        window.history.replaceState({}, '', '/assets');
+      }
       return <WalletPage onNavigate={navigate} />;
     }
     if (currentPath === '/settings') {

@@ -17,6 +17,7 @@ import {
   Tabs,
   formatDecimal,
 } from '@cex/ui';
+import { dec, floorToStep } from '@cex/core';
 
 export interface TradePageProps {
   symbolParam?: string;
@@ -50,7 +51,15 @@ export const TradePage: React.FC<TradePageProps> = ({ symbolParam, onNavigate })
   }, [symbolParam, activeSymbol, symbols, setActiveSymbol]);
 
   const handlePriceSelected = (price: string) => {
-    setSelectedPrice(price);
+    if (activeSymbolInfo?.tickSize) {
+      try {
+        setSelectedPrice(floorToStep(dec(price), dec(activeSymbolInfo.tickSize)).toString());
+      } catch {
+        setSelectedPrice(price);
+      }
+    } else {
+      setSelectedPrice(price);
+    }
   };
 
   const handleOrderPlaced = () => {

@@ -194,6 +194,7 @@ export const UserOrdersTabs: React.FC<UserOrdersTabsProps> = ({
       ADMIN: 'Admin hủy',
       HALTED: 'Sàn tạm dừng',
       INSUFFICIENT_BALANCE: 'Số dư không đủ',
+      BOT_STOPPED: 'Bot đã dừng',
     };
     return map[reason] || reason;
   };
@@ -203,6 +204,10 @@ export const UserOrdersTabs: React.FC<UserOrdersTabsProps> = ({
     const activeOcoIds = new Set(openOrderLists.map((l) => l.id));
     return openOrders.filter((o) => !o.orderListId || !activeOcoIds.has(o.orderListId));
   }, [openOrders, openOrderLists]);
+
+  const hasBotOrders = useMemo(() => {
+    return openOrders.some((o) => o.source && o.source !== 'USER');
+  }, [openOrders]);
 
   const totalOpenCount = standaloneOpenOrders.length + openOrderLists.length;
 
@@ -290,9 +295,9 @@ export const UserOrdersTabs: React.FC<UserOrdersTabsProps> = ({
           {activeTab === 'open' && totalOpenCount > 0 && (
             <button
               onClick={() => setCancelModalOpen(true)}
-              className="text-xs text-[var(--text-3,#63636b)] hover:text-[var(--text,#f4f4f5)] bg-[var(--panel-2,#141416)] border border-[var(--line,#1d1e21)] px-2 py-1 rounded"
+              className="text-xs text-[var(--text-3,#63636b)] hover:text-[var(--text,#f4f4f5)] bg-[var(--panel-2,#141416)] border border-[var(--line,#1d1e21)] px-2 py-1 rounded cursor-pointer"
             >
-              Hủy tất cả
+              {hasBotOrders ? 'Hủy tất cả (trừ lệnh bot)' : 'Hủy tất cả'}
             </button>
           )}
         </div>
@@ -395,9 +400,27 @@ export const UserOrdersTabs: React.FC<UserOrdersTabsProps> = ({
                       </TableCell>
                       <TableCell className="font-bold">{ord.symbol}</TableCell>
                       <TableCell>
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
                           <SideTag side={ord.side} />
                           <span className="text-xs text-[var(--color-text-secondary,#9ca3af)]">{ord.type}</span>
+                          {ord.source === 'GRID' && (
+                            <a
+                              href={ord.sourceId ? `/bots?grid=${ord.sourceId}` : '/bots'}
+                              className="inline-block"
+                              title="Xem chi tiết bot lưới"
+                            >
+                              <Badge variant="info" size="sm" className="bg-[var(--accent,#818cf8)]/15 text-[var(--accent,#818cf8)] cursor-pointer">
+                                Bot lưới
+                              </Badge>
+                            </a>
+                          )}
+                          {ord.source === 'DCA' && (
+                            <a href="/bots?tab=dca" className="inline-block" title="Xem kế hoạch mua định kỳ">
+                              <Badge variant="warning" size="sm">
+                                Mua định kỳ
+                              </Badge>
+                            </a>
+                          )}
                         </div>
                         {ord.tpsl && (
                           <div className="text-[10px] text-[var(--color-accent-primary,#818cf8)] mt-0.5">
@@ -437,15 +460,24 @@ export const UserOrdersTabs: React.FC<UserOrdersTabsProps> = ({
                         <OrderStatusBadge status={ord.status} />
                       </TableCell>
                       <TableCell className="text-right">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          loading={cancelingId === ord.id}
-                          onClick={() => handleCancelOrder(ord.id)}
-                          className="text-[var(--color-sell,#f87171)] hover:bg-[var(--color-sell-bg,rgba(248,113,113,0.12))] text-xs px-2 py-1"
-                        >
-                          Hủy
-                        </Button>
+                        {ord.source && ord.source !== 'USER' ? (
+                          <span
+                            className="text-xs text-[var(--text-3,#63636b)] cursor-help inline-flex items-center"
+                            title="Dừng bot để hủy lệnh này"
+                          >
+                            Dừng bot
+                          </span>
+                        ) : (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            loading={cancelingId === ord.id}
+                            onClick={() => handleCancelOrder(ord.id)}
+                            className="text-[var(--color-sell,#f87171)] hover:bg-[var(--color-sell-bg,rgba(248,113,113,0.12))] text-xs px-2 py-1"
+                          >
+                            Hủy
+                          </Button>
+                        )}
                       </TableCell>
                     </TableRow>
                   );
@@ -483,9 +515,19 @@ export const UserOrdersTabs: React.FC<UserOrdersTabsProps> = ({
                     </TableCell>
                     <TableCell className="font-bold">{ord.symbol}</TableCell>
                     <TableCell>
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         <SideTag side={ord.side} />
                         <span className="text-xs text-[var(--color-text-secondary,#9ca3af)]">{ord.type}</span>
+                        {ord.source === 'GRID' && (
+                          <Badge variant="info" size="sm" className="bg-[var(--accent,#818cf8)]/15 text-[var(--accent,#818cf8)]">
+                            Bot lưới
+                          </Badge>
+                        )}
+                        {ord.source === 'DCA' && (
+                          <Badge variant="warning" size="sm">
+                            Mua định kỳ
+                          </Badge>
+                        )}
                       </div>
                     </TableCell>
                     <TableCell className="text-right font-mono">
