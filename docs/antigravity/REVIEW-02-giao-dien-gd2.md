@@ -41,6 +41,20 @@ Ngày 2026-10-10 · Claude Code. Cách kiểm tra:
 
    Nội dung mẫu ở PROMPT-05 mục 5 và PROMPT-06 mục 7.
 
+## Futures đang làm dở (`FuturesPage.tsx`, chưa commit — xem lúc 14:17)
+Đã gọi gần đủ API của PROMPT-05 và dùng `initialMargin`, `liquidationPrice`, `pnl` của `@cex/core` — đúng hướng. Có 3 lỗi cần sửa trước khi commit:
+
+8. **Sai tên sự kiện realtime → vị thế/ví/lệnh Futures không bao giờ tự cập nhật.**
+   - Kênh `user` dùng `kind` là `futuresAccount`, `futuresPosition`, `futuresOrder`, `futuresTrade` (xem `packages/contracts/src/realtime.ts`).
+   - Code đang so `ev.kind === 'futures:account'`, `'futures:position'`, `'futures:order'` nên không bao giờ khớp.
+   - Typecheck không bắt được vì sự kiện được ép kiểu `unknown`. Hãy dùng kiểu `UserEvent` của hợp đồng để TypeScript kiểm tra giúp.
+9. **Biểu đồ và sổ lệnh đang lấy dữ liệu Spot.**
+   - `CandlestickChart` và `Orderbook` của Spot được dùng nguyên, nên hiện giá Spot. Giá Futures khác giá Spot, và `1000PEPEUSDT` không có bên Spot.
+   - Cho 2 component nhận nguồn dữ liệu: Futures dùng `futuresCandles` + kênh `futures:candles:<S>:<i>`, `futuresDepth` + `futures:depth:<S>`, `futuresMarketTrades` + `futures:trades:<S>` (PROMPT-04 mục 13 đã yêu cầu component "tái dùng được cho Futures").
+10. **Khối lượng khi nhập theo USDT làm tròn cứng 4 số lẻ.**
+    - Code hiện: `roundDown(..., 4)`.
+    - Phải là `floorToStep(qty, stepSize)` theo hợp đồng (BTC Futures bước 0.001). Nếu không, server từ chối lệnh vì khối lượng sai bước.
+
 ## Nên sửa (nhỏ)
 - **"Yêu thích" không bị chặn.** `preferences.favorites` (tối đa 30 cặp, theo thứ tự) có từ hợp đồng 0.2.0: đọc bằng `getPreferences`, lưu bằng `updatePreferences({ body: { favorites } })`. Đổi trạng thái BLOCKED trong `docs/reports/V2-OKX-STYLE-OVERHAUL.md` và lưu yêu thích lên server (localStorage chỉ dùng khi chưa đăng nhập).
 - Dòng O/H/L/C ở góc biểu đồ chỉ đổi khi rê chuột. Khi không rê chuột, cho nó theo nến mới nhất từ kênh `candles:*`.
@@ -48,5 +62,5 @@ Ngày 2026-10-10 · Claude Code. Cách kiểm tra:
 
 ## Thứ tự làm tiếp
 1. `git merge main` → `npm run verify` phải xanh.
-2. Sửa mục "Phải sửa" ở trên (1–7).
+2. Sửa mục "Phải sửa" (1–7) và phần Futures đang làm dở (8–10).
 3. Làm tiếp PROMPT-04 (giao diện v2), rồi PROMPT-05 (Futures — `FuturesPage.tsx` đang làm dở là đúng hướng), rồi PROMPT-06 (Bot, Phân tích lãi lỗ, Bảo mật).
