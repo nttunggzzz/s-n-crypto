@@ -1,5 +1,5 @@
 import { and, desc, eq, gt, isNull, lt, ne, or } from 'drizzle-orm';
-import { ROLE_PERMISSIONS, STAFF_ROLES, type Me, type SessionInfo } from '@cex/contracts';
+import { ROLE_PERMISSIONS, STAFF_ROLES, type AvatarId, type Me, type SessionInfo } from '@cex/contracts';
 import { recoveryCodes, sessions, users, verificationTokens } from '../../db/schema.ts';
 import type { Db } from '../../db/client.ts';
 import type { Config } from '../../config.ts';
@@ -9,6 +9,7 @@ import { DUMMY_HASH, hashPassword, newToken, sha256, verifyPassword } from './cr
 import type { EmailSender } from './email.ts';
 import { hashRecoveryCode, newRecoveryCodes, newTotpSecret, otpauthUrl, SecretBox, verifyTotp } from './totp.ts';
 import { writeAudit } from '../admin/audit.ts';
+import { SecurityService, withAntiPhishing } from './security.ts';
 
 export type UserRow = typeof users.$inferSelect;
 export type SessionRow = typeof sessions.$inferSelect;
@@ -33,8 +34,10 @@ export type LoginResult = { kind: 'session'; user: UserRow; token: string } | { 
 export function toMe(u: UserRow): Me {
   return {
     id: u.id,
+    uid: String(u.uid),
     email: u.email,
     name: u.name,
+    avatar: (u.avatar as AvatarId | null) ?? null,
     emailVerified: u.emailVerifiedAt !== null,
     role: u.role,
     signalsAccess: u.signalsAccess,
@@ -50,6 +53,8 @@ export class AuthService {
   /** 5 wrong second-factor codes per login challenge / per user. */
   private readonly codeFailures = new RateLimiter(5, 15 * 60_000);
   private readonly box: SecretBox;
+  /** Sign-in history + new-device alerts. */
+  readonly security: SecurityService;
 
   constructor(
     private readonly db: Db,
@@ -58,6 +63,7 @@ export class AuthService {
     private readonly now: () => Date = () => new Date(),
   ) {
     this.box = new SecretBox(config.dataKey);
+    this.security = new SecurityService(db, email, now);
   }
 
   // ───────── sessions
@@ -109,6 +115,7 @@ export class AuthService {
     }
     await this.sendVerification(user);
     const { token } = await this.createSession(user.id, client);
+    await this.security.record(user, client, 'OK'); // this browser becomes a known device
     return { user, token };
   }
 
@@ -124,15 +131,20 @@ export class AuthService {
       } catch {
         // the next attempt will be blocked by check()
       }
+      if (user && user.passwordHash && !user.isBot) await this.security.record(user, client, 'BAD_PASSWORD');
       throw new AppError('UNAUTHENTICATED', 'Invalid email or password');
     }
-    if (user.status === 'locked') throw new AppError('ACCOUNT_LOCKED', 'Account is locked');
+    if (user.status === 'locked') {
+      await this.security.record(user, client, 'LOCKED');
+      throw new AppError('ACCOUNT_LOCKED', 'Account is locked');
+    }
     this.loginFailures.reset(`email:${email}`);
     if (user.twoFactorEnabledAt) {
       const challengeToken = await this.issueToken(user.id, 'LOGIN_2FA', LOGIN_CHALLENGE_TTL_MS);
       return { kind: 'challenge', challengeToken, expiresAt: new Date(this.now().getTime() + LOGIN_CHALLENGE_TTL_MS) };
     }
     const { token } = await this.createSession(user.id, client);
+    await this.security.record(user, client, 'OK');
     return { kind: 'session', user, token };
   }
 
@@ -162,6 +174,7 @@ export class AuthService {
         // too many wrong codes: burn the challenge
         await this.db.update(verificationTokens).set({ usedAt: this.now() }).where(eq(verificationTokens.id, ch.id));
       }
+      await this.security.record(user, client, 'BAD_2FA');
       throw new AppError('INVALID_TWO_FACTOR_CODE', 'Invalid code');
     }
     const [used] = await this.db
@@ -172,6 +185,7 @@ export class AuthService {
     if (!used) throw new AppError('UNAUTHENTICATED', 'Login expired, sign in again');
     this.codeFailures.reset(key);
     const { token } = await this.createSession(user.id, client, true);
+    await this.security.record(user, client, 'OK');
     return { user, token };
   }
 
@@ -320,7 +334,7 @@ export class AuthService {
     await this.email.send({
       to: user.email,
       subject: 'Xác minh email — Sàn mô phỏng',
-      text: `Xin chào ${user.name},\n\nBấm vào liên kết để xác minh email (hết hạn sau 24 giờ):\n${this.config.APP_URL}/verify-email?token=${token}\n`,
+      text: withAntiPhishing(user, `Xin chào ${user.name},\n\nBấm vào liên kết để xác minh email (hết hạn sau 24 giờ):\n${this.config.APP_URL}/verify-email?token=${token}\n`),
     });
   }
 
@@ -338,14 +352,14 @@ export class AuthService {
     await this.email.send({
       to: user.email,
       subject: 'Đặt lại mật khẩu — Sàn mô phỏng',
-      text: `Bấm vào liên kết để đặt lại mật khẩu (hết hạn sau 1 giờ):\n${this.config.APP_URL}/reset-password?token=${token}\n\nNếu bạn không yêu cầu, hãy bỏ qua email này.`,
+      text: withAntiPhishing(user, `Bấm vào liên kết để đặt lại mật khẩu (hết hạn sau 1 giờ):\n${this.config.APP_URL}/reset-password?token=${token}\n\nNếu bạn không yêu cầu, hãy bỏ qua email này.`),
     });
   }
 
   /** Sets a new password and signs out every session. */
   async resetPassword(token: string, newPassword: string): Promise<void> {
     const userId = await this.consumeToken(token, 'PASSWORD_RESET');
-    await this.db.update(users).set({ passwordHash: await hashPassword(newPassword), updatedAt: this.now() }).where(eq(users.id, userId));
+    await this.db.update(users).set({ passwordHash: await hashPassword(newPassword), passwordChangedAt: this.now(), updatedAt: this.now() }).where(eq(users.id, userId));
     await this.db.update(sessions).set({ revokedAt: this.now() }).where(and(eq(sessions.userId, userId), isNull(sessions.revokedAt)));
   }
 
@@ -354,11 +368,44 @@ export class AuthService {
     if (!ctx.user.passwordHash || !(await verifyPassword(currentPassword, ctx.user.passwordHash))) {
       throw new AppError('VALIDATION_ERROR', 'Current password is incorrect', { field: 'currentPassword' });
     }
-    await this.db.update(users).set({ passwordHash: await hashPassword(newPassword), updatedAt: this.now() }).where(eq(users.id, ctx.user.id));
+    await this.db.update(users).set({ passwordHash: await hashPassword(newPassword), passwordChangedAt: this.now(), updatedAt: this.now() }).where(eq(users.id, ctx.user.id));
     await this.db
       .update(sessions)
       .set({ revokedAt: this.now() })
       .where(and(eq(sessions.userId, ctx.user.id), ne(sessions.id, ctx.session.id), isNull(sessions.revokedAt)));
+  }
+
+  // ───────── profile + anti-phishing code
+
+  async updateProfile(ctx: AuthContext, p: { name?: string; avatar?: AvatarId | null }): Promise<UserRow> {
+    const [u] = await this.db
+      .update(users)
+      .set({ ...(p.name !== undefined ? { name: p.name.trim() } : {}), ...(p.avatar !== undefined ? { avatar: p.avatar } : {}), updatedAt: this.now() })
+      .where(eq(users.id, ctx.user.id))
+      .returning();
+    return u!;
+  }
+
+  /** Needs the password, plus a 2FA code (TOTP or recovery) when 2FA is on. null removes the code. */
+  async setAntiPhishing(ctx: AuthContext, code: string | null, currentPassword: string, twoFactorCode?: string): Promise<UserRow> {
+    if (!ctx.user.passwordHash || !(await verifyPassword(currentPassword, ctx.user.passwordHash))) {
+      throw new AppError('VALIDATION_ERROR', 'Current password is incorrect', { field: 'currentPassword' });
+    }
+    if (ctx.user.twoFactorEnabledAt) {
+      const key = `user:${ctx.user.id}`;
+      this.codeFailures.check(key);
+      if (!twoFactorCode || !(await this.checkSecondFactor(ctx.user, twoFactorCode))) {
+        try {
+          this.codeFailures.consume(key);
+        } catch {
+          // blocked on the next try
+        }
+        throw new AppError('INVALID_TWO_FACTOR_CODE', 'Invalid code');
+      }
+      this.codeFailures.reset(key);
+    }
+    const [u] = await this.db.update(users).set({ antiPhishingCode: code, updatedAt: this.now() }).where(eq(users.id, ctx.user.id)).returning();
+    return u!;
   }
 
   async listSessions(ctx: AuthContext): Promise<SessionInfo[]> {

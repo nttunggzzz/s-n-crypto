@@ -17,16 +17,18 @@ server/
   drizzle/           migrations (0001 = trigger chặn UPDATE/DELETE trên ledger_entries, audit_logs)
   src/db             schema.ts (Postgres), client.ts
   src/lib            http.ts (route() theo hợp đồng), errors.ts, rateLimit.ts
-  src/modules/auth   phiên cookie/bearer, xác minh email, quên/đổi mật khẩu, 2FA TOTP (totp.ts, SecretBox)
+  src/modules/auth   phiên cookie/bearer, xác minh email, quên/đổi mật khẩu, 2FA TOTP (totp.ts, SecretBox),
+                     security.ts (lịch sử đăng nhập, cảnh báo thiết bị mới, mã chống lừa đảo trong email)
   src/modules/admin  adminService (mọi thao tác admin + audit), routes, audit.ts
   src/modules/market Binance WS (nhiều kết nối, SUBSCRIBE) / REST, MarketDataService (LIVE/STALE), nến,
                      assets (thông tin coin), depthSnapshots (sổ lệnh sâu), sparklines
   src/modules/content announcementService (thông báo của sàn)
+  src/modules/bots   Bot trên ví Spot: dcaService (mua định kỳ), gridService (bot lưới), index (routes)
   src/modules/futures Futures mô phỏng: config (hợp đồng), markData (mark/funding), service (ví, lệnh, vị thế,
                      thanh lý, funding), engine (chạy theo sự kiện thị trường), routes
   src/modules/exchange  ledger, orderService (mọi loại lệnh, OCO, TP/SL), matcher, openOrderIndex,
                         positions (giá vốn), portfolio, alerts, notifications, preferences, exports (CSV),
-                        faucet, reconciliation, routes
+                        faucet, reconciliation, pnlService (phân tích lãi lỗ), routes
   src/realtime       WebSocket /ws
   test/              globalSetup (PostgreSQL nhúng :5434), helpers
 legacy/              code AI Studio cũ
@@ -69,6 +71,11 @@ Quy tắc tích hợp backend ↔ hợp đồng ↔ UI: [docs/parts/README.md](d
     Thanh lý/TP/SL dùng **mark price LIVE**; mark STALE hoặc sàn dừng → không thanh lý, không khớp. Lỗ tối đa = ký quỹ vị thế (không bao giờ âm số dư).
     Funding idempotent theo (vị thế, mốc thời gian) — bảng `futures_funding_payments`.
 18. **Binance Futures WebSocket**: sổ lệnh ở `/public/stream`, còn lại (trade, markPrice, ticker, kline) ở `/market/stream`; `/stream` cũ chỉ còn sổ lệnh.
+19. **Bot (DCA, lưới)** đặt lệnh Spot thường qua `OrderService.placeOrder(userId, input, { source, sourceId })` — không có đường tắt số dư.
+    Người dùng không hủy được lệnh bot (chỉ dừng bot); admin/reset hủy được và bot tự dừng (`resetUser` của bot chạy **trước** hủy lệnh).
+    Mỗi kỳ DCA chạy **đúng 1 lần** (unique `(plan_id, scheduled_at)`), kỳ lỡ không chạy bù.
+    Lưới: `sync()` lặp lại an toàn, `clientOrderId` xác định `g{bot}-{ô}-{vòng}-{B|S}`, mỗi bot một hàng đợi; sổ sách bot (ô + `free_base`/`free_quote`) **khớp ví** — test `walletValue`.
+20. **Mọi email gửi người dùng** bọc `withAntiPhishing()` (auth/security.ts) để in mã chống lừa đảo.
 
 ## Khi thêm tính năng
 1. Hợp đồng (schema + endpoint + fixture + resolver mock — `createMockHandlers` bắt buộc có resolver cho mọi endpoint, thiếu sẽ lỗi typecheck).

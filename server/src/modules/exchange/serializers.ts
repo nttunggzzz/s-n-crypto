@@ -13,6 +13,8 @@ export function serializeOrder(o: OrderRow): Order {
   return {
     id: String(o.id),
     clientOrderId: o.clientOrderId,
+    source: o.source,
+    sourceId: idn(o.sourceId),
     symbol: o.symbol,
     side: o.side,
     type: o.type,

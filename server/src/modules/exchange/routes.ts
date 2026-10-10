@@ -192,6 +192,7 @@ export function registerExchangeRoutes(router: Router, opts: RouteOptions, db: D
 
   route(router, opts, 'portfolio', async ({ auth }) => ex.portfolio.get(auth.user.id));
   route(router, opts, 'portfolioHistory', async ({ auth, query }) => ex.portfolio.history(auth.user.id, query.range));
+  route(router, opts, 'pnlAnalysis', async ({ auth, query }) => ex.pnl.analyze(auth.user.id, query.range));
 
   // ───── CSV exports
 

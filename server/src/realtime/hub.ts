@@ -11,6 +11,7 @@ import { serializeNotification } from '../modules/exchange/notificationService.t
 import { serializeAlert } from '../modules/exchange/alertService.ts';
 import { makePriceOf } from '../modules/exchange/routes.ts';
 import type { Futures } from '../modules/futures/index.ts';
+import type { Bots } from '../modules/bots/index.ts';
 import { serializeFuturesOrder, serializeFuturesTrade, serializePosition } from '../modules/futures/serializers.ts';
 
 interface Client {
@@ -50,6 +51,7 @@ export class RealtimeHub {
     private readonly auth: AuthService,
     private readonly allowedOrigins: Set<string>,
     private readonly futures?: Futures,
+    private readonly bots?: Bots,
   ) {}
 
   attach(server: Server): void {
@@ -67,6 +69,7 @@ export class RealtimeHub {
     this.wireMarket();
     this.wireExchange();
     this.wireFutures();
+    this.wireBots();
     this.heartbeat = setInterval(() => {
       for (const c of this.clients) {
         if (!c.alive) {
@@ -244,6 +247,14 @@ export class RealtimeHub {
         .then((account) => this.toUser(userId, { kind: 'futuresAccount', account }))
         .catch((err) => logger.warn({ err }, 'futures account push failed'));
     });
+  }
+
+  private wireBots(): void {
+    const b = this.bots;
+    if (!b) return;
+    b.events.on('dcaPlan', (userId, plan) => this.toUser(userId, { kind: 'dcaPlan', plan }));
+    b.events.on('gridBot', (userId, bot) => this.toUser(userId, { kind: 'gridBot', bot }));
+    b.events.on('notification', (userId, n) => this.toUser(userId, { kind: 'notification', notification: serializeNotification(n) }));
   }
 
   private toUser(userId: string, data: unknown): void {

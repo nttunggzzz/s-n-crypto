@@ -46,6 +46,7 @@ Phần quan trọng nhất của dự án: số dư **luôn đúng tuyệt đố
 - [x] Giai đoạn 3: API admin
 - [ ] Giai đoạn 5: nhật ký & thống kê
 - [x] Giai đoạn F: Futures mô phỏng — ví riêng, ký quỹ cô lập, đòn bẩy ≤ 20×, thanh lý, funding, đối soát 2 ví
+- [x] Giai đoạn 2.6: bot lưới Spot, mua định kỳ (DCA), phân tích lãi lỗ; lệnh có `source` (USER/GRID/DCA), người dùng không hủy được lệnh bot
 
 ## Xong khi
 Test tự động bao phủ: số dư không bao giờ âm; tổng sổ cái = số dư; hủy đúng lúc khớp → chỉ một trong hai xảy ra; OCO một bên khớp → bên kia hủy; chạy lại cùng sự kiện giá 2 lần → không khớp 2 lần.

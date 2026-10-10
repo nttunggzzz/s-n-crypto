@@ -2,6 +2,7 @@ import type { Response, Router } from 'express';
 import type { Config } from '../../config.ts';
 import { clientIp, route, SESSION_COOKIE, type RouteOptions } from '../../lib/http.ts';
 import { RateLimiter } from '../../lib/rateLimit.ts';
+import { AppError } from '../../lib/errors.ts';
 import { verifyCaptcha } from './captcha.ts';
 import { toMe, type AuthService } from './authService.ts';
 
@@ -94,4 +95,12 @@ export function registerAuthRoutes(router: Router, opts: RouteOptions, auth: Aut
   });
 
   route(router, opts, 'me', async ({ auth: ctx }) => toMe(ctx.user));
+  route(router, opts, 'updateProfile', async ({ auth: ctx, body }) => toMe(await auth.updateProfile(ctx, body)));
+  route(router, opts, 'securityOverview', async ({ auth: ctx }) => auth.security.overview(ctx.user));
+  route(router, opts, 'setAntiPhishingCode', async ({ auth: ctx, body }) => auth.security.overview(await auth.setAntiPhishing(ctx, body.code, body.currentPassword, body.twoFactorCode)));
+  route(router, opts, 'loginHistory', async ({ auth: ctx, query }) => {
+    const cursor = query.cursor === undefined ? undefined : Number(query.cursor);
+    if (cursor !== undefined && (!Number.isSafeInteger(cursor) || cursor <= 0)) throw new AppError('VALIDATION_ERROR', 'Invalid cursor');
+    return auth.security.history(ctx.user.id, cursor, query.limit);
+  });
 }
