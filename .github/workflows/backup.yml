@@ -1,0 +1,73 @@
+# Nightly backup of the staging database + a RESTORE DRILL on every backup:
+#   1. pg_dump the database (secret STAGING_DATABASE_URL — Railway's public PostgreSQL URL)
+#   2. restore it into a fresh PostgreSQL and run `restore:check` (all migrations, ledger = balances,
+#      locked = open orders / futures margin) — a backup that does not restore fails the run
+#   3. encrypt with secret BACKUP_PASSPHRASE (AES-256, gpg) and keep it as a workflow artifact (30 days)
+# Restore by hand: download the artifact → gpg -d file.dump.gpg > file.dump → pg_restore -d <url> file.dump
+# (docs/deploy/railway.md). Failures alert by GitHub email; Telegram alerts come from the server itself.
+name: Backup database
+
+on:
+  schedule:
+    - cron: '0 19 * * *' # 02:00 GMT+7
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    services:
+      restore:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: restore
+          POSTGRES_INITDB_ARGS: --encoding=UTF8 --locale=C
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      SOURCE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+      RESTORE_URL: postgres://postgres:postgres@localhost:5432/restore
+    steps:
+      - name: secrets present
+        run: |
+          test -n "$SOURCE_URL" || { echo "::error::secret STAGING_DATABASE_URL is not set"; exit 1; }
+          test -n "${{ secrets.BACKUP_PASSPHRASE }}" || { echo "::error::secret BACKUP_PASSPHRASE is not set"; exit 1; }
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - name: PostgreSQL 17 client
+        run: |
+          sudo apt-get install -y postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y postgresql-client-17
+      - name: dump
+        run: |
+          STAMP=$(date -u +%Y%m%d-%H%M)
+          echo "STAMP=$STAMP" >> "$GITHUB_ENV"
+          /usr/lib/postgresql/17/bin/pg_dump --format=custom --no-owner --no-acl --dbname="$SOURCE_URL" --file=backup.dump
+          ls -lh backup.dump
+      - run: npm ci
+      - name: restore drill
+        run: |
+          /usr/lib/postgresql/17/bin/pg_restore --no-owner --no-acl --exit-on-error --dbname="$RESTORE_URL" backup.dump
+          DATABASE_URL="$RESTORE_URL" npm run restore:check -w @cex/server
+      - name: encrypt
+        env:
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
+        run: |
+          gpg --batch --yes --pinentry-mode loopback --passphrase "$BACKUP_PASSPHRASE" \
+              --symmetric --cipher-algo AES256 --output "cex-staging-$STAMP.dump.gpg" backup.dump
+          rm backup.dump
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cex-staging-${{ env.STAMP }}
+          path: cex-staging-*.dump.gpg
+          retention-days: 30
+          if-no-files-found: error

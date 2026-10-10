@@ -2,13 +2,13 @@ import { and, asc, count, desc, eq, inArray, lt, lte, ne } from 'drizzle-orm';
 import type { DcaPlan, DcaRun } from '@cex/contracts';
 import { ZERO, dec, toFixedStr } from '@cex/core';
 import { dcaPlans, dcaRuns, notifications } from '../../db/schema.ts';
-import type { Db } from '../../db/client.ts';
+import type { Db, Tx } from '../../db/client.ts';
 import { AppError } from '../../lib/errors.ts';
 import { logger } from '../../logger.ts';
 import type { Exchange } from '../exchange/index.ts';
 import type { BotsEvents } from './events.ts';
 
-type PlanRow = typeof dcaPlans.$inferSelect;
+export type PlanRow = typeof dcaPlans.$inferSelect;
 type RunRow = typeof dcaRuns.$inferSelect;
 export const MAX_ACTIVE_DCA_PLANS = 20;
 const GMT7 = 7 * 3_600_000;
@@ -158,6 +158,22 @@ export class DcaService {
     const cur = await this.own(userId, planId);
     const [p] = await this.db.update(dcaPlans).set({ status: 'CANCELED', nextRunAt: null, updatedAt: this.now() }).where(eq(dcaPlans.id, cur.id)).returning();
     return this.publish(p!);
+  }
+
+  /** Admin cancel: `audit` runs in the transaction that cancels the plan (invariant 13). */
+  async adminCancel(userId: string, planId: string, audit: (tx: Tx, plan: PlanRow) => Promise<unknown>): Promise<DcaPlan> {
+    const cur = await this.own(userId, planId);
+    const p = await this.db.transaction(async (tx) => {
+      const [row] = await tx
+        .update(dcaPlans)
+        .set({ status: 'CANCELED', nextRunAt: null, updatedAt: this.now() })
+        .where(and(eq(dcaPlans.id, cur.id), ne(dcaPlans.status, 'CANCELED')))
+        .returning();
+      if (!row) throw new AppError('CONFLICT', 'The plan is already canceled');
+      await audit(tx, cur);
+      return row;
+    });
+    return this.publish(p);
   }
 
   async runs(userId: string, planId: string, cursor: string | undefined, limit: number) {

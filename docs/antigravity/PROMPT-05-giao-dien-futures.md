@@ -2,6 +2,10 @@
 
 > Dán cho Antigravity **sau khi xong PROMPT-04**: "Chạy `git merge main`, rồi đọc và thực hiện toàn bộ file docs/antigravity/PROMPT-05-giao-dien-futures.md trong worktree D:\Claude\crypto-ui."
 
+> **Nghiệm thu (thêm 2026-10-10):** `npm run e2e` — test `e2e/tests/futures.spec.ts` (chuyển tiền → mở Long → TP/SL → đóng) phải xanh.
+> Gắn `data-testid` theo [TESTIDS.md](TESTIDS.md). Dùng hàm sẵn có trong `@cex/contracts` 0.9.0: `createTickerStore(rt, 'futures')`,
+> `resolveFuturesSymbol`, `countdown`, `futuresTradeBlock`, `createPager` (README hợp đồng mục 11).
+
 ## 0. Bối cảnh
 - **Backend Futures đã xong** (hợp đồng API 0.5.0). Đọc:
   - `packages/contracts/CHANGELOG.md` mục 0.5.0;

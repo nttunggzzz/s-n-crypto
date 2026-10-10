@@ -21,6 +21,10 @@ export const Permission = z.enum([
   'reconciliation.run',
   /** exchange announcements */
   'content.manage',
+  /** stop a user's grid bot / cancel a recurring buy */
+  'bots.manage',
+  /** create / revoke sign-up invite codes (closed staging) */
+  'users.invite',
 ]);
 export type Permission = z.infer<typeof Permission>;
 
@@ -36,6 +40,8 @@ const ADMIN: Permission[] = [
   'audit.read',
   'reconciliation.run',
   'content.manage',
+  'bots.manage',
+  'users.invite',
 ];
 
 export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {

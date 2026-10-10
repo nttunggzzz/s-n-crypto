@@ -140,7 +140,7 @@ function fill(o: FuturesOrder, qty: number, price: number, liquidity: 'MAKER' | 
   const rate = liquidity === 'MAKER' ? MAKER : TAKER;
   let pos = s.positions.find((p) => p.symbol === sym);
   let closeQty = pos && pos.side !== side ? Math.min(qty, pos.qty) : 0;
-  let openQty = o.reduceOnly ? 0 : qty - closeQty;
+  const openQty = o.reduceOnly ? 0 : qty - closeQty;
   if (o.reduceOnly) closeQty = Math.min(qty, pos?.qty ?? 0);
   let realized = 0;
   let fee = 0;

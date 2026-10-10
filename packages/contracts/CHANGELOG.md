@@ -1,5 +1,68 @@
 # Changelog — @cex/contracts
 
+## 0.10.0 — 2026-10-10 (Chạy kín: đăng ký bằng mã mời, cấu hình công khai)
+Chuẩn bị đưa staging lên cloud: chỉ người được mời mới đăng ký được. Thêm 4 endpoint, tổng 128.
+
+**Thêm**
+- `publicConfig` (`GET /api/v1/config`, công khai) → `{ registration: 'OPEN' | 'INVITE_ONLY', captchaSiteKey, emailVerificationRequired, marketFeed }`.
+  App đọc **một lần lúc khởi động** để:
+  - hiện ô mã mời khi `INVITE_ONLY`;
+  - hiện widget Cloudflare Turnstile khi có `captchaSiteKey`;
+  - hiện banner "GIÁ GIẢ LẬP" khi `marketFeed === 'sim'`.
+- `RegisterRequest.inviteCode` (tùy chọn; bắt buộc khi `INVITE_ONLY`). Trang đăng ký đọc `?invite=` trên URL để điền sẵn.
+  Mã nhập không phân biệt hoa thường, khoảng trắng hay dấu gạch.
+- Mã lỗi `INVALID_INVITE` (400), `details.reason`: `MISSING` | `UNKNOWN` | `EXPIRED` | `USED_UP` | `REVOKED`; `details.field = 'inviteCode'`.
+- Admin (quyền mới `users.invite` — admin, owner):
+  - `adminListInvites` (lọc `status`, phân trang);
+  - `adminCreateInvite` (`note`, `maxUses` 1–100, `expiresInDays` 1–90) → `{ invite, code, link }`. **Mã chỉ hiện một lần**; server chỉ lưu bản băm.
+  - `adminRevokeInvite` (`reason`).
+- `AuditAction` thêm `INVITE_CREATE`, `INVITE_REVOKE`; `AuditTargetType` thêm `INVITE`.
+- **Mock:** mặc định `OPEN`. `setMockRegistration('INVITE_ONLY', 'sim')` để xem trang đăng ký của server kín và banner giá giả lập; mã demo `DEMO-MOCK-2026`.
+
+## 0.9.0 — 2026-10-10 (Hàm tiện ích cho giao diện)
+Chỉ thêm. Các hàm không phụ thuộc React, có test, cho những chỗ REVIEW-03 thấy giao diện tự viết và dễ sai.
+Hàm nào giữ trạng thái thì có `subscribe` + hàm đọc, dùng thẳng với `useSyncExternalStore`.
+- `createTickerStore(rt, 'spot' | 'futures')`: một kênh `tickers` / `futures:tickers` cho cả app; `get(symbol)`, `all()`, `subscribe(cb, symbol?)`, `seed(restItems)`.
+- `resolveFuturesSymbol(requested, contracts, spotPairs)` (PEPEUSDT → 1000PEPEUSDT), `spotSymbolFor(contract, …)`.
+- `countdown(nextFundingTime)` → `"HH:MM:SS"` | `null`.
+- `spotTradeBlock(symbol, exchangeStatus, ticker)`, `futuresTradeBlock(status, contract, mark)` → `'HALTED' | 'PAIR_DISABLED' | 'PRICE_STALE' | null`, nhãn `TRADE_BLOCK_LABELS`.
+- `createPager(fetchPage)`: "Xem thêm" theo `nextCursor` (chặn bấm 2 lần, `reset()` khi đổi bộ lọc).
+- `saveTextFile(text, filename)`: tải CSV từ `exportLedger` / `exportOrders` / `exportTrades`.
+
+## 0.8.0 — 2026-10-10 (Realtime: một kênh cho giá mọi cặp)
+Sửa lỗi tích hợp tìm thấy khi đối chiếu giao diện ([REVIEW-03](../../docs/antigravity/REVIEW-03-doi-chieu-giao-dien-tinh-nang.md)):
+giao diện đăng ký 50 kênh `ticker:<SYMBOL>` cộng các kênh khác, vượt giới hạn 50 kênh mỗi kết nối, nên server từ chối 4–5 kênh và giá các cặp đó đứng im.
+
+**Thêm (chỉ thêm, không phá code đang chạy)**
+- Kênh `tickers` → `TickerBatch { items: Ticker[] }`: khi đăng ký nhận **giá mọi cặp**, sau đó tối đa 1 lần/giây chỉ các cặp vừa đổi.
+  Dùng cho danh sách thị trường, thanh tìm kiếm, header — thay cho 50 kênh `ticker:<SYMBOL>`.
+- Kênh `futures:tickers` → `FuturesTickerBatch` (mọi hợp đồng; cũng gửi khi mark/funding đổi).
+- `REALTIME_MAX_CHANNELS = 100` (trước là 50, không công bố): vượt → sự kiện `error` mã `RATE_LIMITED` kèm `channel`, kênh đó **không** được đăng ký.
+  Đăng ký lại kênh đang có không bị tính thêm. **Mock áp dụng cùng giới hạn** và hỗ trợ cả 2 kênh mới.
+- `RealtimeClient.reconnect()`: mở kết nối mới, **giữ nguyên các kênh đã đăng ký**. Server chỉ đọc cookie phiên lúc mở kết nối,
+  nên **UI phải gọi ngay sau khi đăng nhập (kể cả bước 2FA) và đăng xuất**. Nếu không, kênh `user` bị từ chối (`UNAUTHENTICATED`)
+  hoặc vẫn gắn với tài khoản cũ cho tới khi tải lại trang. Lỗi này làm lệnh, số dư và thông báo không cập nhật realtime sau khi đăng ký.
+
+**Bảo mật (server)**
+- Kết nối realtime mở lúc đang đăng nhập sẽ bị **đóng (mã 4401)** khi phiên đó kết thúc: đăng xuất, bị thu hồi, đặt lại mật khẩu,
+  tài khoản bị khóa, hết hạn. Server kiểm tra mỗi 30 giây. Client tự kết nối lại dưới dạng khách.
+
+## 0.7.0 — 2026-10-10 (Admin cho Giai đoạn 2.6 + Futures)
+Hỗ trợ khách hàng kiểu sàn lớn: tìm theo UID, xem Futures / bot / lịch sử đăng nhập của người dùng, dừng bot có ghi nhật ký.
+
+**Thay đổi nhỏ có thể ảnh hưởng UI**
+- `AdminUserSummary` thêm `uid`. `adminListUsers({ query: { q } })` nhận thêm **UID 8 số** (khớp chính xác).
+- `AdminUserDetail` thêm `futures` (`FuturesAccount`) và `bots: { runningGrid, activeDca }`.
+- `AuditAction` thêm `GRID_BOT_STOP`, `DCA_PLAN_CANCEL` (tổng 20). Quyền mới `bots.manage` (admin, owner).
+
+**Thêm (5 endpoint, tổng 124)**
+- `adminUserFuturesPositions` (`open` true/false, phân trang): vị thế Futures của người dùng, lãi lỗ theo mark hiện tại.
+- `adminUserBots`: mọi bot lưới + kế hoạch mua định kỳ (đang chạy lên đầu).
+- `adminStopGridBot` (`reason`, `sellBase`): dừng bot với lý do `ADMIN`; nhật ký ghi **trong cùng giao dịch** dừng bot; người dùng nhận thông báo `GRID_BOT_STOPPED`. Bot không chạy → `CONFLICT`.
+- `adminCancelDcaPlan` (`reason`): hủy kế hoạch; đã hủy rồi → `CONFLICT`.
+- `adminUserLoginHistory` (phân trang): lịch sử đăng nhập của người dùng.
+- **Mock:** đủ 5 endpoint. Mock đăng nhập bằng người dùng demo (UID 10000001), nên các màn admin này chỉ có dữ liệu với người dùng đó.
+
 ## 0.6.0 — 2026-10-10 (Giai đoạn 2.6: hồ sơ + bảo mật, phân tích lãi lỗ, mua định kỳ, bot lưới)
 Chỉ **thêm**, không phá code đang chạy.
 

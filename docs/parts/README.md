@@ -52,7 +52,11 @@ docs/           ← cả hai đọc; sửa tài liệu phần của mình
 1. **Claude** viết hợp đồng trong `packages/contracts`: schema request/response, mã lỗi, sự kiện realtime, **dữ liệu mẫu (fixtures)** và mock handler.
 2. **Antigravity** dựng giao diện dựa trên hợp đồng, chạy với mock (không cần backend).
 3. **Claude** làm backend; test hợp đồng đảm bảo response đúng schema.
-4. Tắt mock, chạy trên staging, test toàn luồng (E2E).
+4. Tắt mock, chạy `npm run e2e` (test trình duyệt trên backend thật, giá giả lập), sau đó chạy trên staging.
+   Mỗi bản review giao diện (`docs/antigravity/REVIEW-xx`) có test nghiệm thu trong `e2e/tests/reviewxx.spec.ts`: mục nào xong thì test đó xanh.
+   `npm run verify` còn chạy lint: code giao diện chỉ bị **cảnh báo** về các lỗi đã gặp (null hiện thành 0, tự `fetch`, `toFixed` cho tiền,
+   `Math.random`, `new WebSocket`), và in danh sách endpoint app chưa dùng (`npm run ui-coverage`).
+   Trước khi gộp nhánh UI vào `main`, Claude chạy `npm run ui-check -- ui/<nhánh> --e2e` (gộp thử trong thư mục tạm, không đụng worktree của Antigravity).
 5. Đánh dấu checklist trong file phần tương ứng và ROADMAP.
 
 Cần đổi hợp đồng? UI **không tự sửa** `packages/contracts` — ghi yêu cầu vào [contract-requests.md](contract-requests.md), Claude cập nhật.

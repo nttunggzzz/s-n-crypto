@@ -5,6 +5,7 @@ import type { Config } from './config.ts';
 import type { Db } from './db/client.ts';
 import { AppError } from './lib/errors.ts';
 import { errorHandler, readSessionToken, route, type RouteOptions } from './lib/http.ts';
+import { webApp } from './lib/webApp.ts';
 import type { AuthService } from './modules/auth/authService.ts';
 import { registerAuthRoutes } from './modules/auth/routes.ts';
 import type { MarketDataService } from './modules/market/marketData.ts';
@@ -35,6 +36,8 @@ export interface AppDeps {
   /** Recurring buys + grid bots (phase 2.6). */
   bots?: Bots;
   version?: string;
+  /** Production build of the exchange web app to serve at `/` (config WEB_DIST); none in dev. */
+  webDist?: string;
 }
 
 export function allowedOrigins(config: Config): Set<string> {
@@ -104,22 +107,29 @@ export function createApp(deps: AppDeps) {
     version: deps.version ?? 'dev',
     market: deps.market.connection,
   }));
+  route(router, opts, 'publicConfig', async () => ({
+    registration: config.REGISTRATION === 'invite' ? ('INVITE_ONLY' as const) : ('OPEN' as const),
+    captchaSiteKey: config.TURNSTILE_SITE_KEY || null,
+    emailVerificationRequired: config.REQUIRE_EMAIL_VERIFICATION,
+    marketFeed: config.MARKET_FEED,
+  }));
   registerAuthRoutes(router, opts, deps.auth, config);
   const exConfig = deps.exchange.config;
   registerMarketRoutes(router, opts, {
     market: deps.market,
     config: exConfig,
     candles: deps.candles,
-    depthSnapshots: deps.depthSnapshots ?? new DepthSnapshots(config.MARKET_FEED === 'binance' ? binanceDepthFetcher(config.BINANCE_REST_URL) : null),
+    depthSnapshots: deps.depthSnapshots ?? new DepthSnapshots(config.MARKET_FEED === 'binance' ? binanceDepthFetcher(config.BINANCE_REST_URL) : null), // sim/off: the 20 live levels only
     sparklines: new SparklineService(deps.candles, deps.market, () => exConfig.allSymbols().map((s) => s.row.symbol)),
   });
   const news = new AnnouncementService(deps.db);
   route(router, opts, 'announcements', async ({ query }) => ({ items: await news.listPublic(query.limit) }));
   registerExchangeRoutes(router, opts, deps.db, deps.exchange, deps.market, config.RATE_LIMIT_SCALE);
-  registerAdminRoutes(router, opts, new AdminService(deps.db, deps.exchange, deps.market, deps.futures, deps.bots), news, config.RATE_LIMIT_SCALE);
+  registerAdminRoutes(router, opts, new AdminService(deps.db, deps.exchange, deps.market, deps.futures, deps.bots), news, deps.auth.invites, config.RATE_LIMIT_SCALE);
   if (deps.futures) registerFuturesRoutes(router, opts, deps.db, deps.futures, deps.market, config.RATE_LIMIT_SCALE);
   if (deps.bots) registerBotRoutes(router, opts, deps.bots, config.RATE_LIMIT_SCALE);
   app.use(router);
+  if (deps.webDist) app.use(webApp(deps.webDist));
 
   app.use('/api', (_req: Request, _res: Response, next: NextFunction) => next(new AppError('NOT_FOUND', 'No such endpoint')));
   app.use(errorHandler);

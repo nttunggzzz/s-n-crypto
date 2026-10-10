@@ -1,3 +1,4 @@
+import { appendFileSync } from 'node:fs';
 import type { Config } from '../../config.ts';
 import { logger } from '../../logger.ts';
 
@@ -20,6 +21,14 @@ export class LogEmailSender implements EmailSender {
   }
 }
 
+/** End-to-end tests: one JSON line per email in a file the test runner reads. Refused in production by config. */
+export class FileEmailSender implements EmailSender {
+  constructor(private readonly path: string) {}
+  async send(msg: EmailMessage): Promise<void> {
+    appendFileSync(this.path, JSON.stringify({ at: new Date().toISOString(), ...msg }) + '\n');
+  }
+}
+
 export class ResendEmailSender implements EmailSender {
   constructor(
     private readonly apiKey: string,
@@ -37,5 +46,6 @@ export class ResendEmailSender implements EmailSender {
 
 export function createEmailSender(config: Config): EmailSender {
   if (config.EMAIL_TRANSPORT === 'resend') return new ResendEmailSender(config.RESEND_API_KEY, config.EMAIL_FROM);
+  if (config.EMAIL_TRANSPORT === 'file') return new FileEmailSender(config.EMAIL_OUTBOX);
   return new LogEmailSender();
 }

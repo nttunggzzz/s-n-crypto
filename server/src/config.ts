@@ -8,8 +8,11 @@ const Env = z.object({
   APP_URL: z.string().default('http://localhost:5173'),
   /** Comma separated extra origins allowed by CORS (admin / signals apps). */
   CORS_ORIGINS: z.string().default(''),
-  /** Disable to run the API without connecting to Binance (tests). */
-  MARKET_FEED: z.enum(['binance', 'off']).default('binance'),
+  /**
+   * binance = real prices · sim = synthetic prices on real pair rules (offline dev, end-to-end tests, CI;
+   * refused in production) · off = no market data (unit tests).
+   */
+  MARKET_FEED: z.enum(['binance', 'sim', 'off']).default('binance'),
   BINANCE_REST_URL: z.string().default('https://api.binance.com'),
   BINANCE_WS_URL: z.string().default('wss://stream.binance.com:9443'),
   /** Binance USDⓈ-M futures (simulated perpetuals). */
@@ -26,8 +29,13 @@ const Env = z.object({
     .transform((v) => v === 'true'),
   /** Cloudflare Turnstile secret; captcha is skipped when empty. */
   TURNSTILE_SECRET: z.string().default(''),
-  /** Email delivery: "log" prints links to the server log (dev only). */
-  EMAIL_TRANSPORT: z.enum(['log', 'resend']).default('log'),
+  /** Turnstile site key (public), handed to the apps by `publicConfig`; set together with the secret. */
+  TURNSTILE_SITE_KEY: z.string().default(''),
+  /** open = anyone can sign up · invite = an invite code is required (closed staging). Default: invite in production, open otherwise. */
+  REGISTRATION: z.enum(['open', 'invite']).optional(),
+  /** Email delivery: "log" prints links to the server log, "file" appends JSON lines to EMAIL_OUTBOX (dev / e2e only). */
+  EMAIL_TRANSPORT: z.enum(['log', 'file', 'resend']).default('log'),
+  EMAIL_OUTBOX: z.string().default('.email-outbox.jsonl'),
   RESEND_API_KEY: z.string().default(''),
   EMAIL_FROM: z.string().default('CEX Sim <no-reply@example.com>'),
   SESSION_TTL_DAYS: z.coerce.number().int().default(30),
@@ -38,23 +46,40 @@ const Env = z.object({
   /** Multiplies every per-IP/per-user rate limit (tests raise it; production keeps 1). */
   RATE_LIMIT_SCALE: z.coerce.number().int().min(1).default(1),
   LOG_LEVEL: z.string().default('info'),
+  /** Production build of apps/exchange to serve at `/` on this same origin (Docker sets it); empty = API only. */
+  WEB_DIST: z.string().default(''),
+  /** Operator alerts to Telegram (feed down, books out of balance, crash) — set both or neither; empty = log only. */
+  TELEGRAM_BOT_TOKEN: z.string().default(''),
+  TELEGRAM_CHAT_ID: z.string().default(''),
+  /** Name in front of every alert; default: Railway's environment name, else NODE_ENV. */
+  ALERT_ENV_NAME: z.string().default(''),
 });
 
-export type Config = z.infer<typeof Env> & { symbols: string[]; isProd: boolean; dataKey: string };
+export type Config = Omit<z.infer<typeof Env>, 'REGISTRATION'> & { symbols: string[]; isProd: boolean; dataKey: string; REGISTRATION: 'open' | 'invite' };
 
 /** Fixed key for development/tests only — never valid in production. */
 const DEV_DATA_KEY = Buffer.alloc(32, 'cex-dev-only-not-a-secret').toString('base64');
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const parsed = Env.parse(env);
-  if (parsed.NODE_ENV === 'production' && parsed.EMAIL_TRANSPORT === 'log') {
-    throw new Error('EMAIL_TRANSPORT=log is not allowed in production');
+  if (parsed.NODE_ENV === 'production' && parsed.EMAIL_TRANSPORT !== 'resend') {
+    throw new Error(`EMAIL_TRANSPORT=${parsed.EMAIL_TRANSPORT} is not allowed in production`);
+  }
+  if (parsed.NODE_ENV === 'production' && parsed.MARKET_FEED === 'sim') {
+    throw new Error('MARKET_FEED=sim (synthetic prices) is not allowed in production');
   }
   if (parsed.NODE_ENV === 'production' && !parsed.DATA_ENCRYPTION_KEY) {
     throw new Error('DATA_ENCRYPTION_KEY is required in production');
   }
+  if (Boolean(parsed.TELEGRAM_BOT_TOKEN) !== Boolean(parsed.TELEGRAM_CHAT_ID)) {
+    throw new Error('TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID go together (set both or neither)');
+  }
+  if (Boolean(parsed.TURNSTILE_SECRET) !== Boolean(parsed.TURNSTILE_SITE_KEY)) {
+    throw new Error('TURNSTILE_SECRET and TURNSTILE_SITE_KEY go together (set both or neither)');
+  }
   return {
     ...parsed,
+    REGISTRATION: parsed.REGISTRATION ?? (parsed.NODE_ENV === 'production' ? 'invite' : 'open'),
     symbols: parsed.SYMBOLS.split(',').map((s) => s.trim().toUpperCase()).filter(Boolean),
     isProd: parsed.NODE_ENV === 'production',
     dataKey: parsed.DATA_ENCRYPTION_KEY || DEV_DATA_KEY,

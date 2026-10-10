@@ -45,13 +45,13 @@ const checkCode = (code: unknown) => {
 };
 const recoveryCodes = () => Array.from({ length: 10 }, (_, i) => `${(1000 + i * 7).toString(36).padStart(4, 'x')}-${(5000 + i * 13).toString(36).padStart(4, 'y')}`);
 
-const findUser = (id: string): AdminUserSummary => {
+export const findUser = (id: string): AdminUserSummary => {
   const u = mockStore.adminUsers.find((x) => x.id === id);
   if (!u) throw new MockError('NOT_FOUND', 'User not found');
   return u;
 };
 
-function audit(e: Omit<AuditLogEntry, 'id' | 'actor' | 'ip' | 'createdAt'>): string {
+export function audit(e: Omit<AuditLogEntry, 'id' | 'actor' | 'ip' | 'createdAt'>): string {
   const id = nextId();
   const me = mockMe();
   mockStore.auditLogs.unshift({ ...e, id, actor: { id: me.id, email: me.email }, ip: '127.0.0.1', createdAt: now() });
@@ -107,7 +107,7 @@ export const adminResolvers: { [N in AdminEndpoint]: Resolver<N> } = {
     const role = query.get('role');
     const status = query.get('status');
     return {
-      items: mockStore.adminUsers.filter((u) => (!q || u.email.includes(q) || u.id === q) && (!role || u.role === role) && (!status || u.status === status)),
+      items: mockStore.adminUsers.filter((u) => (!q || u.email.includes(q) || u.id === q || u.uid === q) && (!role || u.role === role) && (!status || u.status === status)),
       nextCursor: null,
     };
   },

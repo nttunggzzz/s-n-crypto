@@ -2,6 +2,7 @@
 // and every web app in apps/* against the REAL server (mocks off). Ctrl+C stops everything.
 //   npm run dev                 → db + server + all apps
 //   npm run dev -- --no-apps    → db + server only
+//   npm run dev -- --sim        → synthetic prices on real pair rules (offline; no Binance needed)
 import net from 'node:net';
 import { run, workspaces } from './workspaces.mjs';
 
@@ -10,7 +11,8 @@ const track = (c) => children.push(c);
 const stop = () => {
   for (const c of children) {
     try {
-      process.platform === 'win32' ? run('taskkill', ['/pid', String(c.pid), '/T', '/F']) : c.kill('SIGINT');
+      if (process.platform === 'win32') run('taskkill', ['/pid', String(c.pid), '/T', '/F']);
+      else c.kill('SIGINT');
     } catch {
       // already gone
     }
@@ -37,7 +39,8 @@ const waitForPort = (port, timeoutMs = 60_000) =>
 
 void run('npm', ['run', 'db:start'], { prefix: '[db]     ', onSpawn: track });
 await waitForPort(5433);
-void run('npm', ['run', 'dev:server'], { prefix: '[server] ', onSpawn: track });
+const sim = process.argv.includes('--sim');
+void run('npm', ['run', 'dev:server'], { prefix: '[server] ', onSpawn: track, env: sim ? { MARKET_FEED: 'sim' } : {} });
 await waitForPort(8080);
 
 if (!process.argv.includes('--no-apps')) {
@@ -47,4 +50,4 @@ if (!process.argv.includes('--no-apps')) {
     void run('npm', ['run', 'dev', '-w', pkg.name], { prefix: `[${dir.split('/')[1]}] `.padEnd(9), env: { VITE_USE_MOCKS: 'false' }, onSpawn: track });
   }
 }
-process.stdout.write('[dev]    API http://localhost:8080 · WebSocket ws://localhost:8080/ws · Ctrl+C to stop\n');
+process.stdout.write(`[dev]    API http://localhost:8080 · WebSocket ws://localhost:8080/ws · prices: ${sim ? 'SYNTHETIC (--sim)' : 'Binance'} · Ctrl+C to stop\n`);

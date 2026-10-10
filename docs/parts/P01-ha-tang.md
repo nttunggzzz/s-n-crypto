@@ -21,12 +21,16 @@ Logic nghiệp vụ, giao diện.
 ## Checklist
 **Giai đoạn 0**
 - [x] Chuyển code cũ vào `legacy/`, viết lại `CLAUDE.md`
-- [x] Khung monorepo + typecheck/test (vitest + PostgreSQL nhúng) — *còn thiếu lint/format*
-- [ ] Railway staging + PostgreSQL + tự triển khai từ `main`
-- [ ] Khóa truy cập staging
-- [ ] CI GitHub Actions
-- [ ] Backup + thử khôi phục
-- [ ] Sentry + cảnh báo Telegram
+- [x] Khung monorepo + typecheck/test (vitest + PostgreSQL nhúng) + ESLint (`npm run lint`, nằm trong `verify`) — *chưa có format tự động*
+- [x] Test trình duyệt `npm run e2e` (Playwright trên hệ riêng: giá giả lập, email ra file, bản build production) — cổng nghiệm thu giao diện
+- [ ] Railway staging + PostgreSQL + tự triển khai từ `main` — *sẵn: `Dockerfile` (một image: API + /ws + app), `railway.json` (1 bản, health check); chờ tài khoản*
+- [x] Một bản duy nhất khi deploy chồng nhau: khóa PostgreSQL (advisory lock) + máy chủ "chờ" trả health (`server/src/ops/singleInstance.ts`)
+- [x] Khóa truy cập staging: chỉ đăng ký bằng mã mời (`REGISTRATION=invite`), mã đầu tiên tạo bằng `npm run admin:invite`
+- [ ] CI GitHub Actions — *sẵn `.github/workflows/ci.yml` (verify, e2e giá giả lập, build + chạy thử image); chờ repo GitHub*
+- [ ] Backup + thử khôi phục — *sẵn `.github/workflows/backup.yml`: pg_dump hằng đêm → khôi phục vào DB mới → `restore:check` (đối soát) → mã hóa AES-256; chờ secrets*
+- [x] Cảnh báo Telegram (`server/src/ops/alerts.ts`): khởi động, giá gián đoạn > 2 phút + khi chạy lại, đối soát lệch, crash — *chờ bot token*
+- [ ] Sentry (theo dõi lỗi chi tiết) — *chưa làm; log JSON + Telegram trước*
+- [x] Hướng dẫn triển khai từng bước: [docs/deploy/railway.md](../deploy/railway.md)
 
 **Giai đoạn 7**
 - [ ] Kiểm tra chịu tải (số kết nối realtime, số lệnh/giây)

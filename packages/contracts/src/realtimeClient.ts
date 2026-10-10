@@ -7,6 +7,12 @@ export interface RealtimeClient {
   onStatus(cb: (status: RealtimeStatus) => void): () => void;
   /** Server-side errors, e.g. subscribing to `user` while signed out. */
   onError(cb: (err: { code: string; message: string; channel?: string }) => void): () => void;
+  /**
+   * Opens a new connection, keeping every subscription. The server reads the session cookie only when
+   * the connection opens, so call this right after sign-in (incl. 2FA) and sign-out — otherwise the
+   * `user` channel stays refused (UNAUTHENTICATED) or keeps the old account until the page reloads.
+   */
+  reconnect(): void;
   close(): void;
 }
 
@@ -29,6 +35,7 @@ export function createRealtimeClient(options: RealtimeClientOptions = {}): Realt
   let attempt = 0;
   let closedByUser = false;
   let pingTimer: ReturnType<typeof setInterval> | undefined;
+  let retryTimer: ReturnType<typeof setTimeout> | undefined;
 
   const setStatus = (s: RealtimeStatus) => statusCbs.forEach((cb) => cb(s));
   const send = (m: ClientMessage) => {
@@ -59,7 +66,7 @@ export function createRealtimeClient(options: RealtimeClientOptions = {}): Realt
       setStatus('closed');
       if (closedByUser) return;
       const delay = Math.min(maxBackoff, 500 * 2 ** attempt++);
-      setTimeout(connect, delay);
+      retryTimer = setTimeout(connect, delay);
     };
   }
   connect();
@@ -89,8 +96,22 @@ export function createRealtimeClient(options: RealtimeClientOptions = {}): Realt
       errorCbs.add(cb);
       return () => errorCbs.delete(cb);
     },
+    reconnect() {
+      if (closedByUser) return;
+      clearTimeout(retryTimer);
+      clearInterval(pingTimer);
+      const old = ws;
+      if (old) {
+        old.onclose = null; // no "closed" status and no backoff retry for the connection we replace
+        old.onmessage = null;
+        old.close();
+      }
+      attempt = 0;
+      connect();
+    },
     close() {
       closedByUser = true;
+      clearTimeout(retryTimer);
       ws?.close();
     },
   };

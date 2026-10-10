@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { InviteCodeInput } from './invites.ts';
 import { IsoDateTime } from './common.ts';
 import { Me } from './account.ts';
 
@@ -16,6 +17,8 @@ export const RegisterRequest = z.object({
   name: z.string().trim().min(1).max(60),
   /** Cloudflare Turnstile token; required when captcha is enabled on the server. */
   captchaToken: z.string().optional(),
+  /** Required when `publicConfig().registration` is INVITE_ONLY (the register page reads `?invite=`). */
+  inviteCode: InviteCodeInput.optional(),
 });
 
 export const LoginRequest = z.object({

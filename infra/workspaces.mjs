@@ -28,7 +28,7 @@ export function workspaces() {
  */
 export function run(cmd, args, opts = {}) {
   return new Promise((resolve) => {
-    const child = spawn([cmd, ...args].join(' '), { cwd: opts.cwd ?? ROOT, env: { ...process.env, ...opts.env }, shell: true, stdio: opts.prefix ? ['ignore', 'pipe', 'pipe'] : 'inherit' });
+    const child = spawn([cmd, ...args].join(' '), { cwd: opts.cwd ?? ROOT, env: { ...process.env, ...opts.env }, shell: true, stdio: opts.prefix ? [opts.stdin ?? 'ignore', 'pipe', 'pipe'] : 'inherit' });
     if (opts.prefix) {
       const out = (stream) => (buf) => stream.write(buf.toString().replace(/^(?=.)/gm, opts.prefix));
       child.stdout.on('data', out(process.stdout));

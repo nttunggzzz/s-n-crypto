@@ -3,9 +3,11 @@
  * Simplified on purpose (JS numbers). The real rules live on the server.
  */
 import type { AvatarId, DcaPlan, GridBot, Order, PnlAnalysis, PnlRange } from '../index.ts';
+import { audit, findUser } from './admin.ts';
+import { viewPosition } from './futures.ts';
 import type { MockPhase26State } from './phase26State.ts';
 import { fmtPrice, MOCK_PAIRS, ORDER_DEFAULTS } from '../fixtures/index.ts';
-import { MockError, mockMe, now, requireUser, requireVerified, type Resolver } from './common.ts';
+import { MockError, mockMe, now, requireStaff, requireUser, requireVerified, type Resolver } from './common.ts';
 import { adjust, emitUser, mockStore, nextId, notify } from './store.ts';
 
 const f8 = (n: number) => (Math.round(n * 1e8) / 1e8).toFixed(8);
@@ -176,7 +178,44 @@ type Phase26Endpoint =
   | 'createGridBot'
   | 'getGridBot'
   | 'stopGridBot'
-  | 'gridBotOrders';
+  | 'gridBotOrders'
+  | 'adminUserFuturesPositions'
+  | 'adminUserBots'
+  | 'adminStopGridBot'
+  | 'adminCancelDcaPlan'
+  | 'adminUserLoginHistory';
+
+/** The mock signs in as the demo user: only that user has bots / positions / sign-ins in the admin views. */
+const isDemoUser = (userId: string) => userId === mockMe().id;
+
+/** Cancel the bot's orders, optionally sell what it holds, keep the final value (like the server). */
+function stopGrid(bot: MockPhase26State['grids'][number], sellBase: boolean, reason: 'USER' | 'ADMIN'): GridBot {
+  const base = MOCK_PAIRS[bot.symbol]!.base;
+  const held = gridHeld(bot);
+  for (const o of held.live) {
+    if (o.side === 'BUY') adjust('USDT', Number(o.quantity) * Number(o.price), -Number(o.quantity) * Number(o.price));
+    else adjust(base, Number(o.quantity), -Number(o.quantity));
+    o.status = 'CANCELED';
+    o.closeReason = 'BOT_STOPPED';
+    mockStore.history.unshift(o);
+    emitUser({ kind: 'order', order: o });
+  }
+  mockStore.openOrders = mockStore.openOrders.filter((x) => !bot.orderIds.includes(x.id));
+  // only the bot's own base is sold (never the rest of the user's coins)
+  const proceeds = held.base * price(bot.symbol) * 0.999;
+  if (sellBase && held.base > 0) {
+    adjust(base, -held.base);
+    adjust('USDT', proceeds);
+  }
+  bot.finalValue = held.quote + (sellBase ? proceeds : held.base * price(bot.symbol));
+  bot.status = 'STOPPED';
+  bot.stopReason = reason;
+  bot.stoppedAt = now();
+  const view = gridView(bot);
+  emitUser({ kind: 'gridBot', bot: view });
+  notify({ type: 'GRID_BOT_STOPPED', botId: bot.id, symbol: bot.symbol, reason, gridProfit: bot.gridProfit });
+  return view;
+}
 
 const plan = (id: string) => {
   const p = st().dca.find((x) => x.id === id);
@@ -331,35 +370,53 @@ export const phase26Resolvers: { [N in Phase26Endpoint]: Resolver<N> } = {
     requireUser();
     const bot = grid(params.botId!);
     if (bot.status !== 'RUNNING') throw new MockError('CONFLICT', 'Bot is not running');
-    const base = MOCK_PAIRS[bot.symbol]!.base;
-    const held = gridHeld(bot);
-    for (const o of held.live) {
-      if (o.side === 'BUY') adjust('USDT', Number(o.quantity) * Number(o.price), -Number(o.quantity) * Number(o.price));
-      else adjust(base, Number(o.quantity), -Number(o.quantity));
-      o.status = 'CANCELED';
-      o.closeReason = 'BOT_STOPPED';
-      mockStore.history.unshift(o);
-      emitUser({ kind: 'order', order: o });
-    }
-    mockStore.openOrders = mockStore.openOrders.filter((x) => !bot.orderIds.includes(x.id));
-    // only the bot's own base is sold (never the rest of the user's coins)
-    const proceeds = held.base * price(bot.symbol) * 0.999;
-    if (body.sellBase && held.base > 0) {
-      adjust(base, -held.base);
-      adjust('USDT', proceeds);
-    }
-    bot.finalValue = held.quote + (body.sellBase ? proceeds : held.base * price(bot.symbol));
-    bot.status = 'STOPPED';
-    bot.stopReason = 'USER';
-    bot.stoppedAt = now();
-    const view = gridView(bot);
-    emitUser({ kind: 'gridBot', bot: view });
-    notify({ type: 'GRID_BOT_STOPPED', botId: bot.id, symbol: bot.symbol, reason: 'USER', gridProfit: bot.gridProfit });
-    return view;
+    return stopGrid(bot, Boolean(body.sellBase), 'USER');
   },
   gridBotOrders: ({ params }) => {
     requireUser();
     const bot = grid(params.botId!);
     return { items: [...mockStore.openOrders, ...mockStore.history].filter((o) => bot.orderIds.includes(o.id)).slice(0, 100) };
+  },
+
+  // ---- admin (support views of a user's futures, bots and sign-ins)
+  adminUserFuturesPositions: ({ params, query }) => {
+    requireStaff('users.read');
+    findUser(params.userId!);
+    if (!isDemoUser(params.userId!) || empty()) return { items: [], nextCursor: null };
+    const f = mockStore.futures;
+    return { items: (query.get('open') === 'false' ? f.closed : f.positions).map(viewPosition), nextCursor: null };
+  },
+  adminUserBots: ({ params }) => {
+    requireStaff('users.read');
+    findUser(params.userId!);
+    if (!isDemoUser(params.userId!)) return { grid: [], dca: [] };
+    const running = (s: string) => (s === 'RUNNING' || s === 'ACTIVE' ? 0 : 1);
+    return { grid: st().grids.map(gridView).sort((a, b) => running(a.status) - running(b.status)), dca: [...st().dca].sort((a, b) => running(a.status) - running(b.status)) };
+  },
+  adminStopGridBot: ({ params, body }) => {
+    requireStaff('bots.manage');
+    findUser(params.userId!);
+    const bot = isDemoUser(params.userId!) ? st().grids.find((b) => b.id === params.botId) : undefined;
+    if (!bot) throw new MockError('NOT_FOUND', 'Bot not found');
+    if (bot.status !== 'RUNNING') throw new MockError('CONFLICT', 'Bot is not running');
+    audit({ action: 'GRID_BOT_STOP', targetType: 'USER', targetId: params.userId!, before: { botId: bot.id, symbol: bot.symbol, status: 'RUNNING' }, after: { status: 'STOPPED', sellBase: Boolean(body.sellBase) }, reason: String(body.reason) });
+    return stopGrid(bot, Boolean(body.sellBase), 'ADMIN');
+  },
+  adminCancelDcaPlan: ({ params, body }) => {
+    requireStaff('bots.manage');
+    findUser(params.userId!);
+    const p = isDemoUser(params.userId!) ? st().dca.find((x) => x.id === params.planId) : undefined;
+    if (!p) throw new MockError('NOT_FOUND', 'Plan not found');
+    if (p.status === 'CANCELED') throw new MockError('CONFLICT', 'The plan is already canceled');
+    audit({ action: 'DCA_PLAN_CANCEL', targetType: 'USER', targetId: params.userId!, before: { planId: p.id, symbol: p.symbol, status: p.status }, after: { status: 'CANCELED' }, reason: String(body.reason) });
+    p.status = 'CANCELED';
+    p.nextRunAt = null;
+    emitUser({ kind: 'dcaPlan', plan: p });
+    return p;
+  },
+  adminUserLoginHistory: ({ params }) => {
+    requireStaff('users.read');
+    findUser(params.userId!);
+    return { items: isDemoUser(params.userId!) ? st().logins : [], nextCursor: null };
   },
 };

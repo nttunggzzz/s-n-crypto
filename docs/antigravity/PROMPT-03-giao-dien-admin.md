@@ -70,3 +70,24 @@ npm install
    ```
    Kiểm tra: cộng tiền cho một tài khoản thử → số dư bên app sàn cập nhật realtime (sự kiện `balance`); dừng giao dịch → app sàn hiện banner dừng khi tải lại `exchangeInfo` (nên tải lại mỗi 30 giây và ngay khi nhận lỗi `TRADING_HALTED` — hiện chưa có sự kiện realtime cho việc dừng sàn); mỗi thao tác có dòng trong Nhật ký quản trị.
 4. Báo cáo `docs/reports/<ngày>-ui-admin.md`; đánh dấu checklist P09 Giai đoạn 3.
+
+## 6. Bổ sung sau Giai đoạn 3 (hợp đồng 0.4.0 → 0.7.0) — làm cùng lúc với các màn trên
+Phần 3 ở trên viết khi sàn mới có 10 cặp. Hiện tại có thêm các mục sau; làm luôn khi dựng `apps/admin`.
+
+| Màn hình | API | Ghi chú |
+|---|---|---|
+| **Người dùng** (sửa) | `adminListUsers` | Ô tìm nhận **UID 8 số** (cách người dùng báo cho hỗ trợ), email hoặc ID. Cột **UID** đứng đầu bảng, có nút sao chép |
+| **Chi tiết người dùng** (sửa) | `adminGetUser` | Đầu trang: avatar, tên, UID. Thẻ: tổng tài sản Spot, **ví Futures** (`futures`: số dư, ký quỹ, lãi lỗ chưa chốt, số vị thế), **bot** (`bots.runningGrid`, `bots.activeDca`). Các tab: Spot (lệnh, sổ cái) · **Futures** · **Bot** · **Đăng nhập** |
+| ↳ Tab Futures | `adminUserFuturesPositions` (`open` true/false) | Vị thế mở (giá vào, mark, giá thanh lý, ký quỹ, lãi lỗ) và lịch sử vị thế. Chỉ xem |
+| ↳ Tab Bot | `adminUserBots`, `adminStopGridBot`, `adminCancelDcaPlan` | Bảng bot lưới và kế hoạch mua định kỳ (đang chạy lên đầu). Nút **Dừng bot** (lý do + tùy chọn bán coin bot giữ) và **Hủy kế hoạch** (lý do), cần quyền `bots.manage` (admin, owner). Người dùng nhận thông báo `GRID_BOT_STOPPED` lý do `ADMIN` |
+| ↳ Tab Đăng nhập | `adminUserLoginHistory` | Thời gian, thiết bị, IP, kết quả, nhãn "Thiết bị mới" — để hỗ trợ khi người dùng báo bị lạ đăng nhập |
+| **Cặp giao dịch** (sửa) | `adminListSymbols`, `adminUpdateSymbol` | Giờ là **50 cặp**: thêm ô tìm kiếm và lọc theo trạng thái |
+| **Thông tin coin** | `exchangeInfo().assets`, `adminUpdateAsset` | Sửa tên, nhóm ngành (`AssetTag`), mô tả; lý do bắt buộc |
+| **Thông báo của sàn** | `adminListAnnouncements`, `adminCreateAnnouncement`, `adminUpdateAnnouncement` | Bản nháp → đăng; ghim; ẩn; hết hạn; mức độ (`INFO` / `IMPORTANT` / `MAINTENANCE`); quyền `content.manage` |
+| **Hợp đồng Futures** | `adminFuturesSymbols`, `adminUpdateFuturesSymbol` | Bật/tắt, đòn bẩy tối đa (1–20), tỷ lệ ký quỹ duy trì; số vị thế / lệnh đang mở (PROMPT-05 mục 6) |
+| **Cấu hình sàn** (sửa) | `adminUpdateSettings` | Thêm 3 ô phí Futures (maker, taker, thanh lý) |
+| **Nhật ký quản trị** (sửa) | `adminAuditLogs` | Giờ có **20** loại `AuditAction` (thêm `ASSET_UPDATE`, `ANNOUNCEMENT_*`, `FUTURES_SYMBOL_UPDATE`, `GRID_BOT_STOP`, `DCA_PLAN_CANCEL`) |
+| **Dừng khẩn cấp** (sửa) | kênh realtime `exchange:status` | Không cần tải lại `exchangeInfo` mỗi 30 giây nữa: app sàn nhận trạng thái dừng/mở ngay qua kênh này |
+
+**Chạy thử với backend thật mà không cần Binance:** `npm run dev -- --sim` (giá giả lập trên luật cặp thật của Binance; trên màn hình vẫn có nhãn mô phỏng).
+

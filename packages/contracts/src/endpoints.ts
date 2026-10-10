@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { AdminInviteListQuery, CreatedInvite, CreateInviteRequest, Invite, InviteIdParam, PublicConfig } from './invites.ts';
 import { Empty, IsoDateTime, PaginationQuery, SymbolCode, paginated } from './common.ts';
 import { Me, Preferences, UpdatePreferencesRequest } from './account.ts';
 import { LoginEvent, SecurityOverview, SetAntiPhishingRequest, UpdateProfileRequest } from './security.ts';
@@ -34,10 +35,13 @@ import {
 } from './announcements.ts';
 import {
   AdminOverview,
+  AdminStopGridBotRequest,
   AdminSymbol,
+  AdminUserBots,
   AdminUserDetail,
   AdminUserListQuery,
   AdminUserOrdersQuery,
+  AdminUserPositionsQuery,
   AdminUserSummary,
   AssetParam,
   AuditLogEntry,
@@ -56,6 +60,8 @@ import {
   UpdateAssetRequest,
   UpdateSettingsRequest,
   UpdateSymbolRequest,
+  UserBotParam,
+  UserDcaParam,
   UserIdParam,
 } from './admin.ts';
 import type { Permission } from './permissions.ts';
@@ -134,6 +140,8 @@ export const HealthResponse = z.object({
 export const endpoints = {
   // ---- system
   health: ep({ method: 'GET', path: '/api/v1/health', auth: 'public', response: HealthResponse }),
+  /** Server settings the apps need before sign-in: registration mode (invite code field), captcha site key, simulated prices. */
+  publicConfig: ep({ method: 'GET', path: '/api/v1/config', auth: 'public', response: PublicConfig }),
 
   // ---- auth (P03)
   register: ep({ method: 'POST', path: '/api/v1/auth/register', auth: 'public', body: RegisterRequest, response: AuthUserResponse, status: 201 }),
@@ -259,9 +267,20 @@ export const endpoints = {
   adminListAnnouncements: ep({ method: 'GET', path: '/api/v1/admin/announcements', auth: 'staff', permission: 'exchange.read', query: AdminAnnouncementListQuery.extend(PaginationQuery.shape), response: paginated(AdminAnnouncement) }),
   adminCreateAnnouncement: ep({ method: 'POST', path: '/api/v1/admin/announcements', auth: 'staff', permission: 'content.manage', body: CreateAnnouncementRequest, response: AdminAnnouncement, status: 201 }),
   adminUpdateAnnouncement: ep({ method: 'PATCH', path: '/api/v1/admin/announcements/:announcementId', auth: 'staff', permission: 'content.manage', params: AnnouncementIdParam, body: UpdateAnnouncementRequest, response: AdminAnnouncement }),
+  // closed staging (0.10.0): sign-up invite codes
+  adminListInvites: ep({ method: 'GET', path: '/api/v1/admin/invites', auth: 'staff', permission: 'users.invite', query: AdminInviteListQuery.extend(PaginationQuery.shape), response: paginated(Invite) }),
+  /** The code is in this response only (the server keeps a hash). */
+  adminCreateInvite: ep({ method: 'POST', path: '/api/v1/admin/invites', auth: 'staff', permission: 'users.invite', body: CreateInviteRequest, response: CreatedInvite, status: 201 }),
+  adminRevokeInvite: ep({ method: 'POST', path: '/api/v1/admin/invites/:inviteId/revoke', auth: 'staff', permission: 'users.invite', params: InviteIdParam, body: ReasonBody, response: Invite }),
   // phase F: futures contracts
   adminFuturesSymbols: ep({ method: 'GET', path: '/api/v1/admin/futures/symbols', auth: 'staff', permission: 'exchange.read', response: z.object({ items: z.array(AdminFuturesSymbol) }) }),
   adminUpdateFuturesSymbol: ep({ method: 'PATCH', path: '/api/v1/admin/futures/symbols/:symbol', auth: 'staff', permission: 'exchange.configure', params: SymbolParam, body: UpdateFuturesSymbolRequest, response: AdminFuturesSymbol }),
+  // phase 2.6 for support: a user's futures positions, bots and sign-ins; stop a bot (audited)
+  adminUserFuturesPositions: ep({ method: 'GET', path: '/api/v1/admin/users/:userId/futures/positions', auth: 'staff', permission: 'users.read', params: UserIdParam, query: AdminUserPositionsQuery.extend(PaginationQuery.shape), response: paginated(FuturesPosition) }),
+  adminUserBots: ep({ method: 'GET', path: '/api/v1/admin/users/:userId/bots', auth: 'staff', permission: 'users.read', params: UserIdParam, response: AdminUserBots }),
+  adminStopGridBot: ep({ method: 'POST', path: '/api/v1/admin/users/:userId/bots/grid/:botId/stop', auth: 'staff', permission: 'bots.manage', params: UserBotParam, body: AdminStopGridBotRequest, response: GridBot }),
+  adminCancelDcaPlan: ep({ method: 'POST', path: '/api/v1/admin/users/:userId/bots/dca/:planId/cancel', auth: 'staff', permission: 'bots.manage', params: UserDcaParam, body: ReasonBody, response: DcaPlan }),
+  adminUserLoginHistory: ep({ method: 'GET', path: '/api/v1/admin/users/:userId/login-history', auth: 'staff', permission: 'users.read', params: UserIdParam, query: PaginationQuery, response: paginated(LoginEvent) }),
 
   // ---- futures (phase F) — simulated USDT-M perpetuals, isolated margin, ≤ 20×
   futuresExchangeInfo: ep({ method: 'GET', path: '/api/v1/futures/exchange-info', auth: 'public', response: FuturesExchangeInfo }),
@@ -300,6 +319,7 @@ export type Endpoints = typeof endpoints;
 export type EndpointName = keyof Endpoints;
 
 type Infer<T> = T extends z.ZodType ? z.input<T> : never;
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type -- `{}` = no key / "all fields optional" test
 type OptionalIfEmpty<K extends string, T> = [T] extends [never] ? {} : {} extends T ? { [P in K]?: T } : { [P in K]: T };
 
 /** Input accepted by the client for an endpoint: { params?, query?, body? }. */

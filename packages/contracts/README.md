@@ -28,14 +28,19 @@ catch (e) { if (e instanceof ApiError) showError(t(`errors.${e.code}`)); }  // e
 ```ts
 import { createRealtimeClient } from '@cex/contracts';
 const rt = createRealtimeClient();                 // tự kết nối lại, tự đăng ký lại kênh
-const off = rt.subscribe('ticker:BTCUSDT', (t) => setTicker(t));   // kiểu dữ liệu tự suy ra
+rt.subscribe('tickers', ({ items }) => mergeTickers(items)); // MỌI cặp: lần đầu đủ cả, sau đó ≤ 1 lần/giây các cặp vừa đổi
+const off = rt.subscribe('ticker:BTCUSDT', (t) => setTicker(t));   // một cặp; kiểu dữ liệu tự suy ra
 rt.subscribe('depth:BTCUSDT', setDepth);           // top 20, tối đa 2 lần/giây
 rt.subscribe('trades:BTCUSDT', pushTrade);
 rt.subscribe('candles:BTCUSDT:1m', upsertCandle);  // closed=false là nến đang chạy
 rt.subscribe('market:status', setMarketStatus);
 rt.subscribe('user', (e) => { /* e.kind: 'order' | 'trade' | 'balance' */ });   // cần đăng nhập
 rt.onStatus((s) => setConnection(s));              // 'connecting' | 'open' | 'closed' → banner mất kết nối
+rt.onError((e) => console.error('realtime', e));   // vd. RATE_LIMITED khi vượt REALTIME_MAX_CHANNELS (100) kênh
+rt.reconnect();                                    // BẮT BUỘC ngay sau đăng nhập / 2FA / đăng xuất (server đọc cookie lúc mở kết nối)
 ```
+Giá nhiều cặp: dùng **một** kênh `tickers` (Futures: `futures:tickers`), không đăng ký từng `ticker:<SYMBOL>` cho cả danh sách.
+Gộp `items` vào một kho (store) và cho mỗi component chỉ đọc cặp nó cần, để một lần cập nhật không vẽ lại cả ứng dụng.
 
 ## 3. Chạy UI không cần backend (mock)
 
@@ -174,4 +179,38 @@ Mock: `setMockPrice('BTCUSDT', 75000)` đẩy giá để xem stop kích hoạt, 
 - Nút "Dừng bot" → hỏi có bán coin bot đang giữ không (`sellBase`).
 - Lệnh của bot (`gridBotOrders`) và mọi lệnh có `source !== 'USER'`: badge "Bot lưới" / "Mua định kỳ", **không có nút Hủy**.
 - Realtime: sự kiện `gridBot` / `dcaPlan` trên kênh `user` → cập nhật thẻ ngay, không cần gọi lại API.
+
+## 10. Admin cho bot, Futures, đăng nhập (v0.7.0)
+- **Tìm người dùng:** ô tìm nhận UID 8 số, email hoặc ID. Luôn hiện UID (có nút sao chép) — đây là mã người dùng đọc cho hỗ trợ.
+- **Chi tiết người dùng:** thẻ ví Futures (`detail.futures`) và số bot (`detail.bots`); tab Futures (`adminUserFuturesPositions`), Bot (`adminUserBots`), Đăng nhập (`adminUserLoginHistory`).
+- **Dừng bot / hủy kế hoạch:** chỉ hiện khi có quyền `bots.manage`. Hộp xác nhận có ô lý do (≥ 5 ký tự); dừng bot lưới có lựa chọn "bán coin bot đang giữ". Sau khi xong, nhật ký quản trị có dòng `GRID_BOT_STOP` / `DCA_PLAN_CANCEL`.
+
+## 11. Hàm tiện ích cho giao diện (v0.9.0)
+Dùng các hàm này thay vì tự viết (chi tiết và ví dụ trong `src/helpers.ts`):
+```ts
+import { createTickerStore, resolveFuturesSymbol, countdown, spotTradeBlock, TRADE_BLOCK_LABELS, createPager, saveTextFile } from '@cex/contracts';
+
+// giá: MỘT store cho cả app (tạo một lần, cạnh realtime client)
+const prices = createTickerStore(rt);                       // 'futures' → futures:tickers
+prices.seed((await api.tickers()).items);
+const useTicker = (s: string) => useSyncExternalStore((cb) => prices.subscribe(cb, s), () => prices.get(s));
+
+// /futures/PEPEUSDT → /futures/1000PEPEUSDT
+const sym = resolveFuturesSymbol(param, futuresInfo.symbols, exchangeInfo.symbols) ?? 'BTCUSDT';
+
+countdown(mark.nextFundingTime);                            // "03:59:12" | null → hiện "—"
+const block = spotTradeBlock(symbol, exchangeStatus, ticker); // null → cho đặt lệnh; khác → TRADE_BLOCK_LABELS[block]
+
+const pager = createPager((cursor) => api.orderHistory({ query: { symbol, cursor, limit: 50 } }));
+saveTextFile(await api.exportLedger({ query: {} }), 'so-cai.csv');
+```
+
+## 12. Chạy kín: mã mời + cấu hình công khai (v0.10.0)
+- Lúc app khởi động: `const cfg = await api.publicConfig()`.
+  - `cfg.registration === 'INVITE_ONLY'` → form đăng ký có ô **Mã mời** (bắt buộc), điền sẵn từ `?invite=`.
+  - `cfg.captchaSiteKey` → hiện Turnstile, gửi `captchaToken`.
+  - `cfg.marketFeed === 'sim'` → banner "GIÁ GIẢ LẬP — không phải giá thị trường".
+- Lỗi `INVALID_INVITE` → thông báo theo `details.reason`: thiếu mã / mã không đúng / mã hết hạn / mã đã dùng hết lượt / mã đã bị thu hồi.
+- Admin: trang "Mã mời" gồm danh sách (lọc trạng thái), tạo mới (người nhận, số lượt, số ngày) và thu hồi (lý do ≥ 5 ký tự).
+  Sau khi tạo, **chỉ lúc đó** hiện mã + link kèm nút sao chép; đóng hộp là không xem lại được.
 

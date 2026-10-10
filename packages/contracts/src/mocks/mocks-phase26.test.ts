@@ -75,3 +75,30 @@ describe('phase 2.6 mocks', () => {
     expect((await api.gridBotOrders({ params: { botId: bot.id } })).items.every((o) => o.closeReason === 'BOT_STOPPED')).toBe(true);
   });
 });
+
+describe('admin mocks for phase 2.6 (the mock signs in as the demo user)', () => {
+  const DEMO = '00000000-0000-4000-8000-000000000001';
+  it('UID search, user detail with futures + bots, positions, sign-ins, stop / cancel with audit', async () => {
+    const bot = await api.createGridBot({ body: { symbol: 'BTCUSDT', lowerPrice: '76000', upperPrice: '84000', gridCount: 8, investment: '1000' } });
+    setMockRole('support');
+    expect((await api.adminListUsers({ query: { q: '10000001' } })).items.map((u) => u.id)).toEqual([DEMO]);
+    const d = await api.adminGetUser({ params: { userId: DEMO } });
+    expect(d.user.uid).toBe('10000001');
+    expect(d.futures.openPositions).toBeGreaterThanOrEqual(0);
+    expect((await api.adminUserBots({ params: { userId: DEMO } })).grid.map((g) => g.id)).toEqual([bot.id]);
+    expect((await api.adminUserLoginHistory({ params: { userId: DEMO } })).items.length).toBeGreaterThan(0);
+    await api.adminUserFuturesPositions({ params: { userId: DEMO }, query: { open: 'true' } });
+    await expect(api.adminStopGridBot({ params: { userId: DEMO, botId: bot.id }, body: { reason: 'support thử dừng', sellBase: false } })).rejects.toSatisfy(code('FORBIDDEN'));
+
+    setMockRole('admin');
+    const stopped = await api.adminStopGridBot({ params: { userId: DEMO, botId: bot.id }, body: { reason: 'Bot lỗi theo báo cáo', sellBase: false } });
+    expect([stopped.status, stopped.stopReason]).toEqual(['STOPPED', 'ADMIN']);
+    expect(stopped.totalValue).not.toBeNull();
+    await expect(api.adminStopGridBot({ params: { userId: DEMO, botId: bot.id }, body: { reason: 'dừng lần hai', sellBase: false } })).rejects.toSatisfy(code('CONFLICT'));
+    const plan = await api.adminCancelDcaPlan({ params: { userId: DEMO, planId: '301' }, body: { reason: 'Người dùng yêu cầu hủy' } });
+    expect(plan.status).toBe('CANCELED');
+    await expect(api.adminCancelDcaPlan({ params: { userId: DEMO, planId: '301' }, body: { reason: 'hủy lần hai' } })).rejects.toSatisfy(code('CONFLICT'));
+    const actions = (await api.adminAuditLogs({ query: {} })).items.map((a) => a.action);
+    expect(actions).toEqual(expect.arrayContaining(['GRID_BOT_STOP', 'DCA_PLAN_CANCEL']));
+  });
+});

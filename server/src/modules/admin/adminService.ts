@@ -1,13 +1,17 @@
 import { and, desc, eq, gte, inArray, lt, lte, notInArray, sql, type SQL } from 'drizzle-orm';
-import type { AdminOverview, AdminSymbol, AdminUserDetail, AdminUserSummary, AssetInfo, AssetTag, AuditLogEntry, AuditTargetType, ExchangeSettings, ReconciliationRun, Role } from '@cex/contracts';
+import type { AdminOverview, AdminSymbol, AdminUserBots, AdminUserDetail, AdminUserSummary, AssetInfo, DcaPlan, FuturesAccount, GridBot, AssetTag, AuditLogEntry, AuditTargetType, ExchangeSettings, ReconciliationRun, Role } from '@cex/contracts';
 import { AMOUNT_SCALE, dec, hasAtMostScale, toFixedStr } from '@cex/core';
 import {
   assets,
   auditLogs,
   balances,
+  dcaPlans,
   exchangeSettings,
   faucetClaims,
+  futuresPositions,
+  gridBots,
   ledgerEntries,
+  loginEvents,
   OPEN_STATUSES,
   orders,
   portfolioSnapshots,
@@ -29,6 +33,8 @@ import { reconcile } from '../exchange/reconciliation.ts';
 import { makePriceOf } from '../exchange/routes.ts';
 import { serializeBalance, serializeLedger, serializeOrder, valuateBalances } from '../exchange/serializers.ts';
 import { writeAudit } from './audit.ts';
+import { serializeLoginEvent } from '../auth/security.ts';
+import { serializePosition } from '../futures/serializers.ts';
 
 export interface Actor {
   user: UserRow;
@@ -50,6 +56,8 @@ function decodeCursor(c: string): { t: Date; id: string } {
   if (!id || Number.isNaN(d.getTime())) throw new AppError('VALIDATION_ERROR', 'Invalid cursor');
   return { t: d, id };
 }
+const EMPTY_FUTURES: FuturesAccount = { asset: 'USDT', walletBalance: '0.00000000', available: '0.00000000', positionMargin: '0.00000000', orderMargin: '0.00000000', unrealizedPnl: '0.00000000', equity: '0.00000000', openPositions: 0 };
+
 export function idCursor(cursor: string | undefined): number | undefined {
   if (cursor === undefined) return undefined;
   const n = Number(cursor);
@@ -122,6 +130,7 @@ export class AdminService {
   summary(u: UserRow, lastSeenAt: Date | null): AdminUserSummary {
     return {
       id: u.id,
+      uid: String(u.uid),
       email: u.email,
       name: u.name,
       role: u.role,
@@ -168,7 +177,8 @@ export class AdminService {
     const where: SQL[] = [];
     if (q.q) {
       const isUuid = /^[0-9a-f-]{36}$/i.test(q.q);
-      where.push(isUuid ? eq(users.id, q.q) : sql`${users.email} ILIKE ${'%' + q.q.replace(/[%_\\]/g, '\\$&') + '%'}`);
+      const isUid = /^\d{8}$/.test(q.q);
+      where.push(isUuid ? eq(users.id, q.q) : isUid ? eq(users.uid, Number(q.q)) : sql`${users.email} ILIKE ${'%' + q.q.replace(/[%_\\]/g, '\\$&') + '%'}`);
     }
     if (q.role) where.push(eq(users.role, q.role));
     if (q.status) where.push(eq(users.status, q.status));
@@ -191,7 +201,7 @@ export class AdminService {
 
   async getUser(id: string): Promise<AdminUserDetail> {
     const u = await this.loadUser(id);
-    const [bal, [counts], [claimed]] = await Promise.all([
+    const [bal, [counts], [claimed], futures, [bots]] = await Promise.all([
       getBalances(this.db, id),
       this.db
         .select({
@@ -203,6 +213,13 @@ export class AdminService {
         .select({ total: sql<string | null>`sum(${faucetClaims.amount})` })
         .from(faucetClaims)
         .where(eq(faucetClaims.userId, id)),
+      this.futures ? this.futures.service.account(id) : Promise.resolve(EMPTY_FUTURES),
+      this.db
+        .select({
+          grid: sql<number>`(SELECT count(*) FROM ${gridBots} WHERE ${gridBots.userId} = ${id} AND ${gridBots.status} IN ('STARTING', 'RUNNING'))::int`,
+          dca: sql<number>`(SELECT count(*) FROM ${dcaPlans} WHERE ${dcaPlans.userId} = ${id} AND ${dcaPlans.status} = 'ACTIVE')::int`,
+        })
+        .from(sql`(SELECT 1) AS one`),
     ]);
     const v = valuateBalances(bal, this.priceOf);
     return {
@@ -213,7 +230,83 @@ export class AdminService {
       openOrders: counts?.open ?? 0,
       activeSessions: counts?.sessions ?? 0,
       faucetTotalClaimed: toFixedStr(dec(claimed?.total ?? '0')),
+      futures,
+      bots: { runningGrid: bots?.grid ?? 0, activeDca: bots?.dca ?? 0 },
     };
+  }
+
+  // ───────── phase 2.6: support views of futures, bots, sign-ins
+
+  async userFuturesPositions(id: string, open: boolean, cursor: string | undefined, limit: number) {
+    await this.loadUser(id);
+    const f = this.futures;
+    if (!f) return { items: [], nextCursor: null };
+    const where: SQL[] = [eq(futuresPositions.userId, id), eq(futuresPositions.status, open ? 'OPEN' : 'CLOSED')];
+    const c = idCursor(cursor);
+    if (c) where.push(lt(futuresPositions.id, c));
+    const rows = await this.db.select().from(futuresPositions).where(and(...where)).orderBy(desc(futuresPositions.id)).limit(limit + 1);
+    const more = rows.length > limit;
+    const page = more ? rows.slice(0, limit) : rows;
+    return { items: page.map((p) => serializePosition(p, f.config.find(p.symbol), f.marks.liveMark(p.symbol))), nextCursor: more ? String(page[page.length - 1]!.id) : null };
+  }
+
+  async userBots(id: string): Promise<AdminUserBots> {
+    await this.loadUser(id);
+    if (!this.bots) return { grid: [], dca: [] };
+    const [grid, dca] = await Promise.all([this.bots.grid.list(id), this.bots.dca.list(id)]);
+    const active = (s: string) => (s === 'RUNNING' || s === 'ACTIVE' || s === 'PAUSED' ? 0 : 1);
+    return { grid: [...grid].sort((a, b) => active(a.status) - active(b.status)), dca: [...dca].sort((a, b) => active(a.status) - active(b.status)) };
+  }
+
+  async stopGridBot(actor: Actor, userId: string, botId: string, reason: string, sellBase: boolean): Promise<GridBot> {
+    const u = await this.loadUser(userId);
+    this.guardTarget(actor, u);
+    const id = Number(botId);
+    if (!this.bots || !Number.isSafeInteger(id)) throw new AppError('NOT_FOUND', 'Bot not found');
+    return this.bots.grid.adminStop(userId, id, sellBase, (tx, bot) =>
+      writeAudit(tx, {
+        actorId: actor.user.id,
+        action: 'GRID_BOT_STOP',
+        targetType: 'USER',
+        targetId: userId,
+        before: { botId: String(bot.id), symbol: bot.symbol, status: 'RUNNING', gridProfit: toFixedStr(dec(bot.gridProfit)) },
+        after: { status: 'STOPPED', sellBase },
+        reason,
+        ip: actor.ip,
+      }),
+    );
+  }
+
+  async cancelDcaPlan(actor: Actor, userId: string, planId: string, reason: string): Promise<DcaPlan> {
+    const u = await this.loadUser(userId);
+    this.guardTarget(actor, u);
+    if (!this.bots) throw new AppError('NOT_FOUND', 'Plan not found');
+    return this.bots.dca.adminCancel(userId, planId, (tx, plan) =>
+      writeAudit(tx, {
+        actorId: actor.user.id,
+        action: 'DCA_PLAN_CANCEL',
+        targetType: 'USER',
+        targetId: userId,
+        before: { planId: String(plan.id), symbol: plan.symbol, status: plan.status, quoteAmount: toFixedStr(dec(plan.quoteAmount)) },
+        after: { status: 'CANCELED' },
+        reason,
+        ip: actor.ip,
+      }),
+    );
+  }
+
+  async userLoginHistory(id: string, cursor: string | undefined, limit: number) {
+    await this.loadUser(id);
+    const c = idCursor(cursor);
+    const rows = await this.db
+      .select()
+      .from(loginEvents)
+      .where(and(eq(loginEvents.userId, id), c ? lt(loginEvents.id, c) : undefined))
+      .orderBy(desc(loginEvents.id))
+      .limit(limit + 1);
+    const more = rows.length > limit;
+    const page = more ? rows.slice(0, limit) : rows;
+    return { items: page.map(serializeLoginEvent), nextCursor: more ? String(page[page.length - 1]!.id) : null };
   }
 
   async userOrders(id: string, open: boolean, cursor: string | undefined, limit: number) {
