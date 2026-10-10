@@ -9,7 +9,8 @@
     "db:start": "tsx scripts/devDb.ts",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx --env-file-if-exists=../.env scripts/migrate.ts",
-    "admin:set-role": "tsx --env-file-if-exists=../.env scripts/setRole.ts"
+    "admin:set-role": "tsx --env-file-if-exists=../.env scripts/setRole.ts",
+    "sim:snapshot": "tsx scripts/simSnapshot.ts"
   },
   "dependencies": {
     "@cex/contracts": "*",

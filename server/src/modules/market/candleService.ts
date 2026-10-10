@@ -8,6 +8,8 @@ import { fetchKlines } from './binance.ts';
 
 const CACHE_MS = 2000;
 
+export type CandleHistory = (symbol: string, interval: CandleInterval, limit: number, endTime?: number) => Candle[];
+
 /**
  * Candle history for charts: Binance REST (short cache), falling back to the closed candles
  * we stored ourselves if Binance is unreachable.
@@ -18,11 +20,15 @@ export class CandleService {
   constructor(
     private readonly db: Db,
     private readonly restUrl: string | null,
-    /** Futures: { path: '/fapi/v1/klines', storedFallback: false } (we only store spot candles). */
-    private readonly opts: { path?: string; storedFallback?: boolean } = {},
+    /**
+     * Futures: { path: '/fapi/v1/klines', storedFallback: false } (we only store spot candles).
+     * `history`: MARKET_FEED=sim — candles come from the synthetic model instead.
+     */
+    private readonly opts: { path?: string; storedFallback?: boolean; history?: CandleHistory } = {},
   ) {}
 
   async get(symbol: string, interval: CandleInterval, limit: number, endTime?: number): Promise<Candle[]> {
+    if (this.opts.history) return this.opts.history(symbol, interval, limit, endTime);
     if (this.restUrl) {
       const key = `${symbol}|${interval}|${limit}|${endTime ?? ''}`;
       const hit = this.cache.get(key);

@@ -8,8 +8,11 @@ const Env = z.object({
   APP_URL: z.string().default('http://localhost:5173'),
   /** Comma separated extra origins allowed by CORS (admin / signals apps). */
   CORS_ORIGINS: z.string().default(''),
-  /** Disable to run the API without connecting to Binance (tests). */
-  MARKET_FEED: z.enum(['binance', 'off']).default('binance'),
+  /**
+   * binance = real prices · sim = synthetic prices on real pair rules (offline dev, end-to-end tests, CI;
+   * refused in production) · off = no market data (unit tests).
+   */
+  MARKET_FEED: z.enum(['binance', 'sim', 'off']).default('binance'),
   BINANCE_REST_URL: z.string().default('https://api.binance.com'),
   BINANCE_WS_URL: z.string().default('wss://stream.binance.com:9443'),
   /** Binance USDⓈ-M futures (simulated perpetuals). */
@@ -26,8 +29,9 @@ const Env = z.object({
     .transform((v) => v === 'true'),
   /** Cloudflare Turnstile secret; captcha is skipped when empty. */
   TURNSTILE_SECRET: z.string().default(''),
-  /** Email delivery: "log" prints links to the server log (dev only). */
-  EMAIL_TRANSPORT: z.enum(['log', 'resend']).default('log'),
+  /** Email delivery: "log" prints links to the server log, "file" appends JSON lines to EMAIL_OUTBOX (dev / e2e only). */
+  EMAIL_TRANSPORT: z.enum(['log', 'file', 'resend']).default('log'),
+  EMAIL_OUTBOX: z.string().default('.email-outbox.jsonl'),
   RESEND_API_KEY: z.string().default(''),
   EMAIL_FROM: z.string().default('CEX Sim <no-reply@example.com>'),
   SESSION_TTL_DAYS: z.coerce.number().int().default(30),
@@ -47,8 +51,11 @@ const DEV_DATA_KEY = Buffer.alloc(32, 'cex-dev-only-not-a-secret').toString('bas
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const parsed = Env.parse(env);
-  if (parsed.NODE_ENV === 'production' && parsed.EMAIL_TRANSPORT === 'log') {
-    throw new Error('EMAIL_TRANSPORT=log is not allowed in production');
+  if (parsed.NODE_ENV === 'production' && parsed.EMAIL_TRANSPORT !== 'resend') {
+    throw new Error(`EMAIL_TRANSPORT=${parsed.EMAIL_TRANSPORT} is not allowed in production`);
+  }
+  if (parsed.NODE_ENV === 'production' && parsed.MARKET_FEED === 'sim') {
+    throw new Error('MARKET_FEED=sim (synthetic prices) is not allowed in production');
   }
   if (parsed.NODE_ENV === 'production' && !parsed.DATA_ENCRYPTION_KEY) {
     throw new Error('DATA_ENCRYPTION_KEY is required in production');

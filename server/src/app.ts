@@ -110,7 +110,7 @@ export function createApp(deps: AppDeps) {
     market: deps.market,
     config: exConfig,
     candles: deps.candles,
-    depthSnapshots: deps.depthSnapshots ?? new DepthSnapshots(config.MARKET_FEED === 'binance' ? binanceDepthFetcher(config.BINANCE_REST_URL) : null),
+    depthSnapshots: deps.depthSnapshots ?? new DepthSnapshots(config.MARKET_FEED === 'binance' ? binanceDepthFetcher(config.BINANCE_REST_URL) : null), // sim/off: the 20 live levels only
     sparklines: new SparklineService(deps.candles, deps.market, () => exConfig.allSymbols().map((s) => s.row.symbol)),
   });
   const news = new AnnouncementService(deps.db);

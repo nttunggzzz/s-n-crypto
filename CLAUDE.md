@@ -21,7 +21,8 @@ server/
                      security.ts (lịch sử đăng nhập, cảnh báo thiết bị mới, mã chống lừa đảo trong email)
   src/modules/admin  adminService (mọi thao tác admin + audit), routes, audit.ts
   src/modules/market Binance WS (nhiều kết nối, SUBSCRIBE) / REST, MarketDataService (LIVE/STALE), nến,
-                     assets (thông tin coin), depthSnapshots (sổ lệnh sâu), sparklines
+                     assets (thông tin coin), depthSnapshots (sổ lệnh sâu), sparklines,
+                     sim/ (MARKET_FEED=sim: giá giả lập trên luật cặp thật — snapshot.json; cấm ở production)
   src/modules/content announcementService (thông báo của sàn)
   src/modules/bots   Bot trên ví Spot: dcaService (mua định kỳ), gridService (bot lưới), index (routes)
   src/modules/futures Futures mô phỏng: config (hợp đồng), markData (mark/funding), service (ví, lệnh, vị thế,
@@ -44,6 +45,7 @@ npm run typecheck     # mọi workspace có tsconfig (core, contracts, server, v
 npm run db:generate   # sau khi sửa server/src/db/schema.ts
 npm run admin:set-role -- <email> owner   # tạo owner đầu tiên (ghi audit ROLE_BOOTSTRAP)
 npm run dev           # cả hệ thống: DB + server + mọi app trong apps/* (mock tắt)
+npm run dev -- --sim  # như trên nhưng giá GIẢ LẬP (không cần Binance: offline, test e2e, CI)
 npm run verify        # cổng gộp main: typecheck mọi workspace (cả UI) + test + build app
 ```
 Quy tắc tích hợp backend ↔ hợp đồng ↔ UI: [docs/parts/README.md](docs/parts/README.md#quy-tắc-tích-hợp--để-backend-hợp-đồng-và-giao-diện-luôn-khớp-nhau)

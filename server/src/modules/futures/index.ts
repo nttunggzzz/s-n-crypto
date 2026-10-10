@@ -1,7 +1,7 @@
 import type { Db } from '../../db/client.ts';
 import type { ExchangeConfig } from '../exchange/exchangeConfig.ts';
 import type { ExchangeEvents } from '../exchange/events.ts';
-import { CandleService } from '../market/candleService.ts';
+import { CandleService, type CandleHistory } from '../market/candleService.ts';
 import { MarketDataService } from '../market/marketData.ts';
 import { FuturesConfig } from './config.ts';
 import { FuturesEngine } from './engine.ts';
@@ -22,6 +22,8 @@ export interface Futures {
 export interface FuturesOptions {
   /** Binance USDⓈ-M REST base (null = no REST: tests / feed off). */
   restUrl: string | null;
+  /** MARKET_FEED=sim: candle history from the synthetic model (set once the feed exists). */
+  candleHistory?: CandleHistory;
   /** Clock for market-data freshness (tests move it). */
   clock?: () => number;
   now?: () => Date;
@@ -38,7 +40,7 @@ export async function createFutures(db: Db, exchange: ExchangeConfig, exchangeEv
     opts.clock,
   );
   const marks = new FuturesMarkService(stale, opts.clock);
-  const candles = new CandleService(db, opts.restUrl, { path: '/fapi/v1/klines', storedFallback: false });
+  const candles = new CandleService(db, opts.restUrl, { path: '/fapi/v1/klines', storedFallback: false, history: opts.candleHistory });
   const events = new FuturesEvents();
   const service = new FuturesService(db, config, market, marks, events, exchangeEvents, opts.now);
   const engine = new FuturesEngine(service, marks);

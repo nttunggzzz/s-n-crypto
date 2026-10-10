@@ -16,6 +16,7 @@ import { RealtimeHub } from './realtime/hub.ts';
 import { createFutures } from './modules/futures/index.ts';
 import { syncFuturesFromBinance } from './modules/futures/config.ts';
 import { createBots } from './modules/bots/index.ts';
+import { seedSimRules, SimFeed, simSpecs } from './modules/market/sim/feed.ts';
 
 const config = loadConfig();
 const database = createDatabase(config.DATABASE_URL);
@@ -23,6 +24,11 @@ await runMigrations(database.db);
 await seedAssets(database.db);
 
 const feedOn = config.MARKET_FEED === 'binance';
+const sim = config.MARKET_FEED === 'sim';
+if (sim) {
+  const n = await seedSimRules(database.db, config.symbols);
+  logger.warn(n, 'MARKET_FEED=sim: SYNTHETIC prices on real pair rules (dev / e2e only)');
+}
 if (feedOn) {
   try {
     const n = await syncSymbolsFromBinance(database.db, config.BINANCE_REST_URL, config.symbols);
@@ -40,6 +46,7 @@ const market = new MarketDataService(
 );
 market.startStalenessTimer();
 const exchange = await createExchange(database.db, market, exchangeConfig);
+const spotSim = sim ? new SimFeed(market, simSpecs('spot', exchangeConfig.allSymbols().map((s) => ({ symbol: s.row.symbol, tick: s.tick.toFixed(), step: s.step.toFixed() })))) : null;
 
 // ── futures (simulated USDT-M perpetuals): one contract per listed spot coin
 if (feedOn) {
@@ -50,13 +57,20 @@ if (feedOn) {
     logger.error({ err }, 'could not sync futures contracts from Binance; using stored rules');
   }
 }
-const futures = await createFutures(database.db, exchangeConfig, exchange.events, { restUrl: feedOn ? config.BINANCE_FUTURES_REST_URL : null });
+let futuresSim: SimFeed | null = null;
+const futures = await createFutures(database.db, exchangeConfig, exchange.events, {
+  restUrl: feedOn ? config.BINANCE_FUTURES_REST_URL : null,
+  candleHistory: sim ? (symbol, interval, limit, endTime) => futuresSim?.history(symbol, interval, limit, endTime) ?? [] : undefined,
+});
+futuresSim = sim
+  ? new SimFeed(futures.market, simSpecs('futures', futures.config.all().map((c) => ({ symbol: c.row.symbol, tick: c.tick.toFixed(), step: c.step.toFixed() }))), { onMark: (s, m) => futures.marks.ingest(s, m) })
+  : null;
 futures.market.startStalenessTimer();
 const bots = createBots(database.db, exchange, market);
 logger.info({ open: exchange.index.size() }, 'open limit orders loaded');
 
 const auth = new AuthService(database.db, config, createEmailSender(config));
-const candles = new CandleService(database.db, feedOn ? config.BINANCE_REST_URL : null);
+const candles = new CandleService(database.db, feedOn ? config.BINANCE_REST_URL : null, { history: spotSim ? (s, i, l, e) => spotSim.history(s, i, l, e) : undefined });
 const app = createApp({ config, db: database.db, auth, market, exchange, candles, futures, bots, version: process.env.RAILWAY_GIT_COMMIT_SHA?.slice(0, 7) });
 const server = http.createServer(app);
 const hub = new RealtimeHub(market, exchange, auth, allowedOrigins(config), futures, bots);
@@ -68,6 +82,8 @@ const futuresStream = feedOn
   ? new BinanceStream(config.BINANCE_FUTURES_WS_URL, futures.market, futures.config.all().map((c) => c.row.symbol), { kind: 'futures', onMark: (s, m) => futures.marks.ingest(s, m) })
   : null;
 futuresStream?.start();
+spotSim?.start();
+futuresSim?.start();
 await futures.engine.start();
 bots.start();
 
@@ -83,6 +99,8 @@ async function shutdown(signal: string) {
   logger.info({ signal }, 'shutting down');
   stream?.stop();
   futuresStream?.stop();
+  spotSim?.stop();
+  futuresSim?.stop();
   futures.engine.stop();
   bots.stop();
   exchange.matcher.stop();
