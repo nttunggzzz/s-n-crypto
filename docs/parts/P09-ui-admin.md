@@ -3,6 +3,10 @@
 **Phụ trách:** Antigravity · **Thư mục:** `apps/admin/`
 **Backend tương ứng:** P03 (người dùng, quyền, nhật ký quản trị), P05 (số dư, cấu hình sàn), P06 (tín hiệu)
 
+> **Admin là bảng điều khiển của web sàn**, không phải app riêng: cùng server, cùng địa chỉ (`/admin/`), cùng đăng nhập, cùng realtime.
+> Mỗi màn admin làm cùng phần hiển thị tương ứng bên web sàn. Hướng dẫn và thứ tự: [PROMPT-08](../antigravity/PROMPT-08-web-admin-noi-web-san.md);
+> test nghiệm thu hai trình duyệt: `e2e/tests/admin.spec.ts`.
+
 ## Mục tiêu
 Công cụ vận hành sàn: an toàn, rõ ràng, mọi thao tác nhạy cảm phải xác nhận và ghi lý do. Ưu tiên desktop.
 

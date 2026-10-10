@@ -32,7 +32,8 @@ server/
                         faucet, reconciliation, pnlService (phân tích lãi lỗ), routes
   src/realtime       WebSocket /ws
   src/ops            singleInstance (khóa 1 bản + máy chủ chờ khi deploy), alerts (Telegram: giá gián đoạn, đối soát lệch, crash)
-  src/lib/webApp.ts  phục vụ bản build app (WEB_DIST) cùng địa chỉ với API
+  src/lib/webApp.ts  phục vụ bản build app sàn ở / (WEB_DIST) và app admin ở /admin/ (ADMIN_WEB_DIST) cùng địa chỉ với API —
+                     một lần đăng nhập cho cả hai; link giữa hai app: `appLinks` trong contracts (apps.ts)
   test/              globalSetup (PostgreSQL nhúng :5434), helpers
   scripts/e2eStack.ts hệ chạy cho test trình duyệt (server phục vụ bản build production của app qua WEB_DIST, như khi deploy)
 e2e/                 Playwright: fixtures (chặn lỗi console / 5xx / VALIDATION_ERROR / kênh realtime bị từ chối),
@@ -61,7 +62,7 @@ npm run e2e           # test trình duyệt (Playwright, Edge cài sẵn): build
 ```
 Quy tắc tích hợp backend ↔ hợp đồng ↔ UI: [docs/parts/README.md](docs/parts/README.md#quy-tắc-tích-hợp--để-backend-hợp-đồng-và-giao-diện-luôn-khớp-nhau)
 
-Triển khai: `Dockerfile` + `railway.json` (một service: API + /ws + app), hướng dẫn [docs/deploy/railway.md](docs/deploy/railway.md); CI `.github/workflows/`.
+Triển khai: `Dockerfile` + `railway.json` (một service: API + /ws + app sàn ở `/` + app admin ở `/admin/`), hướng dẫn [docs/deploy/railway.md](docs/deploy/railway.md); CI `.github/workflows/`.
 
 ## Bất biến (KHÔNG được phá)
 1. **Mọi thay đổi số dư đi qua `applyBalanceChanges()`** (server/src/modules/exchange/ledger.ts) trong transaction; mỗi thay đổi = 1 dòng `ledger_entries`. Không `UPDATE balances` ở chỗ khác.

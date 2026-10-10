@@ -1,5 +1,5 @@
 // `npm run e2e`: browser tests of the real web app against the real server (synthetic prices).
-//   1. build apps/exchange (production build, mocks off)
+//   1. build apps/exchange and apps/admin (production builds, mocks off)
 //   2. start the isolated stack (server/scripts/e2eStack.ts: db :5436, server + web app on :5190)
 //   3. run Playwright (e2e/) — extra args go to Playwright, e.g. `npm run e2e -- --headed`
 // Locally the tests drive the installed Microsoft Edge (no browser download); CI installs Chromium.
@@ -47,6 +47,10 @@ for (const [name, port] of Object.entries(PORTS)) {
 
 process.stdout.write('━━ build apps/exchange\n');
 if ((await run('npm', ['run', 'build', '-w', '@cex/exchange-web'])) !== 0) process.exit(1);
+if (existsSync(path.join(ROOT, 'apps/admin/package.json'))) {
+  process.stdout.write('━━ build apps/admin\n');
+  if ((await run('npm', ['run', 'build', '-w', '@cex/admin-web'])) !== 0) process.exit(1);
+} else process.stdout.write('[e2e] apps/admin does not exist yet — the admin tests fail until it does (PROMPT-08)\n');
 
 let stack;
 /** Asks the stack to stop (it shuts PostgreSQL down cleanly when its stdin closes), then makes sure. */

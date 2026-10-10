@@ -48,6 +48,8 @@ const Env = z.object({
   LOG_LEVEL: z.string().default('info'),
   /** Production build of apps/exchange to serve at `/` on this same origin (Docker sets it); empty = API only. */
   WEB_DIST: z.string().default(''),
+  /** Production build of apps/admin to serve at `/admin` on this same origin (Docker sets it); empty = none. */
+  ADMIN_WEB_DIST: z.string().default(''),
   /** Operator alerts to Telegram (feed down, books out of balance, crash) — set both or neither; empty = log only. */
   TELEGRAM_BOT_TOKEN: z.string().default(''),
   TELEGRAM_CHAT_ID: z.string().default(''),

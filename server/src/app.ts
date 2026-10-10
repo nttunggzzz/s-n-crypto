@@ -5,6 +5,7 @@ import type { Config } from './config.ts';
 import type { Db } from './db/client.ts';
 import { AppError } from './lib/errors.ts';
 import { errorHandler, readSessionToken, route, type RouteOptions } from './lib/http.ts';
+import { ADMIN_BASE_PATH } from '@cex/contracts';
 import { webApp } from './lib/webApp.ts';
 import type { AuthService } from './modules/auth/authService.ts';
 import { registerAuthRoutes } from './modules/auth/routes.ts';
@@ -38,6 +39,8 @@ export interface AppDeps {
   version?: string;
   /** Production build of the exchange web app to serve at `/` (config WEB_DIST); none in dev. */
   webDist?: string;
+  /** Production build of the admin web app to serve at `/admin` (config ADMIN_WEB_DIST); none in dev. */
+  adminWebDist?: string;
 }
 
 export function allowedOrigins(config: Config): Set<string> {
@@ -129,7 +132,9 @@ export function createApp(deps: AppDeps) {
   if (deps.futures) registerFuturesRoutes(router, opts, deps.db, deps.futures, deps.market, config.RATE_LIMIT_SCALE);
   if (deps.bots) registerBotRoutes(router, opts, deps.bots, config.RATE_LIMIT_SCALE);
   app.use(router);
-  if (deps.webDist) app.use(webApp(deps.webDist));
+  // one origin for both apps: the same session cookie, `/ws` and no CORS (the admin app manages the exchange's users)
+  if (deps.adminWebDist) app.use(ADMIN_BASE_PATH, webApp(deps.adminWebDist, { noindex: true }));
+  if (deps.webDist) app.use(webApp(deps.webDist, { reserved: [ADMIN_BASE_PATH] }));
 
   app.use('/api', (_req: Request, _res: Response, next: NextFunction) => next(new AppError('NOT_FOUND', 'No such endpoint')));
   app.use(errorHandler);

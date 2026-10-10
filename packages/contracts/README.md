@@ -214,3 +214,17 @@ saveTextFile(await api.exportLedger({ query: {} }), 'so-cai.csv');
 - Admin: trang "Mã mời" gồm danh sách (lọc trạng thái), tạo mới (người nhận, số lượt, số ngày) và thu hồi (lý do ≥ 5 ký tự).
   Sau khi tạo, **chỉ lúc đó** hiện mã + link kèm nút sao chép; đóng hộp là không xem lại được.
 
+## 13. Web admin nối với web sàn (v0.11.0)
+- **Một địa chỉ, một lần đăng nhập:** server phục vụ app sàn ở `/` và app admin ở `/admin/`. Nhân sự đăng nhập ở app sàn
+  (có mã 2FA) là vào được admin luôn; đăng xuất ở một bên là đăng xuất cả hai.
+- **Link qua lại** dùng `appLinks` (không tự ghép chuỗi):
+  ```ts
+  import { appLinks, canOpenAdmin } from '@cex/contracts';
+  const ADMIN = import.meta.env.VITE_ADMIN_ORIGIN;        // dev: http://localhost:5174 — deploy: undefined (cùng địa chỉ)
+  {canOpenAdmin(me) && <a href={appLinks.admin.home(ADMIN)} data-testid="nav-admin">Quản trị</a>}
+  // trong app admin:
+  const EX = import.meta.env.VITE_EXCHANGE_ORIGIN;
+  <a href={appLinks.exchange.trade(symbol, EX)} target="_blank">Xem trên sàn</a>
+  ```
+- **Thao tác admin → web sàn thấy gì:** bảng ở `docs/antigravity/PROMPT-08-web-admin-noi-web-san.md` mục 3.
+

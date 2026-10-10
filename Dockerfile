@@ -1,4 +1,5 @@
-# The whole exchange in one image: API + realtime (/ws) + the exchange web app's production build,
+# The whole exchange in one image: API + realtime (/ws) + the production builds of the exchange web app (at /)
+# and the admin web app (at /admin/, same origin = same sign-in),
 # served by ONE process (CLAUDE.md invariant 5). Railway builds it from the repo root (railway.json).
 #   docker build -t cex .   ·   docker run -p 8080:8080 --env-file .env.staging cex
 # Required env in production: DATABASE_URL, APP_URL, DATA_ENCRYPTION_KEY, EMAIL_TRANSPORT=resend,
@@ -10,6 +11,7 @@ COPY . .
 # every workspace (UI included once merged): dev dependencies are needed to build the web app
 RUN npm ci --no-audit --no-fund
 RUN if [ -f apps/exchange/package.json ]; then npm run build -w @cex/exchange-web; fi
+RUN if [ -f apps/admin/package.json ]; then npm run build -w @cex/admin-web; fi
 # keep only what the server needs at runtime (drops vite, vitest, playwright, embedded-postgres…)
 RUN npm prune --omit=dev --no-audit --no-fund \
  && rm -rf legacy e2e .github docs apps/*/src apps/*/node_modules/.vite
@@ -17,7 +19,7 @@ RUN npm prune --omit=dev --no-audit --no-fund \
 FROM node:24-bookworm-slim
 ENV NODE_ENV=production \
     PORT=8080 \
-    WEB_DIST=/app/apps/exchange/dist \
+    WEB_DIST=/app/apps/exchange/dist     ADMIN_WEB_DIST=/app/apps/admin/dist \
     MARKET_FEED=binance
 WORKDIR /app
 COPY --from=build --chown=node:node /app /app

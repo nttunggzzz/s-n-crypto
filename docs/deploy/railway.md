@@ -43,7 +43,7 @@ Khóa bí mật **không gửi qua chat**. Bạn tự dán vào Railway → Vari
 | `ALERT_ENV_NAME` | `staging` |
 | `REGISTRATION` | `invite` (mặc định ở production — ghi rõ cho dễ nhìn) |
 
-   `NODE_ENV=production`, `MARKET_FEED=binance`, `WEB_DIST`, `PORT` đã có trong image hoặc do Railway cấp.
+   `NODE_ENV=production`, `MARKET_FEED=binance`, `WEB_DIST`, `ADMIN_WEB_DIST`, `PORT` đã có trong image hoặc do Railway cấp.
 4. **Deploy.** Log phải có lần lượt:
    - `standby` → `symbols synced from Binance` → `binance stream connected` → `server listening`;
    - tin Telegram "Server đã chạy — phiên bản …".
