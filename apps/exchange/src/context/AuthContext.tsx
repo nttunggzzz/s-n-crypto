@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import type { Me } from '@cex/contracts';
 import { ApiError } from '@cex/contracts';
-import { getApiClient } from '../services/api.ts';
+import { getApiClient, getRealtimeClient } from '../services/api.ts';
 import { getErrorMessage } from '../services/errors.ts';
 
 export interface LoginInput {
@@ -41,12 +41,43 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const api = getApiClient();
 
+  const reconnectRt = async () => {
+    try {
+      const rt = await getRealtimeClient();
+      rt.reconnect();
+    } catch {
+      // ignore
+    }
+  };
+
+  const applyThemeAndColor = (theme?: string, upColor?: string) => {
+    let resolvedTheme = theme;
+    if (!resolvedTheme || resolvedTheme === 'system') {
+      resolvedTheme = window.matchMedia?.('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+    }
+    document.documentElement.setAttribute('data-theme', resolvedTheme);
+    document.documentElement.setAttribute('data-color-reversed', upColor === 'RED' ? 'true' : 'false');
+  };
+
+  const syncPreferences = async () => {
+    try {
+      const pref = await api.getPreferences();
+      applyThemeAndColor(pref.theme, pref.upColor);
+    } catch {
+      const savedTheme = localStorage.getItem('cex_theme') || 'dark';
+      const savedReversed = localStorage.getItem('cex_color_reversed') === 'true';
+      applyThemeAndColor(savedTheme, savedReversed ? 'RED' : 'GREEN');
+    }
+  };
+
   const refreshUser = async () => {
     try {
       const me = await api.me();
       setUser(me);
+      await syncPreferences();
     } catch {
       setUser(null);
+      syncPreferences();
     } finally {
       setIsLoading(false);
     }
@@ -54,6 +85,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     refreshUser();
+    syncPreferences();
+
+    let unsubError: (() => void) | undefined;
+    getRealtimeClient().then((rt) => {
+      unsubError = rt.onError((err) => {
+        if (err.channel === 'user' && err.code === 'UNAUTHENTICATED') {
+          api.me().then(
+            (me) => setUser(me),
+            () => {
+              setUser(null);
+              rt.reconnect();
+            }
+          );
+        }
+      });
+    }).catch(() => {});
+
+    return () => {
+      unsubError?.();
+    };
   }, []);
 
   const login = async (data: LoginInput): Promise<LoginResult> => {
@@ -69,6 +120,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       if ('user' in res) {
         setUser(res.user);
+        await reconnectRt();
         return { success: true };
       }
       return { success: false, error: 'Đăng nhập không thành công.' };
@@ -90,6 +142,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const res = await api.loginTwoFactor({ body: { challengeToken, code } });
       setUser(res.user);
+      await reconnectRt();
       return { success: true };
     } catch (err: unknown) {
       if (err instanceof ApiError) {
@@ -103,6 +156,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const res = await api.register({ body: data });
       setUser(res.user);
+      await reconnectRt();
       return { success: true };
     } catch (err: unknown) {
       if (err instanceof ApiError) {
@@ -119,6 +173,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Ignore logout errors
     } finally {
       setUser(null);
+      await reconnectRt();
     }
   };
 

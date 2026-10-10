@@ -139,7 +139,11 @@ export const TradePage: React.FC<TradePageProps> = ({ symbolParam, onNavigate })
                 )}
               </span>
               <span className="text-[11px] text-[var(--text-2,#a1a1aa)] font-mono">
-                ${activeTicker?.lastPrice ? formatDecimal(activeTicker.lastPrice, { decimals: 2 }) : '0.00'}
+                {activeTicker?.lastPrice ? (
+                  <span>≈ {formatDecimal(activeTicker.lastPrice, { decimals: activeSymbolInfo?.pricePrecision ?? 8 })} USDT</span>
+                ) : (
+                  <span>—</span>
+                )}
               </span>
             </div>
           </div>

@@ -96,6 +96,40 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
       setAvgCost(null);
       return;
     }
+
+    if (marketType === 'futures') {
+      setAvgCost(null);
+      api.futuresOpenOrders({ query: { symbol } })
+        .then((res) => {
+          setOpenOrders(
+            res.items.map((fo) => ({
+              id: fo.id,
+              symbol: fo.symbol,
+              side: fo.side,
+              type: fo.type,
+              price: fo.price || '0',
+              quantity: fo.quantity,
+              executedQty: fo.executedQty,
+              createdAt: fo.createdAt,
+              updatedAt: fo.updatedAt,
+              status: fo.status,
+              source: 'USER',
+              icebergQty: null,
+              timeInForce: 'GTC',
+              avgPrice: null,
+              quoteSpent: '0',
+              baseReceived: '0',
+              cumFee: '0',
+              clientOrderId: null,
+              stopPrice: null,
+              closeReason: null,
+            } as any))
+          );
+        })
+        .catch(() => setOpenOrders([]));
+      return;
+    }
+
     api.openOrders({ query: { symbol } })
       .then((res) => setOpenOrders(res.items))
       .catch(() => setOpenOrders([]));
@@ -107,7 +141,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
         setAvgCost(pos?.avgCost || null);
       })
       .catch(() => setAvgCost(null));
-  }, [api, symbol, isAuthenticated, activeSymbolInfo]);
+  }, [api, symbol, isAuthenticated, activeSymbolInfo, marketType]);
 
   // Fetch historical candles
   useEffect(() => {
@@ -323,8 +357,8 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
       const tick = activeSymbolInfo?.tickSize || '0.01';
       const priceDecimals = tick.includes('.') ? (tick.split('.')[1]?.length ?? 2) : 2;
 
-      // 1. Avg Cost line from portfolio
-      if (avgCost) {
+      // 1. Avg Cost line from portfolio (Spot only)
+      if (marketType === 'spot' && avgCost) {
         const costLine = mainSeries.createPriceLine({
           price: parseFloat(avgCost),
           color: '#f59e0b',

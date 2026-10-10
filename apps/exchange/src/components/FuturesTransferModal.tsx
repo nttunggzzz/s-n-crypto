@@ -149,6 +149,7 @@ export const FuturesTransferModal: React.FC<FuturesTransferModalProps> = ({
         {/* Amount Input with MAX button */}
         <div className="relative">
           <DecimalInput
+            data-testid="transfer-amount"
             label="Số tiền chuyển"
             value={amount}
             onValueChange={setAmount}
@@ -171,6 +172,7 @@ export const FuturesTransferModal: React.FC<FuturesTransferModalProps> = ({
             Hủy
           </Button>
           <Button
+            data-testid="transfer-submit"
             type="submit"
             variant="primary"
             loading={loading}

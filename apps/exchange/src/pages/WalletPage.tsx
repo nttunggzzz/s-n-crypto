@@ -22,7 +22,7 @@ import {
   formatDecimal,
   formatAmount,
 } from '@cex/ui';
-import { ArrowLeftRight, TrendingUp, TrendingDown, ArrowUpRight, BarChart2 } from 'lucide-react';
+import { ArrowLeftRight, TrendingUp, TrendingDown, ArrowUpRight, BarChart2, Download } from 'lucide-react';
 import { FuturesTransferModal } from '../components/FuturesTransferModal.tsx';
 
 export interface WalletPageProps {
@@ -258,6 +258,15 @@ export const WalletPage: React.FC<WalletPageProps> = ({ onNavigate }) => {
         </div>
 
         <div className="flex items-center gap-2">
+          <a
+            href="/api/v1/export/ledger.csv"
+            download="ledger.csv"
+            className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-[var(--radius-sm,4px)] bg-transparent text-[var(--color-text-secondary,#9ca3af)] border border-[var(--color-border-default,#272a33)] hover:bg-[var(--color-bg-surface,#111319)] hover:text-white transition-colors"
+            title="Xuất lịch sử sổ cái ra file CSV"
+          >
+            <Download size={13} />
+            <span>Xuất CSV</span>
+          </a>
           <Button
             variant="outline"
             size="sm"
@@ -472,6 +481,20 @@ export const WalletPage: React.FC<WalletPageProps> = ({ onNavigate }) => {
                   />
                   <span>Hiện khóa/mở khóa lệnh</span>
                 </label>
+
+                {/* Export CSV */}
+                <a
+                  href={`/api/v1/export/ledger.csv?${new URLSearchParams({
+                    ...(ledgerFilterAsset !== 'ALL' ? { asset: ledgerFilterAsset } : {}),
+                    hideLocks: showOrderLocks ? 'false' : 'true',
+                  }).toString()}`}
+                  download="ledger.csv"
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-[var(--radius-sm,4px)] bg-[var(--color-bg-elevated,#1b1e27)] text-[var(--color-text-primary,#f3f4f6)] border border-[var(--color-border-default,#272a33)] hover:bg-[var(--color-border-default,#272a33)] transition-colors cursor-pointer"
+                  title="Xuất dữ liệu sổ cái ra file CSV"
+                >
+                  <Download size={13} />
+                  <span>Xuất CSV</span>
+                </a>
               </div>
             </div>
 
@@ -674,6 +697,19 @@ export const WalletPage: React.FC<WalletPageProps> = ({ onNavigate }) => {
                   />
                   <span>Hiện khóa/mở ký quỹ lệnh</span>
                 </label>
+
+                {/* Export CSV for Futures */}
+                <a
+                  href={`/api/v1/export/ledger.csv?${new URLSearchParams({
+                    hideLocks: showFuturesOrderLocks ? 'false' : 'true',
+                  }).toString()}`}
+                  download="futures-ledger.csv"
+                  className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold rounded-[var(--radius-sm,4px)] bg-[var(--color-bg-elevated,#1b1e27)] text-[var(--color-text-primary,#f3f4f6)] border border-[var(--color-border-default,#272a33)] hover:bg-[var(--color-border-default,#272a33)] transition-colors cursor-pointer"
+                  title="Xuất dữ liệu sổ cái Futures ra file CSV"
+                >
+                  <Download size={13} />
+                  <span>Xuất CSV</span>
+                </a>
               </div>
             </div>
 

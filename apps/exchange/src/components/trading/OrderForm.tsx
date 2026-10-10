@@ -35,7 +35,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({
   onNavigateToLogin,
 }) => {
   const { user, isAuthenticated } = useAuth();
-  const { activeSymbolInfo, activeTicker, exchangeInfo, tradingHalted, realtimeClient } = useMarket();
+  const { activeSymbolInfo, activeTicker, exchangeInfo, tradingHalted, disabledSymbols, realtimeClient } = useMarket();
   const { success, error: toastError } = useToast();
   const api = getApiClient();
 
@@ -541,7 +541,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({
   };
 
   const isPriceInvalid = activeTicker?.status === 'UNAVAILABLE' || activeTicker?.status === 'STALE';
-  const isSymbolDisabled = !activeSymbolInfo?.enabled;
+  const isSymbolDisabled = !activeSymbolInfo?.enabled || (disabledSymbols && disabledSymbols.includes(symbol));
   const isEmailUnverified = user && !user.emailVerified;
 
   const cannotTradeReason = tradingHalted
@@ -1090,6 +1090,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({
                 Hủy bỏ
               </Button>
               <Button
+                data-testid="order-confirm"
                 variant={side === 'BUY' ? 'buy' : 'sell'}
                 loading={submitting}
                 onClick={() => dispatchOrder(confirmModalData)}

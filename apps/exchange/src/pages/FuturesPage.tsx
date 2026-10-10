@@ -11,7 +11,7 @@ import type {
   FuturesSymbolInfo,
   UserEvent,
 } from '@cex/contracts';
-import { ApiError } from '@cex/contracts';
+import { countdown, resolveFuturesSymbol, ApiError } from '@cex/contracts';
 import { getApiClient } from '../services/api.ts';
 import { getErrorMessage } from '../services/errors.ts';
 import { useAuth } from '../context/AuthContext.tsx';
@@ -71,7 +71,7 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
   onNavigate,
 }) => {
   const { isAuthenticated } = useAuth();
-  const { realtimeClient } = useMarket();
+  const { symbols: spotSymbols, realtimeClient } = useMarket();
   const { success, error: toastError, info: toastInfo } = useToast();
   const api = getApiClient();
 
@@ -86,6 +86,13 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
   const [fundingHistory, setFundingHistory] = useState<FundingEvent[]>([]);
   const [symbolSettings, setSymbolSettings] = useState<FuturesSymbolSettings[]>([]);
   const [symbolInfos, setSymbolInfos] = useState<FuturesSymbolInfo[]>([]);
+
+  // Ticking now for countdown
+  const [now, setNow] = useState(Date.now());
+  const [confirmOrdersPref, setConfirmOrdersPref] = useState(true);
+  const [confirmOrderData, setConfirmOrderData] = useState<{ side: 'BUY' | 'SELL'; body: any } | null>(null);
+  const [showContractSelector, setShowContractSelector] = useState(false);
+  const [contractSearch, setContractSearch] = useState('');
 
   // Modals & Panels
   const [transferModalOpen, setTransferModalOpen] = useState(false);
@@ -109,6 +116,51 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
     () => localStorage.getItem('cex_futures_intro_dismissed') === 'true'
   );
   const [doNotShowAgain, setDoNotShowAgain] = useState(false);
+
+  // Countdown timer
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  // Fetch preferences
+  useEffect(() => {
+    if (isAuthenticated) {
+      api.getPreferences()
+        .then((pref) => {
+          if (typeof pref.confirmOrders === 'boolean') {
+            setConfirmOrdersPref(pref.confirmOrders);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [api, isAuthenticated]);
+
+  // Symbol resolution for Spot -> Futures (REVIEW-03 A4)
+  useEffect(() => {
+    if (symbolInfos.length > 0) {
+      const resolved = resolveFuturesSymbol(symbolParam, symbolInfos, spotSymbols || []) || symbolParam;
+      if (resolved !== symbol) {
+        setSymbol(resolved);
+        if (resolved !== symbolParam) {
+          window.history.replaceState({}, '', `/futures/${resolved}`);
+        }
+      }
+    } else {
+      const upper = symbolParam.toUpperCase();
+      const known1000: Record<string, string> = {
+        PEPEUSDT: '1000PEPEUSDT',
+        SHIBUSDT: '1000SHIBUSDT',
+        BONKUSDT: '1000BONKUSDT',
+        FLOKIUSDT: '1000FLOKIUSDT',
+      };
+      if (known1000[upper]) {
+        const mapped = known1000[upper];
+        setSymbol(mapped);
+        window.history.replaceState({}, '', `/futures/${mapped}`);
+      }
+    }
+  }, [symbolParam, symbolInfos, spotSymbols, symbol]);
 
   // Active Futures Ticker
   const currentTicker = useMemo(() => {
@@ -198,6 +250,10 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
   useEffect(() => {
     if (!realtimeClient) return;
 
+    const unsubTickers = realtimeClient.subscribe('futures:tickers', (data: { items: FuturesTicker[] }) => {
+      setTickers(data.items);
+    });
+
     const unsubMark = realtimeClient.subscribe(`futures:mark:${symbol}`, (data: MarkPrice) => {
       setMarkPrice(data);
     });
@@ -245,6 +301,7 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
     }
 
     return () => {
+      unsubTickers();
       unsubMark();
       unsubTicker();
       if (unsubUser) unsubUser();
@@ -335,25 +392,34 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
       return;
     }
 
+    const body: any = {
+      symbol,
+      side: orderSide,
+      type: orderType,
+      quantity: calculatedQty.toString(),
+      reduceOnly,
+    };
+    if (orderType === 'LIMIT') body.price = price;
+    if (enableTpSl) {
+      body.tpsl = {};
+      if (orderTpPrice) body.tpsl.takeProfitPrice = orderTpPrice;
+      if (orderSlPrice) body.tpsl.stopLossPrice = orderSlPrice;
+    }
+
+    if (confirmOrdersPref) {
+      setConfirmOrderData({ side: orderSide, body });
+    } else {
+      await executePlaceOrder(body, orderSide);
+    }
+  };
+
+  const executePlaceOrder = async (body: any, orderSide: 'BUY' | 'SELL') => {
     setSubmittingOrder(true);
     try {
-      const body: any = {
-        symbol,
-        side: orderSide,
-        type: orderType,
-        quantity: calculatedQty.toString(),
-        reduceOnly,
-      };
-      if (orderType === 'LIMIT') body.price = price;
-      if (enableTpSl) {
-        body.tpsl = {};
-        if (orderTpPrice) body.tpsl.takeProfitPrice = orderTpPrice;
-        if (orderSlPrice) body.tpsl.stopLossPrice = orderSlPrice;
-      }
-
       await api.futuresPlaceOrder({ body });
       success(`Đã gửi lệnh Futures ${orderSide === 'BUY' ? 'Mở Long' : 'Mở Short'} thành công!`);
       setQuantity('');
+      setConfirmOrderData(null);
       fetchData();
     } catch (err: unknown) {
       if (err instanceof ApiError) {
@@ -475,13 +541,69 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
       )}
 
       {/* 2. Ticker Bar */}
-      <div className="px-4 py-2 border-b border-[var(--line,#1d1e21)] bg-[var(--panel,#0a0a0b)] flex flex-wrap items-center justify-between gap-4 shrink-0">
+      <div className="px-4 py-2 border-b border-[var(--line,#1d1e21)] bg-[var(--panel,#0a0a0b)] flex flex-wrap items-center justify-between gap-4 shrink-0 relative z-30">
         <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2">
-            <h1 className="text-base font-bold text-white">{symbol}</h1>
-            <Badge variant="outline" size="sm" className="text-[10px] text-[var(--accent,#818cf8)] border-[var(--accent,#818cf8)]/40 font-bold">
-              Futures · Mô phỏng
-            </Badge>
+          <div className="relative">
+            <button
+              onClick={() => setShowContractSelector((prev) => !prev)}
+              className="flex items-center gap-2 hover:bg-[var(--line,#1d1e21)] px-2 py-1 rounded transition-colors cursor-pointer"
+            >
+              <h1 className="text-base font-bold text-white flex items-center gap-1">
+                {symbol}
+                <ChevronDown size={14} className="text-[var(--text-3,#63636b)]" />
+              </h1>
+              <Badge variant="outline" size="sm" className="text-[10px] text-[var(--accent,#818cf8)] border-[var(--accent,#818cf8)]/40 font-bold">
+                Futures · Vĩnh cửu
+              </Badge>
+            </button>
+
+            {/* Contract Selector Dropdown (REVIEW-03 A4) */}
+            {showContractSelector && (
+              <div className="absolute top-full left-0 mt-1 w-72 bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)] rounded-lg shadow-2xl p-2 z-50">
+                <input
+                  type="text"
+                  placeholder="Tìm kiếm hợp đồng..."
+                  value={contractSearch}
+                  onChange={(e) => setContractSearch(e.target.value)}
+                  className="w-full px-2 py-1 bg-[var(--panel-2,#141416)] border border-[var(--line,#1d1e21)] rounded text-xs text-white mb-2 focus:outline-none focus:border-[var(--accent,#818cf8)]"
+                  autoFocus
+                />
+                <div className="max-h-60 overflow-y-auto space-y-1">
+                  {symbolInfos
+                    .filter((c) => {
+                      const q = contractSearch.trim().toUpperCase();
+                      return !q || c.symbol.includes(q) || c.underlyingAsset.includes(q);
+                    })
+                    .map((c) => {
+                      const t = tickers.find((x) => x.symbol === c.symbol);
+                      return (
+                        <div
+                          key={c.symbol}
+                          onClick={() => {
+                            setSymbol(c.symbol);
+                            window.history.replaceState({}, '', `/futures/${c.symbol}`);
+                            setShowContractSelector(false);
+                          }}
+                          className={`flex items-center justify-between p-2 rounded cursor-pointer text-xs hover:bg-[var(--panel-2,#141416)] ${
+                            c.symbol === symbol ? 'bg-[var(--panel-2,#141416)] font-bold text-[var(--accent,#818cf8)]' : 'text-white'
+                          }`}
+                        >
+                          <div>
+                            <div>{c.symbol}</div>
+                            <div className="text-[10px] text-[var(--text-3,#63636b)]">Đơn vị: {c.multiplier}× {c.underlyingAsset}</div>
+                          </div>
+                          <div className="text-right font-mono">
+                            <div>{t?.lastPrice ? formatDecimal(t.lastPrice) : '—'}</div>
+                            <div className={`text-[10px] ${t?.priceChangePercent?.startsWith('-') ? 'text-[var(--down,#f2475f)]' : 'text-[var(--up,#1fc27a)]'}`}>
+                              {t?.priceChangePercent ? `${t.priceChangePercent}%` : '—'}
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Last Price */}
@@ -508,11 +630,19 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
             </span>
           </div>
 
-          {/* Funding Rate & Countdown */}
+          {/* Funding Rate & Countdown (REVIEW-03 A2) */}
           <div className="flex flex-col">
             <span className="text-[10px] text-[var(--text-3,#63636b)]">Funding / Đếm ngược</span>
-            <span className="font-mono text-xs text-[var(--warn,#f59e0b)] font-semibold">
-              {markPrice?.fundingRate ? `${(parseFloat(markPrice.fundingRate) * 100).toFixed(4)}%` : '0.0100%'} · 04:22:15
+            <span className="font-mono text-xs text-[var(--warn,#f59e0b)] font-semibold flex items-center gap-1">
+              <span>
+                {markPrice?.fundingRate
+                  ? `${formatDecimal(dec(markPrice.fundingRate).mul(100).toString(), { decimals: 4 })}%`
+                  : '—'}
+              </span>
+              <span>·</span>
+              <span data-testid="funding-countdown">
+                {countdown(markPrice?.nextFundingTime, now) || '—'}
+              </span>
             </span>
           </div>
         </div>
@@ -644,7 +774,7 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
                         const isNeg = unrealized.lt(ZERO);
 
                         return (
-                          <TableRow key={pos.id}>
+                          <TableRow key={pos.id} data-testid="position-row">
                             <TableCell className="font-bold">
                               <div className="flex items-center gap-1.5">
                                 <span className={pos.side === 'LONG' ? 'text-[var(--up,#1fc27a)]' : 'text-[var(--down,#f2475f)]'}>
@@ -690,13 +820,14 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
                               <div className={isPos ? 'text-[var(--up,#1fc27a)]' : isNeg ? 'text-[var(--down,#f2475f)]' : 'text-white'}>
                                 <div>{isPos ? `+${formatDecimal(unrealized.toString(), { decimals: 2 })}` : formatDecimal(unrealized.toString(), { decimals: 2 })} USDT</div>
                                 <div className="text-[10px]">
-                                  {roe ? `${isPos ? '+' : ''}${(parseFloat(roe.toString()) * 100).toFixed(2)}%` : '0.00%'}
+                                  {roe ? `${isPos ? '+' : ''}${(parseFloat(roe.toString()) * 100).toFixed(2)}%` : '—'}
                                 </div>
                               </div>
                             </TableCell>
 
                             <TableCell className="text-center font-mono text-[11px]">
                               <button
+                                data-testid="position-tpsl"
                                 onClick={() => {
                                   setTpslPosition(pos);
                                   setTpPriceInput(pos.takeProfitPrice || '');
@@ -712,14 +843,7 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
                             <TableCell className="text-right">
                               <div className="flex items-center justify-end gap-1.5">
                                 <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => handleClosePosition(pos, true)}
-                                  className="text-[var(--down,#f2475f)] hover:bg-[var(--down,#f2475f)]/10 text-[11px] px-2 py-1"
-                                >
-                                  Thị trường
-                                </Button>
-                                <Button
+                                  data-testid="position-close"
                                   variant="ghost"
                                   size="sm"
                                   onClick={() => {
@@ -727,9 +851,9 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
                                     setCloseQtyInput(pos.quantity);
                                     setClosePositionModalOpen(true);
                                   }}
-                                  className="text-[var(--text-2,#a1a1aa)] hover:text-white text-[11px] px-2 py-1"
+                                  className="text-[var(--down,#f2475f)] hover:bg-[var(--down,#f2475f)]/10 text-[11px] px-2 py-1"
                                 >
-                                  Một phần
+                                  Đóng
                                 </Button>
                               </div>
                             </TableCell>
@@ -829,6 +953,7 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
               Giới hạn (Limit)
             </button>
             <button
+              data-testid="futures-order-type-market"
               onClick={() => setOrderType('MARKET')}
               className={`py-1 rounded transition-colors cursor-pointer ${orderType === 'MARKET' ? 'bg-[var(--line,#1d1e21)] text-white' : 'text-[var(--text-3,#63636b)]'}`}
             >
@@ -840,11 +965,12 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
           <div className="flex items-center justify-between text-[11px] text-[var(--text-3,#63636b)]">
             <div className="flex items-center gap-1">
               <span>Khả dụng:</span>
-              <span className="font-mono text-white font-semibold">
+              <span data-testid="futures-available" className="font-mono text-white font-semibold">
                 {isAuthenticated ? `${formatDecimal(account?.available || '0.00', { decimals: 2 })} USDT` : '—'}
               </span>
             </div>
             <button
+              data-testid="futures-transfer-open"
               onClick={() => setTransferModalOpen(true)}
               className="text-[var(--accent,#818cf8)] hover:underline flex items-center gap-1 font-semibold cursor-pointer"
             >
@@ -870,6 +996,7 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
               <span>Khối lượng</span>
               <div className="flex items-center gap-1">
                 <button
+                  data-testid="futures-unit-coin"
                   onClick={() => setUnitMode('coin')}
                   className={`cursor-pointer ${unitMode === 'coin' ? 'text-[var(--accent,#818cf8)] font-bold' : 'text-[var(--text-3,#63636b)]'}`}
                 >
@@ -885,6 +1012,7 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
               </div>
             </div>
             <DecimalInput
+              data-testid="futures-qty"
               value={quantity}
               onValueChange={setQuantity}
               unit={unitMode === 'coin' ? symbol.replace('USDT', '') : 'USDT'}
@@ -993,6 +1121,7 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
           {/* Two Big Action Buttons: Mở Long / Mở Short */}
           <div className="grid grid-cols-2 gap-2 mt-1">
             <Button
+              data-testid="futures-open-long"
               variant="buy"
               size="lg"
               loading={submittingOrder}
@@ -1002,6 +1131,7 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
               {currentPosition?.side === 'SHORT' ? 'Đóng Short' : 'Mở Long'}
             </Button>
             <Button
+              data-testid="futures-open-short"
               variant="sell"
               size="lg"
               loading={submittingOrder}
@@ -1129,6 +1259,7 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
             </div>
 
             <DecimalInput
+              data-testid="tpsl-take-profit"
               label="Mức giá Chốt lời (TP)"
               value={tpPriceInput}
               onValueChange={setTpPriceInput}
@@ -1137,6 +1268,7 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
             />
 
             <DecimalInput
+              data-testid="tpsl-stop-loss"
               label="Mức giá Cắt lỗ (SL)"
               value={slPriceInput}
               onValueChange={setSlPriceInput}
@@ -1146,24 +1278,24 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
 
             <div className="grid grid-cols-2 gap-2 pt-3 border-t border-[var(--line,#1d1e21)]">
               <Button variant="secondary" onClick={() => setTpslModalOpen(false)}>Hủy</Button>
-              <Button variant="primary" onClick={handleSaveTpSl}>Lưu thay đổi</Button>
+              <Button data-testid="tpsl-save" variant="primary" onClick={handleSaveTpSl}>Lưu thay đổi</Button>
             </div>
           </div>
         </Modal>
       )}
 
-      {/* Close Partial Position Modal */}
+      {/* Close Position Modal */}
       {closePositionModalOpen && closePositionTarget && (
         <Modal
           isOpen={true}
           onClose={() => setClosePositionModalOpen(false)}
-          title="Đóng vị thế một phần"
+          title="Đóng vị thế"
           maxWidth="sm"
         >
           <div className="p-5 flex flex-col gap-4 text-xs">
             <div className="flex items-center justify-between text-[11px]">
-              <span className="text-[var(--text-3,#63636b)]">Tổng khối lượng hiện tại:</span>
-              <span className="font-bold text-white font-mono">{closePositionTarget.quantity}</span>
+              <span className="text-[var(--text-3,#63636b)]">Tổng khối lượng vị thế:</span>
+              <span className="font-bold text-white font-mono">{closePositionTarget.quantity} {closePositionTarget.symbol.replace('USDT', '')}</span>
             </div>
 
             <DecimalInput
@@ -1176,8 +1308,56 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
 
             <div className="grid grid-cols-2 gap-2 pt-3 border-t border-[var(--line,#1d1e21)]">
               <Button variant="secondary" onClick={() => setClosePositionModalOpen(false)}>Hủy</Button>
-              <Button variant="danger" onClick={() => handleClosePosition(closePositionTarget, false)}>
+              <Button
+                data-testid="close-confirm"
+                variant="danger"
+                onClick={() => handleClosePosition(closePositionTarget, !closeQtyInput || closeQtyInput === closePositionTarget.quantity)}
+              >
                 Xác nhận đóng
+              </Button>
+            </div>
+          </div>
+        </Modal>
+      )}
+
+      {/* Order Confirmation Modal */}
+      {confirmOrderData && (
+        <Modal
+          isOpen={true}
+          onClose={() => setConfirmOrderData(null)}
+          title="Xác nhận đặt lệnh Hợp đồng"
+          maxWidth="sm"
+        >
+          <div className="p-4 flex flex-col gap-3 text-xs">
+            <div className="flex items-center justify-between pb-2 border-b border-[var(--line,#1d1e21)]">
+              <span className="text-[var(--text-3,#63636b)]">Hợp đồng:</span>
+              <span className="font-bold text-white">{symbol}</span>
+            </div>
+            <div className="flex items-center justify-between pb-2 border-b border-[var(--line,#1d1e21)]">
+              <span className="text-[var(--text-3,#63636b)]">Loại lệnh & Chiều:</span>
+              <span className={`font-bold ${confirmOrderData.side === 'BUY' ? 'text-[var(--up,#1fc27a)]' : 'text-[var(--down,#f2475f)]'}`}>
+                {confirmOrderData.side === 'BUY' ? 'MUA / MỞ LONG' : 'BÁN / MỞ SHORT'} ({confirmOrderData.body.type})
+              </span>
+            </div>
+            <div className="flex items-center justify-between pb-2 border-b border-[var(--line,#1d1e21)]">
+              <span className="text-[var(--text-3,#63636b)]">Khối lượng:</span>
+              <span className="font-mono text-white font-bold">{confirmOrderData.body.quantity}</span>
+            </div>
+            {confirmOrderData.body.price && (
+              <div className="flex items-center justify-between pb-2 border-b border-[var(--line,#1d1e21)]">
+                <span className="text-[var(--text-3,#63636b)]">Mức giá:</span>
+                <span className="font-mono text-white font-bold">{confirmOrderData.body.price} USDT</span>
+              </div>
+            )}
+            <div className="grid grid-cols-2 gap-2 mt-2 pt-3 border-t border-[var(--line,#1d1e21)]">
+              <Button variant="secondary" onClick={() => setConfirmOrderData(null)}>Hủy bỏ</Button>
+              <Button
+                data-testid="order-confirm"
+                variant={confirmOrderData.side === 'BUY' ? 'buy' : 'sell'}
+                loading={submittingOrder}
+                onClick={() => executePlaceOrder(confirmOrderData.body, confirmOrderData.side)}
+              >
+                Xác nhận đặt
               </Button>
             </div>
           </div>
