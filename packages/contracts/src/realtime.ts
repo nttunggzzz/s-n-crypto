@@ -5,6 +5,7 @@ import { Order, OrderList, Trade } from './orders.ts';
 import { Notification } from './notifications.ts';
 import { PriceAlert } from './alerts.ts';
 import { FuturesAccount, FuturesOrder, FuturesPosition, FuturesTicker, FuturesTrade, MarkPrice } from './futures.ts';
+import { DcaPlan, GridBot } from './bots.ts';
 
 /**
  * WebSocket: connect to `/ws` (same origin; the session cookie authenticates the `user` channel).
@@ -50,6 +51,11 @@ export const UserEvent = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('futuresPosition'), position: FuturesPosition }),
   /** Futures wallet changed (transfer, fill, funding, liquidation). */
   z.object({ kind: z.literal('futuresAccount'), account: FuturesAccount }),
+  // bots (phase 2.6)
+  /** A grid bot changed (fill, round completed, stopped). */
+  z.object({ kind: z.literal('gridBot'), bot: GridBot }),
+  /** A recurring-buy plan ran / was paused / changed. */
+  z.object({ kind: z.literal('dcaPlan'), plan: DcaPlan }),
 ]);
 export type UserEvent = z.infer<typeof UserEvent>;
 

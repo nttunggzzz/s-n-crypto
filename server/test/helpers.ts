@@ -2,6 +2,7 @@ import { sql } from 'drizzle-orm';
 import { createDatabase, type Database } from '../src/db/client.ts';
 import { futuresSymbols, symbols, users } from '../src/db/schema.ts';
 import { createFutures, type Futures } from '../src/modules/futures/index.ts';
+import { createBots, type Bots } from '../src/modules/bots/index.ts';
 import { seedAssets } from '../src/modules/market/assets.ts';
 import { MarketDataService } from '../src/modules/market/marketData.ts';
 import { ExchangeConfig } from '../src/modules/exchange/exchangeConfig.ts';
@@ -37,12 +38,14 @@ export interface TestEnv {
   market: MarketDataService;
   ex: Exchange;
   futures: Futures;
+  bots: Bots;
   close(): Promise<void>;
 }
 
 export async function resetDb(database: Database): Promise<void> {
   await database.db.execute(sql`
-    TRUNCATE futures_funding_payments, futures_funding_events, futures_trades, futures_orders, futures_positions, futures_user_symbols, futures_symbols,
+    TRUNCATE grid_bot_cells, grid_bots, dca_runs, dca_plans, login_events,
+             futures_funding_payments, futures_funding_events, futures_trades, futures_orders, futures_positions, futures_user_symbols, futures_symbols,
              trades, orders, order_lists, ledger_entries, balances, positions, portfolio_snapshots, price_alerts,
              notifications, user_preferences, faucet_claims, sessions, verification_tokens,
              audit_logs, reconciliation_runs, candles, symbols, assets, announcements, users RESTART IDENTITY CASCADE`);
@@ -68,12 +71,16 @@ export async function createTestEnv(poolSize = 10): Promise<TestEnv> {
   const ex = await createExchange(database.db, market, config, clock.date);
   const futures = await createFutures(database.db, config, ex.events, { restUrl: null, clock: clock.now, now: clock.date });
   await futures.engine.start();
+  // bots react to their order events; tests drive DCA runs and grid sweeps explicitly (no timers)
+  const bots = createBots(database.db, ex, market, clock.date);
+  bots.grid.attach();
   return {
     database,
     clock,
     market,
     ex,
     futures,
+    bots,
     close: async () => {
       ex.matcher.stop();
       futures.engine.stop();

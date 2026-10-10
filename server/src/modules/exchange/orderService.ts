@@ -45,6 +45,12 @@ export interface OrderResult {
   trades: TradeRow[];
 }
 
+/** Bot orders are tagged with their bot; only the bot (or an admin) cancels them. */
+export interface OrderSourceMeta {
+  source: 'GRID' | 'DCA';
+  sourceId: number;
+}
+
 const isOpen = (status: string) => (OPEN_STATUSES as readonly string[]).includes(status);
 const fx = (d: Dec) => toFixedStr(d);
 const fxn = (d: Dec | null | undefined) => (d ? toFixedStr(d) : null);
@@ -99,7 +105,7 @@ export class OrderService {
 
   // ═════════════════════════════ place
 
-  async placeOrder(userId: string, input: PlaceOrderInput): Promise<OrderResult> {
+  async placeOrder(userId: string, input: PlaceOrderInput, meta?: OrderSourceMeta): Promise<OrderResult> {
     const sym = this.config.requireTradable(input.symbol);
     this.requireLive(input.symbol);
     const clientOrderId = input.clientOrderId ?? randomUUID().replace(/-/g, '');
@@ -108,9 +114,9 @@ export class OrderService {
         await this.checkOpenLimit(tx, userId, input.type === 'MARKET' ? 0 : 1);
         switch (input.type) {
           case 'MARKET':
-            return this.placeMarket(tx, out, userId, sym, input, clientOrderId);
+            return this.placeMarket(tx, out, userId, sym, input, clientOrderId, meta);
           case 'LIMIT':
-            return this.placeLimit(tx, out, userId, sym, input, clientOrderId);
+            return this.placeLimit(tx, out, userId, sym, input, clientOrderId, meta);
           case 'STOP_MARKET':
           case 'STOP_LIMIT':
             return this.placeStop(tx, out, userId, sym, input, clientOrderId);
@@ -156,7 +162,7 @@ export class OrderService {
     return out.order(order!);
   }
 
-  private async placeMarket(tx: Tx, out: Outcome, userId: string, sym: LoadedSymbol, input: Extract<PlaceOrderInput, { type: 'MARKET' }>, clientOrderId: string): Promise<OrderResult> {
+  private async placeMarket(tx: Tx, out: Outcome, userId: string, sym: LoadedSymbol, input: Extract<PlaceOrderInput, { type: 'MARKET' }>, clientOrderId: string, meta?: OrderSourceMeta): Promise<OrderResult> {
     let target: WalkTarget;
     if (input.quantity !== undefined) {
       const qty = dec(input.quantity);
@@ -187,12 +193,13 @@ export class OrderService {
         quantity: input.quantity ?? null,
         quoteOrderQty: input.quoteOrderQty ?? null,
         tpsl,
+        ...(meta ? { source: meta.source, sourceId: meta.sourceId } : {}),
       })
       .returning();
     return this.settleFills(tx, out, order!, sym, walk.fills, 'TAKER', this.now(), true);
   }
 
-  private async placeLimit(tx: Tx, out: Outcome, userId: string, sym: LoadedSymbol, input: Extract<PlaceOrderInput, { type: 'LIMIT' }>, clientOrderId: string): Promise<OrderResult> {
+  private async placeLimit(tx: Tx, out: Outcome, userId: string, sym: LoadedSymbol, input: Extract<PlaceOrderInput, { type: 'LIMIT' }>, clientOrderId: string, meta?: OrderSourceMeta): Promise<OrderResult> {
     const price = dec(input.price);
     const qty = dec(input.quantity);
     ruleError(checkPrice(sym.rules, price));
@@ -215,6 +222,7 @@ export class OrderService {
         quantity: fx(qty),
         lockPrice: isBuy ? fx(price) : null,
         tpsl,
+        ...(meta ? { source: meta.source, sourceId: meta.sourceId } : {}),
       },
       isBuy ? sym.row.quoteAsset : sym.row.baseAsset,
       isBuy ? qty.mul(price) : qty,
@@ -694,6 +702,7 @@ export class OrderService {
       const order = group.find((o) => o.id === id);
       if (!order) throw new AppError('NOT_FOUND', 'Order not found');
       if (!isOpen(order.status)) throw new AppError('ORDER_NOT_CANCELABLE', `Order is ${order.status}`);
+      if (order.source !== 'USER' && reason === 'USER_CANCELED') throw new AppError('ORDER_NOT_CANCELABLE', 'This order belongs to a bot — stop the bot instead', { source: order.source });
       await this.cancelLegs(tx, out, group, reason);
       result = out.orders.get(id);
     });
@@ -719,6 +728,8 @@ export class OrderService {
 
   async cancelAll(userId: string, symbol?: string, reason: OrderRow['closeReason'] = 'USER_CANCELED'): Promise<OrderRow[]> {
     const where = [eq(orders.userId, userId), inArray(orders.status, [...OPEN_STATUSES])];
+    // the user's "cancel all" leaves bot orders alone (admin/bot reasons cancel everything)
+    if (reason === 'USER_CANCELED') where.push(eq(orders.source, 'USER'));
     if (symbol) where.push(eq(orders.symbol, symbol));
     const open = await this.db
       .select({ id: orders.id })

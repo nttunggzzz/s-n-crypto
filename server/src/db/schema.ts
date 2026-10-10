@@ -43,10 +43,17 @@ export const users = pgTable(
     twoFactorEnabledAt: ts('two_factor_enabled_at'),
     /** Last accepted TOTP time step — a code can be used once. */
     twoFactorLastStep: bigint('two_factor_last_step', { mode: 'number' }),
+    /** Short public account number (like an exchange UID); existing users get one on migration. */
+    uid: bigint('uid', { mode: 'number' }).generatedByDefaultAsIdentity({ startWith: 10000001 }).notNull(),
+    /** Preset avatar key (contracts AvatarId); null = initials. */
+    avatar: text('avatar'),
+    /** Shown in every email we send (not a secret — it proves the email is from us). */
+    antiPhishingCode: text('anti_phishing_code'),
+    passwordChangedAt: ts('password_changed_at'),
     createdAt: ts('created_at').notNull().defaultNow(),
     updatedAt: ts('updated_at').notNull().defaultNow(),
   },
-  (t) => [uniqueIndex('users_email_uq').on(t.email)],
+  (t) => [uniqueIndex('users_email_uq').on(t.email), uniqueIndex('users_uid_uq').on(t.uid)],
 );
 
 /** One-time 2FA recovery codes (sha256), 10 per user. */
@@ -272,7 +279,7 @@ export const faucetClaims = pgTable(
 export const ORDER_STATUSES = ['NEW', 'PARTIALLY_FILLED', 'FILLED', 'CANCELED', 'REJECTED', 'EXPIRED'] as const;
 export const OPEN_STATUSES = ['NEW', 'PARTIALLY_FILLED'] as const;
 export const ORDER_TYPES = ['MARKET', 'LIMIT', 'STOP_MARKET', 'STOP_LIMIT', 'TRAILING_STOP_MARKET'] as const;
-export const CLOSE_REASONS = ['USER_CANCELED', 'OCO_SIBLING', 'IOC_REMAINDER', 'ADMIN'] as const;
+export const CLOSE_REASONS = ['USER_CANCELED', 'OCO_SIBLING', 'IOC_REMAINDER', 'ADMIN', 'BOT_STOPPED'] as const;
 
 /** TP/SL attached to a BUY order (stored on the parent). */
 export interface TpSlData {
@@ -344,10 +351,14 @@ export const orders = pgTable(
     parentOrderId: bigint('parent_order_id', { mode: 'number' }),
     tpsl: jsonb('tpsl').$type<TpSlData>(),
     closeReason: text('close_reason', { enum: CLOSE_REASONS }),
+    /** USER, or the bot that placed it (bot orders can only be canceled by the bot). */
+    source: text('source', { enum: ['USER', 'GRID', 'DCA'] }).notNull().default('USER'),
+    sourceId: bigint('source_id', { mode: 'number' }),
     createdAt: ts('created_at').notNull().defaultNow(),
     updatedAt: ts('updated_at').notNull().defaultNow(),
   },
   (t) => [
+    index('orders_source_idx').on(t.source, t.sourceId).where(sql`${t.source} <> 'USER'`),
     uniqueIndex('orders_client_id_uq').on(t.userId, t.clientOrderId),
     index('orders_user_idx').on(t.userId, t.id),
     index('orders_open_idx')
@@ -688,4 +699,127 @@ export const futuresFundingPayments = pgTable(
     createdAt: ts('created_at').notNull().defaultNow(),
   },
   (t) => [primaryKey({ columns: [t.positionId, t.fundingTime] })],
+);
+
+// ───────────────────────────── phase 2.6: security, DCA, grid bots
+
+/** Sign-in attempts for known accounts (shown in Security → login history; kept 180 days). */
+export const loginEvents = pgTable(
+  'login_events',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    at: ts('at').notNull().defaultNow(),
+    ip: text('ip'),
+    userAgent: text('user_agent'),
+    /** sha256 of the user agent — "device" for the new-device alert. */
+    deviceKey: text('device_key'),
+    success: boolean('success').notNull(),
+    result: text('result', { enum: ['OK', 'BAD_PASSWORD', 'BAD_2FA', 'LOCKED'] }).notNull(),
+    newDevice: boolean('new_device').notNull().default(false),
+  },
+  (t) => [index('login_events_user_idx').on(t.userId, t.id)],
+);
+
+export const dcaPlans = pgTable(
+  'dca_plans',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    symbol: text('symbol').notNull(),
+    quoteAmount: amount('quote_amount').notNull(),
+    interval: text('interval', { enum: ['DAILY', 'WEEKLY', 'MONTHLY'] }).notNull(),
+    hour: integer('hour').notNull(),
+    dayOfWeek: integer('day_of_week'),
+    dayOfMonth: integer('day_of_month'),
+    status: text('status', { enum: ['ACTIVE', 'PAUSED', 'CANCELED'] }).notNull().default('ACTIVE'),
+    nextRunAt: ts('next_run_at'),
+    lastRunAt: ts('last_run_at'),
+    runs: integer('runs').notNull().default(0),
+    skipped: integer('skipped').notNull().default(0),
+    totalSpent: amount('total_spent').notNull().default('0'),
+    totalBought: amount('total_bought').notNull().default('0'),
+    createdAt: ts('created_at').notNull().defaultNow(),
+    updatedAt: ts('updated_at').notNull().defaultNow(),
+  },
+  (t) => [index('dca_plans_due_idx').on(t.nextRunAt).where(sql`${t.status} = 'ACTIVE'`), index('dca_plans_user_idx').on(t.userId, t.id)],
+);
+
+export const dcaRuns = pgTable(
+  'dca_runs',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    planId: bigint('plan_id', { mode: 'number' })
+      .notNull()
+      .references(() => dcaPlans.id, { onDelete: 'cascade' }),
+    /** The scheduled time this run is for — unique per plan, so a run can never happen twice. */
+    scheduledAt: ts('scheduled_at').notNull(),
+    executedAt: ts('executed_at'),
+    status: text('status', { enum: ['PENDING', 'FILLED', 'SKIPPED'] }).notNull(),
+    orderId: bigint('order_id', { mode: 'number' }),
+    quoteSpent: amount('quote_spent').notNull().default('0'),
+    baseBought: amount('base_bought').notNull().default('0'),
+    price: amount('price'),
+    reason: text('reason'),
+  },
+  (t) => [uniqueIndex('dca_runs_once').on(t.planId, t.scheduledAt), index('dca_runs_plan_idx').on(t.planId, t.id)],
+);
+
+export const gridBots = pgTable(
+  'grid_bots',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    symbol: text('symbol').notNull(),
+    lowerPrice: amount('lower_price').notNull(),
+    upperPrice: amount('upper_price').notNull(),
+    gridCount: integer('grid_count').notNull(),
+    mode: text('mode', { enum: ['ARITHMETIC', 'GEOMETRIC'] }).notNull(),
+    investment: amount('investment').notNull(),
+    quantityPerGrid: amount('quantity_per_grid').notNull(),
+    status: text('status', { enum: ['STARTING', 'RUNNING', 'STOPPED', 'ERROR'] }).notNull(),
+    stopReason: text('stop_reason'),
+    gridProfit: amount('grid_profit').notNull().default('0'),
+    completedRounds: integer('completed_rounds').notNull().default(0),
+    /** Owned by the bot but not in an order (rounding dust, extracted profit). */
+    freeBase: amount('free_base').notNull().default('0'),
+    freeQuote: amount('free_quote').notNull().default('0'),
+    /** Value when the bot stopped (base sold at market, or valued at the live price then); null = no live price. */
+    finalValue: amount('final_value'),
+    createdAt: ts('created_at').notNull().defaultNow(),
+    stoppedAt: ts('stopped_at'),
+    updatedAt: ts('updated_at').notNull().defaultNow(),
+  },
+  (t) => [index('grid_bots_user_idx').on(t.userId, t.id), index('grid_bots_running_idx').on(t.status).where(sql`${t.status} = 'RUNNING'`)],
+);
+
+/**
+ * One cell of a grid = the band [buyPrice, sellPrice]. It holds either quote (waits to BUY at buyPrice)
+ * or base (waits to SELL at sellPrice); orderId is its current open order (null = to be placed).
+ */
+export const gridBotCells = pgTable(
+  'grid_bot_cells',
+  {
+    botId: bigint('bot_id', { mode: 'number' })
+      .notNull()
+      .references(() => gridBots.id, { onDelete: 'cascade' }),
+    idx: integer('idx').notNull(),
+    buyPrice: amount('buy_price').notNull(),
+    sellPrice: amount('sell_price').notNull(),
+    side: text('side', { enum: ['BUY', 'SELL'] }).notNull(),
+    /** Base to buy (BUY) or to sell (SELL). */
+    quantity: amount('quantity').notNull(),
+    /** Quote paid for the base it holds (to measure the round's profit). */
+    costQuote: amount('cost_quote').notNull().default('0'),
+    orderId: bigint('order_id', { mode: 'number' }),
+    rounds: integer('rounds').notNull().default(0),
+    profit: amount('profit').notNull().default('0'),
+  },
+  (t) => [primaryKey({ columns: [t.botId, t.idx] }), index('grid_bot_cells_order_idx').on(t.orderId)],
 );

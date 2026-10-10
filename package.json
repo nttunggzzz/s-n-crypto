@@ -9,13 +9,15 @@
     "apps/*"
   ],
   "scripts": {
+    "dev": "node infra/dev.mjs",
     "dev:server": "npm run dev -w @cex/server",
     "db:start": "npm run db:start -w @cex/server",
     "db:generate": "npm run db:generate -w @cex/server",
     "db:migrate": "npm run db:migrate -w @cex/server",
-    "typecheck": "tsc -p packages/core && tsc -p packages/contracts && tsc -p server",
+    "typecheck": "node infra/typecheck-all.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
+    "verify": "node infra/verify.mjs",
     "admin:set-role": "npm run admin:set-role -w @cex/server --"
   },
   "devDependencies": {

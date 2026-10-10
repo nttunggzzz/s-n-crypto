@@ -38,6 +38,12 @@ export const Notification = z.discriminatedUnion('type', [
   z.object({ ...base, type: z.literal('POSITION_TPSL'), positionId: z.string(), symbol: SymbolCode, side: PositionSide, reason: z.enum(['TAKE_PROFIT', 'STOP_LOSS']), quantity: DecimalString, price: DecimalString, realizedPnl: DecimalString }),
   /** Position liquidated: margin + PnL fell to the maintenance margin. */
   z.object({ ...base, type: z.literal('POSITION_LIQUIDATED'), positionId: z.string(), symbol: SymbolCode, side: PositionSide, quantity: DecimalString, markPrice: DecimalString, lostMargin: DecimalString }),
+  // phase 2.6
+  /** First sign-in from this browser/device (an email with the anti-phishing code was sent too). */
+  z.object({ ...base, type: z.literal('NEW_DEVICE_LOGIN'), ip: z.string().nullable(), device: z.string().nullable(), at: IsoDateTime }),
+  z.object({ ...base, type: z.literal('DCA_EXECUTED'), planId: z.string(), symbol: SymbolCode, quoteSpent: DecimalString, baseBought: DecimalString, price: DecimalString }),
+  z.object({ ...base, type: z.literal('DCA_SKIPPED'), planId: z.string(), symbol: SymbolCode, reason: z.string() }),
+  z.object({ ...base, type: z.literal('GRID_BOT_STOPPED'), botId: z.string(), symbol: SymbolCode, reason: z.string(), gridProfit: DecimalString }),
 ]);
 export type Notification = z.infer<typeof Notification>;
 export type NotificationType = Notification['type'];

@@ -23,6 +23,7 @@ import type { MarketDataService } from '../market/marketData.ts';
 import type { UserRow } from '../auth/authService.ts';
 import type { Exchange } from '../exchange/index.ts';
 import type { Futures } from '../futures/index.ts';
+import type { Bots } from '../bots/index.ts';
 import { applyBalanceChanges, getBalances } from '../exchange/ledger.ts';
 import { reconcile } from '../exchange/reconciliation.ts';
 import { makePriceOf } from '../exchange/routes.ts';
@@ -80,6 +81,7 @@ export class AdminService {
     private readonly ex: Exchange,
     private readonly market: MarketDataService,
     private readonly futures?: Futures,
+    private readonly bots?: Bots,
   ) {
     this.priceOf = makePriceOf(market);
   }
@@ -347,6 +349,7 @@ export class AdminService {
   async resetAccount(actor: Actor, id: string, reason: string): Promise<AdminUserDetail> {
     const u = await this.loadUser(id);
     this.guardTarget(actor, u);
+    await this.bots?.resetUser(id); // first, so no bot places new orders during the reset
     await this.futures?.service.resetUser(id);
     await this.ex.orders.cancelAll(id, undefined, 'ADMIN');
     const changed = await this.db.transaction(async (tx) => {

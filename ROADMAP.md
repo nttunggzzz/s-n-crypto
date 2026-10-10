@@ -93,11 +93,12 @@
 - Đề xuất & lựa chọn: [docs/proposals/2026-10-09-tinh-nang-nhu-san-lon.md](docs/proposals/2026-10-09-tinh-nang-nhu-san-lon.md)
 
 ### Giai đoạn 2.6 — Tính năng kiểu sàn lớn (đã chọn 2026-10-09)
-- [ ] P05: **Bot lưới Spot** (Grid)
-- [ ] P05: **Mua định kỳ** (DCA)
-- [ ] P05: **Phân tích lãi lỗ** — lịch PnL theo ngày, lũy kế, tỷ lệ thắng, theo coin (gộp phần thống kê của Giai đoạn 5)
-- [ ] P03: **Hồ sơ + bảo mật kiểu OKX** — biệt danh, ảnh đại diện, UID; mã chống lừa đảo trong email, lịch sử đăng nhập, cảnh báo thiết bị mới
-- [ ] P08: Giao diện cho các mục trên
+- [x] P05: **Bot lưới Spot** (Grid) — số học / hình học, 2–100 lưới, xem trước, dừng + bán, giữ kết quả sau khi dừng
+- [x] P05: **Mua định kỳ** (DCA) — hằng ngày / tuần / tháng theo giờ GMT+7, mỗi kỳ đúng 1 lần
+- [x] P05: **Phân tích lãi lỗ** — lịch PnL theo ngày, lũy kế, tỷ lệ thắng, theo coin, sụt giảm tối đa (gộp phần thống kê của Giai đoạn 5)
+- [x] P03: **Hồ sơ + bảo mật kiểu OKX** — biệt danh, ảnh đại diện, UID; mã chống lừa đảo trong email, lịch sử đăng nhập, cảnh báo thiết bị mới
+- [x] P02: Hợp đồng 0.6.0 + mock (16 endpoint, tổng 119)
+- [ ] P08: Giao diện cho các mục trên — [PROMPT-06](docs/antigravity/PROMPT-06-giao-dien-bot-lai-lo-bao-mat.md)
 
 ### Giai đoạn F — Futures mô phỏng (đã duyệt 2026-10-09: tối đa 20×, ký quỹ cô lập trước; **làm trước GĐ 2.6**)
 - [x] P04: 50 hợp đồng vĩnh cửu USDT-M (Binance USDⓈ-M: sổ lệnh, giao dịch, nến, mark/index, funding) — luồng `/public` + `/market`

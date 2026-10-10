@@ -26,6 +26,7 @@ import { baseOf, cancel, createOco, findList, isOpen, lockOf, mockFill, newOrder
 import { MockError, mockMe, now, ok, requireUser, requireVerified, type Req, type Resolver } from './common.ts';
 import { adminResolvers } from './admin.ts';
 import { futuresResolvers } from './futures.ts';
+import { phase26Resolvers } from './phase26.ts';
 const requireTradable = (symbol: string) => {
   if (mockStore.scenario === 'halted') throw new MockError('TRADING_HALTED', 'Trading is halted by the operator');
   if (!MOCK_PAIRS[symbol]) throw new MockError('NOT_FOUND', 'Unknown symbol');
@@ -226,13 +227,15 @@ const resolvers: { [N in EndpointName]: Resolver<N> } = {
     requireUser();
     const o = mockStore.openOrders.find((x) => x.id === params.orderId);
     if (!o) throw new MockError(mockStore.history.some((x) => x.id === params.orderId) ? 'ORDER_NOT_CANCELABLE' : 'NOT_FOUND');
+    // like the server: a bot's orders are canceled by stopping the bot
+    if (o.source !== 'USER') throw new MockError('ORDER_NOT_CANCELABLE', 'This order belongs to a bot: stop the bot to cancel it');
     return cancel(o);
   },
   cancelAllOrders: ({ query }) => {
     requireUser();
     const s = query.get('symbol');
     const canceled: Order[] = [];
-    for (const o of [...mockStore.openOrders]) if ((!s || o.symbol === s) && isOpen(o)) canceled.push(cancel(o));
+    for (const o of [...mockStore.openOrders]) if ((!s || o.symbol === s) && isOpen(o) && o.source === 'USER') canceled.push(cancel(o)); // bot orders stay
     return { canceled };
   },
   myTrades: ({ query }) => {
@@ -358,6 +361,7 @@ const resolvers: { [N in EndpointName]: Resolver<N> } = {
   unreadNotifications: () => (requireUser(), { unread: mockStore.notifications.filter((n) => n.readAt === null).length }),
   ...adminResolvers,
   ...futuresResolvers,
+  ...phase26Resolvers,
 
   markNotificationsRead: ({ body }) => {
     requireUser();

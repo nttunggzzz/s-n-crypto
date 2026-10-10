@@ -42,6 +42,8 @@ export const requireStaff = (p: Permission) => {
 
 export const mockMe = () => ({
   ...fixtureMe,
+  name: mockStore.phase26.name,
+  avatar: mockStore.phase26.avatar,
   emailVerified: mockStore.scenario !== 'unverified',
   role: mockStore.role,
   twoFactorEnabled: mockStore.twoFactorEnabled,

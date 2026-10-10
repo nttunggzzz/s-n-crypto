@@ -38,6 +38,8 @@ export const CloseReason = z.enum([
   /** IOC remainder, or a triggered stop-market that the visible book could not fully fill */
   'IOC_REMAINDER',
   'ADMIN',
+  /** its grid bot was stopped */
+  'BOT_STOPPED',
 ]);
 export type CloseReason = z.infer<typeof CloseReason>;
 

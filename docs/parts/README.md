@@ -63,6 +63,21 @@ Cần đổi hợp đồng? UI **không tự sửa** `packages/contracts` — gh
 - Nhánh: `ui/<tên-tính-năng>` cho Antigravity, `be/<tên-tính-năng>` cho Claude. Gộp vào `main` qua Pull Request; CI phải xanh.
 - Mỗi công cụ chỉ sửa thư mục mình phụ trách (bảng trên). Sửa ngoài phạm vi → ghi lý do trong PR.
 
+## Quy tắc tích hợp — để backend, hợp đồng và giao diện luôn khớp nhau
+
+Mục tiêu cuối là **một web sàn chạy được** (sau đó đóng gói thành app). Vì vậy:
+
+1. **Một nguồn sự thật duy nhất là `packages/contracts`.** Giao diện chỉ gọi API qua typed client (`createApiClient`) và nhận realtime qua `ChannelData<…>`; **không** tự viết `fetch` hay tự định nghĩa kiểu dữ liệu API. Server đăng ký mọi endpoint bằng `route()` theo đúng hợp đồng đó.
+2. **Tính tiền chỉ bằng `@cex/core`** (cả server lẫn UI). UI chỉ tính để *hiển thị* (ví dụ lãi lỗ theo mark); con số chốt luôn lấy từ server.
+3. **Mock = server:** mock kiểm tra đầu vào như server và dùng chung luật/fixture. Giao diện chạy được với mock thì phải chạy được với server thật.
+4. **Hợp đồng chỉ thêm, không phá.** Nếu buộc phải đổi, CHANGELOG ghi rõ mục "Thay đổi cần sửa UI".
+5. **Cổng gộp `main`:** `npm run verify` phải xanh, gồm typecheck **mọi** workspace (kể cả `apps/*`, `packages/ui`), toàn bộ test và build các app. Hợp đồng đổi mà UI vỡ thì bị chặn ngay ở đây.
+6. **Nhịp gộp:**
+   - Claude gộp nhánh backend vào `main` khi xanh.
+   - Antigravity `git merge main` vào nhánh UI **trước** mỗi lần làm prompt mới.
+   - Khi một prompt UI xong, Claude kiểm tra (REVIEW-xx, chạy với server thật) rồi gộp nhánh UI vào `main`.
+7. **Chạy cả hệ thống bằng một lệnh:** `npm run dev`, gồm PostgreSQL :5433, API/WebSocket :8080 và mọi app trong `apps/*` với **mock tắt**. Đây là cách kiểm tra cuối cùng trước khi báo xong.
+
 ## Quy tắc chung (bắt buộc cho cả hai)
 
 1. **Không bịa dữ liệu.** Dữ liệu mock chỉ nằm trong thư mục `mocks/`/`fixtures/` và **tự tắt trên staging/production**. Thiếu dữ liệu → hiển thị "không có dữ liệu", không thay bằng 0 hay số giả.

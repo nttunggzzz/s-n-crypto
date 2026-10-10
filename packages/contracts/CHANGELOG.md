@@ -1,5 +1,41 @@
 # Changelog — @cex/contracts
 
+## 0.6.0 — 2026-10-10 (Giai đoạn 2.6: hồ sơ + bảo mật, phân tích lãi lỗ, mua định kỳ, bot lưới)
+Chỉ **thêm**, không phá code đang chạy.
+
+**Thay đổi nhỏ có thể ảnh hưởng UI**
+- `Order` thêm `source: 'USER' | 'GRID' | 'DCA'` và `sourceId` (id bot / kế hoạch; `null` với lệnh của người dùng).
+  - Lệnh của bot hiện **badge** "Bot lưới" / "Mua định kỳ".
+  - Người dùng **không hủy được** lệnh của bot (`ORDER_NOT_CANCELABLE`) — ẩn nút Hủy, thay bằng "Dừng bot". `cancelAll` của người dùng bỏ qua lệnh bot.
+- `Me` thêm `uid` (chuỗi chữ số, từ "10000001" — hiển thị như "UID 10000001", có nút sao chép) và `avatar` (`AvatarId` hoặc `null`).
+- `CloseReason` thêm `BOT_STOPPED` (lệnh bị hủy vì bot dừng).
+- `Notification` thêm `NEW_DEVICE_LOGIN`, `DCA_EXECUTED`, `DCA_SKIPPED`, `GRID_BOT_STOPPED`.
+
+**Thêm (16 endpoint, tổng 119)**
+- **Hồ sơ + bảo mật** (kiểu OKX):
+  - `updateProfile` (PATCH `/me/profile`): đổi tên hiển thị, avatar (12 avatar có sẵn: `AvatarId` — UI tự vẽ hình cho từng khóa).
+  - `securityOverview`: 2FA, mã chống lừa đảo (đã che), email đã xác minh, lần đổi mật khẩu gần nhất, lần đăng nhập gần nhất, số phiên đang mở.
+  - `setAntiPhishingCode`: 4–20 chữ/số, `null` để xóa. Cần mật khẩu, và mã 2FA nếu đã bật 2FA. Mã này được in ở đầu **mọi email** sàn gửi.
+  - `loginHistory`: lịch sử đăng nhập 180 ngày (thành công, sai mật khẩu, sai 2FA, bị khóa; thiết bị "Chrome · Windows"; đánh dấu thiết bị mới).
+  - Đăng nhập thành công từ **thiết bị mới** → email cảnh báo + thông báo `NEW_DEVICE_LOGIN`.
+- **Phân tích lãi lỗ:** `pnlAnalysis({ query: { range: '7d' | '30d' | '90d' | 'all' } })`.
+  - Chỉ lãi lỗ **đã chốt**: Spot (bán so với giá vốn, đã trừ phí) + Futures (đóng vị thế − phí + funding).
+  - Theo ngày (GMT+7, đủ mọi ngày kể cả 0, có cộng dồn), theo cặp, tỷ lệ thắng, lãi/lỗ trung bình, lớn nhất, profit factor, sụt giảm tối đa.
+- **Mua định kỳ (DCA)** trên ví Spot — mua Market bằng `quoteAmount` USDT mỗi kỳ:
+  - `dcaPlans`, `createDcaPlan` (DAILY / WEEKLY + `dayOfWeek` 1–7 / MONTHLY + `dayOfMonth` 1–28, giờ theo GMT+7), `updateDcaPlan` (đổi số tiền, tạm dừng / chạy tiếp), `cancelDcaPlan`, `dcaRuns`.
+  - Mỗi kỳ chạy **đúng một lần**. Không đủ tiền / sàn dừng → kỳ đó `SKIPPED` kèm lý do + thông báo `DCA_SKIPPED`. Kỳ bị lỡ (server tắt) **không** chạy bù.
+  - Tối đa 20 kế hoạch đang chạy.
+- **Bot lưới Spot:**
+  - `gridBotPreview` (xem trước: các mức giá, khối lượng mỗi lưới, số lệnh mua/bán, lãi mỗi lưới sau phí, vốn tối thiểu), `createGridBot`, `gridBots`, `getGridBot`, `stopGridBot` (`sellBase`: bán số coin bot đang giữ), `gridBotOrders`.
+  - Lưới số học (`ARITHMETIC`) hoặc hình học (`GEOMETRIC`), 2–100 lưới. Giá hiện tại phải nằm trong khoảng. Tối đa 5 bot chạy cùng lúc.
+  - Khi bắt đầu, bot mua Market phần coin cho các lưới phía trên giá hiện tại.
+  - Lỗi: `INVALID_GRID` (khoảng giá sai, quá dày so với bước giá, vốn quá nhỏ → `details.minInvestment`, khoảng cách lưới nhỏ hơn phí).
+  - Bot đã dừng vẫn giữ `totalValue` / `totalPnl` (giá trị lúc dừng) để hiện trong lịch sử.
+  - Admin hủy lệnh của bot hoặc reset tài khoản → bot dừng (`ERROR` / `STOPPED`, kèm `stopReason`) + thông báo `GRID_BOT_STOPPED`.
+- **Realtime** (kênh `user`): `dcaPlan`, `gridBot` (bot đổi trạng thái / khớp lệnh).
+- **Mã lỗi:** `INVALID_GRID`.
+- **Mock:** đủ 16 endpoint. Mock không mô phỏng lưới khớp lệnh (lãi lưới luôn 0); khi tạo bot, giá trị = vốn đầu tư; khi dừng có bán, lỗ đúng bằng phí bán 0,1%.
+
 ## 0.5.0 — 2026-10-09 (Giai đoạn F: Futures mô phỏng)
 Hợp đồng vĩnh cửu USDT-M mô phỏng: giá Binance USDⓈ-M, ký quỹ **cô lập**, **một chiều**, đòn bẩy **1–20×**.
 

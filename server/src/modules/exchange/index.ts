@@ -10,6 +10,7 @@ import { OpenOrderIndex } from './openOrderIndex.ts';
 import { OrderService } from './orderService.ts';
 import { PortfolioService } from './portfolioService.ts';
 import { PreferencesService } from './preferencesService.ts';
+import { PnlService } from './pnlService.ts';
 
 export interface Exchange {
   config: ExchangeConfig;
@@ -22,6 +23,7 @@ export interface Exchange {
   notifications: NotificationService;
   portfolio: PortfolioService;
   preferences: PreferencesService;
+  pnl: PnlService;
 }
 
 export async function createExchange(db: Db, market: MarketDataService, config: ExchangeConfig, now?: () => Date): Promise<Exchange> {
@@ -34,8 +36,9 @@ export async function createExchange(db: Db, market: MarketDataService, config: 
   const matcher = new Matcher(orders, index, market, config, alerts);
   const portfolio = new PortfolioService(db, market, now);
   const preferences = new PreferencesService(db, config);
+  const pnl = new PnlService(db, now);
   await orders.loadOpenOrders();
   await alerts.load();
   matcher.attach();
-  return { config, events, index, orders, faucet, matcher, alerts, notifications, portfolio, preferences };
+  return { config, events, index, orders, faucet, matcher, alerts, notifications, portfolio, preferences, pnl };
 }

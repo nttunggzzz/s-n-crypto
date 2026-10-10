@@ -43,6 +43,13 @@
       "when": 1791552324797,
       "tag": "0005_phaseF_futures",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791610055141,
+      "tag": "0006_phase26_security_bots",
+      "breakpoints": true
     }
   ]
 }
