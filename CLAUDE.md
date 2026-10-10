@@ -38,10 +38,13 @@ npm install
 npm run db:start      # PostgreSQL nhúng :5433 (dữ liệu ở .pgdata) + migrate
 npm run dev:server    # API :8080, đọc .env (copy từ .env.example)
 npm test              # vitest — tự bật PostgreSQL thật trên :5434
-npm run typecheck
+npm run typecheck     # mọi workspace có tsconfig (core, contracts, server, và ui/apps khi đã gộp)
 npm run db:generate   # sau khi sửa server/src/db/schema.ts
 npm run admin:set-role -- <email> owner   # tạo owner đầu tiên (ghi audit ROLE_BOOTSTRAP)
+npm run dev           # cả hệ thống: DB + server + mọi app trong apps/* (mock tắt)
+npm run verify        # cổng gộp main: typecheck mọi workspace (cả UI) + test + build app
 ```
+Quy tắc tích hợp backend ↔ hợp đồng ↔ UI: [docs/parts/README.md](docs/parts/README.md#quy-tắc-tích-hợp--để-backend-hợp-đồng-và-giao-diện-luôn-khớp-nhau)
 
 ## Bất biến (KHÔNG được phá)
 1. **Mọi thay đổi số dư đi qua `applyBalanceChanges()`** (server/src/modules/exchange/ledger.ts) trong transaction; mỗi thay đổi = 1 dòng `ledger_entries`. Không `UPDATE balances` ở chỗ khác.
