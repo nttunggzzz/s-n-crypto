@@ -148,3 +148,30 @@ Mock: `setMockPrice('BTCUSDT', 75000)` đẩy giá để xem stop kích hoạt, 
 - **Form lệnh:** đòn bẩy (slider 1–`maxLeverage`), Mở Long / Mở Short, chỉ giảm vị thế, TP/SL, ký quỹ cần dùng = giá × khối lượng ÷ đòn bẩy (`initialMargin`) + phí ước tính.
 - **Tab dưới:** Vị thế (n) | Lệnh đang chờ | Lịch sử lệnh | Lịch sử vị thế | Funding (sổ cái loại `FUNDING_FEE`).
 - **Sự kiện realtime:** `futuresPosition` / `futuresAccount` → cập nhật ngay; thông báo `POSITION_LIQUIDATED` / `POSITION_TPSL` → hiện toast nổi bật.
+
+## 9. Hồ sơ, bảo mật, lãi lỗ, bot (v0.6.0)
+
+**Hồ sơ + bảo mật** (trang "Tài khoản" kiểu OKX)
+- Đầu trang: avatar (`me.avatar`, `null` → chữ cái đầu của tên), tên, **UID** (`me.uid`) có nút sao chép, trạng thái xác minh email.
+- Thẻ bảo mật lấy từ `securityOverview()`: 2FA, mã chống lừa đảo, mật khẩu (lần đổi gần nhất), số phiên. Mỗi thẻ có trạng thái "Đã bật / Chưa bật" và nút thao tác.
+- Mã chống lừa đảo: form `setAntiPhishingCode` cần mật khẩu, và ô mã 2FA khi `twoFactorEnabled`. Giải thích ngắn: "Mã này sẽ xuất hiện trong mọi email thật từ sàn".
+- Lịch sử đăng nhập: bảng `loginHistory` (thời gian, thiết bị, IP, kết quả; nhãn "Thiết bị mới").
+
+**Phân tích lãi lỗ** (`pnlAnalysis`)
+- Bộ chọn 7 ngày / 30 ngày / 90 ngày / Tất cả.
+- Thẻ tổng: lãi lỗ đã chốt (Spot / Futures), tỷ lệ thắng, profit factor, sụt giảm tối đa.
+- Biểu đồ cột theo ngày (xanh/đỏ) + đường cộng dồn (`cumulative`). Lịch tháng tô màu theo ngày (giống OKX) dùng `daily`. Bảng theo cặp dùng `bySymbol`.
+- Mọi giá trị có thể `null` (chưa có giao dịch) → hiện `—`, không hiện 0.
+
+**Mua định kỳ (DCA)**
+- Form: cặp, số USDT mỗi kỳ, tần suất (Hằng ngày / Hằng tuần + thứ / Hằng tháng + ngày 1–28), giờ (GMT+7). Hiện "Lần mua tiếp theo" = `nextRunAt`.
+- Danh sách kế hoạch: đã mua (`totalSpent`, `totalBought`), giá trung bình (`avgPrice`), số kỳ đã chạy / bỏ qua; nút Tạm dừng / Tiếp tục / Hủy.
+- Lịch sử từng kỳ (`dcaRuns`): kỳ `SKIPPED` hiện lý do bằng tiếng Việt (bảng mã lỗi chung).
+
+**Bot lưới Spot**
+- Form tạo: cặp, giá thấp / cao, số lưới, kiểu lưới, vốn. Gọi `gridBotPreview` khi người dùng ngừng gõ (debounce khoảng 400 ms) để hiện lãi mỗi lưới (`profitPerGridMin`–`Max`, dạng %), vốn tối thiểu, số lệnh mua/bán, và vẽ các mức giá lên biểu đồ.
+- Thẻ bot: trạng thái, khoảng giá, số vòng đã xong (`completedRounds`), lãi lưới (`gridProfit`), tổng lãi lỗ (`totalPnl`, gồm cả biến động giá của coin bot đang giữ), số lệnh đang mở.
+- Nút "Dừng bot" → hỏi có bán coin bot đang giữ không (`sellBase`).
+- Lệnh của bot (`gridBotOrders`) và mọi lệnh có `source !== 'USER'`: badge "Bot lưới" / "Mua định kỳ", **không có nút Hủy**.
+- Realtime: sự kiện `gridBot` / `dcaPlan` trên kênh `user` → cập nhật thẻ ngay, không cần gọi lại API.
+

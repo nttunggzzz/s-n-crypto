@@ -1,12 +1,17 @@
 import { z } from 'zod';
 import { CandleInterval, IsoDateTime, Role, SymbolCode } from './common.ts';
 import { Permission } from './permissions.ts';
+import { AvatarId } from './security.ts';
 
 /** The signed-in user. Auth itself (sign-up, sign-in, sessions…) lives under /api/v1/auth — see auth.ts. */
 export const Me = z.object({
   id: z.string(),
+  /** Short public account number shown in the UI (like an exchange UID), e.g. "10000042". */
+  uid: z.string(),
   email: z.string(),
   name: z.string(),
+  /** Preset avatar key; null = initials. */
+  avatar: AvatarId.nullable(),
   emailVerified: z.boolean(),
   role: Role,
   /** Admin-controlled flag for the signals feature (phase 6). */

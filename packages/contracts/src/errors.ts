@@ -49,6 +49,9 @@ export const ErrorCode = z.enum([
   'REDUCE_ONLY_REJECTED',
   /** removing margin would leave less than the initial margin at the mark price; details.maxRemovable */
   'MARGIN_TOO_LOW',
+  // bots (phase 2.6)
+  /** grid params impossible: range, price outside, levels collapse, investment below details.minInvestment */
+  'INVALID_GRID',
   // order execution
   'INSUFFICIENT_BALANCE',
   'INSUFFICIENT_LIQUIDITY',
@@ -89,6 +92,7 @@ export const ERROR_HTTP_STATUS: Record<ErrorCode, number> = {
   INVALID_LEVERAGE: 400,
   REDUCE_ONLY_REJECTED: 400,
   MARGIN_TOO_LOW: 400,
+  INVALID_GRID: 400,
   INVALID_PRICE: 400,
   PRICE_TICK_SIZE: 400,
   INVALID_QUANTITY: 400,

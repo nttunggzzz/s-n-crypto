@@ -141,9 +141,16 @@ export const AttachedTpSl = z.object({
 });
 export type AttachedTpSl = z.infer<typeof AttachedTpSl>;
 
+/** Who placed the order: the user, or one of the user's bots (bot orders are managed by the bot). */
+export const OrderSource = z.enum(['USER', 'GRID', 'DCA']);
+export type OrderSource = z.infer<typeof OrderSource>;
+
 export const Order = z.object({
   id: z.string(),
   clientOrderId: z.string(),
+  source: OrderSource,
+  /** Grid bot id / DCA plan id for bot orders; null for the user's own orders. */
+  sourceId: z.string().nullable(),
   symbol: SymbolCode,
   side: OrderSide,
   type: OrderType,

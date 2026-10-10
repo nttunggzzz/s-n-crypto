@@ -312,8 +312,10 @@ export const fixtureMarketStatus: MarketStatus = {
 
 export const fixtureMe: Me = {
   id: '00000000-0000-4000-8000-000000000001',
+  uid: '10000001',
   email: 'demo@example.com',
   name: 'Người dùng demo',
+  avatar: 'fox',
   emailVerified: true,
   role: 'user',
   signalsAccess: false,
@@ -345,6 +347,8 @@ export const fixtureFaucetStatus: FaucetStatus = {
 
 /** New Order fields (phase 2) for plain orders. */
 export const ORDER_DEFAULTS = {
+  source: 'USER' as const,
+  sourceId: null,
   triggerState: null,
   triggerDirection: null,
   triggeredAt: null,

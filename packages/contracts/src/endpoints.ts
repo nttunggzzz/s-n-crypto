@@ -1,6 +1,9 @@
 import { z } from 'zod';
 import { Empty, IsoDateTime, PaginationQuery, SymbolCode, paginated } from './common.ts';
 import { Me, Preferences, UpdatePreferencesRequest } from './account.ts';
+import { LoginEvent, SecurityOverview, SetAntiPhishingRequest, UpdateProfileRequest } from './security.ts';
+import { PnlAnalysis, PnlQuery } from './analytics.ts';
+import { CreateDcaPlanRequest, DcaPlan, DcaPlanIdParam, DcaRun, GridBot, GridBotIdParam, GridBotParams, GridPreview, StopGridBotRequest, UpdateDcaPlanRequest } from './bots.ts';
 import {
   AuthUserResponse,
   ChangePasswordRequest,
@@ -152,6 +155,11 @@ export const endpoints = {
   regenerateRecoveryCodes: ep({ method: 'POST', path: '/api/v1/auth/2fa/recovery-codes', auth: 'user', body: RegenerateRecoveryCodesRequest, response: RecoveryCodes }),
   getPreferences: ep({ method: 'GET', path: '/api/v1/me/preferences', auth: 'user', response: Preferences }),
   updatePreferences: ep({ method: 'PATCH', path: '/api/v1/me/preferences', auth: 'user', body: UpdatePreferencesRequest, response: Preferences }),
+  // phase 2.6: profile + security
+  updateProfile: ep({ method: 'PATCH', path: '/api/v1/me/profile', auth: 'user', body: UpdateProfileRequest, response: Me }),
+  securityOverview: ep({ method: 'GET', path: '/api/v1/me/security', auth: 'user', response: SecurityOverview }),
+  setAntiPhishingCode: ep({ method: 'PUT', path: '/api/v1/me/security/anti-phishing', auth: 'user', body: SetAntiPhishingRequest, response: SecurityOverview }),
+  loginHistory: ep({ method: 'GET', path: '/api/v1/me/security/login-history', auth: 'user', query: PaginationQuery, response: paginated(LoginEvent) }),
 
   // ---- market data (P04)
   exchangeInfo: ep({ method: 'GET', path: '/api/v1/market/exchange-info', auth: 'public', response: ExchangeInfo }),
@@ -192,6 +200,22 @@ export const endpoints = {
   // ---- portfolio (P05, phase 2)
   portfolio: ep({ method: 'GET', path: '/api/v1/portfolio', auth: 'user', response: Portfolio }),
   portfolioHistory: ep({ method: 'GET', path: '/api/v1/portfolio/history', auth: 'user', query: z.object({ range: PortfolioRange.default('7d') }), response: PortfolioHistory }),
+  /** Realized PnL analysis: spot + futures, daily calendar, win rate, by symbol (phase 2.6). */
+  pnlAnalysis: ep({ method: 'GET', path: '/api/v1/portfolio/pnl', auth: 'user', query: PnlQuery, response: PnlAnalysis }),
+
+  // ---- bots (phase 2.6) — spot wallet
+  dcaPlans: ep({ method: 'GET', path: '/api/v1/bots/dca', auth: 'user', response: z.object({ items: z.array(DcaPlan) }) }),
+  createDcaPlan: ep({ method: 'POST', path: '/api/v1/bots/dca', auth: 'verified', body: CreateDcaPlanRequest, response: DcaPlan, status: 201 }),
+  updateDcaPlan: ep({ method: 'PATCH', path: '/api/v1/bots/dca/:planId', auth: 'verified', params: DcaPlanIdParam, body: UpdateDcaPlanRequest, response: DcaPlan }),
+  cancelDcaPlan: ep({ method: 'DELETE', path: '/api/v1/bots/dca/:planId', auth: 'user', params: DcaPlanIdParam, response: DcaPlan }),
+  dcaRuns: ep({ method: 'GET', path: '/api/v1/bots/dca/:planId/runs', auth: 'user', params: DcaPlanIdParam, query: PaginationQuery, response: paginated(DcaRun) }),
+  gridBotPreview: ep({ method: 'POST', path: '/api/v1/bots/grid/preview', auth: 'user', body: GridBotParams, response: GridPreview }),
+  gridBots: ep({ method: 'GET', path: '/api/v1/bots/grid', auth: 'user', response: z.object({ items: z.array(GridBot) }) }),
+  createGridBot: ep({ method: 'POST', path: '/api/v1/bots/grid', auth: 'verified', body: GridBotParams, response: GridBot, status: 201 }),
+  getGridBot: ep({ method: 'GET', path: '/api/v1/bots/grid/:botId', auth: 'user', params: GridBotIdParam, response: GridBot }),
+  stopGridBot: ep({ method: 'POST', path: '/api/v1/bots/grid/:botId/stop', auth: 'user', params: GridBotIdParam, body: StopGridBotRequest, response: GridBot }),
+  /** The bot's open orders and its most recent finished ones (newest first, ≤ 100). */
+  gridBotOrders: ep({ method: 'GET', path: '/api/v1/bots/grid/:botId/orders', auth: 'user', params: GridBotIdParam, response: z.object({ items: z.array(Order) }) }),
 
   // ---- CSV exports (max 10,000 rows, newest first; times in UTC and GMT+7)
   exportOrders: ep({ method: 'GET', path: '/api/v1/export/orders.csv', auth: 'user', query: HistoryQuery, response: Csv, format: 'csv' }),
