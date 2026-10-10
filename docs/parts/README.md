@@ -56,6 +56,7 @@ docs/           ← cả hai đọc; sửa tài liệu phần của mình
    Mỗi bản review giao diện (`docs/antigravity/REVIEW-xx`) có test nghiệm thu trong `e2e/tests/reviewxx.spec.ts`: mục nào xong thì test đó xanh.
    `npm run verify` còn chạy lint: code giao diện chỉ bị **cảnh báo** về các lỗi đã gặp (null hiện thành 0, tự `fetch`, `toFixed` cho tiền,
    `Math.random`, `new WebSocket`), và in danh sách endpoint app chưa dùng (`npm run ui-coverage`).
+   Trước khi gộp nhánh UI vào `main`, Claude chạy `npm run ui-check -- ui/<nhánh> --e2e` (gộp thử trong thư mục tạm, không đụng worktree của Antigravity).
 5. Đánh dấu checklist trong file phần tương ứng và ROADMAP.
 
 Cần đổi hợp đồng? UI **không tự sửa** `packages/contracts` — ghi yêu cầu vào [contract-requests.md](contract-requests.md), Claude cập nhật.

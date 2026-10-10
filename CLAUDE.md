@@ -55,6 +55,7 @@ npm run dev -- --sim  # như trên nhưng giá GIẢ LẬP (không cần Binance
 npm run verify        # cổng gộp main: typecheck mọi workspace (cả UI) + lint + test + build app + báo cáo API app chưa dùng
 npm run lint          # ESLint: backend/contracts/core/infra/e2e lỗi là chặn; apps/*, packages/ui chỉ cảnh báo
 npm run ui-coverage   # endpoint nào backend có mà app chưa gọi (--strict: thiếu là lỗi)
+npm run ui-check -- [nhánh] [--e2e]   # nhánh UI (mặc định ui/gd2-exchange) gộp main trong worktree tạm → verify (+ e2e)
 npm run e2e           # test trình duyệt (Playwright, Edge cài sẵn): build apps/exchange, dựng hệ riêng
                       #   DB :5436 + server :5190 phục vụ cả API, /ws và bản build app (giá giả lập, email ra .e2e/outbox.jsonl)
 ```

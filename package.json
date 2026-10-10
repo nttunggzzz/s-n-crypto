@@ -21,6 +21,7 @@
     "e2e": "node infra/e2e.mjs",
     "lint": "eslint .",
     "ui-coverage": "node infra/ui-coverage.mjs",
+    "ui-check": "node infra/ui-check.mjs",
     "admin:set-role": "npm run admin:set-role -w @cex/server --",
     "admin:invite": "npm run admin:invite -w @cex/server --"
   },
