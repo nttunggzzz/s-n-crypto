@@ -1,7 +1,7 @@
 # ROADMAP — Sàn giao dịch ảo + Web tín hiệu
 
-> Trạng thái: **ĐANG LÀM** — backend GĐ 0–3 + 2.5 + F (Futures) + 2.6 xong (chạy local, chưa lên cloud), hợp đồng 0.8.0, test trình duyệt `npm run e2e`; giao diện sàn đang làm GĐ2 + Futures + 2.6 (review mới nhất: [REVIEW-03](docs/antigravity/REVIEW-03-doi-chieu-giao-dien-tinh-nang.md)). Cập nhật: 2026-10-10
-> Báo cáo mới nhất: [docs/reports/2026-10-10-backend-gd26.md](docs/reports/2026-10-10-backend-gd26.md) · trước đó: [Futures](docs/reports/2026-10-09-backend-futures.md), [GĐ2.5](docs/reports/2026-10-09-backend-gd25.md), [GĐ3](docs/reports/2026-10-09-backend-gd3.md), [GĐ2](docs/reports/2026-10-09-backend-gd2.md), [GĐ0–1](docs/reports/2026-10-09-backend-gd0-gd1.md)
+> Trạng thái: **ĐANG LÀM** — backend GĐ 0–3 + 2.5 + F (Futures) + 2.6 xong; **sẵn sàng chạy kín trên cloud** (Docker, CI, sao lưu + diễn tập khôi phục, mã mời, cảnh báo Telegram — chờ tài khoản của chủ dự án, xem [docs/deploy/railway.md](docs/deploy/railway.md)); hợp đồng 0.10.0, 201 test + test trình duyệt; giao diện sàn đang làm GĐ2 + Futures + 2.6 (review mới nhất: [REVIEW-03](docs/antigravity/REVIEW-03-doi-chieu-giao-dien-tinh-nang.md)). Cập nhật: 2026-10-10
+> Báo cáo mới nhất: [docs/reports/2026-10-10-ha-tang-va-ho-tro-ui.md](docs/reports/2026-10-10-ha-tang-va-ho-tro-ui.md) · trước đó: [GĐ2.6](docs/reports/2026-10-10-backend-gd26.md), [Futures](docs/reports/2026-10-09-backend-futures.md), [GĐ2.5](docs/reports/2026-10-09-backend-gd25.md), [GĐ3](docs/reports/2026-10-09-backend-gd3.md), [GĐ2](docs/reports/2026-10-09-backend-gd2.md), [GĐ0–1](docs/reports/2026-10-09-backend-gd0-gd1.md)
 > Dự án thử nghiệm cá nhân. Phần kinh doanh (thu phí, thanh toán…) để sau — xem [Backlog](#backlog-để-sau).
 > Chi tiết từng phần: [docs/parts/README.md](docs/parts/README.md)
 
@@ -54,9 +54,9 @@
 ### Giai đoạn 0 — Hạ tầng cloud
 - [x] P01: Monorepo (npm workspaces), chuyển code cũ vào `legacy/`, viết lại `CLAUDE.md`
 - [ ] P01: Kho GitHub riêng tư (chờ chủ dự án tạo repo)
-- [ ] P01: Staging trên Railway (server + PostgreSQL), tự triển khai khi push, khóa truy cập
+- [ ] P01: Staging trên Railway (server + PostgreSQL), tự triển khai khi push, khóa truy cập — *sẵn: Dockerfile, railway.json, khóa 1 bản khi deploy, đăng ký bằng mã mời; chờ tài khoản*
 - [x] P01: typecheck + test chạy local (41 test, PostgreSQL thật)
-- [ ] P01: CI GitHub Actions; quản lý secrets; backup DB hằng ngày + **đã thử khôi phục**; Sentry; cảnh báo về Telegram
+- [ ] P01: CI GitHub Actions; quản lý secrets; backup DB hằng ngày + **đã thử khôi phục**; Sentry; cảnh báo về Telegram — *sẵn: ci.yml, backup.yml (khôi phục + đối soát mỗi đêm), cảnh báo Telegram; chờ repo/secrets; Sentry chưa làm*
 - [x] P02: Quy ước API, khung `packages/contracts`, cơ chế mock cho UI (MSW + realtime giả lập)
 - [ ] P07: Design tokens (màu, chữ, khoảng cách, sáng/tối), component cơ bản
 
