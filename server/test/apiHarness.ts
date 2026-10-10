@@ -21,7 +21,7 @@ export class ApiHarness {
   mail = new LogEmailSender();
   base = '';
   private server!: http.Server;
-  private hub!: RealtimeHub;
+  hub!: RealtimeHub;
   private seq = 0;
   /** Auth clock offset: TOTP codes are single-use per 30 s step, so tests move this clock forward. */
   skewMs = 0;

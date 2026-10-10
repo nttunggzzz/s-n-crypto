@@ -4,7 +4,7 @@
  * TP/SL children, price alerts) and emits ticker/depth/trades/candle updates plus the
  * `user` events produced by the mock handlers/engine.
  */
-import type { ChannelData } from '../realtime.ts';
+import { REALTIME_MAX_CHANNELS, type ChannelData } from '../realtime.ts';
 import type { RealtimeClient, RealtimeStatus } from '../realtimeClient.ts';
 import type { CandleInterval } from '../common.ts';
 import { fixtureCandles, fixtureDepth, fixtureMarketStatus, fixtureTicker, fmtPrice, MOCK_PAIRS } from '../fixtures/index.ts';
@@ -62,7 +62,12 @@ export function createMockRealtimeClient(opts: MockRealtimeOptions = {}): Realti
         emit('exchange:status', st);
       }
     }
+    if (subs.has('tickers')) emit('tickers', { items: Object.keys(MOCK_PAIRS).filter((s) => !FROZEN.has(s)).map((s) => fixtureTicker(s, mockStore.prices[s]!)) });
+    if (subs.has('futures:tickers')) {
+      emit('futures:tickers', { items: Object.keys(MOCK_FUTURES).filter((s) => !MOCK_FUTURES_FROZEN.has(s)).map((s) => fixtureFuturesTicker(s, mockStore.futures.prices[s]!)) });
+    }
     for (const channel of subs.keys()) {
+      if (channel === 'futures:tickers') continue;
       if (channel.startsWith('futures:')) {
         const [, kind, symbol, interval] = channel.split(':');
         if (kind === 'status') {
@@ -108,8 +113,17 @@ export function createMockRealtimeClient(opts: MockRealtimeOptions = {}): Realti
         queueMicrotask(() => errorCbs.forEach((cb) => cb({ code: 'UNAUTHENTICATED', message: 'Sign in required', channel })));
       }
       let set = subs.get(channel);
-      if (!set) subs.set(channel, (set = new Set()));
+      if (!set) {
+        // same limit as the server: one connection, distinct channels
+        if (subs.size >= REALTIME_MAX_CHANNELS) {
+          queueMicrotask(() => errorCbs.forEach((cb) => cb({ code: 'RATE_LIMITED', message: `Too many subscriptions (max ${REALTIME_MAX_CHANNELS})`, channel })));
+          return () => {};
+        }
+        subs.set(channel, (set = new Set()));
+      }
       set.add(onData as (d: unknown) => void);
+      if (channel === 'tickers') queueMicrotask(() => onData({ items: Object.keys(MOCK_PAIRS).map((s) => fixtureTicker(s, mockStore.prices[s]!)) } as ChannelData<C>));
+      if (channel === 'futures:tickers') queueMicrotask(() => onData({ items: Object.keys(MOCK_FUTURES).map((s) => fixtureFuturesTicker(s, mockStore.futures.prices[s]!)) } as ChannelData<C>));
       if (channel === 'market:status') queueMicrotask(() => onData(fixtureMarketStatus as ChannelData<C>));
       if (channel === 'exchange:status') queueMicrotask(() => onData(exchangeStatus() as ChannelData<C>));
       return () => {

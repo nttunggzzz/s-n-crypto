@@ -1,9 +1,9 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import WebSocket from 'ws';
 import { and, eq } from 'drizzle-orm';
-import { ApiError, type Depth, type ExchangeStatus, type ServerMessage } from '@cex/contracts';
+import { ApiError, REALTIME_MAX_CHANNELS, type Depth, type ExchangeStatus, type FuturesTickerBatch, type ServerMessage, type TickerBatch } from '@cex/contracts';
 import { auditLogs, candles } from '../../db/schema.ts';
-import { setBook } from '../../../test/helpers.ts';
+import { setBook, setMark } from '../../../test/helpers.ts';
 import { ApiHarness } from '../../../test/apiHarness.ts';
 import { DepthSnapshots, mergeDeepDepth, type BookSnapshot } from './depthSnapshots.ts';
 import { planConnections, streamsFor } from './binance.ts';
@@ -270,5 +270,61 @@ describe('realtime exchange:status', () => {
     await settle();
     ws.close();
     expect(events.at(-1)).toMatchObject({ tradingHalted: false, disabledSymbols: [] });
+  });
+});
+
+describe('realtime tickers (one channel for every pair)', () => {
+  const connect = async () => {
+    const ws = new WebSocket(h.base.replace('http', 'ws') + '/ws');
+    const msgs: ServerMessage[] = [];
+    ws.on('message', (d) => msgs.push(JSON.parse(String(d)) as ServerMessage));
+    await new Promise((r) => ws.once('open', r));
+    return { ws, msgs, sub: (channel: string) => ws.send(JSON.stringify({ type: 'subscribe', channel })) };
+  };
+  const events = <T>(msgs: ServerMessage[], channel: string) =>
+    msgs.flatMap((m) => (m.type === 'event' && m.channel === channel ? [m.data as T] : []));
+  const ticker = (last: string) => ({
+    lastPrice: last, openPrice: '100', highPrice: last, lowPrice: '99', priceChange: '1', priceChangePercent: '1',
+    volume: '10', quoteVolume: '1000', bestBid: null, bestAsk: null, eventTime: h.env.clock.now(),
+  });
+
+  it('snapshot of every pair, then ≤ 1 batch/s with only the pairs that changed (spot and futures)', async () => {
+    const { ws, msgs, sub } = await connect();
+    sub('tickers');
+    sub('futures:tickers');
+    await new Promise((r) => setTimeout(r, 150));
+    const pairs = (await h.browser().exchangeInfo()).symbols.length;
+    expect(events<TickerBatch>(msgs, 'tickers')[0]!.items).toHaveLength(pairs);
+    expect(events<FuturesTickerBatch>(msgs, 'futures:tickers')[0]!.items.length).toBeGreaterThan(0);
+
+    h.env.market.ingestTicker('BTCUSDT', ticker('101'));
+    h.env.market.ingestTicker('ETHUSDT', ticker('102'));
+    h.env.market.ingestTicker('BTCUSDT', ticker('103')); // same pair twice → one entry, latest value
+    setMark(h.env, 'BTCUSDT', '100.5');
+    await new Promise((r) => setTimeout(r, 1300));
+    const spot = events<TickerBatch>(msgs, 'tickers');
+    expect(spot).toHaveLength(2);
+    expect(spot[1]!.items.map((t) => [t.symbol, t.lastPrice]).sort()).toEqual([['BTCUSDT', '103'], ['ETHUSDT', '102']]);
+    const fut = events<FuturesTickerBatch>(msgs, 'futures:tickers');
+    expect(fut.at(-1)!.items.find((t) => t.symbol === 'BTCUSDT')?.markPrice).toBe('100.5');
+    ws.close();
+  });
+
+  it(`at most ${REALTIME_MAX_CHANNELS} channels per connection; subscribing again to a channel is not counted`, async () => {
+    expect(h.hub.maxChannels).toBe(REALTIME_MAX_CHANNELS);
+    const limit = 12; // the test pairs give fewer than 100 distinct channels
+    h.hub.maxChannels = limit;
+    const { ws, msgs, sub } = await connect();
+    const symbols = (await h.browser().exchangeInfo()).symbols.map((s) => s.symbol);
+    const channels = symbols.flatMap((s) => [`ticker:${s}`, `depth:${s}`, `trades:${s}`, ...['1m', '5m', '15m', '1h', '4h', '1d'].map((i) => `candles:${s}:${i}`)]);
+    for (const c of channels.slice(0, limit)) sub(c);
+    sub(channels[0]!); // already subscribed
+    sub(channels[limit]!); // one too many
+    await new Promise((r) => setTimeout(r, 300));
+    h.hub.maxChannels = REALTIME_MAX_CHANNELS;
+    const refused = msgs.flatMap((m) => (m.type === 'error' ? [m] : []));
+    expect(msgs.filter((m) => m.type === 'subscribed')).toHaveLength(limit + 1);
+    expect(refused).toEqual([expect.objectContaining({ code: 'RATE_LIMITED', channel: channels[limit] })]);
+    ws.close();
   });
 });

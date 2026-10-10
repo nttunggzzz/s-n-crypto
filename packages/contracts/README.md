@@ -28,14 +28,18 @@ catch (e) { if (e instanceof ApiError) showError(t(`errors.${e.code}`)); }  // e
 ```ts
 import { createRealtimeClient } from '@cex/contracts';
 const rt = createRealtimeClient();                 // tự kết nối lại, tự đăng ký lại kênh
-const off = rt.subscribe('ticker:BTCUSDT', (t) => setTicker(t));   // kiểu dữ liệu tự suy ra
+rt.subscribe('tickers', ({ items }) => mergeTickers(items)); // MỌI cặp: lần đầu đủ cả, sau đó ≤ 1 lần/giây các cặp vừa đổi
+const off = rt.subscribe('ticker:BTCUSDT', (t) => setTicker(t));   // một cặp; kiểu dữ liệu tự suy ra
 rt.subscribe('depth:BTCUSDT', setDepth);           // top 20, tối đa 2 lần/giây
 rt.subscribe('trades:BTCUSDT', pushTrade);
 rt.subscribe('candles:BTCUSDT:1m', upsertCandle);  // closed=false là nến đang chạy
 rt.subscribe('market:status', setMarketStatus);
 rt.subscribe('user', (e) => { /* e.kind: 'order' | 'trade' | 'balance' */ });   // cần đăng nhập
 rt.onStatus((s) => setConnection(s));              // 'connecting' | 'open' | 'closed' → banner mất kết nối
+rt.onError((e) => console.error('realtime', e));   // vd. RATE_LIMITED khi vượt REALTIME_MAX_CHANNELS (100) kênh
 ```
+Giá nhiều cặp: dùng **một** kênh `tickers` (Futures: `futures:tickers`), không đăng ký từng `ticker:<SYMBOL>` cho cả danh sách.
+Gộp `items` vào một kho (store) và cho mỗi component chỉ đọc cặp nó cần, để một lần cập nhật không vẽ lại cả ứng dụng.
 
 ## 3. Chạy UI không cần backend (mock)
 

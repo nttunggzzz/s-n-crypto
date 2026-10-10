@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { setupServer } from 'msw/node';
-import { ApiError, createApiClient, type UserEvent } from '../index.ts';
+import { ApiError, createApiClient, REALTIME_MAX_CHANNELS, type TickerBatch, type UserEvent } from '../index.ts';
 import { createMockHandlers, createMockRealtimeClient, resetMockStore, setMockScenario } from './index.ts';
 
 const BASE = 'http://mock.local';
@@ -69,5 +69,20 @@ describe('mock handlers follow the contract', () => {
     await expect(api.tickers()).rejects.toSatisfy((e) => e instanceof ApiError && e.status === 500);
     setMockScenario('empty');
     expect((await api.openOrders()).items).toEqual([]);
+  });
+});
+
+describe('mock realtime follows the server rules', () => {
+  it('`tickers` sends every pair at once; more than the channel limit is refused like on the server', async () => {
+    const rt = createMockRealtimeClient({ intervalMs: 10_000 });
+    const batches: TickerBatch[] = [];
+    rt.subscribe('tickers', (b) => batches.push(b));
+    const errors: { code: string; channel?: string }[] = [];
+    rt.onError((e) => errors.push(e));
+    for (let i = 0; i < REALTIME_MAX_CHANNELS; i++) rt.subscribe(`candles:BTCUSDT:x${i}`, () => {});
+    await new Promise((r) => setTimeout(r, 0));
+    expect(batches[0]!.items.length).toBe((await api.tickers()).items.length);
+    expect(errors).toEqual([expect.objectContaining({ code: 'RATE_LIMITED', channel: `candles:BTCUSDT:x${REALTIME_MAX_CHANNELS - 1}` })]);
+    rt.close();
   });
 });

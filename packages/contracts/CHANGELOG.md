@@ -1,5 +1,16 @@
 # Changelog — @cex/contracts
 
+## 0.8.0 — 2026-10-10 (Realtime: một kênh cho giá mọi cặp)
+Sửa lỗi tích hợp tìm thấy khi đối chiếu giao diện ([REVIEW-03](../../docs/antigravity/REVIEW-03-doi-chieu-giao-dien-tinh-nang.md)):
+giao diện đăng ký 50 kênh `ticker:<SYMBOL>` cộng các kênh khác, vượt giới hạn 50 kênh mỗi kết nối, nên server từ chối 4–5 kênh và giá các cặp đó đứng im.
+
+**Thêm (chỉ thêm, không phá code đang chạy)**
+- Kênh `tickers` → `TickerBatch { items: Ticker[] }`: khi đăng ký nhận **giá mọi cặp**, sau đó tối đa 1 lần/giây chỉ các cặp vừa đổi.
+  Dùng cho danh sách thị trường, thanh tìm kiếm, header — thay cho 50 kênh `ticker:<SYMBOL>`.
+- Kênh `futures:tickers` → `FuturesTickerBatch` (mọi hợp đồng; cũng gửi khi mark/funding đổi).
+- `REALTIME_MAX_CHANNELS = 100` (trước là 50, không công bố): vượt → sự kiện `error` mã `RATE_LIMITED` kèm `channel`, kênh đó **không** được đăng ký.
+  Đăng ký lại kênh đang có không bị tính thêm. **Mock áp dụng cùng giới hạn** và hỗ trợ cả 2 kênh mới.
+
 ## 0.7.0 — 2026-10-10 (Admin cho Giai đoạn 2.6 + Futures)
 Hỗ trợ khách hàng kiểu sàn lớn: tìm theo UID, xem Futures / bot / lịch sử đăng nhập của người dùng, dừng bot có ghi nhật ký.
 

@@ -10,8 +10,12 @@ import { DcaPlan, GridBot } from './bots.ts';
 /**
  * WebSocket: connect to `/ws` (same origin; the session cookie authenticates the `user` channel).
  *
+ * At most REALTIME_MAX_CHANNELS channels per connection; more → `error` RATE_LIMITED (the channel is not subscribed).
+ *
  * Channels:
- *   ticker:<SYMBOL>            -> Ticker            (every update)
+ *   tickers                    -> TickerBatch       (ALL pairs: snapshot of every pair on subscribe, then ≤ 1/s with the
+ *                                                    pairs that changed — use this for lists/headers, not 50 ticker:<SYMBOL>)
+ *   ticker:<SYMBOL>            -> Ticker            (≤ 1/s)
  *   depth:<SYMBOL>             -> Depth             (top 20 levels, ~1/s)
  *   trades:<SYMBOL>            -> MarketTrade       (each public trade)
  *   candles:<SYMBOL>:<interval>-> Candle            (forming + closed candles)
@@ -21,6 +25,7 @@ import { DcaPlan, GridBot } from './bots.ts';
  *   user                       -> UserEvent         (requires sign-in)
  *
  * Futures (phase F), SYMBOL = futures symbol (e.g. BTCUSDT, 1000PEPEUSDT):
+ *   futures:tickers            -> FuturesTickerBatch (all contracts, like `tickers`; also sent when mark/funding moves)
  *   futures:ticker:<SYMBOL>    -> FuturesTicker     (~1/s)
  *   futures:mark:<SYMBOL>      -> MarkPrice         (~1/s; use it for live PnL with @cex/core futures math)
  *   futures:depth:<SYMBOL>     -> Depth             (top 20, ~2/s)
@@ -28,6 +33,15 @@ import { DcaPlan, GridBot } from './bots.ts';
  *   futures:candles:<SYMBOL>:<interval> -> Candle
  *   futures:status             -> MarketStatus      (futures feed; on change)
  */
+/** Subscriptions allowed per WebSocket connection (server and mock enforce it). */
+export const REALTIME_MAX_CHANNELS = 100;
+
+/** `tickers`: every pair on subscribe, then only the pairs that changed since the last batch. */
+export const TickerBatch = z.object({ items: z.array(Ticker) });
+export type TickerBatch = z.infer<typeof TickerBatch>;
+export const FuturesTickerBatch = z.object({ items: z.array(FuturesTicker) });
+export type FuturesTickerBatch = z.infer<typeof FuturesTickerBatch>;
+
 export const ClientMessage = z.discriminatedUnion('type', [
   z.object({ type: z.literal('subscribe'), channel: z.string() }),
   z.object({ type: z.literal('unsubscribe'), channel: z.string() }),
@@ -70,6 +84,7 @@ export type ServerMessage = z.infer<typeof ServerMessage>;
 
 /** Payload schema for each channel prefix, for validating `event.data`. */
 export const ChannelPayload = {
+  tickers: TickerBatch,
   ticker: Ticker,
   depth: Depth,
   trades: MarketTrade,
@@ -77,6 +92,7 @@ export const ChannelPayload = {
   'market:status': MarketStatus,
   'exchange:status': ExchangeStatus,
   user: UserEvent,
+  'futures:tickers': FuturesTickerBatch,
   'futures:ticker': FuturesTicker,
   'futures:mark': MarkPrice,
   'futures:depth': Depth,
@@ -85,7 +101,9 @@ export const ChannelPayload = {
   'futures:status': MarketStatus,
 } as const;
 
-export type ChannelData<C extends string> = C extends `futures:ticker:${string}`
+export type ChannelData<C extends string> = C extends 'futures:tickers'
+  ? FuturesTickerBatch
+  : C extends `futures:ticker:${string}`
   ? FuturesTicker
   : C extends `futures:mark:${string}`
     ? MarkPrice
@@ -99,7 +117,9 @@ export type ChannelData<C extends string> = C extends `futures:ticker:${string}`
             ? MarketStatus
             : SpotChannelData<C>;
 
-type SpotChannelData<C extends string> = C extends `ticker:${string}`
+type SpotChannelData<C extends string> = C extends 'tickers'
+  ? TickerBatch
+  : C extends `ticker:${string}`
   ? Ticker
   : C extends `depth:${string}`
     ? Depth
@@ -120,6 +140,8 @@ export function payloadSchemaFor(channel: string): z.ZodTypeAny | null {
   if (channel === 'market:status') return MarketStatus;
   if (channel === 'exchange:status') return ExchangeStatus;
   if (channel === 'futures:status') return MarketStatus;
+  if (channel === 'futures:tickers') return FuturesTickerBatch;
+  if (channel === 'tickers') return TickerBatch;
   if (channel.startsWith('futures:')) {
     switch (channel.split(':')[1]) {
       case 'ticker':
