@@ -11,7 +11,8 @@ const track = (c) => children.push(c);
 const stop = () => {
   for (const c of children) {
     try {
-      process.platform === 'win32' ? run('taskkill', ['/pid', String(c.pid), '/T', '/F']) : c.kill('SIGINT');
+      if (process.platform === 'win32') run('taskkill', ['/pid', String(c.pid), '/T', '/F']);
+      else c.kill('SIGINT');
     } catch {
       // already gone
     }

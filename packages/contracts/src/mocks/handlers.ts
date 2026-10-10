@@ -23,7 +23,7 @@ import {
 } from '../fixtures/index.ts';
 import { adjust, balanceOf, emitUser, mockStore, nextId } from './store.ts';
 import { baseOf, cancel, createOco, findList, isOpen, lockOf, mockFill, newOrder } from './engine.ts';
-import { MockError, mockMe, now, ok, requireUser, requireVerified, type Req, type Resolver } from './common.ts';
+import { MockError, mockMe, now, ok, requireUser, requireVerified, type Resolver } from './common.ts';
 import { adminResolvers } from './admin.ts';
 import { futuresResolvers } from './futures.ts';
 import { phase26Resolvers } from './phase26.ts';

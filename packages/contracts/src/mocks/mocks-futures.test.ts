@@ -39,11 +39,11 @@ describe('futures mocks (contracts phase F)', () => {
 
     const o = await api.futuresPlaceOrder({ body: { symbol: 'SOLUSDT', side: 'BUY', type: 'MARKET', quantity: '10', tpsl: { takeProfitPrice: '130.00', stopLossPrice: '100.00' } } });
     expect(o).toMatchObject({ status: 'FILLED', leverage: 20, purpose: 'TRADE' });
-    let pos = (await api.futuresPositions()).items.find((p) => p.symbol === 'SOLUSDT')!;
+    const pos = (await api.futuresPositions()).items.find((p) => p.symbol === 'SOLUSDT')!;
     expect(pos).toMatchObject({ side: 'LONG', quantity: '10.00', leverage: 20, takeProfitPrice: '130.00', stopLossPrice: '100.00', marginMode: 'ISOLATED' });
     expect(pos.liquidationPrice).not.toBeNull();
 
-    pos = await api.futuresAdjustMargin({ params: { symbol: 'SOLUSDT' }, body: { amount: '20' } });
+    await api.futuresAdjustMargin({ params: { symbol: 'SOLUSDT' }, body: { amount: '20' } });
     await expect(api.futuresAdjustMargin({ params: { symbol: 'SOLUSDT' }, body: { amount: '-9999' } })).rejects.toSatisfy(code('MARGIN_TOO_LOW'));
     await expect(api.futuresSetTpSl({ params: { symbol: 'SOLUSDT' }, body: { takeProfitPrice: '1.00', stopLossPrice: null } })).rejects.toSatisfy(code('INVALID_TPSL'));
 

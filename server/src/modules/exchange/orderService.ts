@@ -207,7 +207,7 @@ export class OrderService {
     ruleError(checkNotional(sym.rules, qty.mul(price)));
     const tpsl = this.tpslData(sym, input.tpsl, price);
     const isBuy = input.side === 'BUY';
-    let order = await this.insertLocked(
+    const order = await this.insertLocked(
       tx,
       out,
       {
@@ -227,9 +227,7 @@ export class OrderService {
       isBuy ? sym.row.quoteAsset : sym.row.baseAsset,
       isBuy ? qty.mul(price) : qty,
     );
-    let tradeRows: TradeRow[] = [];
-    ({ order, trades: tradeRows } = await this.takeAsLimit(tx, out, order, sym));
-    return { order, trades: tradeRows };
+    return this.takeAsLimit(tx, out, order, sym);
   }
 
   /**
@@ -601,7 +599,7 @@ export class OrderService {
     const sl = t.stopLossPrice ? dec(t.stopLossPrice) : null;
     const slLimit = t.stopLossLimitPrice ? dec(t.stopLossLimitPrice) : null;
     const executed = dec(parent.executedQty);
-    let skip: string | null = null;
+    let skip: string | null;
     let qty = ZERO;
     if (executed.isZero()) {
       skip = 'PARENT_NOT_FILLED';

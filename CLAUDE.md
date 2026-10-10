@@ -49,7 +49,9 @@ npm run db:generate   # sau khi sửa server/src/db/schema.ts
 npm run admin:set-role -- <email> owner   # tạo owner đầu tiên (ghi audit ROLE_BOOTSTRAP)
 npm run dev           # cả hệ thống: DB + server + mọi app trong apps/* (mock tắt)
 npm run dev -- --sim  # như trên nhưng giá GIẢ LẬP (không cần Binance: offline, test e2e, CI)
-npm run verify        # cổng gộp main: typecheck mọi workspace (cả UI) + test + build app
+npm run verify        # cổng gộp main: typecheck mọi workspace (cả UI) + lint + test + build app + báo cáo API app chưa dùng
+npm run lint          # ESLint: backend/contracts/core/infra/e2e lỗi là chặn; apps/*, packages/ui chỉ cảnh báo
+npm run ui-coverage   # endpoint nào backend có mà app chưa gọi (--strict: thiếu là lỗi)
 npm run e2e           # test trình duyệt (Playwright, Edge cài sẵn): build apps/exchange, dựng hệ riêng
                       #   DB :5436 + API :8090 (giá giả lập, email ra .e2e/outbox.jsonl) + web :5190, chạy e2e/tests
 ```

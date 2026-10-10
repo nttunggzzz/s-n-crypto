@@ -11,6 +11,8 @@ export interface ApiClientOptions {
   headers?: () => Record<string, string>;
 }
 
+// `{} extends X` = "every field of X is optional" (the input may be omitted)
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
 type Args<N extends EndpointName> = {} extends EndpointInput<N> ? [input?: EndpointInput<N>] : [input: EndpointInput<N>];
 
 export type ApiClient = {

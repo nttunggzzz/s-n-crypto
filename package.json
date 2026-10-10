@@ -19,13 +19,19 @@
     "test:watch": "vitest",
     "verify": "node infra/verify.mjs",
     "e2e": "node infra/e2e.mjs",
+    "lint": "eslint .",
+    "ui-coverage": "node infra/ui-coverage.mjs",
     "admin:set-role": "npm run admin:set-role -w @cex/server --"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@playwright/test": "^1.64.0",
     "@types/node": "^22.14.0",
+    "eslint": "^10.11.0",
+    "globals": "^17.12.0",
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",
+    "typescript-eslint": "^8.70.1",
     "vitest": "^5.0.3"
   },
   "engines": {

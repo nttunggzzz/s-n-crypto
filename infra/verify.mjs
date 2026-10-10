@@ -1,5 +1,6 @@
 // `npm run verify`: the gate before anything is merged into main (both sides run it).
-//   1. type-check every workspace (incl. UI)  2. all tests (real PostgreSQL)  3. production build of every app
+//   1. type-check every workspace (incl. UI)  2. lint (errors fail; UI findings are warnings, listed only)
+//   3. all tests (real PostgreSQL)  4. production build of every app  5. report: endpoints the apps do not use yet
 import { ROOT, run, workspaces } from './workspaces.mjs';
 
 const step = async (title, cmd, args) => {
@@ -12,8 +13,11 @@ const step = async (title, cmd, args) => {
 };
 
 await step('typecheck (all workspaces)', 'node', ['infra/typecheck-all.mjs']);
+await step('lint', 'npx', ['eslint', '.']);
 await step('tests', 'npx', ['vitest', 'run']);
 for (const { dir, pkg } of workspaces()) {
   if (dir.startsWith('apps/') && pkg.scripts?.build) await step(`build ${pkg.name}`, 'npm', ['run', 'build', '-w', pkg.name]);
 }
+process.stdout.write('\n━━ report: API endpoints the apps do not use yet (does not fail verify)\n');
+await run('node', ['infra/ui-coverage.mjs'], { cwd: ROOT });
 process.stdout.write('\n✓ verify passed — safe to merge\n');

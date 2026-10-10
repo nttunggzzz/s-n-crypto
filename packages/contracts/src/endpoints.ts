@@ -311,6 +311,7 @@ export type Endpoints = typeof endpoints;
 export type EndpointName = keyof Endpoints;
 
 type Infer<T> = T extends z.ZodType ? z.input<T> : never;
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type -- `{}` = no key / "all fields optional" test
 type OptionalIfEmpty<K extends string, T> = [T] extends [never] ? {} : {} extends T ? { [P in K]?: T } : { [P in K]: T };
 
 /** Input accepted by the client for an endpoint: { params?, query?, body? }. */

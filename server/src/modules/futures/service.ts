@@ -363,7 +363,7 @@ export class FuturesService {
     const t = this.now();
     let pos = await this.openPosition(tx, userId, order.symbol);
 
-    let closeQty = pos && pos.side !== dir ? minDec(f.qty, dec(pos.quantity)) : ZERO;
+    const closeQty = pos && pos.side !== dir ? minDec(f.qty, dec(pos.quantity)) : ZERO;
     const openQty = order.reduceOnly ? ZERO : f.qty.sub(closeQty);
     const executed = closeQty.add(openQty);
     if (executed.isZero()) return this.finish(tx, out, order, 'CANCELED', 'REDUCE_ONLY');

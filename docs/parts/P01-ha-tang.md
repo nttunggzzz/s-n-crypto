@@ -21,7 +21,7 @@ Logic nghiệp vụ, giao diện.
 ## Checklist
 **Giai đoạn 0**
 - [x] Chuyển code cũ vào `legacy/`, viết lại `CLAUDE.md`
-- [x] Khung monorepo + typecheck/test (vitest + PostgreSQL nhúng) — *còn thiếu lint/format*
+- [x] Khung monorepo + typecheck/test (vitest + PostgreSQL nhúng) + ESLint (`npm run lint`, nằm trong `verify`) — *chưa có format tự động*
 - [x] Test trình duyệt `npm run e2e` (Playwright trên hệ riêng: giá giả lập, email ra file, bản build production) — cổng nghiệm thu giao diện
 - [ ] Railway staging + PostgreSQL + tự triển khai từ `main`
 - [ ] Khóa truy cập staging
