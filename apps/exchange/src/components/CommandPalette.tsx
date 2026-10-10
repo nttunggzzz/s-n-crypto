@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Command } from 'cmdk';
-import { Search, Wallet, User, Monitor, LogOut } from 'lucide-react';
+import { Search, Wallet, User, Monitor, LogOut, TrendingUp } from 'lucide-react';
 import { useAuth } from '../context/AuthContext.tsx';
 import { useMarket } from '../context/MarketContext.tsx';
 
@@ -61,6 +61,12 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ onNavigate }) =>
               className="flex items-center px-2 py-2 text-sm text-[var(--text,#f4f4f5)] rounded-md hover:bg-[var(--panel-2,#141416)] cursor-pointer aria-selected:bg-[var(--panel-2,#141416)] aria-selected:text-[var(--accent,#818cf8)] transition-colors"
             >
               <Monitor size={16} className="mr-2 opacity-70" /> Thị trường Spot
+            </Command.Item>
+            <Command.Item 
+              onSelect={() => runCommand(() => onNavigate('/futures/BTCUSDT'))}
+              className="flex items-center px-2 py-2 text-sm text-[var(--text,#f4f4f5)] rounded-md hover:bg-[var(--panel-2,#141416)] cursor-pointer aria-selected:bg-[var(--panel-2,#141416)] aria-selected:text-[var(--accent,#818cf8)] transition-colors"
+            >
+              <TrendingUp size={16} className="mr-2 opacity-70" /> Giao dịch Futures (≤ 20×)
             </Command.Item>
             {isAuthenticated && (
               <Command.Item 

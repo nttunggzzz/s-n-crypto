@@ -80,11 +80,15 @@ export const Header: React.FC<HeaderProps> = ({ currentPath, onNavigate }) => {
                     <div className="text-[13px] text-[var(--text,#f4f4f5)] font-medium">Giao dịch Spot</div>
                     <div className="text-[11px] text-[var(--text-3,#63636b)]">Giao dịch tiền mã hóa cơ sở</div>
                   </div>
-                  <div className="px-4 py-2 opacity-50 cursor-not-allowed">
-                    <div className="text-[13px] text-[var(--text,#f4f4f5)] font-medium flex items-center gap-2">
-                      Futures <span className="text-[9px] px-1.5 py-0.5 rounded bg-[var(--line,#1d1e21)] text-[var(--text-2,#a1a1aa)]">Sắp có</span>
+                  <div 
+                    onClick={() => onNavigate(`/futures/${activeSymbol || 'BTCUSDT'}`)}
+                    className="px-4 py-2 hover:bg-[var(--panel-2,#141416)] cursor-pointer"
+                  >
+                    <div className="text-[13px] text-[var(--text,#f4f4f5)] font-medium flex items-center gap-1.5">
+                      <span>Futures</span>
+                      <span className="text-[9px] px-1.5 py-0.2 rounded bg-[var(--accent,#818cf8)]/10 text-[var(--accent,#818cf8)] font-bold">Mô phỏng</span>
                     </div>
-                    <div className="text-[11px] text-[var(--text-3,#63636b)]">Hợp đồng vĩnh cửu USDT-M</div>
+                    <div className="text-[11px] text-[var(--text-3,#63636b)]">Hợp đồng vĩnh cửu USDT-M (≤ 20×)</div>
                   </div>
                 </div>
               </div>

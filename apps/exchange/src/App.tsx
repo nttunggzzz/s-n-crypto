@@ -10,6 +10,7 @@ import { ToastProvider, SimulatedBanner } from '@cex/ui';
 // Pages
 import { MarketsPage } from './pages/MarketsPage.tsx';
 import { TradePage } from './pages/TradePage.tsx';
+import { FuturesPage } from './pages/FuturesPage.tsx';
 import { WalletPage } from './pages/WalletPage.tsx';
 import { PortfolioPage } from './pages/PortfolioPage.tsx';
 import { SettingsPage } from './pages/SettingsPage.tsx';
@@ -50,6 +51,11 @@ const AppContent: React.FC = () => {
       const parts = currentPath.split('/');
       const symbol = parts[2] || 'BTCUSDT';
       return <TradePage symbolParam={symbol} onNavigate={navigate} />;
+    }
+    if (currentPath.startsWith('/futures')) {
+      const parts = currentPath.split('/');
+      const symbol = parts[2] || 'BTCUSDT';
+      return <FuturesPage symbolParam={symbol} onNavigate={navigate} />;
     }
     if (currentPath === '/portfolio') {
       return <PortfolioPage onNavigate={navigate} />;
