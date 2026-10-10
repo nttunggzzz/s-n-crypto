@@ -26,6 +26,7 @@ import { baseOf, cancel, createOco, findList, isOpen, lockOf, mockFill, newOrder
 import { MockError, mockMe, now, ok, requireUser, requireVerified, type Resolver } from './common.ts';
 import { adminResolvers } from './admin.ts';
 import { futuresResolvers } from './futures.ts';
+import { inviteResolvers, mockConsumeInvite } from './invites.ts';
 import { phase26Resolvers } from './phase26.ts';
 const requireTradable = (symbol: string) => {
   if (mockStore.scenario === 'halted') throw new MockError('TRADING_HALTED', 'Trading is halted by the operator');
@@ -60,7 +61,8 @@ const vnTime = (iso: string) => new Date(Date.parse(iso) + 7 * 3600_000).toISOSt
 const resolvers: { [N in EndpointName]: Resolver<N> } = {
   health: () => ({ status: 'ok', time: now(), version: 'mock', market: 'CONNECTED' }),
 
-  register: () => {
+  register: ({ body }) => {
+    mockConsumeInvite(body.inviteCode);
     mockStore.signedIn = true;
     return { user: { ...mockMe(), emailVerified: false } };
   },
@@ -362,6 +364,7 @@ const resolvers: { [N in EndpointName]: Resolver<N> } = {
   ...adminResolvers,
   ...futuresResolvers,
   ...phase26Resolvers,
+  ...inviteResolvers,
 
   markNotificationsRead: ({ body }) => {
     requireUser();

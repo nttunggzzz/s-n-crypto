@@ -107,6 +107,12 @@ export function createApp(deps: AppDeps) {
     version: deps.version ?? 'dev',
     market: deps.market.connection,
   }));
+  route(router, opts, 'publicConfig', async () => ({
+    registration: config.REGISTRATION === 'invite' ? ('INVITE_ONLY' as const) : ('OPEN' as const),
+    captchaSiteKey: config.TURNSTILE_SITE_KEY || null,
+    emailVerificationRequired: config.REQUIRE_EMAIL_VERIFICATION,
+    marketFeed: config.MARKET_FEED,
+  }));
   registerAuthRoutes(router, opts, deps.auth, config);
   const exConfig = deps.exchange.config;
   registerMarketRoutes(router, opts, {
@@ -119,7 +125,7 @@ export function createApp(deps: AppDeps) {
   const news = new AnnouncementService(deps.db);
   route(router, opts, 'announcements', async ({ query }) => ({ items: await news.listPublic(query.limit) }));
   registerExchangeRoutes(router, opts, deps.db, deps.exchange, deps.market, config.RATE_LIMIT_SCALE);
-  registerAdminRoutes(router, opts, new AdminService(deps.db, deps.exchange, deps.market, deps.futures, deps.bots), news, config.RATE_LIMIT_SCALE);
+  registerAdminRoutes(router, opts, new AdminService(deps.db, deps.exchange, deps.market, deps.futures, deps.bots), news, deps.auth.invites, config.RATE_LIMIT_SCALE);
   if (deps.futures) registerFuturesRoutes(router, opts, deps.db, deps.futures, deps.market, config.RATE_LIMIT_SCALE);
   if (deps.bots) registerBotRoutes(router, opts, deps.bots, config.RATE_LIMIT_SCALE);
   app.use(router);

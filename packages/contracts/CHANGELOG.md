@@ -1,5 +1,24 @@
 # Changelog — @cex/contracts
 
+## 0.10.0 — 2026-10-10 (Chạy kín: đăng ký bằng mã mời, cấu hình công khai)
+Chuẩn bị đưa staging lên cloud: chỉ người được mời mới đăng ký được. Thêm 4 endpoint, tổng 128.
+
+**Thêm**
+- `publicConfig` (`GET /api/v1/config`, công khai) → `{ registration: 'OPEN' | 'INVITE_ONLY', captchaSiteKey, emailVerificationRequired, marketFeed }`.
+  App đọc **một lần lúc khởi động** để:
+  - hiện ô mã mời khi `INVITE_ONLY`;
+  - hiện widget Cloudflare Turnstile khi có `captchaSiteKey`;
+  - hiện banner "GIÁ GIẢ LẬP" khi `marketFeed === 'sim'`.
+- `RegisterRequest.inviteCode` (tùy chọn; bắt buộc khi `INVITE_ONLY`). Trang đăng ký đọc `?invite=` trên URL để điền sẵn.
+  Mã nhập không phân biệt hoa thường, khoảng trắng hay dấu gạch.
+- Mã lỗi `INVALID_INVITE` (400), `details.reason`: `MISSING` | `UNKNOWN` | `EXPIRED` | `USED_UP` | `REVOKED`; `details.field = 'inviteCode'`.
+- Admin (quyền mới `users.invite` — admin, owner):
+  - `adminListInvites` (lọc `status`, phân trang);
+  - `adminCreateInvite` (`note`, `maxUses` 1–100, `expiresInDays` 1–90) → `{ invite, code, link }`. **Mã chỉ hiện một lần**; server chỉ lưu bản băm.
+  - `adminRevokeInvite` (`reason`).
+- `AuditAction` thêm `INVITE_CREATE`, `INVITE_REVOKE`; `AuditTargetType` thêm `INVITE`.
+- **Mock:** mặc định `OPEN`. `setMockRegistration('INVITE_ONLY', 'sim')` để xem trang đăng ký của server kín và banner giá giả lập; mã demo `DEMO-MOCK-2026`.
+
 ## 0.9.0 — 2026-10-10 (Hàm tiện ích cho giao diện)
 Chỉ thêm. Các hàm không phụ thuộc React, có test, cho những chỗ REVIEW-03 thấy giao diện tự viết và dễ sai.
 Hàm nào giữ trạng thái thì có `subscribe` + hàm đọc, dùng thẳng với `useSyncExternalStore`.

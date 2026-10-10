@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { setupServer } from 'msw/node';
 import { ApiError, createApiClient } from '../index.ts';
-import { createMockHandlers, resetMockStore, setMockRole } from './index.ts';
+import { createMockHandlers, resetMockStore, setMockRegistration, setMockRole } from './index.ts';
 
 const BASE = 'http://mock.local';
 const server = setupServer(...createMockHandlers({ baseUrl: BASE, latencyMs: 0 }));
@@ -94,3 +94,38 @@ describe('phase 3 mocks follow the contract', () => {
     expect(u.role).toBe('support');
   });
 });
+
+describe('mock closed registration (0.10.0)', () => {
+  const refused = (reason: string) => (e: unknown) => e instanceof ApiError && e.code === 'INVALID_INVITE' && (e.details as { reason?: string })?.reason === reason;
+  const signUp = (inviteCode?: string) => api.register({ body: { email: 'khach@example.com', password: 'correct horse battery', name: 'Khách', inviteCode } });
+
+  it('OPEN by default; INVITE_ONLY needs a code like the server (demo code works)', async () => {
+    expect(await api.publicConfig()).toMatchObject({ registration: 'OPEN', marketFeed: 'binance' });
+    await signUp();
+    setMockRegistration('INVITE_ONLY', 'sim');
+    expect(await api.publicConfig()).toMatchObject({ registration: 'INVITE_ONLY', marketFeed: 'sim' });
+    await expect(signUp()).rejects.toSatisfy(refused('MISSING'));
+    await expect(signUp('NOPE-NOPE-NOPE')).rejects.toSatisfy(refused('UNKNOWN'));
+    await expect(signUp('USED-USED-USED')).rejects.toSatisfy(refused('USED_UP'));
+    await signUp('demo-mock-2026');
+  });
+
+  it('admin creates (code shown once), the code works once, revoke is audited; support may not', async () => {
+    setMockRegistration('INVITE_ONLY');
+    setMockRole('support');
+    await expect(api.adminCreateInvite({ body: { note: 'x' } })).rejects.toSatisfy(code('FORBIDDEN'));
+    setMockRole('admin');
+    const { invite, code: c, link } = await api.adminCreateInvite({ body: { note: 'Anh Minh', maxUses: 1 } });
+    expect(link).toContain(`/register?invite=${c}`);
+    await signUp(c);
+    await expect(signUp(c)).rejects.toSatisfy(refused('USED_UP'));
+    const more = await api.adminCreateInvite({ body: { note: 'thu hồi' } });
+    await api.adminRevokeInvite({ params: { inviteId: more.invite.id }, body: { reason: 'gửi nhầm người' } });
+    await expect(signUp(more.code)).rejects.toSatisfy(refused('REVOKED'));
+    expect((await api.adminListInvites({ query: { status: 'REVOKED' } })).items.map((i) => i.id)).toEqual([more.invite.id]);
+    const logs = (await api.adminAuditLogs()).items.filter((l) => l.targetType === 'INVITE').map((l) => l.action);
+    expect(logs).toEqual(['INVITE_REVOKE', 'INVITE_CREATE', 'INVITE_CREATE']);
+    expect(invite.status).toBe('ACTIVE');
+  });
+});
+

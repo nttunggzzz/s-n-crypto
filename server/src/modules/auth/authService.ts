@@ -10,6 +10,7 @@ import type { EmailSender } from './email.ts';
 import { hashRecoveryCode, newRecoveryCodes, newTotpSecret, otpauthUrl, SecretBox, verifyTotp } from './totp.ts';
 import { writeAudit } from '../admin/audit.ts';
 import { SecurityService, withAntiPhishing } from './security.ts';
+import { InviteService } from './inviteService.ts';
 
 export type UserRow = typeof users.$inferSelect;
 export type SessionRow = typeof sessions.$inferSelect;
@@ -55,6 +56,8 @@ export class AuthService {
   private readonly box: SecretBox;
   /** Sign-in history + new-device alerts. */
   readonly security: SecurityService;
+  /** Sign-up invite codes (REGISTRATION=invite, closed staging). */
+  readonly invites: InviteService;
 
   constructor(
     private readonly db: Db,
@@ -64,6 +67,7 @@ export class AuthService {
   ) {
     this.box = new SecretBox(config.dataKey);
     this.security = new SecurityService(db, email, now);
+    this.invites = new InviteService(db, config.APP_URL, now);
   }
 
   // ───────── sessions
@@ -112,14 +116,17 @@ export class AuthService {
 
   // ───────── register / login
 
-  async register(input: { email: string; password: string; name: string }, client: ClientInfo) {
+  /** With REGISTRATION=invite the invite use and the new user commit together (a failed sign-up keeps the use). */
+  async register(input: { email: string; password: string; name: string; inviteCode?: string }, client: ClientInfo) {
     const email = input.email.trim().toLowerCase();
+    const passwordHash = await hashPassword(input.password);
     let user: UserRow;
     try {
-      [user] = (await this.db
-        .insert(users)
-        .values({ email, name: input.name.trim(), passwordHash: await hashPassword(input.password) })
-        .returning()) as [UserRow];
+      user = await this.db.transaction(async (tx) => {
+        const inviteId = this.config.REGISTRATION === 'invite' ? await this.invites.consume(tx, input.inviteCode) : null;
+        const [row] = await tx.insert(users).values({ email, name: input.name.trim(), passwordHash, inviteId }).returning();
+        return row!;
+      });
     } catch (err) {
       if (isUniqueViolation(err, 'users_email_uq')) throw new AppError('CONFLICT', 'Email already registered', { field: 'email' });
       throw err;

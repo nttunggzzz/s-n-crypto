@@ -47,6 +47,7 @@ npm test              # vitest — tự bật PostgreSQL thật trên :5434
 npm run typecheck     # mọi workspace có tsconfig (core, contracts, server, và ui/apps khi đã gộp)
 npm run db:generate   # sau khi sửa server/src/db/schema.ts
 npm run admin:set-role -- <email> owner   # tạo owner đầu tiên (ghi audit ROLE_BOOTSTRAP)
+npm run admin:invite -- "<người nhận>" [lượt] [ngày]  # mã mời đăng ký (REGISTRATION=invite — mặc định ở production)
 npm run dev           # cả hệ thống: DB + server + mọi app trong apps/* (mock tắt)
 npm run dev -- --sim  # như trên nhưng giá GIẢ LẬP (không cần Binance: offline, test e2e, CI)
 npm run verify        # cổng gộp main: typecheck mọi workspace (cả UI) + lint + test + build app + báo cáo API app chưa dùng

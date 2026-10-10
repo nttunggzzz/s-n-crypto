@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { AdminInviteListQuery, CreatedInvite, CreateInviteRequest, Invite, InviteIdParam, PublicConfig } from './invites.ts';
 import { Empty, IsoDateTime, PaginationQuery, SymbolCode, paginated } from './common.ts';
 import { Me, Preferences, UpdatePreferencesRequest } from './account.ts';
 import { LoginEvent, SecurityOverview, SetAntiPhishingRequest, UpdateProfileRequest } from './security.ts';
@@ -139,6 +140,8 @@ export const HealthResponse = z.object({
 export const endpoints = {
   // ---- system
   health: ep({ method: 'GET', path: '/api/v1/health', auth: 'public', response: HealthResponse }),
+  /** Server settings the apps need before sign-in: registration mode (invite code field), captcha site key, simulated prices. */
+  publicConfig: ep({ method: 'GET', path: '/api/v1/config', auth: 'public', response: PublicConfig }),
 
   // ---- auth (P03)
   register: ep({ method: 'POST', path: '/api/v1/auth/register', auth: 'public', body: RegisterRequest, response: AuthUserResponse, status: 201 }),
@@ -264,6 +267,11 @@ export const endpoints = {
   adminListAnnouncements: ep({ method: 'GET', path: '/api/v1/admin/announcements', auth: 'staff', permission: 'exchange.read', query: AdminAnnouncementListQuery.extend(PaginationQuery.shape), response: paginated(AdminAnnouncement) }),
   adminCreateAnnouncement: ep({ method: 'POST', path: '/api/v1/admin/announcements', auth: 'staff', permission: 'content.manage', body: CreateAnnouncementRequest, response: AdminAnnouncement, status: 201 }),
   adminUpdateAnnouncement: ep({ method: 'PATCH', path: '/api/v1/admin/announcements/:announcementId', auth: 'staff', permission: 'content.manage', params: AnnouncementIdParam, body: UpdateAnnouncementRequest, response: AdminAnnouncement }),
+  // closed staging (0.10.0): sign-up invite codes
+  adminListInvites: ep({ method: 'GET', path: '/api/v1/admin/invites', auth: 'staff', permission: 'users.invite', query: AdminInviteListQuery.extend(PaginationQuery.shape), response: paginated(Invite) }),
+  /** The code is in this response only (the server keeps a hash). */
+  adminCreateInvite: ep({ method: 'POST', path: '/api/v1/admin/invites', auth: 'staff', permission: 'users.invite', body: CreateInviteRequest, response: CreatedInvite, status: 201 }),
+  adminRevokeInvite: ep({ method: 'POST', path: '/api/v1/admin/invites/:inviteId/revoke', auth: 'staff', permission: 'users.invite', params: InviteIdParam, body: ReasonBody, response: Invite }),
   // phase F: futures contracts
   adminFuturesSymbols: ep({ method: 'GET', path: '/api/v1/admin/futures/symbols', auth: 'staff', permission: 'exchange.read', response: z.object({ items: z.array(AdminFuturesSymbol) }) }),
   adminUpdateFuturesSymbol: ep({ method: 'PATCH', path: '/api/v1/admin/futures/symbols/:symbol', auth: 'staff', permission: 'exchange.configure', params: SymbolParam, body: UpdateFuturesSymbolRequest, response: AdminFuturesSymbol }),

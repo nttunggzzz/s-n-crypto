@@ -158,10 +158,13 @@ export const AuditAction = z.enum([
   'FUTURES_SYMBOL_UPDATE',
   'GRID_BOT_STOP',
   'DCA_PLAN_CANCEL',
+  // closed staging (0.10.0)
+  'INVITE_CREATE',
+  'INVITE_REVOKE',
 ]);
 export type AuditAction = z.infer<typeof AuditAction>;
 
-export const AuditTargetType = z.enum(['USER', 'EXCHANGE', 'SYMBOL', 'ASSET', 'ANNOUNCEMENT']);
+export const AuditTargetType = z.enum(['USER', 'EXCHANGE', 'SYMBOL', 'ASSET', 'ANNOUNCEMENT', 'INVITE']);
 export type AuditTargetType = z.infer<typeof AuditTargetType>;
 
 /** Append-only: entries can never be edited or deleted (enforced by the database). */

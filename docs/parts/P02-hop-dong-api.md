@@ -33,6 +33,8 @@ Một nguồn sự thật duy nhất cho mọi dữ liệu đi giữa backend v�
 - [x] Giai đoạn 3: toàn bộ API admin (v0.3.0) + 2FA
 - [x] Admin cho 2.6 + Futures: v0.7.0 — tìm theo UID, Futures / bot / lịch sử đăng nhập của người dùng, dừng bot có nhật ký (5 endpoint, tổng 124)
 - [x] Realtime v0.8.0 — kênh `tickers` / `futures:tickers` (giá mọi cặp trong một kênh, ≤ 1 lần/giây), giới hạn `REALTIME_MAX_CHANNELS` = 100 công bố trong hợp đồng, mock áp dụng cùng giới hạn
+- [x] v0.9.0 — hàm tiện ích cho UI (kho giá, PEPE→1000PEPE, đếm ngược, chặn đặt lệnh, phân trang, tải CSV)
+- [x] v0.10.0 — `publicConfig`, đăng ký bằng mã mời (`INVALID_INVITE`), admin tạo/thu hồi mã (quyền `users.invite`, có nhật ký) — tổng 128 endpoint
 - [x] Giai đoạn 2.6: v0.6.0 — hồ sơ + bảo mật, phân tích lãi lỗ, DCA, bot lưới (16 endpoint, tổng 119; sự kiện `dcaPlan`/`gridBot`; mock đủ)
 - [x] Giai đoạn F: v0.5.0 — Futures mô phỏng (26 endpoint, tổng 103; kênh realtime `futures:*`; mock đủ)
 - [x] Giai đoạn 2.5: v0.4.0 — thông tin coin, sparkline, sổ lệnh sâu, `exchange:status`, thông báo của sàn (77 endpoint); mock kiểm tra đầu vào như server

@@ -205,3 +205,12 @@ const pager = createPager((cursor) => api.orderHistory({ query: { symbol, cursor
 saveTextFile(await api.exportLedger({ query: {} }), 'so-cai.csv');
 ```
 
+## 12. Chạy kín: mã mời + cấu hình công khai (v0.10.0)
+- Lúc app khởi động: `const cfg = await api.publicConfig()`.
+  - `cfg.registration === 'INVITE_ONLY'` → form đăng ký có ô **Mã mời** (bắt buộc), điền sẵn từ `?invite=`.
+  - `cfg.captchaSiteKey` → hiện Turnstile, gửi `captchaToken`.
+  - `cfg.marketFeed === 'sim'` → banner "GIÁ GIẢ LẬP — không phải giá thị trường".
+- Lỗi `INVALID_INVITE` → thông báo theo `details.reason`: thiếu mã / mã không đúng / mã hết hạn / mã đã dùng hết lượt / mã đã bị thu hồi.
+- Admin: trang "Mã mời" gồm danh sách (lọc trạng thái), tạo mới (người nhận, số lượt, số ngày) và thu hồi (lý do ≥ 5 ký tự).
+  Sau khi tạo, **chỉ lúc đó** hiện mã + link kèm nút sao chép; đóng hộp là không xem lại được.
+

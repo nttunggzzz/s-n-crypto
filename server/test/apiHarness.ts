@@ -22,16 +22,20 @@ export class ApiHarness {
   base = '';
   private server!: http.Server;
   hub!: RealtimeHub;
+  auth!: AuthService;
+  private inviteOnly = false;
   private seq = 0;
   /** Auth clock offset: TOTP codes are single-use per 30 s step, so tests move this clock forward. */
   skewMs = 0;
   authNow = () => new Date(Date.now() + this.skewMs);
 
-  /** Optional fake Binance REST order book for deep-depth tests. */
-  async start(opts: { depthFetcher?: DepthFetcher; webDist?: string } = {}): Promise<void> {
-    const config = loadConfig({ NODE_ENV: 'test', MARKET_FEED: 'off', APP_URL: 'http://localhost:5173', RATE_LIMIT_SCALE: '100' });
+  /** Optional fake Binance REST order book for deep-depth tests; `env` overrides config (e.g. REGISTRATION). */
+  async start(opts: { depthFetcher?: DepthFetcher; webDist?: string; env?: Record<string, string> } = {}): Promise<void> {
+    const config = loadConfig({ NODE_ENV: 'test', MARKET_FEED: 'off', APP_URL: 'http://localhost:5173', RATE_LIMIT_SCALE: '100', ...opts.env });
+    this.inviteOnly = config.REGISTRATION === 'invite';
     this.env = await createTestEnv();
     const auth = new AuthService(this.env.database.db, config, this.mail, this.authNow);
+    this.auth = auth;
     const app = createApp({ config, db: this.env.database.db, auth, market: this.env.market, exchange: this.env.ex, candles: new CandleService(this.env.database.db, null), depthSnapshots: new DepthSnapshots(opts.depthFetcher ?? null), futures: this.env.futures, bots: this.env.bots, webDist: opts.webDist });
     this.server = http.createServer(app);
     this.hub = new RealtimeHub(this.env.market, this.env.ex, auth, allowedOrigins(config), this.env.futures, this.env.bots);
@@ -69,7 +73,9 @@ export class ApiHarness {
     const b = this.browser();
     const email = `u${++this.seq}-${Date.now()}@test.local`;
     const password = 'correct horse battery';
-    const { user } = await b.register({ body: { email, password, name: `U${this.seq}` } });
+    // closed registration: each test user gets its own one-use invite (as the owner would send)
+    const inviteCode = this.inviteOnly ? (await this.auth.invites.create({ user: null }, { note: email, maxUses: 1, expiresInDays: 1 })).code : undefined;
+    const { user } = await b.register({ body: { email, password, name: `U${this.seq}`, inviteCode } });
     const token = /token=([\w-]+)/.exec(this.mail.sent.findLast((m) => m.to === email)!.text)![1]!;
     await b.verifyEmail({ body: { token } });
     if (role !== 'user') await this.env.database.db.update(users).set({ role }).where(eq(users.id, user.id));

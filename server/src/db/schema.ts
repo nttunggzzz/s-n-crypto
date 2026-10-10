@@ -50,10 +50,35 @@ export const users = pgTable(
     /** Shown in every email we send (not a secret — it proves the email is from us). */
     antiPhishingCode: text('anti_phishing_code'),
     passwordChangedAt: ts('password_changed_at'),
+    /** Invite used to sign up (closed staging); null when registration was open. */
+    inviteId: bigint('invite_id', { mode: 'number' }),
     createdAt: ts('created_at').notNull().defaultNow(),
     updatedAt: ts('updated_at').notNull().defaultNow(),
   },
   (t) => [uniqueIndex('users_email_uq').on(t.email), uniqueIndex('users_uid_uq').on(t.uid)],
+);
+
+/**
+ * Sign-up invite codes (REGISTRATION=invite). Only a sha256 of the code is stored; the code is shown once.
+ * A sign-up takes one use in the same transaction that creates the user (`uses < max_uses` guard).
+ */
+export const invites = pgTable(
+  'invites',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    codeHash: text('code_hash').notNull(),
+    /** First 4 characters, to recognise a code in lists. */
+    codePrefix: text('code_prefix').notNull(),
+    note: text('note').notNull(),
+    maxUses: integer('max_uses').notNull(),
+    uses: integer('uses').notNull().default(0),
+    expiresAt: ts('expires_at').notNull(),
+    revokedAt: ts('revoked_at'),
+    /** null = created from the server command line. */
+    createdBy: uuid('created_by').references(() => users.id, { onDelete: 'set null' }),
+    createdAt: ts('created_at').notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('invites_code_uq').on(t.codeHash), check('invites_uses_le_max', sql`${t.uses} >= 0 and ${t.uses} <= ${t.maxUses}`)],
 );
 
 /** One-time 2FA recovery codes (sha256), 10 per user. */
@@ -115,7 +140,7 @@ export const auditLogs = pgTable(
     id: bigserial('id', { mode: 'number' }).primaryKey(),
     actorId: uuid('actor_id').references(() => users.id),
     action: text('action').notNull(),
-    targetType: text('target_type', { enum: ['USER', 'EXCHANGE', 'SYMBOL', 'ASSET', 'ANNOUNCEMENT'] }),
+    targetType: text('target_type', { enum: ['USER', 'EXCHANGE', 'SYMBOL', 'ASSET', 'ANNOUNCEMENT', 'INVITE'] }),
     targetId: text('target_id'),
     before: jsonb('before'),
     after: jsonb('after'),

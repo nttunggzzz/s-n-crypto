@@ -21,7 +21,8 @@
     "e2e": "node infra/e2e.mjs",
     "lint": "eslint .",
     "ui-coverage": "node infra/ui-coverage.mjs",
-    "admin:set-role": "npm run admin:set-role -w @cex/server --"
+    "admin:set-role": "npm run admin:set-role -w @cex/server --",
+    "admin:invite": "npm run admin:invite -w @cex/server --"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
