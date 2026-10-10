@@ -32,7 +32,7 @@ server/
                         faucet, reconciliation, pnlService (phân tích lãi lỗ), routes
   src/realtime       WebSocket /ws
   test/              globalSetup (PostgreSQL nhúng :5434), helpers
-  scripts/e2eStack.ts hệ chạy cho test trình duyệt (bản build production của app + proxy /api, /ws)
+  scripts/e2eStack.ts hệ chạy cho test trình duyệt (server phục vụ bản build production của app qua WEB_DIST, như khi deploy)
 e2e/                 Playwright: fixtures (chặn lỗi console / 5xx / VALIDATION_ERROR / kênh realtime bị từ chối),
                      tests/*.spec.ts (luồng chính + test nghiệm thu REVIEW-xx cho giao diện)
 legacy/              code AI Studio cũ
@@ -53,7 +53,7 @@ npm run verify        # cổng gộp main: typecheck mọi workspace (cả UI) +
 npm run lint          # ESLint: backend/contracts/core/infra/e2e lỗi là chặn; apps/*, packages/ui chỉ cảnh báo
 npm run ui-coverage   # endpoint nào backend có mà app chưa gọi (--strict: thiếu là lỗi)
 npm run e2e           # test trình duyệt (Playwright, Edge cài sẵn): build apps/exchange, dựng hệ riêng
-                      #   DB :5436 + API :8090 (giá giả lập, email ra .e2e/outbox.jsonl) + web :5190, chạy e2e/tests
+                      #   DB :5436 + server :5190 phục vụ cả API, /ws và bản build app (giá giả lập, email ra .e2e/outbox.jsonl)
 ```
 Quy tắc tích hợp backend ↔ hợp đồng ↔ UI: [docs/parts/README.md](docs/parts/README.md#quy-tắc-tích-hợp--để-backend-hợp-đồng-và-giao-diện-luôn-khớp-nhau)
 

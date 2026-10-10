@@ -1,0 +1,13 @@
+**/node_modules
+**/dist
+.git
+.github
+.env*
+!.env.example
+.pgdata
+.pgdata-test
+.e2e
+.email-outbox.jsonl
+legacy
+coverage
+**/*.log

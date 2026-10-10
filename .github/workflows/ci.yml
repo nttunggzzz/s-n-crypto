@@ -1,0 +1,96 @@
+# Every push to main and every pull request (be/* and ui/* branches): the same gates as on the dev machines.
+# GitHub's runners are in the US, where Binance blocks API access — so nothing here uses real prices:
+# unit tests run without a feed, browser tests on the simulated feed (MARKET_FEED=sim).
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    name: typecheck · lint · tests · build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      # embedded PostgreSQL for the tests runs as the runner user (PostgreSQL refuses root)
+      - run: npm run verify
+
+  e2e:
+    name: browser tests (Playwright, simulated prices)
+    needs: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      CI: 'true'
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      # builds apps/exchange, starts the isolated stack (DB + server serving the app), runs e2e/tests;
+      # does nothing until apps/exchange exists on the branch
+      - run: npm run e2e
+      - name: keep the report of a failed run
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-report
+          path: |
+            .e2e/report
+            .e2e/results
+          retention-days: 14
+
+  image:
+    name: Docker image builds and starts
+    needs: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: cex
+          POSTGRES_INITDB_ARGS: --encoding=UTF8 --locale=C
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 20
+    steps:
+      - uses: actions/checkout@v5
+      - run: docker build -t cex:ci .
+      # the production image refuses simulated prices, and Binance is blocked here: start it in development
+      # mode on the simulated feed just to prove it boots, migrates, serves the API and the web app
+      - name: smoke test
+        run: |
+          docker run -d --name cex --network host \
+            -e NODE_ENV=development -e PORT=8080 -e MARKET_FEED=sim -e EMAIL_TRANSPORT=log \
+            -e DATABASE_URL=postgres://postgres:postgres@localhost:5432/cex -e APP_URL=http://localhost:8080 \
+            cex:ci
+          for i in $(seq 1 60); do
+            if curl -fs localhost:8080/api/v1/market/status | grep -q '"status":"LIVE"'; then break; fi
+            sleep 2
+          done
+          curl -fsS localhost:8080/api/v1/health
+          curl -fsS localhost:8080/api/v1/market/tickers > /dev/null
+          if [ -f apps/exchange/package.json ]; then curl -fsS -H 'accept: text/html' localhost:8080/trade/BTCUSDT | grep -q 'id="root"'; fi
+      - name: server log
+        if: always()
+        run: docker logs cex || true

@@ -1,4 +1,6 @@
+import { existsSync } from 'node:fs';
 import http from 'node:http';
+import path from 'node:path';
 import { loadConfig } from './config.ts';
 import { logger } from './logger.ts';
 import { createDatabase, runMigrations } from './db/client.ts';
@@ -17,8 +19,23 @@ import { createFutures } from './modules/futures/index.ts';
 import { syncFuturesFromBinance } from './modules/futures/config.ts';
 import { createBots } from './modules/bots/index.ts';
 import { seedSimRules, SimFeed, simSpecs } from './modules/market/sim/feed.ts';
+import { acquireInstanceLock, startStandbyServer } from './ops/singleInstance.ts';
 
 const config = loadConfig();
+const version = process.env.RAILWAY_GIT_COMMIT_SHA?.slice(0, 7) ?? 'dev';
+
+// Invariant 5 — one instance: during a deploy the old container is still running. Answer health checks
+// as "standby" until it has stopped (it holds the lock), then start everything (migrations included).
+const standby = await startStandbyServer(config.PORT, version);
+const instanceLock = await acquireInstanceLock(config.DATABASE_URL, {
+  onWait: () => logger.warn('another instance is running (deploy in progress?) — waiting for it to stop'),
+  onLost: (err) => {
+    logger.fatal({ err }, 'lost the instance lock — exiting so that two instances never run together');
+    process.exit(1);
+  },
+});
+await standby.close();
+
 const database = createDatabase(config.DATABASE_URL);
 await runMigrations(database.db);
 await seedAssets(database.db);
@@ -71,7 +88,9 @@ logger.info({ open: exchange.index.size() }, 'open limit orders loaded');
 
 const auth = new AuthService(database.db, config, createEmailSender(config));
 const candles = new CandleService(database.db, feedOn ? config.BINANCE_REST_URL : null, { history: spotSim ? (s, i, l, e) => spotSim.history(s, i, l, e) : undefined });
-const app = createApp({ config, db: database.db, auth, market, exchange, candles, futures, bots, version: process.env.RAILWAY_GIT_COMMIT_SHA?.slice(0, 7) });
+const webDist = config.WEB_DIST && existsSync(path.join(config.WEB_DIST, 'index.html')) ? config.WEB_DIST : undefined;
+if (config.WEB_DIST && !webDist) logger.warn({ WEB_DIST: config.WEB_DIST }, 'WEB_DIST has no index.html — serving the API only');
+const app = createApp({ config, db: database.db, auth, market, exchange, candles, futures, bots, version, webDist });
 const server = http.createServer(app);
 const hub = new RealtimeHub(market, exchange, auth, allowedOrigins(config), futures, bots);
 hub.attach(server);
@@ -108,6 +127,7 @@ async function shutdown(signal: string) {
   hub.close();
   server.close();
   await database.close();
+  await instanceLock.release();
   process.exit(0);
 }
 process.on('SIGINT', () => void shutdown('SIGINT'));

@@ -10,7 +10,8 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx --env-file-if-exists=../.env scripts/migrate.ts",
     "admin:set-role": "tsx --env-file-if-exists=../.env scripts/setRole.ts",
-    "sim:snapshot": "tsx scripts/simSnapshot.ts"
+    "sim:snapshot": "tsx scripts/simSnapshot.ts",
+    "restore:check": "tsx scripts/restoreCheck.ts"
   },
   "dependencies": {
     "@cex/contracts": "*",
@@ -21,6 +22,7 @@
     "helmet": "^8.1.0",
     "pg": "^8.16.0",
     "pino": "^9.7.0",
+    "tsx": "^4.21.0",
     "ws": "^8.18.0",
     "zod": "^4.1.0"
   },

@@ -1,6 +1,6 @@
 // `npm run e2e`: browser tests of the real web app against the real server (synthetic prices).
 //   1. build apps/exchange (production build, mocks off)
-//   2. start the isolated stack (server/scripts/e2eStack.ts: db :5436, api :8090, web :5190)
+//   2. start the isolated stack (server/scripts/e2eStack.ts: db :5436, server + web app on :5190)
 //   3. run Playwright (e2e/) — extra args go to Playwright, e.g. `npm run e2e -- --headed`
 // Locally the tests drive the installed Microsoft Edge (no browser download); CI installs Chromium.
 import { existsSync, readdirSync } from 'node:fs';
@@ -8,7 +8,7 @@ import net from 'node:net';
 import path from 'node:path';
 import { ROOT, run } from './workspaces.mjs';
 
-const PORTS = { db: 5436, api: 8090, web: 5190 };
+const PORTS = { db: 5436, web: 5190 };
 
 if (!existsSync(path.join(ROOT, 'apps/exchange/package.json'))) {
   process.stdout.write('[e2e] apps/exchange does not exist yet (the UI branch is not merged) — nothing to test\n');

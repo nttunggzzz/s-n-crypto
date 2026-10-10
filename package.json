@@ -15,7 +15,7 @@
     "db:generate": "npm run db:generate -w @cex/server",
     "db:migrate": "npm run db:migrate -w @cex/server",
     "typecheck": "node infra/typecheck-all.mjs",
-    "test": "vitest run",
+    "test": "node infra/test-all.mjs",
     "test:watch": "vitest",
     "verify": "node infra/verify.mjs",
     "e2e": "node infra/e2e.mjs",

@@ -42,6 +42,8 @@ const Env = z.object({
   /** Multiplies every per-IP/per-user rate limit (tests raise it; production keeps 1). */
   RATE_LIMIT_SCALE: z.coerce.number().int().min(1).default(1),
   LOG_LEVEL: z.string().default('info'),
+  /** Production build of apps/exchange to serve at `/` on this same origin (Docker sets it); empty = API only. */
+  WEB_DIST: z.string().default(''),
 });
 
 export type Config = z.infer<typeof Env> & { symbols: string[]; isProd: boolean; dataKey: string };

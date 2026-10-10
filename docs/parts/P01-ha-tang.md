@@ -23,10 +23,11 @@ Logic nghiệp vụ, giao diện.
 - [x] Chuyển code cũ vào `legacy/`, viết lại `CLAUDE.md`
 - [x] Khung monorepo + typecheck/test (vitest + PostgreSQL nhúng) + ESLint (`npm run lint`, nằm trong `verify`) — *chưa có format tự động*
 - [x] Test trình duyệt `npm run e2e` (Playwright trên hệ riêng: giá giả lập, email ra file, bản build production) — cổng nghiệm thu giao diện
-- [ ] Railway staging + PostgreSQL + tự triển khai từ `main`
+- [ ] Railway staging + PostgreSQL + tự triển khai từ `main` — *sẵn: `Dockerfile` (một image: API + /ws + app), `railway.json` (1 bản, health check); chờ tài khoản*
+- [x] Một bản duy nhất khi deploy chồng nhau: khóa PostgreSQL (advisory lock) + máy chủ "chờ" trả health (`server/src/ops/singleInstance.ts`)
 - [ ] Khóa truy cập staging
-- [ ] CI GitHub Actions
-- [ ] Backup + thử khôi phục
+- [ ] CI GitHub Actions — *sẵn `.github/workflows/ci.yml` (verify, e2e giá giả lập, build + chạy thử image); chờ repo GitHub*
+- [ ] Backup + thử khôi phục — *sẵn `.github/workflows/backup.yml`: pg_dump hằng đêm → khôi phục vào DB mới → `restore:check` (đối soát) → mã hóa AES-256; chờ secrets*
 - [ ] Sentry + cảnh báo Telegram
 
 **Giai đoạn 7**

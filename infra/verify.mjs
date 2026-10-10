@@ -14,7 +14,7 @@ const step = async (title, cmd, args) => {
 
 await step('typecheck (all workspaces)', 'node', ['infra/typecheck-all.mjs']);
 await step('lint', 'npx', ['eslint', '.']);
-await step('tests', 'npx', ['vitest', 'run']);
+await step('tests', 'node', ['infra/test-all.mjs']);
 for (const { dir, pkg } of workspaces()) {
   if (dir.startsWith('apps/') && pkg.scripts?.build) await step(`build ${pkg.name}`, 'npm', ['run', 'build', '-w', pkg.name]);
 }
