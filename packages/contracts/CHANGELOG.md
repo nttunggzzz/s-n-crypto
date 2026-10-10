@@ -1,5 +1,21 @@
 # Changelog — @cex/contracts
 
+## 0.7.0 — 2026-10-10 (Admin cho Giai đoạn 2.6 + Futures)
+Hỗ trợ khách hàng kiểu sàn lớn: tìm theo UID, xem Futures / bot / lịch sử đăng nhập của người dùng, dừng bot có ghi nhật ký.
+
+**Thay đổi nhỏ có thể ảnh hưởng UI**
+- `AdminUserSummary` thêm `uid`. `adminListUsers({ query: { q } })` nhận thêm **UID 8 số** (khớp chính xác).
+- `AdminUserDetail` thêm `futures` (`FuturesAccount`) và `bots: { runningGrid, activeDca }`.
+- `AuditAction` thêm `GRID_BOT_STOP`, `DCA_PLAN_CANCEL` (tổng 20). Quyền mới `bots.manage` (admin, owner).
+
+**Thêm (5 endpoint, tổng 124)**
+- `adminUserFuturesPositions` (`open` true/false, phân trang): vị thế Futures của người dùng, lãi lỗ theo mark hiện tại.
+- `adminUserBots`: mọi bot lưới + kế hoạch mua định kỳ (đang chạy lên đầu).
+- `adminStopGridBot` (`reason`, `sellBase`): dừng bot với lý do `ADMIN`; nhật ký ghi **trong cùng giao dịch** dừng bot; người dùng nhận thông báo `GRID_BOT_STOPPED`. Bot không chạy → `CONFLICT`.
+- `adminCancelDcaPlan` (`reason`): hủy kế hoạch; đã hủy rồi → `CONFLICT`.
+- `adminUserLoginHistory` (phân trang): lịch sử đăng nhập của người dùng.
+- **Mock:** đủ 5 endpoint. Mock đăng nhập bằng người dùng demo (UID 10000001), nên các màn admin này chỉ có dữ liệu với người dùng đó.
+
 ## 0.6.0 — 2026-10-10 (Giai đoạn 2.6: hồ sơ + bảo mật, phân tích lãi lỗ, mua định kỳ, bot lưới)
 Chỉ **thêm**, không phá code đang chạy.
 

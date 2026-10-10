@@ -34,10 +34,13 @@ import {
 } from './announcements.ts';
 import {
   AdminOverview,
+  AdminStopGridBotRequest,
   AdminSymbol,
+  AdminUserBots,
   AdminUserDetail,
   AdminUserListQuery,
   AdminUserOrdersQuery,
+  AdminUserPositionsQuery,
   AdminUserSummary,
   AssetParam,
   AuditLogEntry,
@@ -56,6 +59,8 @@ import {
   UpdateAssetRequest,
   UpdateSettingsRequest,
   UpdateSymbolRequest,
+  UserBotParam,
+  UserDcaParam,
   UserIdParam,
 } from './admin.ts';
 import type { Permission } from './permissions.ts';
@@ -262,6 +267,12 @@ export const endpoints = {
   // phase F: futures contracts
   adminFuturesSymbols: ep({ method: 'GET', path: '/api/v1/admin/futures/symbols', auth: 'staff', permission: 'exchange.read', response: z.object({ items: z.array(AdminFuturesSymbol) }) }),
   adminUpdateFuturesSymbol: ep({ method: 'PATCH', path: '/api/v1/admin/futures/symbols/:symbol', auth: 'staff', permission: 'exchange.configure', params: SymbolParam, body: UpdateFuturesSymbolRequest, response: AdminFuturesSymbol }),
+  // phase 2.6 for support: a user's futures positions, bots and sign-ins; stop a bot (audited)
+  adminUserFuturesPositions: ep({ method: 'GET', path: '/api/v1/admin/users/:userId/futures/positions', auth: 'staff', permission: 'users.read', params: UserIdParam, query: AdminUserPositionsQuery.extend(PaginationQuery.shape), response: paginated(FuturesPosition) }),
+  adminUserBots: ep({ method: 'GET', path: '/api/v1/admin/users/:userId/bots', auth: 'staff', permission: 'users.read', params: UserIdParam, response: AdminUserBots }),
+  adminStopGridBot: ep({ method: 'POST', path: '/api/v1/admin/users/:userId/bots/grid/:botId/stop', auth: 'staff', permission: 'bots.manage', params: UserBotParam, body: AdminStopGridBotRequest, response: GridBot }),
+  adminCancelDcaPlan: ep({ method: 'POST', path: '/api/v1/admin/users/:userId/bots/dca/:planId/cancel', auth: 'staff', permission: 'bots.manage', params: UserDcaParam, body: ReasonBody, response: DcaPlan }),
+  adminUserLoginHistory: ep({ method: 'GET', path: '/api/v1/admin/users/:userId/login-history', auth: 'staff', permission: 'users.read', params: UserIdParam, query: PaginationQuery, response: paginated(LoginEvent) }),
 
   // ---- futures (phase F) — simulated USDT-M perpetuals, isolated margin, ≤ 20×
   futuresExchangeInfo: ep({ method: 'GET', path: '/api/v1/futures/exchange-info', auth: 'public', response: FuturesExchangeInfo }),

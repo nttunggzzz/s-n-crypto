@@ -175,3 +175,8 @@ Mock: `setMockPrice('BTCUSDT', 75000)` đẩy giá để xem stop kích hoạt, 
 - Lệnh của bot (`gridBotOrders`) và mọi lệnh có `source !== 'USER'`: badge "Bot lưới" / "Mua định kỳ", **không có nút Hủy**.
 - Realtime: sự kiện `gridBot` / `dcaPlan` trên kênh `user` → cập nhật thẻ ngay, không cần gọi lại API.
 
+## 10. Admin cho bot, Futures, đăng nhập (v0.7.0)
+- **Tìm người dùng:** ô tìm nhận UID 8 số, email hoặc ID. Luôn hiện UID (có nút sao chép) — đây là mã người dùng đọc cho hỗ trợ.
+- **Chi tiết người dùng:** thẻ ví Futures (`detail.futures`) và số bot (`detail.bots`); tab Futures (`adminUserFuturesPositions`), Bot (`adminUserBots`), Đăng nhập (`adminUserLoginHistory`).
+- **Dừng bot / hủy kế hoạch:** chỉ hiện khi có quyền `bots.manage`. Hộp xác nhận có ô lý do (≥ 5 ký tự); dừng bot lưới có lựa chọn "bán coin bot đang giữ". Sau khi xong, nhật ký quản trị có dòng `GRID_BOT_STOP` / `DCA_PLAN_CANCEL`.
+

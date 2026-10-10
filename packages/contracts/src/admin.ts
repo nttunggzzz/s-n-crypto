@@ -2,13 +2,16 @@ import { z } from 'zod';
 import { AssetCode, DecimalString, IsoDateTime, Role, SymbolCode, TimeRangeQuery } from './common.ts';
 import { AssetTag, MarketStatus, SymbolInfo } from './market.ts';
 import { Balance, LedgerEntry, WalletAccount } from './wallet.ts';
-import { FuturesFees } from './futures.ts';
+import { FuturesAccount, FuturesFees } from './futures.ts';
+import { DcaPlan, GridBot } from './bots.ts';
 
 /** Every admin action that changes data must say why (stored in the audit log). */
 export const Reason = z.string().trim().min(5, 'at least 5 characters').max(500);
 
 export const AdminUserSummary = z.object({
   id: z.string(),
+  /** Public 8-digit account number (what users quote to support). */
+  uid: z.string(),
   email: z.string(),
   name: z.string(),
   role: Role,
@@ -25,7 +28,7 @@ export const AdminUserSummary = z.object({
 export type AdminUserSummary = z.infer<typeof AdminUserSummary>;
 
 export const AdminUserListQuery = z.object({
-  /** Matches email (contains) or exact user id. */
+  /** Matches email (contains), exact UID (8 digits) or exact user id. */
   q: z.string().trim().max(254).optional(),
   role: Role.optional(),
   status: z.enum(['active', 'locked']).optional(),
@@ -39,8 +42,24 @@ export const AdminUserDetail = z.object({
   openOrders: z.number().int(),
   activeSessions: z.number().int(),
   faucetTotalClaimed: DecimalString,
+  /** Futures wallet (unrealized PnL at the live mark). */
+  futures: FuturesAccount,
+  bots: z.object({ runningGrid: z.number().int(), activeDca: z.number().int() }),
 });
 export type AdminUserDetail = z.infer<typeof AdminUserDetail>;
+
+/** Futures positions of a user: open (default) or closed (newest first). */
+export const AdminUserPositionsQuery = z.object({ open: z.enum(['true', 'false']).default('true') });
+
+/** Every grid bot and recurring buy of a user (running first). */
+export const AdminUserBots = z.object({ grid: z.array(GridBot), dca: z.array(DcaPlan) });
+export type AdminUserBots = z.infer<typeof AdminUserBots>;
+
+export const AdminStopGridBotRequest = z.object({
+  reason: Reason,
+  /** Sell the base the bot holds at market after canceling its orders. */
+  sellBase: z.boolean().default(false),
+});
 
 export const AdminUserOrdersQuery = z.object({ open: z.enum(['true', 'false']).default('true') });
 
@@ -137,6 +156,8 @@ export const AuditAction = z.enum([
   'ANNOUNCEMENT_CREATE',
   'ANNOUNCEMENT_UPDATE',
   'FUTURES_SYMBOL_UPDATE',
+  'GRID_BOT_STOP',
+  'DCA_PLAN_CANCEL',
 ]);
 export type AuditAction = z.infer<typeof AuditAction>;
 
@@ -202,6 +223,8 @@ export const AdminOverview = z.object({
 export type AdminOverview = z.infer<typeof AdminOverview>;
 
 export const UserIdParam = z.object({ userId: z.uuid() });
+export const UserBotParam = UserIdParam.extend({ botId: z.string().regex(/^\d+$/) });
+export const UserDcaParam = UserIdParam.extend({ planId: z.string().regex(/^\d+$/) });
 export const SymbolParam = z.object({ symbol: SymbolCode });
 
 export const AssetParam = z.object({ asset: AssetCode });

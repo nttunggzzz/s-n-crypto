@@ -656,13 +656,13 @@ export const fixturePreferences: Preferences = {
 const U = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 
 export const fixtureAdminUsers: AdminUserSummary[] = [
-  { id: U(1), email: 'demo@example.com', name: 'Người dùng demo', role: 'user', status: 'active', emailVerified: true, twoFactorEnabled: false, signalsAccess: false, isBot: false, createdAt: '2026-10-01T00:00:00.000Z', lastSeenAt: T0 },
-  { id: U(2), email: 'trader.an@example.com', name: 'Trần An', role: 'user', status: 'active', emailVerified: true, twoFactorEnabled: true, signalsAccess: true, isBot: false, createdAt: '2026-10-02T08:00:00.000Z', lastSeenAt: '2026-10-09T02:10:00.000Z' },
-  { id: U(3), email: 'spam.bot@example.com', name: 'Spam', role: 'user', status: 'locked', emailVerified: false, twoFactorEnabled: false, signalsAccess: false, isBot: false, createdAt: '2026-10-05T12:00:00.000Z', lastSeenAt: null },
-  { id: U(4), email: 'support@example.com', name: 'Hỗ trợ', role: 'support', status: 'active', emailVerified: true, twoFactorEnabled: true, signalsAccess: false, isBot: false, createdAt: '2026-09-30T00:00:00.000Z', lastSeenAt: '2026-10-08T15:00:00.000Z' },
-  { id: U(5), email: 'admin@example.com', name: 'Quản trị', role: 'admin', status: 'active', emailVerified: true, twoFactorEnabled: true, signalsAccess: true, isBot: false, createdAt: '2026-09-30T00:00:00.000Z', lastSeenAt: T0 },
-  { id: U(6), email: 'owner@example.com', name: 'Chủ dự án', role: 'owner', status: 'active', emailVerified: true, twoFactorEnabled: true, signalsAccess: true, isBot: false, createdAt: '2026-09-29T00:00:00.000Z', lastSeenAt: '2026-10-09T01:00:00.000Z' },
-  { id: U(7), email: 'signals-bot@system.local', name: 'Signal bot', role: 'user', status: 'active', emailVerified: true, twoFactorEnabled: false, signalsAccess: false, isBot: true, createdAt: '2026-09-29T00:00:00.000Z', lastSeenAt: null },
+  { id: U(1), uid: '10000001', email: 'demo@example.com', name: 'Người dùng demo', role: 'user', status: 'active', emailVerified: true, twoFactorEnabled: false, signalsAccess: false, isBot: false, createdAt: '2026-10-01T00:00:00.000Z', lastSeenAt: T0 },
+  { id: U(2), uid: '10000002', email: 'trader.an@example.com', name: 'Trần An', role: 'user', status: 'active', emailVerified: true, twoFactorEnabled: true, signalsAccess: true, isBot: false, createdAt: '2026-10-02T08:00:00.000Z', lastSeenAt: '2026-10-09T02:10:00.000Z' },
+  { id: U(3), uid: '10000003', email: 'spam.bot@example.com', name: 'Spam', role: 'user', status: 'locked', emailVerified: false, twoFactorEnabled: false, signalsAccess: false, isBot: false, createdAt: '2026-10-05T12:00:00.000Z', lastSeenAt: null },
+  { id: U(4), uid: '10000004', email: 'support@example.com', name: 'Hỗ trợ', role: 'support', status: 'active', emailVerified: true, twoFactorEnabled: true, signalsAccess: false, isBot: false, createdAt: '2026-09-30T00:00:00.000Z', lastSeenAt: '2026-10-08T15:00:00.000Z' },
+  { id: U(5), uid: '10000005', email: 'admin@example.com', name: 'Quản trị', role: 'admin', status: 'active', emailVerified: true, twoFactorEnabled: true, signalsAccess: true, isBot: false, createdAt: '2026-09-30T00:00:00.000Z', lastSeenAt: T0 },
+  { id: U(6), uid: '10000006', email: 'owner@example.com', name: 'Chủ dự án', role: 'owner', status: 'active', emailVerified: true, twoFactorEnabled: true, signalsAccess: true, isBot: false, createdAt: '2026-09-29T00:00:00.000Z', lastSeenAt: '2026-10-09T01:00:00.000Z' },
+  { id: U(7), uid: '10000007', email: 'signals-bot@system.local', name: 'Signal bot', role: 'user', status: 'active', emailVerified: true, twoFactorEnabled: false, signalsAccess: false, isBot: true, createdAt: '2026-09-29T00:00:00.000Z', lastSeenAt: null },
 ];
 
 export function fixtureAdminUserDetail(userId: string): AdminUserDetail | null {
@@ -677,6 +677,10 @@ export function fixtureAdminUserDetail(userId: string): AdminUserDetail | null {
     openOrders: isDemo ? fixtureOpenOrders.length : 0,
     activeSessions: user.lastSeenAt ? 1 : 0,
     faucetTotalClaimed: '10000.00000000',
+    futures: isDemo
+      ? { asset: 'USDT', walletBalance: '1000.00000000', available: '917.27725000', positionMargin: '82.72275000', orderMargin: '0.00000000', unrealizedPnl: '1.20000000', equity: '1001.20000000', openPositions: 1 }
+      : { asset: 'USDT', walletBalance: '0.00000000', available: '0.00000000', positionMargin: '0.00000000', orderMargin: '0.00000000', unrealizedPnl: '0.00000000', equity: '0.00000000', openPositions: 0 },
+    bots: { runningGrid: 0, activeDca: isDemo ? 1 : 0 },
   };
 }
 
