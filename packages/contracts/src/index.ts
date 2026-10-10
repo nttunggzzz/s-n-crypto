@@ -22,3 +22,4 @@ export * from './endpoints.ts';
 export * from './client.ts';
 export * from './realtimeClient.ts';
 export * from './helpers.ts';
+export * from './apps.ts';

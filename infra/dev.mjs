@@ -6,6 +6,10 @@
 import net from 'node:net';
 import { run, workspaces } from './workspaces.mjs';
 
+// In dev each app has its own Vite server, so links between the exchange and the admin app need the
+// other app's origin (`appLinks` in @cex/contracts). Deployed, both are on one origin and these stay unset.
+const DEV_ORIGINS = { VITE_EXCHANGE_ORIGIN: 'http://localhost:5173', VITE_ADMIN_ORIGIN: 'http://localhost:5174' };
+
 const children = [];
 const track = (c) => children.push(c);
 const stop = () => {
@@ -47,7 +51,7 @@ if (!process.argv.includes('--no-apps')) {
   const apps = workspaces().filter(({ dir, pkg }) => dir.startsWith('apps/') && pkg.scripts?.dev);
   if (apps.length === 0) process.stdout.write('[dev]    no web app in apps/ yet (the UI branch is not merged)\n');
   for (const { dir, pkg } of apps) {
-    void run('npm', ['run', 'dev', '-w', pkg.name], { prefix: `[${dir.split('/')[1]}] `.padEnd(9), env: { VITE_USE_MOCKS: 'false' }, onSpawn: track });
+    void run('npm', ['run', 'dev', '-w', pkg.name], { prefix: `[${dir.split('/')[1]}] `.padEnd(9), env: { VITE_USE_MOCKS: 'false', ...DEV_ORIGINS }, onSpawn: track });
   }
 }
 process.stdout.write(`[dev]    API http://localhost:8080 · WebSocket ws://localhost:8080/ws · prices: ${sim ? 'SYNTHETIC (--sim)' : 'Binance'} · Ctrl+C to stop\n`);

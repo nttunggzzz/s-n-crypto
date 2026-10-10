@@ -1,7 +1,9 @@
+import { execFileSync } from 'node:child_process';
 import { readFileSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { test as base, expect, type Page } from '@playwright/test';
+import { test as base, expect, type Browser, type Page } from '@playwright/test';
+import { base32Decode, hotp, totpStep } from '../server/src/modules/auth/totp.ts';
 
 /** What the page sent to / was refused by the realtime server (`/ws`). */
 export interface RealtimeLog {
@@ -131,3 +133,30 @@ export function toStep(value: number, step: string): string {
   return n.toFixed(decimals);
 }
 
+
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+
+/**
+ * A fresh test account made staff (`support` | `admin` | `owner`) the way an operator does it: the
+ * `admin:set-role` command on the e2e database, then 2FA turned on through the API (staff need it;
+ * enabling it marks the current session as 2FA-verified). The page's cookies are that staff session.
+ * Test credentials only, local e2e server only.
+ */
+export async function signUpStaff(page: Page, role: 'support' | 'admin' | 'owner' = 'admin') {
+  const acc = await signUp(page);
+  const { databaseUrl } = JSON.parse(readFileSync(path.join(ROOT, '.e2e/stack.json'), 'utf8')) as { databaseUrl: string };
+  execFileSync(process.execPath, ['--import', 'tsx', 'scripts/setRole.ts', acc.email, role], {
+    cwd: path.join(ROOT, 'server'),
+    env: { ...process.env, DATABASE_URL: databaseUrl, NODE_ENV: 'development', LOG_LEVEL: 'warn' },
+    stdio: 'pipe',
+  });
+  const setup = await apiPost<{ secret: string }>(page, '/api/v1/auth/2fa/setup', { currentPassword: acc.password });
+  await apiPost(page, '/api/v1/auth/2fa/enable', { code: hotp(base32Decode(setup.secret), totpStep(Date.now())) });
+  return { ...acc, role };
+}
+
+/** A second, separate browser (own cookies) on the same server — e.g. the user while the admin acts. */
+export async function otherBrowser(browser: Browser, baseURL: string | undefined): Promise<Page> {
+  const ctx = await browser.newContext({ baseURL, locale: 'vi-VN', timezoneId: 'Asia/Ho_Chi_Minh', viewport: { width: 1440, height: 900 } });
+  return ctx.newPage();
+}

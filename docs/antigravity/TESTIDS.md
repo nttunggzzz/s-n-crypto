@@ -54,3 +54,33 @@ Test nằm ở `e2e/tests/*.spec.ts` — đọc test để biết chính xác lu
 | `dca-create` | Nút "Tạo kế hoạch" | Sau đó là `bot-confirm` |
 | `dca-plan-card` | Mỗi thẻ kế hoạch (giờ chạy ghi rõ "GMT+7") | Kế hoạch đã hủy không còn trong `dcaPlans` → thẻ biến mất |
 | `dca-pause` / `dca-cancel` / `dca-cancel-confirm` | Tạm dừng, Hủy, xác nhận hủy | |
+
+## Web sàn ↔ web admin — `admin.spec.ts` (PROMPT-08)
+Test mở **hai trình duyệt cùng lúc**: admin thao tác ở `/admin/…`, người dùng ở web sàn phải thấy kết quả **không cần tải lại**.
+
+**Phía web sàn (`apps/exchange`)**
+| id | Phần tử | Ghi chú |
+|---|---|---|
+| `nav-admin` | Link "Quản trị" trên Header | Chỉ render khi `canOpenAdmin(me)`; `href` = `appLinks.admin.home(VITE_ADMIN_ORIGIN)` → bản build là `/admin/` |
+| `trade-block-reason` | Dòng báo không đặt được lệnh trên trang Giao dịch (Spot và Futures) | Render khi `spotTradeBlock(...)` / `futuresTradeBlock(...)` khác `null`, **không render** khi `null`. Chữ lấy từ `TRADE_BLOCK_LABELS` |
+| `spot-available-<ASSET>` | Số dư khả dụng của từng tài sản ở trang Tài sản (ví dụ `spot-available-USDT`) | **Luôn có dòng USDT**, kể cả khi số dư 0. Cập nhật từ sự kiện `balance` của kênh `user` |
+
+**Phía web admin (`apps/admin`, đường dẫn tính từ `/admin`)**
+| id | Phần tử | Ghi chú |
+|---|---|---|
+| `admin-no-access` | Màn "Không có quyền truy cập" | Đã đăng nhập nhưng `canOpenAdmin(me)` sai. Có link về web sàn |
+| `admin-overview` | Khung trang Tổng quan (`/admin/`) | |
+| `admin-open-exchange` | Link "Mở sàn" trên Header admin | `href` = `appLinks.exchange.home(VITE_EXCHANGE_ORIGIN)` → bản build là `/` |
+| `admin-trading-state` | Ô trạng thái sàn trên Tổng quan | Thuộc tính `data-halted="true"` / `"false"` |
+| `admin-halt-open` / `admin-resume-open` | Nút Dừng khẩn cấp / Mở lại, **trên Tổng quan** | Chỉ render khi có quyền `exchange.halt`; chỉ hiện nút hợp với trạng thái hiện tại |
+| `admin-user-search` | Ô tìm người dùng ở `/admin/users` | Nhận email, UID, ID |
+| `admin-user-row` | Mỗi dòng kết quả (chứa email) | Bấm cả dòng → `/admin/users/:id` |
+| `admin-user-status` | Nhãn trạng thái ở trang chi tiết người dùng | Thuộc tính `data-status="active"` / `"locked"` |
+| `admin-adjust-open` | Nút Cộng/Trừ số dư | Chỉ render khi có quyền `balances.adjust` |
+| `adjust-asset` / `adjust-amount` | Ô tài sản (`<input>` hoặc `<select>`, `value` = mã tài sản) / ô số tiền có dấu | |
+| `adjust-preview` | Dòng xem trước "số dư trước → sau" | |
+| `admin-lock-open` / `admin-unlock-open` | Nút Khóa / Mở khóa | Chỉ render khi có quyền `users.lock` |
+| `confirm-reason` | Ô **lý do** trong hộp xác nhận dùng chung của mọi thao tác thay đổi dữ liệu | ≥ 5 ký tự |
+| `confirm-phrase` | Ô gõ chữ xác nhận (`HALT`, `RESUME`, `RESET`) | Chỉ có ở thao tác nguy hiểm |
+| `confirm-submit` | Nút xác nhận | Khóa khi chưa đủ lý do / gõ sai chữ |
+| `audit-row` | Mỗi dòng ở `/admin/audit-logs` | Dòng chứa cả **lý do** |

@@ -100,9 +100,15 @@ logger.info({ open: exchange.index.size() }, 'open limit orders loaded');
 
 const auth = new AuthService(database.db, config, createEmailSender(config));
 const candles = new CandleService(database.db, feedOn ? config.BINANCE_REST_URL : null, { history: spotSim ? (s, i, l, e) => spotSim.history(s, i, l, e) : undefined });
-const webDist = config.WEB_DIST && existsSync(path.join(config.WEB_DIST, 'index.html')) ? config.WEB_DIST : undefined;
-if (config.WEB_DIST && !webDist) logger.warn({ WEB_DIST: config.WEB_DIST }, 'WEB_DIST has no index.html — serving the API only');
-const app = createApp({ config, db: database.db, auth, market, exchange, candles, futures, bots, version, webDist });
+/** A web app build to serve, or undefined (with a warning) when the variable points at nothing built. */
+const builtApp = (name: string, dir: string) => {
+  if (dir && existsSync(path.join(dir, 'index.html'))) return dir;
+  if (dir) logger.warn({ [name]: dir }, `${name} has no index.html — not serving that app`);
+  return undefined;
+};
+const webDist = builtApp('WEB_DIST', config.WEB_DIST);
+const adminWebDist = builtApp('ADMIN_WEB_DIST', config.ADMIN_WEB_DIST);
+const app = createApp({ config, db: database.db, auth, market, exchange, candles, futures, bots, version, webDist, adminWebDist });
 const server = http.createServer(app);
 const hub = new RealtimeHub(market, exchange, auth, allowedOrigins(config), futures, bots);
 hub.attach(server);

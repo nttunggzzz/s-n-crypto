@@ -1,11 +1,13 @@
 /**
  * The stack the browser tests run against — isolated from `npm run dev`, so both can run at once:
- *   PostgreSQL :5436 (fresh every run, in .e2e/) · server :5190 = API + /ws + the PRODUCTION build of
- *   apps/exchange (WEB_DIST, mocks off) on one origin, exactly as deployed. MARKET_FEED=sim, emails → .e2e/outbox.jsonl.
+ *   PostgreSQL :5436 (fresh every run, in .e2e/) · server :5190 = API + /ws + the PRODUCTION builds of
+ *   apps/exchange (at /) and apps/admin (at /admin/, when it exists) — mocks off, one origin, exactly as deployed.
+ *   MARKET_FEED=sim, emails → .e2e/outbox.jsonl. `.e2e/stack.json` tells the tests the database URL
+ *   (the staff fixture gives a test account a role with `npm run admin:set-role`, as an operator would).
  * Started by `npm run e2e` (infra/e2e.mjs); the server logs "server listening" when it is up.
  */
 import { spawn, type ChildProcess } from 'node:child_process';
-import { existsSync, mkdirSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { startEmbeddedPostgres } from './embeddedPg.ts';
@@ -15,6 +17,7 @@ export const E2E = { dbPort: 5436, webPort: 5190 };
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const state = path.join(root, '.e2e');
 const dist = path.join(root, 'apps/exchange/dist');
+const adminDist = path.join(root, 'apps/admin/dist');
 if (!existsSync(path.join(dist, 'index.html'))) throw new Error('apps/exchange/dist is missing — build the app first (npm run e2e does it)');
 
 rmSync(state, { recursive: true, force: true });
@@ -24,6 +27,7 @@ const { pg, url } = await startEmbeddedPostgres({ dir: path.join(state, 'pgdata'
 const database = createDatabase(url, 1);
 await runMigrations(database.db);
 await database.close();
+writeFileSync(path.join(state, 'stack.json'), JSON.stringify({ databaseUrl: url }));
 
 const api: ChildProcess = spawn(process.execPath, ['--import', 'tsx', 'src/main.ts'], {
   cwd: path.join(root, 'server'),
@@ -34,6 +38,7 @@ const api: ChildProcess = spawn(process.execPath, ['--import', 'tsx', 'src/main.
     PORT: String(E2E.webPort),
     DATABASE_URL: url,
     WEB_DIST: dist,
+    ADMIN_WEB_DIST: existsSync(path.join(adminDist, 'index.html')) ? adminDist : '',
     MARKET_FEED: 'sim',
     EMAIL_TRANSPORT: 'file',
     EMAIL_OUTBOX: path.join(state, 'outbox.jsonl'),

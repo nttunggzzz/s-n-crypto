@@ -1,5 +1,14 @@
 # Changelog — @cex/contracts
 
+## 0.11.0 — 2026-10-10 (Web admin nối với web sàn)
+Chỉ thêm, không đổi endpoint (vẫn 128). Hai web là **một sản phẩm trên một địa chỉ**: server phục vụ app sàn ở `/` và app admin ở `/admin/`
+(cùng cookie đăng nhập, cùng `/ws`). Hướng dẫn đầy đủ: `docs/antigravity/PROMPT-08-web-admin-noi-web-san.md`.
+- `ADMIN_BASE_PATH = '/admin'` — `apps/admin` build với Vite `base: '/admin/'`.
+- `appLinks.exchange.*` (home, markets, trade, futures, register) và `appLinks.admin.*` (home, user, symbols, auditLogs):
+  link giữa hai app lấy từ đây, không tự viết. Tham số `origin` tùy chọn: dev truyền `import.meta.env.VITE_EXCHANGE_ORIGIN` /
+  `VITE_ADMIN_ORIGIN` (`npm run dev` đặt sẵn :5173 / :5174); bản deploy để trống (cùng địa chỉ).
+- `canOpenAdmin(me)` — hiện nút "Quản trị" trên app sàn cho support / admin / owner (chỉ để ẩn/hiện; API admin vẫn tự kiểm tra quyền + 2FA).
+
 ## 0.10.0 — 2026-10-10 (Chạy kín: đăng ký bằng mã mời, cấu hình công khai)
 Chuẩn bị đưa staging lên cloud: chỉ người được mời mới đăng ký được. Thêm 4 endpoint, tổng 128.
 

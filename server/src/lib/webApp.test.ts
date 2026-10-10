@@ -6,6 +6,7 @@ import { ApiHarness } from '../../test/apiHarness.ts';
 import { webApp } from './webApp.ts';
 
 const dist = mkdtempSync(path.join(tmpdir(), 'cex-web-'));
+const adminDist = mkdtempSync(path.join(tmpdir(), 'cex-admin-'));
 const h = new ApiHarness();
 
 beforeAll(async () => {
@@ -13,18 +14,22 @@ beforeAll(async () => {
   writeFileSync(path.join(dist, 'index.html'), '<!doctype html><div id="root"></div>');
   writeFileSync(path.join(dist, 'assets', 'index-abc123.js'), 'console.log(1)');
   writeFileSync(path.join(dist, 'robots.txt'), 'User-agent: *\nDisallow: /');
-  await h.start({ webDist: dist });
+  mkdirSync(path.join(adminDist, 'assets'));
+  writeFileSync(path.join(adminDist, 'index.html'), '<!doctype html><div id="admin-root"></div>');
+  writeFileSync(path.join(adminDist, 'assets', 'admin-def456.js'), 'console.log(2)');
+  await h.start({ webDist: dist, adminWebDist: adminDist });
 });
 afterAll(async () => {
   await h.stop();
   rmSync(dist, { recursive: true, force: true });
+  rmSync(adminDist, { recursive: true, force: true });
 });
 
 const get = (p: string, accept = 'text/html') => fetch(h.base + p, { headers: { accept } });
 
 describe('the web app on the API origin (WEB_DIST)', () => {
   it('any page path returns index.html, never cached', async () => {
-    for (const p of ['/', '/trade/BTCUSDT', '/futures/1000PEPEUSDT', '/assets']) {
+    for (const p of ['/', '/trade/BTCUSDT', '/futures/1000PEPEUSDT', '/assets', '/assets/analysis']) {
       const r = await get(p);
       expect(r.status, p).toBe(200);
       expect(r.headers.get('content-type')).toContain('text/html');
@@ -48,6 +53,22 @@ describe('the web app on the API origin (WEB_DIST)', () => {
     expect(await r.json()).toMatchObject({ error: { code: 'NOT_FOUND' } });
     expect((await get('/api/v1/health', 'application/json')).status).toBe(200);
     expect((await get('/ws')).status).toBe(404);
+  });
+
+  it('the admin app is served under /admin from its own build; the exchange never answers admin paths', async () => {
+    for (const p of ['/admin', '/admin/', '/admin/users/42', '/admin/assets']) {
+      const r = await get(p);
+      expect(r.status, p).toBe(200);
+      expect(r.headers.get('x-robots-tag')).toContain('noindex');
+      expect(await r.text(), p).toContain('id="admin-root"');
+    }
+    const js = await get('/admin/assets/admin-def456.js', '*/*');
+    expect(js.status).toBe(200);
+    expect(js.headers.get('cache-control')).toContain('immutable');
+    expect((await get('/admin/assets/index-abc123.js', '*/*')).status, "the exchange's file is not the admin's").toBe(404);
+    expect((await get('/administrator')).status, 'only the /admin prefix').toBe(200);
+    expect(await (await get('/administrator')).text()).toContain('id="root"');
+    expect((await get('/trade/BTCUSDT')).headers.get('x-robots-tag')).toBeNull();
   });
 
   it('refuses to start without a build', () => {
