@@ -1,7 +1,7 @@
 # ROADMAP — Sàn giao dịch ảo + Web tín hiệu
 
-> Trạng thái: **ĐANG LÀM** — backend GĐ 0–3 + 2.5 + **F (Futures)** xong (chạy local, chưa lên cloud); giao diện GĐ1 xong, đang làm lại theo phong cách OKX (v2). Cập nhật: 2026-10-09
-> Báo cáo mới nhất: [docs/reports/2026-10-09-backend-futures.md](docs/reports/2026-10-09-backend-futures.md) · trước đó: [GĐ2.5](docs/reports/2026-10-09-backend-gd25.md), [GĐ3](docs/reports/2026-10-09-backend-gd3.md), [GĐ2](docs/reports/2026-10-09-backend-gd2.md), [GĐ0–1](docs/reports/2026-10-09-backend-gd0-gd1.md)
+> Trạng thái: **ĐANG LÀM** — backend GĐ 0–3 + 2.5 + F (Futures) + 2.6 xong (chạy local, chưa lên cloud), hợp đồng 0.8.0, test trình duyệt `npm run e2e`; giao diện sàn đang làm GĐ2 + Futures + 2.6 (review mới nhất: [REVIEW-03](docs/antigravity/REVIEW-03-doi-chieu-giao-dien-tinh-nang.md)). Cập nhật: 2026-10-10
+> Báo cáo mới nhất: [docs/reports/2026-10-10-backend-gd26.md](docs/reports/2026-10-10-backend-gd26.md) · trước đó: [Futures](docs/reports/2026-10-09-backend-futures.md), [GĐ2.5](docs/reports/2026-10-09-backend-gd25.md), [GĐ3](docs/reports/2026-10-09-backend-gd3.md), [GĐ2](docs/reports/2026-10-09-backend-gd2.md), [GĐ0–1](docs/reports/2026-10-09-backend-gd0-gd1.md)
 > Dự án thử nghiệm cá nhân. Phần kinh doanh (thu phí, thanh toán…) để sau — xem [Backlog](#backlog-để-sau).
 > Chi tiết từng phần: [docs/parts/README.md](docs/parts/README.md)
 
