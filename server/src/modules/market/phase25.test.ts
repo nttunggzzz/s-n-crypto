@@ -6,6 +6,7 @@ import { auditLogs, candles } from '../../db/schema.ts';
 import { setBook, setMark } from '../../../test/helpers.ts';
 import { ApiHarness } from '../../../test/apiHarness.ts';
 import { DepthSnapshots, mergeDeepDepth, type BookSnapshot } from './depthSnapshots.ts';
+import { WS_SESSION_ENDED } from '../../realtime/hub.ts';
 import { planConnections, streamsFor } from './binance.ts';
 
 const expectApiError = (p: Promise<unknown>, code: string) => expect(p).rejects.toSatisfy((e: unknown) => e instanceof ApiError && e.code === code);
@@ -326,5 +327,32 @@ describe('realtime tickers (one channel for every pair)', () => {
     expect(msgs.filter((m) => m.type === 'subscribed')).toHaveLength(limit + 1);
     expect(refused).toEqual([expect.objectContaining({ code: 'RATE_LIMITED', channel: channels[limit] })]);
     ws.close();
+  });
+});
+
+describe('realtime and sign-out', () => {
+  it('a connection opened while signed in is closed once that session ends; other sessions keep theirs', async () => {
+    const u = await h.user();
+    const other = h.browser();
+    await other.login({ body: { email: u.email, password: u.password } });
+    const open = async (cookie: string) => {
+      const ws = new WebSocket(h.base.replace('http', 'ws') + '/ws', { headers: { cookie } });
+      const closed = new Promise<number>((r) => ws.once('close', (code) => r(code)));
+      await new Promise((r) => ws.once('open', r));
+      ws.send(JSON.stringify({ type: 'subscribe', channel: 'user' }));
+      await new Promise((r) => ws.once('message', r)); // subscribed
+      return { ws, closed };
+    };
+    const a = await open(u.b.cookie());
+    const b = await open(other.cookie());
+
+    await h.hub.dropEndedSessions();
+    expect(a.ws.readyState).toBe(WebSocket.OPEN);
+
+    await u.b.logout();
+    await h.hub.dropEndedSessions(); // the heartbeat does this every 30 s
+    expect(await a.closed).toBe(WS_SESSION_ENDED);
+    expect(b.ws.readyState).toBe(WebSocket.OPEN);
+    b.ws.close();
   });
 });

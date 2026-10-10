@@ -85,4 +85,19 @@ describe('mock realtime follows the server rules', () => {
     expect(errors).toEqual([expect.objectContaining({ code: 'RATE_LIMITED', channel: `candles:BTCUSDT:x${REALTIME_MAX_CHANNELS - 1}` })]);
     rt.close();
   });
+
+  it('reconnect() keeps the subscriptions and re-checks sign-in, like a new server connection', async () => {
+    const rt = createMockRealtimeClient({ intervalMs: 10_000 });
+    const statuses: string[] = [];
+    rt.onStatus((s) => statuses.push(s));
+    const errors: { code: string; channel?: string }[] = [];
+    rt.onError((e) => errors.push(e));
+    rt.subscribe('user', () => {});
+    await api.logout();
+    rt.reconnect();
+    await new Promise((r) => setTimeout(r, 0));
+    expect(statuses.slice(-2)).toEqual(['connecting', 'open']);
+    expect(errors).toEqual([expect.objectContaining({ code: 'UNAUTHENTICATED', channel: 'user' })]);
+    rt.close();
+  });
 });

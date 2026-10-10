@@ -140,6 +140,14 @@ export function createMockRealtimeClient(opts: MockRealtimeOptions = {}): Realti
       errorCbs.add(cb);
       return () => errorCbs.delete(cb);
     },
+    reconnect() {
+      setStatus('connecting');
+      queueMicrotask(() => {
+        setStatus('open');
+        // like the server: the new connection carries the current sign-in state
+        if (subs.has('user') && !mockStore.signedIn) errorCbs.forEach((cb) => cb({ code: 'UNAUTHENTICATED', message: 'Sign in required', channel: 'user' }));
+      });
+    },
     close() {
       clearInterval(timer);
       clearInterval(dropTimer);

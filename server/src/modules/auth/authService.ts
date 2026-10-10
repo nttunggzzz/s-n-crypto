@@ -1,4 +1,4 @@
-import { and, desc, eq, gt, isNull, lt, ne, or } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, isNull, lt, ne, or } from 'drizzle-orm';
 import { ROLE_PERMISSIONS, STAFF_ROLES, type AvatarId, type Me, type SessionInfo } from '@cex/contracts';
 import { recoveryCodes, sessions, users, verificationTokens } from '../../db/schema.ts';
 import type { Db } from '../../db/client.ts';
@@ -97,6 +97,17 @@ export class AuthService {
       await this.db.update(sessions).set({ lastSeenAt: this.now() }).where(eq(sessions.id, row.session.id));
     }
     return row;
+  }
+
+  /** Of `ids`, the sessions that are still signed in (not revoked or expired, account active). */
+  async liveSessionIds(ids: string[]): Promise<Set<string>> {
+    if (ids.length === 0) return new Set();
+    const rows = await this.db
+      .select({ id: sessions.id })
+      .from(sessions)
+      .innerJoin(users, eq(users.id, sessions.userId))
+      .where(and(inArray(sessions.id, ids), isNull(sessions.revokedAt), gt(sessions.expiresAt, this.now()), eq(users.status, 'active')));
+    return new Set(rows.map((r) => r.id));
   }
 
   // ───────── register / login

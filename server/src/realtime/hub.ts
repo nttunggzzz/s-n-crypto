@@ -17,6 +17,8 @@ import { serializeFuturesOrder, serializeFuturesTrade, serializePosition } from 
 interface Client {
   ws: WebSocket;
   userId: string | null;
+  /** Session the connection was opened with (re-checked every heartbeat; ended → connection closed). */
+  sessionId: string | null;
   channels: Set<string>;
   alive: boolean;
 }
@@ -26,6 +28,8 @@ const DEPTH_THROTTLE_MS = 500;
 const TICKER_THROTTLE_MS = 1000;
 /** `tickers` / `futures:tickers`: one batch of the pairs that changed, at most this often. */
 const TICKER_BATCH_MS = 1000;
+/** Close code when the session behind a connection was signed out / revoked / expired. */
+export const WS_SESSION_ENDED = 4401;
 
 /**
  * WebSocket fan-out at /ws. Users never connect to Binance directly.
@@ -69,8 +73,8 @@ export class RealtimeHub {
         socket.destroy();
         return;
       }
-      void this.resolveUser(req).then((userId) => {
-        this.wss.handleUpgrade(req, socket, head, (ws) => this.onConnection(ws, userId));
+      void this.resolveUser(req).then((auth) => {
+        this.wss.handleUpgrade(req, socket, head, (ws) => this.onConnection(ws, auth));
       });
     });
     this.wireMarket();
@@ -86,6 +90,7 @@ export class RealtimeHub {
         c.alive = false;
         c.ws.ping();
       }
+      void this.dropEndedSessions().catch((err) => logger.warn({ err }, 'ws session check failed'));
     }, 30_000);
     this.heartbeat.unref();
     this.batchTimer = setInterval(() => this.flushTickerBatches(), TICKER_BATCH_MS);
@@ -100,20 +105,32 @@ export class RealtimeHub {
     this.wss.close();
   }
 
-  private async resolveUser(req: IncomingMessage): Promise<string | null> {
+  private async resolveUser(req: IncomingMessage): Promise<{ userId: string; sessionId: string } | null> {
     try {
       const token = readSessionToken({ headers: req.headers, cookies: parseCookieHeader(req.headers.cookie) });
       if (!token) return null;
       const ctx = await this.auth.authenticate(token);
-      return ctx && ctx.user.status === 'active' ? ctx.user.id : null;
+      return ctx && ctx.user.status === 'active' ? { userId: ctx.user.id, sessionId: ctx.session.id } : null;
     } catch (err) {
       logger.warn({ err }, 'ws auth failed');
       return null;
     }
   }
 
-  private onConnection(ws: WebSocket, userId: string | null): void {
-    const client: Client = { ws, userId, channels: new Set(), alive: true };
+  /**
+   * Closes signed-in connections whose session has ended (sign-out, revoked, password reset, account
+   * locked, expired), so private events stop flowing to a tab that is no longer signed in.
+   * Runs every heartbeat; the client reconnects as a guest.
+   */
+  async dropEndedSessions(): Promise<void> {
+    const authed = [...this.clients].filter((c) => c.sessionId);
+    if (authed.length === 0) return;
+    const live = await this.auth.liveSessionIds([...new Set(authed.map((c) => c.sessionId!))]);
+    for (const c of authed) if (!live.has(c.sessionId!)) c.ws.close(WS_SESSION_ENDED, 'session ended');
+  }
+
+  private onConnection(ws: WebSocket, auth: { userId: string; sessionId: string } | null): void {
+    const client: Client = { ws, userId: auth?.userId ?? null, sessionId: auth?.sessionId ?? null, channels: new Set(), alive: true };
     this.clients.add(client);
     ws.on('pong', () => (client.alive = true));
     ws.on('close', () => this.clients.delete(client));

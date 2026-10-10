@@ -37,6 +37,7 @@ rt.subscribe('market:status', setMarketStatus);
 rt.subscribe('user', (e) => { /* e.kind: 'order' | 'trade' | 'balance' */ });   // cần đăng nhập
 rt.onStatus((s) => setConnection(s));              // 'connecting' | 'open' | 'closed' → banner mất kết nối
 rt.onError((e) => console.error('realtime', e));   // vd. RATE_LIMITED khi vượt REALTIME_MAX_CHANNELS (100) kênh
+rt.reconnect();                                    // BẮT BUỘC ngay sau đăng nhập / 2FA / đăng xuất (server đọc cookie lúc mở kết nối)
 ```
 Giá nhiều cặp: dùng **một** kênh `tickers` (Futures: `futures:tickers`), không đăng ký từng `ticker:<SYMBOL>` cho cả danh sách.
 Gộp `items` vào một kho (store) và cho mỗi component chỉ đọc cặp nó cần, để một lần cập nhật không vẽ lại cả ứng dụng.

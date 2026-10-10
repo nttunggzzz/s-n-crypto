@@ -10,6 +10,13 @@ giao diện đăng ký 50 kênh `ticker:<SYMBOL>` cộng các kênh khác, vư�
 - Kênh `futures:tickers` → `FuturesTickerBatch` (mọi hợp đồng; cũng gửi khi mark/funding đổi).
 - `REALTIME_MAX_CHANNELS = 100` (trước là 50, không công bố): vượt → sự kiện `error` mã `RATE_LIMITED` kèm `channel`, kênh đó **không** được đăng ký.
   Đăng ký lại kênh đang có không bị tính thêm. **Mock áp dụng cùng giới hạn** và hỗ trợ cả 2 kênh mới.
+- `RealtimeClient.reconnect()`: mở kết nối mới, **giữ nguyên các kênh đã đăng ký**. Server chỉ đọc cookie phiên lúc mở kết nối,
+  nên **UI phải gọi ngay sau khi đăng nhập (kể cả bước 2FA) và đăng xuất**. Nếu không, kênh `user` bị từ chối (`UNAUTHENTICATED`)
+  hoặc vẫn gắn với tài khoản cũ cho tới khi tải lại trang. Lỗi này làm lệnh, số dư và thông báo không cập nhật realtime sau khi đăng ký.
+
+**Bảo mật (server)**
+- Kết nối realtime mở lúc đang đăng nhập sẽ bị **đóng (mã 4401)** khi phiên đó kết thúc: đăng xuất, bị thu hồi, đặt lại mật khẩu,
+  tài khoản bị khóa, hết hạn. Server kiểm tra mỗi 30 giây. Client tự kết nối lại dưới dạng khách.
 
 ## 0.7.0 — 2026-10-10 (Admin cho Giai đoạn 2.6 + Futures)
 Hỗ trợ khách hàng kiểu sàn lớn: tìm theo UID, xem Futures / bot / lịch sử đăng nhập của người dùng, dừng bot có ghi nhật ký.
