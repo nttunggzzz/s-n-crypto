@@ -22,7 +22,7 @@ import {
   formatDecimal,
   formatAmount,
 } from '@cex/ui';
-import { ArrowLeftRight, TrendingUp, TrendingDown, ArrowUpRight } from 'lucide-react';
+import { ArrowLeftRight, TrendingUp, TrendingDown, ArrowUpRight, BarChart2 } from 'lucide-react';
 import { FuturesTransferModal } from '../components/FuturesTransferModal.tsx';
 
 export interface WalletPageProps {
@@ -257,15 +257,26 @@ export const WalletPage: React.FC<WalletPageProps> = ({ onNavigate }) => {
           </button>
         </div>
 
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => setTransferModalOpen(true)}
-          className="flex items-center gap-1.5 text-xs font-semibold"
-        >
-          <ArrowLeftRight size={13} />
-          <span>Chuyển tiền</span>
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => onNavigate('/assets/analysis')}
+            className="flex items-center gap-1.5 text-xs font-semibold"
+          >
+            <BarChart2 size={13} />
+            <span>Phân tích</span>
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => setTransferModalOpen(true)}
+            className="flex items-center gap-1.5 text-xs font-semibold"
+          >
+            <ArrowLeftRight size={13} />
+            <span>Chuyển tiền</span>
+          </Button>
+        </div>
       </div>
 
       {walletTab === 'spot' ? (

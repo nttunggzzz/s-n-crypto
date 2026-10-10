@@ -6,7 +6,8 @@ import { NotificationCenter } from './NotificationCenter.tsx';
 import { AvatarIcon } from './AvatarIcon.tsx';
 import { 
   Search, Bell, Moon, Globe, ChevronDown, 
-  Wallet, History, CreditCard, Settings, Shield, LogOut, Copy, X, LayoutPanelLeft, User
+  Wallet, History, CreditCard, Settings, Shield, LogOut, Copy, X, LayoutPanelLeft, User,
+  Bot, BarChart2
 } from 'lucide-react';
 
 export interface HeaderProps {
@@ -90,6 +91,15 @@ export const Header: React.FC<HeaderProps> = ({ currentPath, onNavigate }) => {
                       <span className="text-[9px] px-1.5 py-0.2 rounded bg-[var(--accent,#818cf8)]/10 text-[var(--accent,#818cf8)] font-bold">Mô phỏng</span>
                     </div>
                     <div className="text-[11px] text-[var(--text-3,#63636b)]">Hợp đồng vĩnh cửu USDT-M (≤ 20×)</div>
+                  </div>
+                  <div 
+                    onClick={() => onNavigate('/bots')}
+                    className="px-4 py-2 hover:bg-[var(--panel-2,#141416)] cursor-pointer"
+                  >
+                    <div className="text-[13px] text-[var(--text,#f4f4f5)] font-medium flex items-center gap-1.5">
+                      <span>Bot giao dịch</span>
+                    </div>
+                    <div className="text-[11px] text-[var(--text-3,#63636b)]">Bot lưới Spot & Mua định kỳ (DCA)</div>
                   </div>
                 </div>
               </div>
@@ -213,6 +223,14 @@ export const Header: React.FC<HeaderProps> = ({ currentPath, onNavigate }) => {
                       <div onClick={() => onNavigate('/settings')} className="px-4 py-2 hover:bg-[var(--panel-2,#141416)] cursor-pointer text-[13px] text-[var(--text,#f4f4f5)] flex items-center gap-2">
                         <Shield size={16} className="text-[var(--text-2,#a1a1aa)]" />
                         Bảo mật (2FA)
+                      </div>
+                      <div onClick={() => onNavigate('/assets/analysis')} className="px-4 py-2 hover:bg-[var(--panel-2,#141416)] cursor-pointer text-[13px] text-[var(--text,#f4f4f5)] flex items-center gap-2">
+                        <BarChart2 size={16} className="text-[var(--text-2,#a1a1aa)]" />
+                        Phân tích lãi lỗ
+                      </div>
+                      <div onClick={() => onNavigate('/bots')} className="px-4 py-2 hover:bg-[var(--panel-2,#141416)] cursor-pointer text-[13px] text-[var(--text,#f4f4f5)] flex items-center gap-2">
+                        <Bot size={16} className="text-[var(--text-2,#a1a1aa)]" />
+                        Bot của tôi
                       </div>
                       <div onClick={() => onNavigate('/settings')} className="px-4 py-2 hover:bg-[var(--panel-2,#141416)] cursor-pointer text-[13px] text-[var(--text,#f4f4f5)] flex items-center gap-2">
                         <Settings size={16} className="text-[var(--text-2,#a1a1aa)]" />

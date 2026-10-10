@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import type { SessionInfo, AvatarId } from '@cex/contracts';
+import React, { useState, useEffect, useMemo } from 'react';
+import type { SessionInfo, AvatarId, SecurityOverview, LoginEvent } from '@cex/contracts';
 import { ApiError } from '@cex/contracts';
 import { getApiClient } from '../services/api.ts';
 import { getErrorMessage } from '../services/errors.ts';
@@ -16,11 +16,12 @@ import {
   TableRow,
   TableHead,
   TableCell,
+  Modal,
   useToast,
   EmptyState,
 } from '@cex/ui';
 
-import { User, Shield, Settings, Copy, Check } from 'lucide-react';
+import { User, Shield, Settings, Copy, Check, ShieldCheck, Lock, Key, AlertTriangle, ShieldAlert } from 'lucide-react';
 
 export interface SettingsPageProps {
   onNavigate: (path: string) => void;
@@ -31,7 +32,14 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate }) => {
   const { success, error: toastError } = useToast();
   const api = getApiClient();
 
-  const [activeTab, setActiveTab] = useState<'profile' | 'security' | 'preferences'>('profile');
+  const searchParams = useMemo(() => new URLSearchParams(window.location.search), []);
+  const initialTab = searchParams.get('tab') === 'security'
+    ? 'security'
+    : searchParams.get('tab') === 'preferences'
+    ? 'preferences'
+    : 'profile';
+
+  const [activeTab, setActiveTab] = useState<'profile' | 'security' | 'preferences'>(initialTab);
 
   // Profile states
   const [nameInput, setNameInput] = useState(user?.name || '');
@@ -45,6 +53,48 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate }) => {
       setNameInput(user.name);
     }
   }, [user?.name]);
+
+  // Security Overview states
+  const [secOverview, setSecOverview] = useState<SecurityOverview | null>(null);
+  const [loginEvents, setLoginEvents] = useState<LoginEvent[]>([]);
+  const [loadingSec, setLoadingSec] = useState(false);
+
+  // Anti-phishing modal
+  const [antiPhishingModalOpen, setAntiPhishingModalOpen] = useState(false);
+  const [antiCodeInput, setAntiCodeInput] = useState('');
+  const [antiPasswordInput, setAntiPasswordInput] = useState('');
+  const [anti2faInput, setAnti2faInput] = useState('');
+  const [savingAntiPhishing, setSavingAntiPhishing] = useState(false);
+
+  // 2FA modal
+  const [twoFactorModalOpen, setTwoFactorModalOpen] = useState(false);
+  const [twoFactorStep, setTwoFactorStep] = useState<'SETUP' | 'RECOVERY' | 'DISABLE'>('SETUP');
+  const [twoFactorSetupData, setTwoFactorSetupData] = useState<{ secret: string; otpauthUrl: string } | null>(null);
+  const [twoFactorRecoveryCodes, setTwoFactorRecoveryCodes] = useState<string[]>([]);
+  const [twoFactorCodeInput, setTwoFactorCodeInput] = useState('');
+  const [twoFactorPasswordInput, setTwoFactorPasswordInput] = useState('');
+  const [processingTwoFactor, setProcessingTwoFactor] = useState(false);
+
+  const fetchSecurityData = async () => {
+    if (!isAuthenticated) return;
+    setLoadingSec(true);
+    try {
+      const [sec, logs] = await Promise.all([
+        api.securityOverview(),
+        api.loginHistory({ query: { limit: 20 } }),
+      ]);
+      setSecOverview(sec);
+      setLoginEvents(logs.items);
+    } catch {} finally {
+      setLoadingSec(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchSecurityData();
+    }
+  }, [isAuthenticated]);
 
   // Change password states
   const [currentPassword, setCurrentPassword] = useState('');
@@ -406,75 +456,513 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate }) => {
 
         {activeTab === 'security' && (
           <div className="space-y-8 max-w-3xl">
-            <h2 className="text-lg font-bold text-[var(--text,#f4f4f5)] pb-2 border-b border-[var(--line,#1d1e21)]">Bảo mật tài khoản</h2>
-            
-            {/* 2FA */}
-            <div>
-               <h3 className="text-sm font-bold text-[var(--text,#f4f4f5)] mb-4">Xác thực hai yếu tố (2FA)</h3>
-               <div className="flex items-center justify-between p-4 rounded-[var(--radius-lg,12px)] border border-[var(--line,#1d1e21)] bg-[var(--panel,#0a0a0b)]">
-                 <div>
-                   <div className="text-sm font-semibold text-[var(--text,#f4f4f5)] flex items-center gap-2">
-                     Google Authenticator
-                     <Badge variant="warning" size="sm">Chưa bật</Badge>
-                   </div>
-                   <div className="text-xs text-[var(--text-3,#63636b)] mt-1">Bảo vệ tài khoản của bạn bằng mã từ ứng dụng Authenticator</div>
-                 </div>
-                 <Button variant="primary" size="sm">Bật ngay</Button>
-               </div>
+            <h2 className="text-lg font-bold text-[var(--text,#f4f4f5)] pb-2 border-b border-[var(--line,#1d1e21)]">
+              Bảo mật tài khoản
+            </h2>
+
+            {/* Security Level Progress Bar */}
+            <div className="p-5 rounded-[var(--radius-lg,12px)] border border-[var(--line,#1d1e21)] bg-[var(--panel,#0a0a0b)] space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck size={20} className={secOverview?.twoFactorEnabled ? 'text-[var(--up,#1fc27a)]' : 'text-[var(--warn,#f5b544)]'} />
+                  <span className="font-bold text-sm text-[var(--text,#f4f4f5)]">Mức độ bảo mật</span>
+                </div>
+                <Badge
+                  variant={
+                    (user?.emailVerified ? 1 : 0) + (secOverview?.twoFactorEnabled ? 1 : 0) + (secOverview?.antiPhishingCode ? 1 : 0) >= 3
+                      ? 'success'
+                      : (user?.emailVerified ? 1 : 0) + (secOverview?.twoFactorEnabled ? 1 : 0) + (secOverview?.antiPhishingCode ? 1 : 0) >= 2
+                      ? 'warning'
+                      : 'error'
+                  }
+                  size="sm"
+                >
+                  {(user?.emailVerified ? 1 : 0) + (secOverview?.twoFactorEnabled ? 1 : 0) + (secOverview?.antiPhishingCode ? 1 : 0) >= 3
+                    ? 'Cao'
+                    : (user?.emailVerified ? 1 : 0) + (secOverview?.twoFactorEnabled ? 1 : 0) + (secOverview?.antiPhishingCode ? 1 : 0) >= 2
+                    ? 'Trung bình'
+                    : 'Thấp'}
+                </Badge>
+              </div>
+
+              {/* Progress Bar 3 segments */}
+              <div className="grid grid-cols-3 gap-2">
+                <div
+                  className={`h-2 rounded-full transition-all ${
+                    user?.emailVerified ? 'bg-[var(--up,#1fc27a)]' : 'bg-[var(--line,#1d1e21)]'
+                  }`}
+                  title="Email đã xác minh"
+                />
+                <div
+                  className={`h-2 rounded-full transition-all ${
+                    secOverview?.twoFactorEnabled ? 'bg-[var(--up,#1fc27a)]' : 'bg-[var(--line,#1d1e21)]'
+                  }`}
+                  title="Xác thực 2FA"
+                />
+                <div
+                  className={`h-2 rounded-full transition-all ${
+                    secOverview?.antiPhishingCode ? 'bg-[var(--up,#1fc27a)]' : 'bg-[var(--line,#1d1e21)]'
+                  }`}
+                  title="Mã chống lừa đảo"
+                />
+              </div>
+
+              <div className="flex items-center justify-between text-[11px] text-[var(--text-3,#63636b)] pt-1">
+                <span>Email: {user?.emailVerified ? '✓ Đã xác minh' : '✗ Chưa'}</span>
+                <span>2FA: {secOverview?.twoFactorEnabled ? '✓ Đã bật' : '✗ Chưa'}</span>
+                <span>Anti-phishing: {secOverview?.antiPhishingCode ? '✓ Đã đặt' : '✗ Chưa'}</span>
+              </div>
             </div>
 
-            {/* Change Password */}
+            {/* 2FA Card */}
             <div>
-               <h3 className="text-sm font-bold text-[var(--text,#f4f4f5)] mb-4">Đổi mật khẩu</h3>
-               <form onSubmit={handleChangePassword} className="space-y-4 max-w-md bg-[var(--panel,#0a0a0b)] p-5 rounded-[var(--radius-lg,12px)] border border-[var(--line,#1d1e21)]">
-                 <Input label="Mật khẩu hiện tại" type="password" value={currentPassword} onChange={e => setCurrentPassword(e.target.value)} required />
-                 <Input label="Mật khẩu mới" type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} required />
-                 <Input label="Xác nhận mật khẩu" type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} required />
-                 <Button type="submit" variant="secondary" fullWidth loading={changingPassword}>Cập nhật</Button>
-               </form>
+              <h3 className="text-sm font-bold text-[var(--text,#f4f4f5)] mb-3">Xác thực hai yếu tố (2FA)</h3>
+              <div className="flex items-center justify-between p-4 rounded-[var(--radius-lg,12px)] border border-[var(--line,#1d1e21)] bg-[var(--panel,#0a0a0b)]">
+                <div>
+                  <div className="text-sm font-semibold text-[var(--text,#f4f4f5)] flex items-center gap-2">
+                    Google Authenticator
+                    <Badge variant={secOverview?.twoFactorEnabled ? 'success' : 'warning'} size="sm">
+                      {secOverview?.twoFactorEnabled ? 'Đã bật' : 'Chưa bật'}
+                    </Badge>
+                  </div>
+                  <div className="text-xs text-[var(--text-3,#63636b)] mt-1">
+                    Bảo vệ tài khoản bằng mã TOTP 6 số từ Google Authenticator hoặc Authy
+                  </div>
+                </div>
+                <Button
+                  variant={secOverview?.twoFactorEnabled ? 'secondary' : 'primary'}
+                  size="sm"
+                  onClick={() => {
+                    if (secOverview?.twoFactorEnabled) {
+                      setTwoFactorStep('DISABLE');
+                      setTwoFactorPasswordInput('');
+                      setTwoFactorCodeInput('');
+                      setTwoFactorModalOpen(true);
+                    } else {
+                      setTwoFactorStep('SETUP');
+                      setTwoFactorPasswordInput('');
+                      setTwoFactorCodeInput('');
+                      setTwoFactorSetupData(null);
+                      setTwoFactorModalOpen(true);
+                    }
+                  }}
+                >
+                  {secOverview?.twoFactorEnabled ? 'Tắt 2FA' : 'Bật ngay'}
+                </Button>
+              </div>
             </div>
 
-            {/* Sessions */}
+            {/* Anti-phishing Code Card */}
             <div>
-               <div className="flex items-center justify-between mb-4">
-                 <h3 className="text-sm font-bold text-[var(--text,#f4f4f5)]">Quản lý thiết bị</h3>
-                 <Button variant="ghost" size="sm" onClick={fetchSessions}>Làm mới</Button>
-               </div>
-               
-               <div className="border border-[var(--line,#1d1e21)] rounded-[var(--radius-lg,12px)] overflow-hidden bg-[var(--panel,#0a0a0b)]">
-                 <Table>
-                   <TableHeader className="bg-transparent border-b border-[var(--line,#1d1e21)]">
-                     <TableRow className="hover:bg-transparent">
-                       <TableHead className="text-xs">Thiết bị</TableHead>
-                       <TableHead className="text-xs">IP</TableHead>
-                       <TableHead className="text-xs">Đăng nhập lúc</TableHead>
-                       <TableHead className="text-right text-xs">Thao tác</TableHead>
-                     </TableRow>
-                   </TableHeader>
-                   <TableBody>
-                     {sessions.map((sess) => (
-                       <TableRow key={sess.id} className="border-b border-[var(--line,#1d1e21)]">
-                         <TableCell className="font-semibold text-xs flex items-center gap-2 text-[var(--text,#f4f4f5)]">
-                           <span>{sess.userAgent || 'Trình duyệt web'}</span>
-                           {sess.current && <Badge variant="success" size="sm" className="bg-[var(--up,#1fc27a)]/10 text-[var(--up,#1fc27a)] border-none">Phiên này</Badge>}
-                         </TableCell>
-                         <TableCell className="font-mono text-xs text-[var(--text-3,#63636b)]">{sess.ip || '127.0.0.1'}</TableCell>
-                         <TableCell className="text-xs text-[var(--text-3,#63636b)]">{new Date(sess.createdAt).toLocaleString('vi-VN')}</TableCell>
-                         <TableCell className="text-right">
-                           {sess.current ? (
-                             <Button variant="ghost" size="sm" onClick={logout} className="text-xs text-[var(--text-3,#63636b)] hover:text-[var(--text,#f4f4f5)]">Đăng xuất</Button>
-                           ) : (
-                             <Button variant="ghost" size="sm" loading={revokingId === sess.id} onClick={() => handleRevokeSession(sess.id)} className="text-xs text-[var(--down,#f2475f)]">Thu hồi</Button>
-                           )}
-                         </TableCell>
-                       </TableRow>
-                     ))}
-                   </TableBody>
-                 </Table>
-               </div>
+              <h3 className="text-sm font-bold text-[var(--text,#f4f4f5)] mb-3">Mã chống lừa đảo (Anti-Phishing)</h3>
+              <div className="flex items-center justify-between p-4 rounded-[var(--radius-lg,12px)] border border-[var(--line,#1d1e21)] bg-[var(--panel,#0a0a0b)]">
+                <div>
+                  <div className="text-sm font-semibold text-[var(--text,#f4f4f5)] flex items-center gap-2">
+                    Mã chống lừa đảo
+                    <Badge variant={secOverview?.antiPhishingCode ? 'success' : 'secondary'} size="sm">
+                      {secOverview?.antiPhishingCode ? `Đang dùng: ${secOverview.antiPhishingCode}` : 'Chưa đặt'}
+                    </Badge>
+                  </div>
+                  <div className="text-xs text-[var(--text-3,#63636b)] mt-1 max-w-xl">
+                    Mã này xuất hiện ở đầu mọi email thật từ sàn. Email không có mã = giả mạo.
+                  </div>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setAntiCodeInput('');
+                    setAntiPasswordInput('');
+                    setAnti2faInput('');
+                    setAntiPhishingModalOpen(true);
+                  }}
+                >
+                  {secOverview?.antiPhishingCode ? 'Thay đổi' : 'Cài đặt'}
+                </Button>
+              </div>
+            </div>
+
+            {/* Change Password Card */}
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-bold text-[var(--text,#f4f4f5)]">Đổi mật khẩu</h3>
+                <span className="text-xs text-[var(--text-3,#63636b)]">
+                  Đổi lần cuối: {secOverview?.passwordChangedAt ? new Date(secOverview.passwordChangedAt).toLocaleString('vi-VN') : 'Chưa đổi'}
+                </span>
+              </div>
+              <form onSubmit={handleChangePassword} className="space-y-4 max-w-md bg-[var(--panel,#0a0a0b)] p-5 rounded-[var(--radius-lg,12px)] border border-[var(--line,#1d1e21)]">
+                <Input label="Mật khẩu hiện tại" type="password" value={currentPassword} onChange={e => setCurrentPassword(e.target.value)} required />
+                <Input label="Mật khẩu mới" type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} required />
+                <Input label="Xác nhận mật khẩu" type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} required />
+                <Button type="submit" variant="secondary" fullWidth loading={changingPassword}>Cập nhật mật khẩu</Button>
+              </form>
+            </div>
+
+            {/* Sessions Management */}
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-bold text-[var(--text,#f4f4f5)]">
+                  Phiên đăng nhập ({sessions.length})
+                </h3>
+                <Button variant="ghost" size="sm" onClick={fetchSessions}>Làm mới</Button>
+              </div>
+              
+              <div className="border border-[var(--line,#1d1e21)] rounded-[var(--radius-lg,12px)] overflow-hidden bg-[var(--panel,#0a0a0b)]">
+                <Table>
+                  <TableHeader className="bg-transparent border-b border-[var(--line,#1d1e21)]">
+                    <TableRow className="hover:bg-transparent">
+                      <TableHead className="text-xs">Thiết bị</TableHead>
+                      <TableHead className="text-xs">IP</TableHead>
+                      <TableHead className="text-xs">Đăng nhập lúc</TableHead>
+                      <TableHead className="text-right text-xs">Thao tác</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {sessions.map((sess) => (
+                      <TableRow key={sess.id} className="border-b border-[var(--line,#1d1e21)]">
+                        <TableCell className="font-semibold text-xs flex items-center gap-2 text-[var(--text,#f4f4f5)]">
+                          <span>{sess.userAgent || 'Trình duyệt web'}</span>
+                          {sess.current && <Badge variant="success" size="sm" className="bg-[var(--up,#1fc27a)]/10 text-[var(--up,#1fc27a)] border-none">Phiên này</Badge>}
+                        </TableCell>
+                        <TableCell className="font-mono text-xs text-[var(--text-3,#63636b)]">{sess.ip || '127.0.0.1'}</TableCell>
+                        <TableCell className="text-xs text-[var(--text-3,#63636b)]">{new Date(sess.createdAt).toLocaleString('vi-VN')}</TableCell>
+                        <TableCell className="text-right">
+                          {sess.current ? (
+                            <Button variant="ghost" size="sm" onClick={logout} className="text-xs text-[var(--text-3,#63636b)] hover:text-[var(--text,#f4f4f5)]">Đăng xuất</Button>
+                          ) : (
+                            <Button variant="ghost" size="sm" loading={revokingId === sess.id} onClick={() => handleRevokeSession(sess.id)} className="text-xs text-[var(--down,#f2475f)]">Thu hồi</Button>
+                          )}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
+
+            {/* Login History */}
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-bold text-[var(--text,#f4f4f5)]">
+                  Lịch sử đăng nhập ({loginEvents.length} lần gần nhất)
+                </h3>
+                <Button variant="ghost" size="sm" onClick={fetchSecurityData}>Làm mới</Button>
+              </div>
+
+              <div className="border border-[var(--line,#1d1e21)] rounded-[var(--radius-lg,12px)] overflow-hidden bg-[var(--panel,#0a0a0b)]">
+                <Table>
+                  <TableHeader className="bg-transparent border-b border-[var(--line,#1d1e21)]">
+                    <TableRow className="hover:bg-transparent">
+                      <TableHead className="text-xs">Thời gian</TableHead>
+                      <TableHead className="text-xs">Thiết bị</TableHead>
+                      <TableHead className="text-xs">IP</TableHead>
+                      <TableHead className="text-right text-xs">Kết quả</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {loginEvents.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={4} className="text-center py-6 text-xs text-[var(--text-3,#63636b)]">
+                          Chưa có lịch sử đăng nhập nào.
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      loginEvents.map((evt) => {
+                        const isSuccess = evt.result === 'OK';
+                        return (
+                          <TableRow
+                            key={evt.id}
+                            className={`border-b border-[var(--line,#1d1e21)] ${
+                              !isSuccess ? 'bg-[var(--down,#f2475f)]/5' : ''
+                            }`}
+                          >
+                            <TableCell className="text-xs font-mono text-[var(--text-3,#63636b)]">
+                              {new Date(evt.at).toLocaleString('vi-VN')}
+                            </TableCell>
+                            <TableCell className="text-xs font-medium text-[var(--text,#f4f4f5)] flex items-center gap-2">
+                              <span>{evt.device || 'Trình duyệt web'}</span>
+                              {evt.newDevice && (
+                                <Badge variant="warning" size="sm" className="bg-[var(--warn,#f5b544)]/10 text-[var(--warn,#f5b544)] border-none">
+                                  Thiết bị mới
+                                </Badge>
+                              )}
+                            </TableCell>
+                            <TableCell className="font-mono text-xs text-[var(--text-3,#63636b)]">
+                              {evt.ip || '—'}
+                            </TableCell>
+                            <TableCell className="text-right">
+                              {evt.result === 'OK' ? (
+                                <Badge variant="success" size="sm">Thành công</Badge>
+                              ) : evt.result === 'BAD_PASSWORD' ? (
+                                <Badge variant="error" size="sm">Sai mật khẩu</Badge>
+                              ) : evt.result === 'BAD_2FA' ? (
+                                <Badge variant="error" size="sm">Sai mã 2FA</Badge>
+                              ) : (
+                                <Badge variant="error" size="sm">Tạm khóa</Badge>
+                              )}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
             </div>
           </div>
         )}
+
+        {/* Modal: Anti-phishing Code */}
+        <Modal
+          isOpen={antiPhishingModalOpen}
+          onClose={() => setAntiPhishingModalOpen(false)}
+          title={secOverview?.antiPhishingCode ? 'Thay đổi mã chống lừa đảo' : 'Cài đặt mã chống lừa đảo'}
+        >
+          <form
+            onSubmit={async (e) => {
+              e.preventDefault();
+              if (!antiPasswordInput) return;
+              setSavingAntiPhishing(true);
+              try {
+                await api.setAntiPhishingCode({
+                  body: {
+                    code: antiCodeInput.trim() ? antiCodeInput.trim() : null,
+                    currentPassword: antiPasswordInput,
+                    twoFactorCode: anti2faInput.trim() ? anti2faInput.trim() : undefined,
+                  },
+                });
+                success(antiCodeInput.trim() ? 'Đã cài đặt mã chống lừa đảo thành công!' : 'Đã xóa mã chống lừa đảo.');
+                setAntiPhishingModalOpen(false);
+                setAntiCodeInput('');
+                setAntiPasswordInput('');
+                setAnti2faInput('');
+                fetchSecurityData();
+              } catch (err: unknown) {
+                if (err instanceof ApiError) {
+                  toastError(getErrorMessage(err.code));
+                } else {
+                  toastError('Không thể cập nhật mã chống lừa đảo.');
+                }
+              } finally {
+                setSavingAntiPhishing(false);
+              }
+            }}
+            className="space-y-4 text-xs"
+          >
+            <p className="text-[var(--text-2,#a1a1aa)] leading-relaxed">
+              Mã chống lừa đảo (4–20 ký tự chữ hoặc số) sẽ xuất hiện ở đầu mọi email thật gửi từ sàn để giúp bạn phân biệt với email giả mạo.
+            </p>
+
+            <div>
+              <Input
+                label="Mã chống lừa đảo mới (Để trống nếu muốn xóa)"
+                value={antiCodeInput}
+                onChange={(e) => setAntiCodeInput(e.target.value)}
+                placeholder="VD: Safu2026"
+              />
+            </div>
+
+            <div>
+              <Input
+                label="Mật khẩu tài khoản (Bắt buộc)"
+                type="password"
+                value={antiPasswordInput}
+                onChange={(e) => setAntiPasswordInput(e.target.value)}
+                required
+              />
+            </div>
+
+            {secOverview?.twoFactorEnabled && (
+              <div>
+                <Input
+                  label="Mã xác thực 2FA (6 chữ số)"
+                  value={anti2faInput}
+                  onChange={(e) => setAnti2faInput(e.target.value)}
+                  placeholder="000000"
+                  required
+                />
+              </div>
+            )}
+
+            <div className="flex justify-end gap-3 pt-2">
+              <Button variant="secondary" onClick={() => setAntiPhishingModalOpen(false)}>
+                Hủy bỏ
+              </Button>
+              <Button type="submit" variant="primary" loading={savingAntiPhishing}>
+                Lưu mã
+              </Button>
+            </div>
+          </form>
+        </Modal>
+
+        {/* Modal: 2FA Setup & Disable */}
+        <Modal
+          isOpen={twoFactorModalOpen}
+          onClose={() => setTwoFactorModalOpen(false)}
+          title={twoFactorStep === 'DISABLE' ? 'Tắt xác thực 2FA' : 'Kích hoạt xác thực 2FA'}
+        >
+          {twoFactorStep === 'DISABLE' ? (
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (!twoFactorPasswordInput || !twoFactorCodeInput) return;
+                setProcessingTwoFactor(true);
+                try {
+                  await api.disableTwoFactor({
+                    body: {
+                      currentPassword: twoFactorPasswordInput,
+                      code: twoFactorCodeInput.trim(),
+                    },
+                  });
+                  success('Đã tắt 2FA thành công.');
+                  setTwoFactorModalOpen(false);
+                  fetchSecurityData();
+                  refreshUser();
+                } catch (err: unknown) {
+                  if (err instanceof ApiError) {
+                    toastError(getErrorMessage(err.code));
+                  } else {
+                    toastError('Không thể tắt 2FA.');
+                  }
+                } finally {
+                  setProcessingTwoFactor(false);
+                }
+              }}
+              className="space-y-4 text-xs"
+            >
+              <p className="text-[var(--text-2,#a1a1aa)]">
+                Vui lòng nhập mật khẩu tài khoản và mã 2FA từ ứng dụng để xác nhận tắt bảo mật 2 bước.
+              </p>
+              <Input
+                label="Mật khẩu hiện tại"
+                type="password"
+                value={twoFactorPasswordInput}
+                onChange={(e) => setTwoFactorPasswordInput(e.target.value)}
+                required
+              />
+              <Input
+                label="Mã 2FA (6 số)"
+                value={twoFactorCodeInput}
+                onChange={(e) => setTwoFactorCodeInput(e.target.value)}
+                placeholder="000000"
+                required
+              />
+              <div className="flex justify-end gap-3 pt-2">
+                <Button variant="secondary" onClick={() => setTwoFactorModalOpen(false)}>
+                  Hủy
+                </Button>
+                <Button type="submit" variant="primary" loading={processingTwoFactor}>
+                  Xác nhận tắt 2FA
+                </Button>
+              </div>
+            </form>
+          ) : twoFactorStep === 'RECOVERY' ? (
+            <div className="space-y-4 text-xs">
+              <p className="text-[var(--text-2,#a1a1aa)]">
+                Lưu lại 10 mã khôi phục bên dưới ở nơi an toàn. Mỗi mã chỉ sử dụng được 1 lần khi bạn mất thiết bị 2FA.
+              </p>
+              <div className="grid grid-cols-2 gap-2 p-3 rounded-lg bg-[var(--panel-2,#141416)] border border-[var(--line,#1d1e21)] font-mono text-center">
+                {twoFactorRecoveryCodes.map((code, idx) => (
+                  <div key={idx} className="p-1 rounded bg-[var(--panel,#0a0a0b)] text-white">
+                    {code}
+                  </div>
+                ))}
+              </div>
+              <div className="flex justify-end pt-2">
+                <Button variant="primary" onClick={() => setTwoFactorModalOpen(false)}>
+                  Tôi đã lưu các mã này
+                </Button>
+              </div>
+            </div>
+          ) : !twoFactorSetupData ? (
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (!twoFactorPasswordInput) return;
+                setProcessingTwoFactor(true);
+                try {
+                  const res = await api.setupTwoFactor({ body: { currentPassword: twoFactorPasswordInput } });
+                  setTwoFactorSetupData(res);
+                } catch (err: unknown) {
+                  if (err instanceof ApiError) {
+                    toastError(getErrorMessage(err.code));
+                  } else {
+                    toastError('Mật khẩu không chính xác.');
+                  }
+                } finally {
+                  setProcessingTwoFactor(false);
+                }
+              }}
+              className="space-y-4 text-xs"
+            >
+              <p className="text-[var(--text-2,#a1a1aa)]">
+                Nhập mật khẩu tài khoản để nhận khóa bí mật thiết lập 2FA.
+              </p>
+              <Input
+                label="Mật khẩu tài khoản"
+                type="password"
+                value={twoFactorPasswordInput}
+                onChange={(e) => setTwoFactorPasswordInput(e.target.value)}
+                required
+              />
+              <div className="flex justify-end gap-3 pt-2">
+                <Button variant="secondary" onClick={() => setTwoFactorModalOpen(false)}>
+                  Hủy
+                </Button>
+                <Button type="submit" variant="primary" loading={processingTwoFactor}>
+                  Tiếp tục
+                </Button>
+              </div>
+            </form>
+          ) : (
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (!twoFactorCodeInput) return;
+                setProcessingTwoFactor(true);
+                try {
+                  const res = await api.enableTwoFactor({ body: { code: twoFactorCodeInput.trim() } });
+                  setTwoFactorRecoveryCodes(res.recoveryCodes);
+                  setTwoFactorStep('RECOVERY');
+                  success('Đã kích hoạt 2FA thành công!');
+                  fetchSecurityData();
+                  refreshUser();
+                } catch (err: unknown) {
+                  if (err instanceof ApiError) {
+                    toastError(getErrorMessage(err.code));
+                  } else {
+                    toastError('Mã xác thực không hợp lệ.');
+                  }
+                } finally {
+                  setProcessingTwoFactor(false);
+                }
+              }}
+              className="space-y-4 text-xs"
+            >
+              <p className="text-[var(--text-2,#a1a1aa)]">
+                Nhập khóa bí mật này vào ứng dụng Authenticator (Google Authenticator / Authy):
+              </p>
+              <div className="p-3 rounded-lg bg-[var(--panel-2,#141416)] border border-[var(--line,#1d1e21)] font-mono text-center font-bold text-sm text-[var(--accent,#818cf8)] select-all">
+                {twoFactorSetupData.secret}
+              </div>
+              <Input
+                label="Mã xác thực 6 số từ ứng dụng"
+                value={twoFactorCodeInput}
+                onChange={(e) => setTwoFactorCodeInput(e.target.value)}
+                placeholder="000000"
+                required
+              />
+              <div className="flex justify-end gap-3 pt-2">
+                <Button variant="secondary" onClick={() => setTwoFactorModalOpen(false)}>
+                  Hủy
+                </Button>
+                <Button type="submit" variant="primary" loading={processingTwoFactor}>
+                  Kích hoạt 2FA
+                </Button>
+              </div>
+            </form>
+          )}
+        </Modal>
 
         {activeTab === 'preferences' && (
           <div className="space-y-6 max-w-2xl">

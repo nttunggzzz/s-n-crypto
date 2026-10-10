@@ -14,6 +14,8 @@ import { FuturesPage } from './pages/FuturesPage.tsx';
 import { WalletPage } from './pages/WalletPage.tsx';
 import { PortfolioPage } from './pages/PortfolioPage.tsx';
 import { SettingsPage } from './pages/SettingsPage.tsx';
+import { BotsPage } from './pages/BotsPage.tsx';
+import { PnlAnalysisPage } from './pages/PnlAnalysisPage.tsx';
 import {
   LoginPage,
   RegisterPage,
@@ -60,11 +62,17 @@ const AppContent: React.FC = () => {
     if (currentPath === '/portfolio') {
       return <PortfolioPage onNavigate={navigate} />;
     }
+    if (currentPath === '/assets/analysis') {
+      return <PnlAnalysisPage onNavigate={navigate} />;
+    }
     if (currentPath === '/assets' || currentPath === '/wallet') {
       if (currentPath === '/wallet') {
         window.history.replaceState({}, '', '/assets');
       }
       return <WalletPage onNavigate={navigate} />;
+    }
+    if (currentPath.startsWith('/bots')) {
+      return <BotsPage onNavigate={navigate} />;
     }
     if (currentPath === '/settings') {
       return <SettingsPage onNavigate={navigate} />;
