@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext.tsx';
 import { getApiClient } from '../services/api.ts';
 import { Button, Input, Card, CheckIcon, AlertCircleIcon } from '@cex/ui';
@@ -8,9 +8,11 @@ export interface AuthPageProps {
 }
 
 export const LoginPage: React.FC<AuthPageProps> = ({ onNavigate }) => {
-  const { login } = useAuth();
+  const { login, loginTwoFactor } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [twoFactorChallenge, setTwoFactorChallenge] = useState<string | null>(null);
+  const [twoFactorCode, setTwoFactorCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -26,76 +28,150 @@ export const LoginPage: React.FC<AuthPageProps> = ({ onNavigate }) => {
     setLoading(false);
     if (res.success) {
       onNavigate('/trade/BTCUSDT');
-    } else {
+    } else if ('twoFactorRequired' in res && res.twoFactorRequired) {
+      setTwoFactorChallenge(res.challengeToken);
+      setError(null);
+    } else if ('error' in res) {
       setError(res.error || 'Đăng nhập không thành công.');
     }
   };
 
+  const handleTwoFactorSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!twoFactorChallenge || !twoFactorCode.trim()) {
+      setError('Vui lòng nhập mã xác thực 2FA.');
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    const res = await loginTwoFactor(twoFactorChallenge, twoFactorCode.trim());
+    setLoading(false);
+    if (res.success) {
+      onNavigate('/trade/BTCUSDT');
+    } else {
+      setError(res.error || 'Mã xác thực 2FA không chính xác.');
+    }
+  };
+
   return (
-    <div className="min-h-[80vh] flex items-center justify-center px-4 py-12">
-      <Card variant="surface" className="max-w-md w-full border-[var(--color-border-default,#272a33)]">
-        <div className="text-center mb-6">
-          <h2 className="text-2xl font-bold text-[var(--color-text-primary,#f3f4f6)] mb-2">
-            Đăng nhập sàn CEX Spot
-          </h2>
-          <p className="text-xs text-[var(--color-text-secondary,#9ca3af)]">
-            Trải nghiệm giao dịch mô phỏng thời gian thực
+    <div className="min-h-[calc(100vh-56px)] flex items-stretch">
+      {/* Left side: Branding */}
+      <div className="hidden lg:flex w-1/2 bg-[var(--panel,#0a0a0b)] border-r border-[var(--line,#1d1e21)] items-center justify-center p-12">
+        <div className="max-w-md text-left">
+          <h1 className="text-4xl font-black text-[var(--text,#f4f4f5)] tracking-tight mb-6 leading-tight">
+            Nền tảng giao dịch <br/><span className="text-[var(--accent,#818cf8)]">Crypto chuyên nghiệp</span>
+          </h1>
+          <p className="text-[var(--text-3,#63636b)] text-lg mb-8 leading-relaxed">
+            Khớp lệnh tốc độ cao, thanh khoản sâu, an toàn và bảo mật tối đa cho tài sản của bạn.
           </p>
-        </div>
-
-        {error && (
-          <div className="mb-4 p-3 rounded-[var(--radius-md,8px)] bg-[var(--color-sell-bg,rgba(248,113,113,0.12))] border border-[var(--color-sell,#f87171)]/20 text-xs text-[var(--color-sell,#f87171)] flex items-center gap-2">
-            <AlertCircleIcon size={16} className="shrink-0" />
-            <span>{error}</span>
+          <div className="flex items-center gap-4 text-sm font-semibold text-[var(--text-2,#a1a1aa)]">
+            <div className="flex items-center gap-2"><CheckIcon size={18} className="text-[var(--up,#1fc27a)]" /> Phí giao dịch thấp</div>
+            <div className="flex items-center gap-2"><CheckIcon size={18} className="text-[var(--up,#1fc27a)]" /> Bảo mật 2FA</div>
           </div>
-        )}
+        </div>
+      </div>
 
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <Input
-            label="Địa chỉ Email"
-            type="email"
-            autoComplete="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="name@example.com"
-            required
-          />
-
-          <Input
-            label="Mật khẩu"
-            type="password"
-            autoComplete="current-password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="••••••••"
-            required
-          />
-
-          <div className="flex justify-end">
-            <button
-              type="button"
-              onClick={() => onNavigate('/forgot-password')}
-              className="text-xs text-[var(--color-accent-primary,#818cf8)] hover:underline cursor-pointer"
-            >
-              Quên mật khẩu?
-            </button>
+      {/* Right side: Form */}
+      <div className="flex-1 flex flex-col items-center justify-center p-6 bg-[var(--bg,#000000)]">
+        <div className="w-full max-w-md">
+          <div className="mb-8">
+            <h2 className="text-3xl font-bold text-[var(--text,#f4f4f5)] mb-2">
+              {twoFactorChallenge ? 'Xác thực hai yếu tố (2FA)' : 'Đăng nhập'}
+            </h2>
+            <p className="text-sm text-[var(--text-3,#63636b)]">
+              {twoFactorChallenge
+                ? 'Nhập mã 6 chữ số từ ứng dụng xác thực Google Authenticator'
+                : 'Đăng nhập để bắt đầu giao dịch'}
+            </p>
           </div>
 
-          <Button type="submit" variant="primary" loading={loading} fullWidth className="mt-2">
-            Đăng nhập
-          </Button>
-        </form>
+          {error && (
+            <div className="mb-6 p-3 rounded-[var(--radius-md,8px)] bg-[var(--down,#f2475f)]/10 border border-[var(--down,#f2475f)]/20 text-sm text-[var(--down,#f2475f)] flex items-center gap-2">
+              <AlertCircleIcon size={18} className="shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
 
-        <div className="mt-6 pt-4 border-t border-[var(--color-border-subtle,#1e212b)] text-center text-xs text-[var(--color-text-secondary,#9ca3af)]">
-          Chưa có tài khoản?{' '}
-          <button
-            onClick={() => onNavigate('/register')}
-            className="text-[var(--color-accent-primary,#818cf8)] font-semibold hover:underline cursor-pointer"
-          >
-            Đăng ký tài khoản mới
-          </button>
+          {twoFactorChallenge ? (
+            <form onSubmit={handleTwoFactorSubmit} className="flex flex-col gap-5">
+              <Input
+                label="Mã xác thực 2FA"
+                type="text"
+                autoFocus
+                maxLength={20}
+                value={twoFactorCode}
+                onChange={(e) => setTwoFactorCode(e.target.value)}
+                placeholder="123456"
+                required
+              />
+              <Button type="submit" variant="primary" loading={loading} fullWidth className="py-2.5 mt-2">
+                Xác nhận
+              </Button>
+              <div className="text-center mt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setTwoFactorChallenge(null);
+                    setTwoFactorCode('');
+                    setError(null);
+                  }}
+                  className="text-sm text-[var(--text-3,#63636b)] hover:text-[var(--text,#f4f4f5)] transition-colors"
+                >
+                  ← Quay lại đăng nhập
+                </button>
+              </div>
+            </form>
+          ) : (
+            <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+              <Input
+                label="Địa chỉ Email"
+                type="email"
+                autoComplete="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="name@example.com"
+                required
+              />
+
+              <Input
+                label="Mật khẩu"
+                type="password"
+                autoComplete="current-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                required
+              />
+
+              <div className="flex justify-end -mt-2">
+                <button
+                  type="button"
+                  onClick={() => onNavigate('/forgot-password')}
+                  className="text-sm font-semibold text-[var(--accent,#818cf8)] hover:brightness-125 transition-all"
+                >
+                  Quên mật khẩu?
+                </button>
+              </div>
+
+              <Button type="submit" variant="primary" loading={loading} fullWidth className="py-2.5">
+                Đăng nhập
+              </Button>
+            </form>
+          )}
+
+          {!twoFactorChallenge && (
+            <div className="mt-8 pt-6 border-t border-[var(--line,#1d1e21)] text-center text-sm text-[var(--text-3,#63636b)]">
+              Chưa có tài khoản?{' '}
+              <button
+                onClick={() => onNavigate('/register')}
+                className="text-[var(--accent,#818cf8)] font-bold hover:brightness-125 transition-all"
+              >
+                Đăng ký ngay
+              </button>
+            </div>
+          )}
         </div>
-      </Card>
+      </div>
     </div>
   );
 };
@@ -131,67 +207,82 @@ export const RegisterPage: React.FC<AuthPageProps> = ({ onNavigate }) => {
   };
 
   return (
-    <div className="min-h-[80vh] flex items-center justify-center px-4 py-12">
-      <Card variant="surface" className="max-w-md w-full border-[var(--color-border-default,#272a33)]">
-        <div className="text-center mb-6">
-          <h2 className="text-2xl font-bold text-[var(--color-text-primary,#f3f4f6)] mb-2">
-            Tạo tài khoản giao dịch
-          </h2>
-          <p className="text-xs text-[var(--color-text-secondary,#9ca3af)]">
-            Nhận ngay 10.000 USDT thử nghiệm sau khi xác minh email
+    <div className="min-h-[calc(100vh-56px)] flex items-stretch">
+      {/* Left side: Branding */}
+      <div className="hidden lg:flex w-1/2 bg-[var(--panel,#0a0a0b)] border-r border-[var(--line,#1d1e21)] items-center justify-center p-12">
+        <div className="max-w-md text-left">
+          <h1 className="text-4xl font-black text-[var(--text,#f4f4f5)] tracking-tight mb-6 leading-tight">
+            Tạo tài khoản giao dịch <br/><span className="text-[var(--accent,#818cf8)]">CEX Spot</span>
+          </h1>
+          <p className="text-[var(--text-3,#63636b)] text-lg mb-8 leading-relaxed">
+            Nhận ngay 10.000 USDT thử nghiệm sau khi xác minh email. Bắt đầu giao dịch không rủi ro.
           </p>
         </div>
+      </div>
 
-        {error && (
-          <div className="mb-4 p-3 rounded-[var(--radius-md,8px)] bg-[var(--color-sell-bg,rgba(248,113,113,0.12))] border border-[var(--color-sell,#f87171)]/20 text-xs text-[var(--color-sell,#f87171)] flex items-center gap-2">
-            <AlertCircleIcon size={16} className="shrink-0" />
-            <span>{error}</span>
+      {/* Right side: Form */}
+      <div className="flex-1 flex flex-col items-center justify-center p-6 bg-[var(--bg,#000000)]">
+        <div className="w-full max-w-md">
+          <div className="mb-8">
+            <h2 className="text-3xl font-bold text-[var(--text,#f4f4f5)] mb-2">
+              Đăng ký
+            </h2>
+            <p className="text-sm text-[var(--text-3,#63636b)]">
+              Hoàn thành các thông tin dưới đây để tạo tài khoản
+            </p>
           </div>
-        )}
 
-        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          <Input
-            label="Địa chỉ Email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="trader@example.com"
-            required
-          />
+          {error && (
+            <div className="mb-6 p-3 rounded-[var(--radius-md,8px)] bg-[var(--down,#f2475f)]/10 border border-[var(--down,#f2475f)]/20 text-sm text-[var(--down,#f2475f)] flex items-center gap-2">
+              <AlertCircleIcon size={18} className="shrink-0" />
+              <span>{error}</span>
+            </div>
+          )}
 
-          <Input
-            label="Tên hiển thị"
-            type="text"
-            value={displayName}
-            onChange={(e) => setDisplayName(e.target.value)}
-            placeholder="Satoshi Nakamoto"
-            required
-          />
+          <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+            <Input
+              label="Địa chỉ Email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="trader@example.com"
+              required
+            />
 
-          <Input
-            label="Mật khẩu (tối thiểu 8 ký tự)"
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="••••••••"
-            required
-          />
+            <Input
+              label="Tên hiển thị"
+              type="text"
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              placeholder="Satoshi Nakamoto"
+              required
+            />
 
-          <Button type="submit" variant="primary" loading={loading} fullWidth className="mt-2">
-            Đăng ký tài khoản
-          </Button>
-        </form>
+            <Input
+              label="Mật khẩu (tối thiểu 8 ký tự)"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="••••••••"
+              required
+            />
 
-        <div className="mt-6 pt-4 border-t border-[var(--color-border-subtle,#1e212b)] text-center text-xs text-[var(--color-text-secondary,#9ca3af)]">
-          Đã có tài khoản?{' '}
-          <button
-            onClick={() => onNavigate('/login')}
-            className="text-[var(--color-accent-primary,#818cf8)] font-semibold hover:underline cursor-pointer"
-          >
-            Đăng nhập ngay
-          </button>
+            <Button type="submit" variant="primary" loading={loading} fullWidth className="py-2.5 mt-2">
+              Đăng ký tài khoản
+            </Button>
+          </form>
+
+          <div className="mt-8 pt-6 border-t border-[var(--line,#1d1e21)] text-center text-sm text-[var(--text-3,#63636b)]">
+            Đã có tài khoản?{' '}
+            <button
+              onClick={() => onNavigate('/login')}
+              className="text-[var(--accent,#818cf8)] font-bold hover:brightness-125 transition-all"
+            >
+              Đăng nhập ngay
+            </button>
+          </div>
         </div>
-      </Card>
+      </div>
     </div>
   );
 };
@@ -370,8 +461,12 @@ export const VerifyEmailPage: React.FC<AuthPageProps> = ({ onNavigate }) => {
   const [status, setStatus] = useState<'success' | 'error' | 'pending'>('pending');
   const { refreshUser } = useAuth();
   const api = getApiClient();
+  const hasRun = useRef(false);
 
   useEffect(() => {
+    if (hasRun.current) return;
+    hasRun.current = true;
+
     const urlParams = new URLSearchParams(window.location.search);
     const token = urlParams.get('token');
 
@@ -394,7 +489,7 @@ export const VerifyEmailPage: React.FC<AuthPageProps> = ({ onNavigate }) => {
     }
 
     verify();
-  }, [api, refreshUser]);
+  }, []);
 
   return (
     <div className="min-h-[80vh] flex items-center justify-center px-4 py-12">

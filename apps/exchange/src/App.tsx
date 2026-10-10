@@ -4,12 +4,14 @@ import { MarketProvider, useMarket } from './context/MarketContext.tsx';
 import { Header } from './components/Header.tsx';
 import { BottomNav } from './components/BottomNav.tsx';
 import { DevToolbar } from './components/DevToolbar.tsx';
+import { CommandPalette } from './components/CommandPalette.tsx';
 import { ToastProvider, SimulatedBanner } from '@cex/ui';
 
 // Pages
 import { MarketsPage } from './pages/MarketsPage.tsx';
 import { TradePage } from './pages/TradePage.tsx';
 import { WalletPage } from './pages/WalletPage.tsx';
+import { PortfolioPage } from './pages/PortfolioPage.tsx';
 import { SettingsPage } from './pages/SettingsPage.tsx';
 import {
   LoginPage,
@@ -49,7 +51,10 @@ const AppContent: React.FC = () => {
       const symbol = parts[2] || 'BTCUSDT';
       return <TradePage symbolParam={symbol} onNavigate={navigate} />;
     }
-    if (currentPath === '/wallet') {
+    if (currentPath === '/portfolio') {
+      return <PortfolioPage onNavigate={navigate} />;
+    }
+    if (currentPath === '/assets') {
       return <WalletPage onNavigate={navigate} />;
     }
     if (currentPath === '/settings') {
@@ -74,8 +79,8 @@ const AppContent: React.FC = () => {
       return <UiShowcasePage />;
     }
 
-    // Default route -> redirect to trade
-    return <TradePage symbolParam="BTCUSDT" onNavigate={navigate} />;
+    // Default route -> redirect to markets
+    return <MarketsPage onNavigate={navigate} />;
   };
 
   return (
@@ -85,6 +90,8 @@ const AppContent: React.FC = () => {
 
       {/* Main Header */}
       <Header currentPath={currentPath} onNavigate={navigate} />
+      
+      <CommandPalette onNavigate={navigate} />
 
       {/* Page Content */}
       <main className="flex-1 w-full flex flex-col">{renderPage()}</main>

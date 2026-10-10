@@ -1,6 +1,6 @@
 /**
  * String-based numeric formatters for CEX Spot UI.
- * RULE: Money/price/amount must NEVER use JS `Number()` or float arithmetic.
+ * RULE: Money/price/amount must NEVER use JS `Number()` or float arithmetic for financial operations.
  * RULE: null or undefined values must ALWAYS format as "—", NEVER as "0".
  */
 
@@ -8,6 +8,19 @@ export interface FormatOptions {
   decimals?: number;
   locale?: 'vi' | 'en';
   trimTrailingZeros?: boolean;
+}
+
+/**
+ * Number of decimals implied by a step string like "0.00010000" -> 4.
+ * Consistent with `@cex/core`'s `stepDecimals`.
+ */
+export function getStepDecimals(step: string | null | undefined): number {
+  if (!step) return 2;
+  const s = String(step).trim();
+  const dot = s.indexOf('.');
+  if (dot === -1) return 0;
+  const frac = s.slice(dot + 1).replace(/0+$/, '');
+  return frac.length;
 }
 
 /**
@@ -51,7 +64,6 @@ export function formatDecimal(
   }
 
   // Add thousand separators to integer part
-  // Format regex: add separator every 3 digits from right
   const thousandSep = options.locale === 'en' ? ',' : '.';
   const decimalSep = options.locale === 'en' ? '.' : ',';
 
@@ -74,7 +86,7 @@ export function formatPrice(
   locale: 'vi' | 'en' = 'vi'
 ): string {
   if (price === null || price === undefined) return '—';
-  const decimals = tickSize && tickSize.includes('.') ? tickSize.split('.')[1]!.length : undefined;
+  const decimals = tickSize ? getStepDecimals(tickSize) : undefined;
   return formatDecimal(price, { decimals, locale });
 }
 
@@ -87,7 +99,7 @@ export function formatAmount(
   locale: 'vi' | 'en' = 'vi'
 ): string {
   if (amount === null || amount === undefined) return '—';
-  const decimals = stepSize && stepSize.includes('.') ? stepSize.split('.')[1]!.length : undefined;
+  const decimals = stepSize ? getStepDecimals(stepSize) : undefined;
   return formatDecimal(amount, { decimals, locale });
 }
 
@@ -112,4 +124,30 @@ export function formatPercent(
   if (isNeg) return `-${formatted}%`;
   if (isPos) return `+${formatted}%`;
   return `${formatted}%`;
+}
+
+/**
+ * Format large numbers compactly for 24h volume (e.g. 1,58 T / 938,9 Tr).
+ */
+export function formatCompactNumber(
+  value: string | null | undefined,
+  locale: 'vi' | 'en' = 'vi'
+): string {
+  if (value === null || value === undefined || value === '') return '—';
+  const num = parseFloat(value);
+  if (isNaN(num)) return '—';
+
+  if (Math.abs(num) >= 1_000_000_000) {
+    const val = (num / 1_000_000_000).toFixed(2);
+    return locale === 'vi' ? `${formatDecimal(val, { locale: 'vi' })} T` : `${val}B`;
+  }
+  if (Math.abs(num) >= 1_000_000) {
+    const val = (num / 1_000_000).toFixed(2);
+    return locale === 'vi' ? `${formatDecimal(val, { locale: 'vi' })} Tr` : `${val}M`;
+  }
+  if (Math.abs(num) >= 1_000) {
+    const val = (num / 1_000).toFixed(2);
+    return locale === 'vi' ? `${formatDecimal(val, { locale: 'vi' })} K` : `${val}K`;
+  }
+  return formatDecimal(num.toFixed(2), { locale });
 }

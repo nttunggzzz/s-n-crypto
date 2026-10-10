@@ -16,11 +16,17 @@ export interface RegisterInput {
   captchaToken?: string;
 }
 
+export type LoginResult =
+  | { success: true }
+  | { success: false; twoFactorRequired: true; challengeToken: string; expiresAt: string }
+  | { success: false; error: string };
+
 interface AuthContextType {
   user: Me | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  login: (data: LoginInput) => Promise<{ success: boolean; error?: string }>;
+  login: (data: LoginInput) => Promise<LoginResult>;
+  loginTwoFactor: (challengeToken: string, code: string) => Promise<{ success: boolean; error?: string }>;
   register: (data: RegisterInput) => Promise<{ success: boolean; error?: string }>;
   logout: () => Promise<void>;
   resendVerification: () => Promise<{ success: boolean; error?: string }>;
@@ -50,11 +56,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     refreshUser();
   }, []);
 
-  const login = async (data: LoginInput) => {
+  const login = async (data: LoginInput): Promise<LoginResult> => {
     try {
       const res = await api.login({ body: data });
-      setUser(res.user);
-      return { success: true };
+      if ('twoFactorRequired' in res && res.twoFactorRequired) {
+        return {
+          success: false,
+          twoFactorRequired: true,
+          challengeToken: res.challengeToken,
+          expiresAt: res.expiresAt,
+        };
+      }
+      if ('user' in res) {
+        setUser(res.user);
+        return { success: true };
+      }
+      return { success: false, error: 'Đăng nhập không thành công.' };
     } catch (err: unknown) {
       if (err instanceof ApiError) {
         if (err.code === 'RATE_LIMITED' && err.details && 'retryAfterSeconds' in err.details) {
@@ -66,6 +83,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return { success: false, error: getErrorMessage(err.code) };
       }
       return { success: false, error: 'Đăng nhập không thành công.' };
+    }
+  };
+
+  const loginTwoFactor = async (challengeToken: string, code: string) => {
+    try {
+      const res = await api.loginTwoFactor({ body: { challengeToken, code } });
+      setUser(res.user);
+      return { success: true };
+    } catch (err: unknown) {
+      if (err instanceof ApiError) {
+        return { success: false, error: getErrorMessage(err.code) };
+      }
+      return { success: false, error: 'Mã xác thực 2FA không chính xác hoặc đã hết hạn.' };
     }
   };
 
@@ -111,6 +141,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         isLoading,
         isAuthenticated: !!user,
         login,
+        loginTwoFactor,
         register,
         logout,
         resendVerification,

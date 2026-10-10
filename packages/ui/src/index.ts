@@ -1,6 +1,7 @@
 // Design tokens & CSS
 export * from './format.ts';
 export * from './icons.tsx';
+export * from './brand.tsx';
 
 // Basic components
 export * from './OrbitalLoader.tsx';

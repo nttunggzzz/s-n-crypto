@@ -124,9 +124,11 @@ export const WalletPage: React.FC<WalletPageProps> = ({ onNavigate }) => {
         setCountdown(null);
         clearInterval(interval);
       } else {
-        const m = Math.floor(diff / 60);
+        const h = Math.floor(diff / 3600);
+        const m = Math.floor((diff % 3600) / 60);
         const s = diff % 60;
-        setCountdown(`${m}:${s < 10 ? '0' : ''}${s}`);
+        const pad = (n: number) => (n < 10 ? `0${n}` : `${n}`);
+        setCountdown(`${pad(h)}:${pad(m)}:${pad(s)}`);
       }
     }, 1000);
 

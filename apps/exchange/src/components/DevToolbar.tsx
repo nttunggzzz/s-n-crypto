@@ -84,6 +84,55 @@ export const DevToolbar: React.FC = () => {
               );
             })}
           </div>
+
+          {/* Test Mock Price Changes (Milestone 3 of GD2) */}
+          <div className="mt-3 pt-3 border-t border-[var(--color-border-subtle,#1e212b)]">
+            <span className="font-bold text-[10px] text-[var(--color-text-primary,#f3f4f6)] block mb-1.5">
+              TEST GIÁ (KÍCH HOẠT STOP / TP / SL / ALERT)
+            </span>
+            <div className="grid grid-cols-2 gap-1.5">
+              <button
+                onClick={async () => {
+                  const { setMockPrice } = await import('@cex/contracts/mocks');
+                  setMockPrice('BTCUSDT', 70000);
+                  refreshMarketData();
+                }}
+                className="p-1.5 rounded bg-[var(--color-buy,#22c55e)]/10 text-[var(--color-buy,#22c55e)] border border-[var(--color-buy,#22c55e)]/30 hover:bg-[var(--color-buy,#22c55e)]/20 text-[10px] font-bold"
+              >
+                BTC +3% (70,000)
+              </button>
+              <button
+                onClick={async () => {
+                  const { setMockPrice } = await import('@cex/contracts/mocks');
+                  setMockPrice('BTCUSDT', 65000);
+                  refreshMarketData();
+                }}
+                className="p-1.5 rounded bg-[var(--color-sell,#f87171)]/10 text-[var(--color-sell,#f87171)] border border-[var(--color-sell,#f87171)]/30 hover:bg-[var(--color-sell,#f87171)]/20 text-[10px] font-bold"
+              >
+                BTC −3% (65,000)
+              </button>
+              <button
+                onClick={async () => {
+                  const { setMockPrice } = await import('@cex/contracts/mocks');
+                  setMockPrice('BTCUSDT', 75000);
+                  refreshMarketData();
+                }}
+                className="p-1.5 rounded bg-[var(--accent,#818cf8)]/10 text-[var(--accent,#818cf8)] border border-[var(--accent,#818cf8)]/30 hover:bg-[var(--accent,#818cf8)]/20 text-[10px] font-bold"
+              >
+                Chạm TP (75,000)
+              </button>
+              <button
+                onClick={async () => {
+                  const { setMockPrice } = await import('@cex/contracts/mocks');
+                  setMockPrice('BTCUSDT', 60000);
+                  refreshMarketData();
+                }}
+                className="p-1.5 rounded bg-[var(--down,#f2475f)]/10 text-[var(--down,#f2475f)] border border-[var(--down,#f2475f)]/30 hover:bg-[var(--down,#f2475f)]/20 text-[10px] font-bold"
+              >
+                Chạm SL (60,000)
+              </button>
+            </div>
+          </div>
         </div>
       ) : null}
 

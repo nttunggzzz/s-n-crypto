@@ -19,6 +19,8 @@ import {
   EmptyState,
 } from '@cex/ui';
 
+import { User, Shield, Settings } from 'lucide-react';
+
 export interface SettingsPageProps {
   onNavigate: (path: string) => void;
 }
@@ -27,6 +29,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate }) => {
   const { user, isAuthenticated, logout } = useAuth();
   const { success, error: toastError } = useToast();
   const api = getApiClient();
+
+  const [activeTab, setActiveTab] = useState<'profile' | 'security' | 'preferences'>('profile');
 
   // Change password states
   const [currentPassword, setCurrentPassword] = useState('');
@@ -40,28 +44,52 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate }) => {
   const [revokingId, setRevokingId] = useState<string | null>(null);
 
   // Preference states
-  const [theme, setTheme] = useState<'dark' | 'light'>('dark');
+  const [theme, setTheme] = useState<'system' | 'light' | 'dark'>('dark');
   const [colorReversed, setColorReversed] = useState(false);
+  const [confirmOrders, setConfirmOrders] = useState(true);
+  const [defaultInterval, setDefaultInterval] = useState<string>('15m');
+  const [locale, setLocale] = useState<'vi' | 'en'>('vi');
 
   useEffect(() => {
-    // Read saved preferences
-    const savedTheme = localStorage.getItem('cex_theme') as 'dark' | 'light' | null;
-    if (savedTheme) {
+    if (isAuthenticated) {
+      api.getPreferences()
+        .then((pref) => {
+          setTheme(pref.theme);
+          setColorReversed(pref.upColor === 'RED');
+          setConfirmOrders(pref.confirmOrders);
+          setDefaultInterval(pref.defaultInterval);
+          setLocale(pref.locale);
+
+          document.documentElement.setAttribute('data-theme', pref.theme === 'light' ? 'light' : 'dark');
+          document.documentElement.setAttribute('data-color-reversed', pref.upColor === 'RED' ? 'true' : 'false');
+        })
+        .catch(() => {});
+    } else {
+      const savedTheme = (localStorage.getItem('cex_theme') as any) || 'dark';
       setTheme(savedTheme);
       document.documentElement.setAttribute('data-theme', savedTheme);
-    }
 
-    const savedReversed = localStorage.getItem('cex_color_reversed') === 'true';
-    setColorReversed(savedReversed);
-    document.documentElement.setAttribute('data-color-reversed', savedReversed ? 'true' : 'false');
-  }, []);
+      const savedReversed = localStorage.getItem('cex_color_reversed') === 'true';
+      setColorReversed(savedReversed);
+      document.documentElement.setAttribute('data-color-reversed', savedReversed ? 'true' : 'false');
+    }
+  }, [isAuthenticated, api]);
+
+  const handleUpdatePref = async (patch: any) => {
+    if (isAuthenticated) {
+      try {
+        await api.updatePreferences({ body: patch });
+      } catch {}
+    }
+  };
 
   const handleToggleTheme = () => {
     const next = theme === 'dark' ? 'light' : 'dark';
     setTheme(next);
     localStorage.setItem('cex_theme', next);
     document.documentElement.setAttribute('data-theme', next);
-    success(`Đã chuyển sang giao diện ${next === 'dark' ? 'Tối (Obsidian Black)' : 'Sáng'}.`);
+    handleUpdatePref({ theme: next });
+    success(`Đã chuyển sang giao diện ${next === 'dark' ? 'Tối' : 'Sáng'}.`);
   };
 
   const handleToggleColorReverse = () => {
@@ -69,10 +97,23 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate }) => {
     setColorReversed(next);
     localStorage.setItem('cex_color_reversed', next ? 'true' : 'false');
     document.documentElement.setAttribute('data-color-reversed', next ? 'true' : 'false');
+    handleUpdatePref({ upColor: next ? 'RED' : 'GREEN' });
     success(`Đã ${next ? 'bật' : 'tắt'} chế độ đảo màu tăng/giảm.`);
   };
 
-  // Fetch active sessions
+  const handleToggleConfirmOrders = () => {
+    const next = !confirmOrders;
+    setConfirmOrders(next);
+    handleUpdatePref({ confirmOrders: next });
+    success(`Đã ${next ? 'bật' : 'tắt'} hộp xác nhận đặt lệnh.`);
+  };
+
+  const handleChangeInterval = (val: string) => {
+    setDefaultInterval(val);
+    handleUpdatePref({ defaultInterval: val });
+    success(`Đã lưu khung thời gian nến mặc định: ${val}.`);
+  };
+
   const fetchSessions = async () => {
     if (!isAuthenticated) return;
     setLoadingSessions(true);
@@ -80,7 +121,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate }) => {
       const res = await api.listSessions();
       setSessions(res.items);
     } catch {
-      // Ignore session errors
+      // Ignore
     } finally {
       setLoadingSessions(false);
     }
@@ -90,7 +131,6 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate }) => {
     fetchSessions();
   }, [isAuthenticated]);
 
-  // Handle change password
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentPassword || !newPassword) return;
@@ -107,7 +147,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate }) => {
     setChangingPassword(true);
     try {
       await api.changePassword({ body: { currentPassword, newPassword } });
-      success('Đổi mật khẩu thành công! Các phiên đăng nhập trên thiết bị khác đã được đăng xuất an toàn.');
+      success('Đổi mật khẩu thành công!');
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
@@ -123,7 +163,6 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate }) => {
     }
   };
 
-  // Handle revoke session
   const handleRevokeSession = async (sessionId: string) => {
     setRevokingId(sessionId);
     try {
@@ -142,10 +181,10 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate }) => {
       <div className="max-w-4xl mx-auto px-4 py-16 text-center">
         <EmptyState
           title="Yêu cầu đăng nhập"
-          description="Vui lòng đăng nhập để xem thông tin tài khoản và quản lý phiên làm việc."
+          description="Vui lòng đăng nhập để xem thông tin tài khoản."
           action={
             <Button variant="primary" onClick={() => onNavigate('/login')}>
-              Đăng nhập ngay
+              Đăng nhập
             </Button>
           }
         />
@@ -154,215 +193,221 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate }) => {
   }
 
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 pb-20 md:pb-8 space-y-6">
-      <h1 className="text-xl sm:text-2xl font-bold text-[var(--color-text-primary,#f3f4f6)]">
-        Cài đặt tài khoản & Phiên đăng nhập
-      </h1>
+    <div className="max-w-6xl mx-auto px-4 py-8 pb-20 w-full flex flex-col md:flex-row gap-8">
+      {/* Sidebar */}
+      <aside className="w-full md:w-64 shrink-0 flex flex-col gap-2">
+        <h1 className="text-xl font-bold text-[var(--text,#f4f4f5)] mb-4">Cài đặt</h1>
+        
+        <button 
+          onClick={() => setActiveTab('profile')}
+          className={`flex items-center gap-3 px-4 py-3 rounded-[var(--radius-md,8px)] transition-colors text-sm font-semibold ${activeTab === 'profile' ? 'bg-[var(--panel-2,#141416)] text-[var(--text,#f4f4f5)]' : 'text-[var(--text-3,#63636b)] hover:text-[var(--text-2,#a1a1aa)] hover:bg-[var(--panel-2,#141416)]/50'}`}
+        >
+          <User size={18} /> Hồ sơ & Tài khoản
+        </button>
+        <button 
+          onClick={() => setActiveTab('security')}
+          className={`flex items-center gap-3 px-4 py-3 rounded-[var(--radius-md,8px)] transition-colors text-sm font-semibold ${activeTab === 'security' ? 'bg-[var(--panel-2,#141416)] text-[var(--text,#f4f4f5)]' : 'text-[var(--text-3,#63636b)] hover:text-[var(--text-2,#a1a1aa)] hover:bg-[var(--panel-2,#141416)]/50'}`}
+        >
+          <Shield size={18} /> Bảo mật & Phiên
+        </button>
+        <button 
+          onClick={() => setActiveTab('preferences')}
+          className={`flex items-center gap-3 px-4 py-3 rounded-[var(--radius-md,8px)] transition-colors text-sm font-semibold ${activeTab === 'preferences' ? 'bg-[var(--panel-2,#141416)] text-[var(--text,#f4f4f5)]' : 'text-[var(--text-3,#63636b)] hover:text-[var(--text-2,#a1a1aa)] hover:bg-[var(--panel-2,#141416)]/50'}`}
+        >
+          <Settings size={18} /> Tùy chọn hiển thị
+        </button>
+      </aside>
 
-      {/* Profile Overview Card */}
-      <Card variant="surface" className="p-6">
-        <h3 className="text-sm font-bold text-[var(--color-text-primary,#f3f4f6)] mb-4">
-          Thông tin cá nhân
-        </h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-          <div>
-            <span className="text-[var(--color-text-muted,#6b7280)]">Tên hiển thị:</span>
-            <div className="font-semibold text-sm text-[var(--color-text-primary,#f3f4f6)] mt-0.5">
-              {user?.name || 'Chưa đặt tên'}
-            </div>
-          </div>
-          <div>
-            <span className="text-[var(--color-text-muted,#6b7280)]">Địa chỉ Email:</span>
-            <div className="font-semibold text-sm text-[var(--color-text-primary,#f3f4f6)] mt-0.5 flex items-center gap-2">
-              <span>{user?.email}</span>
-              {user?.emailVerified ? (
-                <Badge variant="success" size="sm">Đã xác minh</Badge>
-              ) : (
-                <Badge variant="warning" size="sm">Chưa xác minh</Badge>
-              )}
-            </div>
-          </div>
-          <div>
-            <span className="text-[var(--color-text-muted,#6b7280)]">Vai trò hệ thống:</span>
-            <div className="font-semibold text-sm text-[var(--color-text-primary,#f3f4f6)] mt-0.5">
-              {user?.role?.toUpperCase() || 'USER'}
-            </div>
-          </div>
-          <div>
-            <span className="text-[var(--color-text-muted,#6b7280)]">Mã tài khoản ID:</span>
-            <div className="font-mono text-xs text-[var(--color-text-secondary,#9ca3af)] mt-0.5">
-              {user?.id}
-            </div>
-          </div>
-        </div>
-      </Card>
-
-      {/* Preferences & Appearance Card */}
-      <Card variant="surface" className="p-6">
-        <h3 className="text-sm font-bold text-[var(--color-text-primary,#f3f4f6)] mb-4">
-          Tùy chọn hiển thị & Giao diện
-        </h3>
-        <div className="space-y-4 text-xs">
-          {/* Theme switcher */}
-          <div className="flex items-center justify-between pb-3 border-b border-[var(--color-border-subtle,#1e212b)]">
-            <div>
-              <div className="font-semibold text-[var(--color-text-primary,#f3f4f6)]">
-                Chế độ màu giao diện
+      {/* Main Content */}
+      <div className="flex-1 min-w-0">
+        {activeTab === 'profile' && (
+          <div className="space-y-6 max-w-2xl">
+            <h2 className="text-lg font-bold text-[var(--text,#f4f4f5)] mb-6 pb-2 border-b border-[var(--line,#1d1e21)]">Hồ sơ cá nhân</h2>
+            
+            <div className="flex items-center gap-6 mb-8">
+              <div className="w-20 h-20 rounded-full bg-[var(--panel-2,#141416)] border border-[var(--line,#1d1e21)] flex items-center justify-center text-2xl font-bold text-[var(--text-2,#a1a1aa)]">
+                {user?.email?.charAt(0).toUpperCase()}
               </div>
-              <div className="text-[var(--color-text-muted,#6b7280)] mt-0.5">
-                Hiện tại: {theme === 'dark' ? 'Obsidian Black (Tối)' : 'Light (Sáng)'}
+              <div className="flex flex-col gap-2">
+                <Button variant="secondary" size="sm">Đổi ảnh đại diện</Button>
+                <span className="text-[10px] text-[var(--text-3,#63636b)]">JPG, PNG, GIF tối đa 2MB</span>
               </div>
             </div>
-            <Button variant="secondary" size="sm" onClick={handleToggleTheme}>
-              Đổi sang {theme === 'dark' ? 'Sáng' : 'Tối'}
-            </Button>
-          </div>
 
-          {/* Color reverse */}
-          <div className="flex items-center justify-between pb-3 border-b border-[var(--color-border-subtle,#1e212b)]">
-            <div>
-              <div className="font-semibold text-[var(--color-text-primary,#f3f4f6)]">
-                Đảo ngược màu sắc Tăng / Giảm
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              <div>
+                <label className="block text-xs font-semibold text-[var(--text-2,#a1a1aa)] mb-1">Email đăng nhập</label>
+                <div className="text-sm font-medium text-[var(--text,#f4f4f5)]">{user?.email}</div>
               </div>
-              <div className="text-[var(--color-text-muted,#6b7280)] mt-0.5">
-                {colorReversed
-                  ? 'Đang bật: Đỏ = Tăng/Mua, Xanh = Giảm/Bán'
-                  : 'Mặc định: Xanh = Tăng/Mua, Đỏ = Giảm/Bán'}
+              <div>
+                <label className="block text-xs font-semibold text-[var(--text-2,#a1a1aa)] mb-1">UID Tài khoản</label>
+                <div className="text-sm font-medium text-[var(--text-2,#a1a1aa)]">{user?.id}</div>
               </div>
             </div>
-            <Button variant="secondary" size="sm" onClick={handleToggleColorReverse}>
-              {colorReversed ? 'Về mặc định' : 'Đảo màu'}
-            </Button>
-          </div>
 
-          {/* Language */}
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="font-semibold text-[var(--color-text-primary,#f3f4f6)]">
-                Ngôn ngữ giao diện
-              </div>
-              <div className="text-[var(--color-text-muted,#6b7280)] mt-0.5">
-                Tiếng Việt (mặc định)
+            <div className="pt-6 border-t border-[var(--line,#1d1e21)]">
+              <h3 className="text-sm font-bold text-[var(--text,#f4f4f5)] mb-4">Liên kết mxh</h3>
+              <div className="flex items-center justify-between p-4 rounded-[var(--radius-lg,12px)] border border-[var(--line,#1d1e21)] bg-[var(--panel,#0a0a0b)]">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 bg-[#2AABEE]/20 text-[#2AABEE] rounded-full flex items-center justify-center font-bold">T</div>
+                  <div>
+                    <div className="text-sm font-semibold text-[var(--text,#f4f4f5)]">Telegram</div>
+                    <div className="text-xs text-[var(--text-3,#63636b)]">Chưa liên kết</div>
+                  </div>
+                </div>
+                <Button variant="outline" size="sm">Liên kết</Button>
               </div>
             </div>
-            <Badge variant="secondary" size="sm">Tiếng Việt (vi-VN)</Badge>
-          </div>
-        </div>
-      </Card>
-
-      {/* Change Password Card */}
-      <Card variant="surface" className="p-6">
-        <h3 className="text-sm font-bold text-[var(--color-text-primary,#f3f4f6)] mb-4">
-          Đổi mật khẩu bảo mật
-        </h3>
-        <form onSubmit={handleChangePassword} className="space-y-4 max-w-md">
-          <Input
-            label="Mật khẩu hiện tại"
-            type="password"
-            value={currentPassword}
-            onChange={(e) => setCurrentPassword(e.target.value)}
-            placeholder="••••••••"
-            required
-          />
-
-          <Input
-            label="Mật khẩu mới (tối thiểu 8 ký tự)"
-            type="password"
-            value={newPassword}
-            onChange={(e) => setNewPassword(e.target.value)}
-            placeholder="••••••••"
-            required
-          />
-
-          <Input
-            label="Xác nhận mật khẩu mới"
-            type="password"
-            value={confirmPassword}
-            onChange={(e) => setConfirmPassword(e.target.value)}
-            placeholder="••••••••"
-            required
-          />
-
-          <Button type="submit" variant="primary" size="md" loading={changingPassword}>
-            Cập nhật mật khẩu
-          </Button>
-        </form>
-      </Card>
-
-      {/* Active Sessions Card */}
-      <Card variant="surface" className="p-6">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h3 className="text-sm font-bold text-[var(--color-text-primary,#f3f4f6)]">
-              Danh sách phiên đăng nhập & Thiết bị
-            </h3>
-            <p className="text-xs text-[var(--color-text-secondary,#9ca3af)] mt-0.5">
-              Quản lý các thiết bị và trình duyệt đang duy trì phiên hoạt động
-            </p>
-          </div>
-          <Button variant="ghost" size="sm" onClick={fetchSessions}>
-            Làm mới
-          </Button>
-        </div>
-
-        {sessions.length === 0 ? (
-          <p className="text-xs text-[var(--color-text-muted,#6b7280)] py-4">
-            Đang tải thông tin phiên đăng nhập...
-          </p>
-        ) : (
-          <div className="border border-[var(--color-border-subtle,#1e212b)] rounded-[var(--radius-md,8px)] overflow-hidden">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Thiết bị / Trình duyệt</TableHead>
-                  <TableHead>Địa chỉ IP</TableHead>
-                  <TableHead>Đăng nhập lúc</TableHead>
-                  <TableHead>Hoạt động gần nhất</TableHead>
-                  <TableHead className="text-right">Thao tác</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {sessions.map((sess) => (
-                  <TableRow key={sess.id}>
-                    <TableCell className="font-semibold text-xs flex items-center gap-2">
-                      <span>{sess.userAgent || 'Trình duyệt web'}</span>
-                      {sess.current && (
-                        <Badge variant="success" size="sm">Phiên này</Badge>
-                      )}
-                    </TableCell>
-                    <TableCell className="font-mono text-xs text-[var(--color-text-secondary,#9ca3af)]">
-                      {sess.ip || '127.0.0.1'}
-                    </TableCell>
-                    <TableCell className="text-xs text-[var(--color-text-muted,#6b7280)]">
-                      {new Date(sess.createdAt).toLocaleString('vi-VN')}
-                    </TableCell>
-                    <TableCell className="text-xs text-[var(--color-text-muted,#6b7280)]">
-                      {new Date(sess.lastSeenAt).toLocaleString('vi-VN')}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      {sess.current ? (
-                        <Button variant="ghost" size="sm" onClick={logout} className="text-xs">
-                          Đăng xuất
-                        </Button>
-                      ) : (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          loading={revokingId === sess.id}
-                          onClick={() => handleRevokeSession(sess.id)}
-                          className="text-xs text-[var(--color-sell,#f87171)]"
-                        >
-                          Thu hồi
-                        </Button>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
           </div>
         )}
-      </Card>
+
+        {activeTab === 'security' && (
+          <div className="space-y-8 max-w-3xl">
+            <h2 className="text-lg font-bold text-[var(--text,#f4f4f5)] pb-2 border-b border-[var(--line,#1d1e21)]">Bảo mật tài khoản</h2>
+            
+            {/* 2FA */}
+            <div>
+               <h3 className="text-sm font-bold text-[var(--text,#f4f4f5)] mb-4">Xác thực hai yếu tố (2FA)</h3>
+               <div className="flex items-center justify-between p-4 rounded-[var(--radius-lg,12px)] border border-[var(--line,#1d1e21)] bg-[var(--panel,#0a0a0b)]">
+                 <div>
+                   <div className="text-sm font-semibold text-[var(--text,#f4f4f5)] flex items-center gap-2">
+                     Google Authenticator
+                     <Badge variant="warning" size="sm">Chưa bật</Badge>
+                   </div>
+                   <div className="text-xs text-[var(--text-3,#63636b)] mt-1">Bảo vệ tài khoản của bạn bằng mã từ ứng dụng Authenticator</div>
+                 </div>
+                 <Button variant="primary" size="sm">Bật ngay</Button>
+               </div>
+            </div>
+
+            {/* Change Password */}
+            <div>
+               <h3 className="text-sm font-bold text-[var(--text,#f4f4f5)] mb-4">Đổi mật khẩu</h3>
+               <form onSubmit={handleChangePassword} className="space-y-4 max-w-md bg-[var(--panel,#0a0a0b)] p-5 rounded-[var(--radius-lg,12px)] border border-[var(--line,#1d1e21)]">
+                 <Input label="Mật khẩu hiện tại" type="password" value={currentPassword} onChange={e => setCurrentPassword(e.target.value)} required />
+                 <Input label="Mật khẩu mới" type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} required />
+                 <Input label="Xác nhận mật khẩu" type="password" value={confirmPassword} onChange={e => setConfirmPassword(e.target.value)} required />
+                 <Button type="submit" variant="secondary" fullWidth loading={changingPassword}>Cập nhật</Button>
+               </form>
+            </div>
+
+            {/* Sessions */}
+            <div>
+               <div className="flex items-center justify-between mb-4">
+                 <h3 className="text-sm font-bold text-[var(--text,#f4f4f5)]">Quản lý thiết bị</h3>
+                 <Button variant="ghost" size="sm" onClick={fetchSessions}>Làm mới</Button>
+               </div>
+               
+               <div className="border border-[var(--line,#1d1e21)] rounded-[var(--radius-lg,12px)] overflow-hidden bg-[var(--panel,#0a0a0b)]">
+                 <Table>
+                   <TableHeader className="bg-transparent border-b border-[var(--line,#1d1e21)]">
+                     <TableRow className="hover:bg-transparent">
+                       <TableHead className="text-xs">Thiết bị</TableHead>
+                       <TableHead className="text-xs">IP</TableHead>
+                       <TableHead className="text-xs">Đăng nhập lúc</TableHead>
+                       <TableHead className="text-right text-xs">Thao tác</TableHead>
+                     </TableRow>
+                   </TableHeader>
+                   <TableBody>
+                     {sessions.map((sess) => (
+                       <TableRow key={sess.id} className="border-b border-[var(--line,#1d1e21)]">
+                         <TableCell className="font-semibold text-xs flex items-center gap-2 text-[var(--text,#f4f4f5)]">
+                           <span>{sess.userAgent || 'Trình duyệt web'}</span>
+                           {sess.current && <Badge variant="success" size="sm" className="bg-[var(--up,#1fc27a)]/10 text-[var(--up,#1fc27a)] border-none">Phiên này</Badge>}
+                         </TableCell>
+                         <TableCell className="font-mono text-xs text-[var(--text-3,#63636b)]">{sess.ip || '127.0.0.1'}</TableCell>
+                         <TableCell className="text-xs text-[var(--text-3,#63636b)]">{new Date(sess.createdAt).toLocaleString('vi-VN')}</TableCell>
+                         <TableCell className="text-right">
+                           {sess.current ? (
+                             <Button variant="ghost" size="sm" onClick={logout} className="text-xs text-[var(--text-3,#63636b)] hover:text-[var(--text,#f4f4f5)]">Đăng xuất</Button>
+                           ) : (
+                             <Button variant="ghost" size="sm" loading={revokingId === sess.id} onClick={() => handleRevokeSession(sess.id)} className="text-xs text-[var(--down,#f2475f)]">Thu hồi</Button>
+                           )}
+                         </TableCell>
+                       </TableRow>
+                     ))}
+                   </TableBody>
+                 </Table>
+               </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'preferences' && (
+          <div className="space-y-6 max-w-2xl">
+            <h2 className="text-lg font-bold text-[var(--text,#f4f4f5)] mb-6 pb-2 border-b border-[var(--line,#1d1e21)]">Tùy chọn hiển thị</h2>
+            
+            <div className="flex flex-col gap-4">
+              {/* Theme mode */}
+              <div className="flex items-center justify-between p-4 rounded-[var(--radius-lg,12px)] border border-[var(--line,#1d1e21)] bg-[var(--panel,#0a0a0b)]">
+                <div>
+                  <div className="font-semibold text-sm text-[var(--text,#f4f4f5)]">Chế độ sáng tối</div>
+                  <div className="text-xs text-[var(--text-3,#63636b)] mt-1">Đang dùng: {theme === 'dark' ? 'Obsidian Black (Tối)' : 'Sáng'}</div>
+                </div>
+                <Button variant="secondary" size="sm" onClick={handleToggleTheme}>
+                  Đổi sang {theme === 'dark' ? 'Sáng' : 'Tối'}
+                </Button>
+              </div>
+
+              {/* Color reverse */}
+              <div className="flex items-center justify-between p-4 rounded-[var(--radius-lg,12px)] border border-[var(--line,#1d1e21)] bg-[var(--panel,#0a0a0b)]">
+                <div>
+                  <div className="font-semibold text-sm text-[var(--text,#f4f4f5)]">Đảo màu Tăng/Giảm</div>
+                  <div className="text-xs text-[var(--text-3,#63636b)] mt-1">
+                    {colorReversed ? 'Đang bật: Đỏ = Tăng/Mua, Xanh = Giảm/Bán' : 'Mặc định: Xanh = Tăng/Mua, Đỏ = Giảm/Bán'}
+                  </div>
+                </div>
+                <Button variant="secondary" size="sm" onClick={handleToggleColorReverse}>
+                  {colorReversed ? 'Tắt' : 'Bật'}
+                </Button>
+              </div>
+
+              {/* Order Confirmation Dialog */}
+              <div className="flex items-center justify-between p-4 rounded-[var(--radius-lg,12px)] border border-[var(--line,#1d1e21)] bg-[var(--panel,#0a0a0b)]">
+                <div>
+                  <div className="font-semibold text-sm text-[var(--text,#f4f4f5)]">Hộp xác nhận trước khi đặt lệnh</div>
+                  <div className="text-xs text-[var(--text-3,#63636b)] mt-1">
+                    {confirmOrders ? 'Đang bật: Hiển thị tóm tắt lệnh trước khi gửi' : 'Đang tắt: Gửi lệnh ngay khi nhấn nút'}
+                  </div>
+                </div>
+                <Button variant="secondary" size="sm" onClick={handleToggleConfirmOrders}>
+                  {confirmOrders ? 'Tắt xác nhận' : 'Bật xác nhận'}
+                </Button>
+              </div>
+
+              {/* Default Candle Interval */}
+              <div className="flex items-center justify-between p-4 rounded-[var(--radius-lg,12px)] border border-[var(--line,#1d1e21)] bg-[var(--panel,#0a0a0b)]">
+                <div>
+                  <div className="font-semibold text-sm text-[var(--text,#f4f4f5)]">Khung thời gian nến mặc định</div>
+                  <div className="text-xs text-[var(--text-3,#63636b)] mt-1">Khung nến tự động hiển thị khi vào trang giao dịch</div>
+                </div>
+                <div className="flex items-center gap-1 bg-[var(--panel-2,#141416)] p-1 rounded border border-[var(--line,#1d1e21)]">
+                  {['1m', '5m', '15m', '1h', '4h', '1d'].map((iv) => (
+                    <button
+                      key={iv}
+                      onClick={() => handleChangeInterval(iv)}
+                      className={`px-2 py-0.5 rounded text-xs font-semibold cursor-pointer transition-colors ${
+                        defaultInterval === iv ? 'bg-[var(--accent,#818cf8)] text-black' : 'text-[var(--text-3,#63636b)] hover:text-white'
+                      }`}
+                    >
+                      {iv}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Locale */}
+              <div className="flex items-center justify-between p-4 rounded-[var(--radius-lg,12px)] border border-[var(--line,#1d1e21)] bg-[var(--panel,#0a0a0b)]">
+                <div>
+                  <div className="font-semibold text-sm text-[var(--text,#f4f4f5)]">Ngôn ngữ giao diện</div>
+                  <div className="text-xs text-[var(--text-3,#63636b)] mt-1">Tiếng Việt (vi-VN)</div>
+                </div>
+                <Badge variant="secondary" size="sm">Tiếng Việt</Badge>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 };
