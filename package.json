@@ -18,9 +18,11 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "verify": "node infra/verify.mjs",
+    "e2e": "node infra/e2e.mjs",
     "admin:set-role": "npm run admin:set-role -w @cex/server --"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.0",
     "@types/node": "^22.14.0",
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",

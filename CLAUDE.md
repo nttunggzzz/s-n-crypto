@@ -32,6 +32,9 @@ server/
                         faucet, reconciliation, pnlService (phân tích lãi lỗ), routes
   src/realtime       WebSocket /ws
   test/              globalSetup (PostgreSQL nhúng :5434), helpers
+  scripts/e2eStack.ts hệ chạy cho test trình duyệt (bản build production của app + proxy /api, /ws)
+e2e/                 Playwright: fixtures (chặn lỗi console / 5xx / VALIDATION_ERROR / kênh realtime bị từ chối),
+                     tests/*.spec.ts (luồng chính + test nghiệm thu REVIEW-xx cho giao diện)
 legacy/              code AI Studio cũ
 ```
 
@@ -47,6 +50,8 @@ npm run admin:set-role -- <email> owner   # tạo owner đầu tiên (ghi audit 
 npm run dev           # cả hệ thống: DB + server + mọi app trong apps/* (mock tắt)
 npm run dev -- --sim  # như trên nhưng giá GIẢ LẬP (không cần Binance: offline, test e2e, CI)
 npm run verify        # cổng gộp main: typecheck mọi workspace (cả UI) + test + build app
+npm run e2e           # test trình duyệt (Playwright, Edge cài sẵn): build apps/exchange, dựng hệ riêng
+                      #   DB :5436 + API :8090 (giá giả lập, email ra .e2e/outbox.jsonl) + web :5190, chạy e2e/tests
 ```
 Quy tắc tích hợp backend ↔ hợp đồng ↔ UI: [docs/parts/README.md](docs/parts/README.md#quy-tắc-tích-hợp--để-backend-hợp-đồng-và-giao-diện-luôn-khớp-nhau)
 

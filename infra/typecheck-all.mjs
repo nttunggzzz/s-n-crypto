@@ -5,7 +5,8 @@ import path from 'node:path';
 import { ROOT, run, workspaces } from './workspaces.mjs';
 
 let failed = 0;
-for (const { dir } of workspaces()) {
+// workspaces + the browser tests (e2e/ is not a workspace but imports nothing that is not typed)
+for (const { dir } of [...workspaces(), { dir: 'e2e' }]) {
   if (!existsSync(path.join(ROOT, dir, 'tsconfig.json'))) continue;
   process.stdout.write(`▶ tsc ${dir}\n`);
   const code = await run('npx', ['tsc', '-p', dir, '--noEmit']);
