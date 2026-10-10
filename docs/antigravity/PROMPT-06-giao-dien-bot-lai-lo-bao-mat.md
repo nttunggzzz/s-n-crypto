@@ -2,6 +2,9 @@
 
 > Dán cho Antigravity **sau khi xong PROMPT-04 và PROMPT-05**: "Chạy `git merge main`, rồi đọc và thực hiện toàn bộ file docs/antigravity/PROMPT-06-giao-dien-bot-lai-lo-bao-mat.md trong worktree D:\Claude\crypto-ui."
 
+> **Nghiệm thu (thêm 2026-10-10):** `npm run e2e` — test `e2e/tests/bots.spec.ts` (bot lưới: tạo → badge lệnh bot → dừng và bán; mua định kỳ: tạo → tạm dừng → hủy) phải xanh.
+> Gắn `data-testid` theo [TESTIDS.md](TESTIDS.md). Route: `/bots` (nhận `?symbol=BTCUSDT`). Lịch sử dùng `createPager` của `@cex/contracts`.
+
 ## 0. Bối cảnh
 - **Backend đã xong** (hợp đồng API 0.6.0). Đọc trước khi làm:
   - `packages/contracts/CHANGELOG.md` mục 0.6.0;

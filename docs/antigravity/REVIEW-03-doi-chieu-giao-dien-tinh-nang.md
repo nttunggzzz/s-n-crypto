@@ -11,7 +11,9 @@ Phần chưa commit (BotsPage, PnlAnalysisPage, SettingsPage, Header) chỉ có 
 
 1. Gộp `main` vào nhánh của bạn. Xung đột `package-lock.json`: `git checkout --ours package-lock.json && npm install`.
 2. `npm run verify`, rồi `npm run e2e`. Lần đầu sẽ build app và dựng hệ test riêng: DB :5436, API :8090, web :5190.
-3. Test nghiệm thu nằm ở `e2e/tests/review03.spec.ts` và `spot.spec.ts`. **Mục nào xong thì test đó xanh.** Không sửa test.
+3. Test nghiệm thu nằm ở `e2e/tests/review03.spec.ts` và `spot.spec.ts`; luồng Futures và Bot ở `futures.spec.ts`, `bots.spec.ts`.
+   Tên `data-testid` cần gắn: [TESTIDS.md](TESTIDS.md). **Mục nào xong thì test đó xanh.** Không sửa test.
+   Hợp đồng 0.9.0 có sẵn hàm cho phần lớn mục A (README hợp đồng mục 11) — dùng thay vì tự viết.
    Nếu thấy test sai, ghi vào `docs/parts/contract-requests.md`.
 4. Mọi test còn bị **chốt chặn chung** (`e2e/fixtures.ts`) đánh trượt khi có một trong các lỗi sau:
    - lỗi console hoặc lỗi trang;

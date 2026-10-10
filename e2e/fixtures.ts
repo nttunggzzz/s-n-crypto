@@ -110,3 +110,24 @@ export async function signUp(page: Page): Promise<ReturnType<typeof newAccount> 
   return { ...acc, id: me.id, uid: me.uid };
 }
 
+/** Reads the API as the page's signed-in user — to check what the UI really did. */
+export async function apiGet<T>(page: Page, path: string): Promise<T> {
+  const r = await page.request.get(path);
+  expect(r.ok(), `GET ${path} → ${r.status()} ${await r.text()}`).toBe(true);
+  return (await r.json()) as T;
+}
+
+/** Calls the API as the page's user (test setup only — the flow under test goes through the UI). */
+export async function apiPost<T>(page: Page, path: string, data: unknown = {}): Promise<T> {
+  const r = await page.request.post(path, { data });
+  expect(r.ok(), `POST ${path} → ${r.status()} ${await r.text()}`).toBe(true);
+  return (await r.json()) as T;
+}
+
+/** `value` rounded to a multiple of `step` (e.g. a price to the pair's tickSize), as the API string. */
+export function toStep(value: number, step: string): string {
+  const decimals = step.includes('.') ? step.replace(/0+$/, '').split('.')[1]!.length : 0;
+  const n = Math.round(value / Number(step)) * Number(step);
+  return n.toFixed(decimals);
+}
+
