@@ -48,6 +48,11 @@ const Env = z.object({
   LOG_LEVEL: z.string().default('info'),
   /** Production build of apps/exchange to serve at `/` on this same origin (Docker sets it); empty = API only. */
   WEB_DIST: z.string().default(''),
+  /** Operator alerts to Telegram (feed down, books out of balance, crash) — set both or neither; empty = log only. */
+  TELEGRAM_BOT_TOKEN: z.string().default(''),
+  TELEGRAM_CHAT_ID: z.string().default(''),
+  /** Name in front of every alert; default: Railway's environment name, else NODE_ENV. */
+  ALERT_ENV_NAME: z.string().default(''),
 });
 
 export type Config = Omit<z.infer<typeof Env>, 'REGISTRATION'> & { symbols: string[]; isProd: boolean; dataKey: string; REGISTRATION: 'open' | 'invite' };
@@ -65,6 +70,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   }
   if (parsed.NODE_ENV === 'production' && !parsed.DATA_ENCRYPTION_KEY) {
     throw new Error('DATA_ENCRYPTION_KEY is required in production');
+  }
+  if (Boolean(parsed.TELEGRAM_BOT_TOKEN) !== Boolean(parsed.TELEGRAM_CHAT_ID)) {
+    throw new Error('TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID go together (set both or neither)');
   }
   if (Boolean(parsed.TURNSTILE_SECRET) !== Boolean(parsed.TURNSTILE_SITE_KEY)) {
     throw new Error('TURNSTILE_SECRET and TURNSTILE_SITE_KEY go together (set both or neither)');

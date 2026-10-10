@@ -31,6 +31,8 @@ server/
                         positions (giá vốn), portfolio, alerts, notifications, preferences, exports (CSV),
                         faucet, reconciliation, pnlService (phân tích lãi lỗ), routes
   src/realtime       WebSocket /ws
+  src/ops            singleInstance (khóa 1 bản + máy chủ chờ khi deploy), alerts (Telegram: giá gián đoạn, đối soát lệch, crash)
+  src/lib/webApp.ts  phục vụ bản build app (WEB_DIST) cùng địa chỉ với API
   test/              globalSetup (PostgreSQL nhúng :5434), helpers
   scripts/e2eStack.ts hệ chạy cho test trình duyệt (server phục vụ bản build production của app qua WEB_DIST, như khi deploy)
 e2e/                 Playwright: fixtures (chặn lỗi console / 5xx / VALIDATION_ERROR / kênh realtime bị từ chối),
@@ -58,12 +60,15 @@ npm run e2e           # test trình duyệt (Playwright, Edge cài sẵn): build
 ```
 Quy tắc tích hợp backend ↔ hợp đồng ↔ UI: [docs/parts/README.md](docs/parts/README.md#quy-tắc-tích-hợp--để-backend-hợp-đồng-và-giao-diện-luôn-khớp-nhau)
 
+Triển khai: `Dockerfile` + `railway.json` (một service: API + /ws + app), hướng dẫn [docs/deploy/railway.md](docs/deploy/railway.md); CI `.github/workflows/`.
+
 ## Bất biến (KHÔNG được phá)
 1. **Mọi thay đổi số dư đi qua `applyBalanceChanges()`** (server/src/modules/exchange/ledger.ts) trong transaction; mỗi thay đổi = 1 dòng `ledger_entries`. Không `UPDATE balances` ở chỗ khác.
 2. **Tiền là số thập phân chính xác**: `numeric(38,18)` trong DB, `Dec` (decimal.js) trong code, chuỗi trong API. Không dùng `number` cho tiền. Số dư/sổ cái làm tròn 8 chữ số: thu của người dùng làm tròn lên, trả cho người dùng làm tròn xuống.
 3. **Chỉ bật cặp có `decimals(tick)+decimals(step) ≤ 8`** để giá×khối lượng luôn chính xác (khóa/mở khóa không cần làm tròn).
 4. **Lệnh đổi trạng thái chỉ khi đang giữ khóa dòng** (`SELECT … FOR UPDATE`) và kiểm tra status còn mở → hủy/khớp đồng thời chỉ một bên thắng; phát lại sự kiện giá không khớp 2 lần.
 5. **Chỉ 1 tiến trình server** (matcher + chỉ mục lệnh trong bộ nhớ + rate limit trong bộ nhớ). Không bật autoscale.
+   Khi deploy chồng nhau, bản mới chờ khóa advisory của PostgreSQL (`ops/singleInstance.ts`) rồi mới chạy — không bỏ khóa này.
 6. **NULL ≠ 0, không bịa dữ liệu**: thiếu dữ liệu thị trường → `null` + `status` UNAVAILABLE/STALE. Giá STALE hoặc sàn dừng → không nhận lệnh, không khớp.
 7. **Nến**: chỉ lưu nến đã đóng; `open_time` = mốc mở UTC; ghi idempotent (`onConflictDoNothing`).
 8. Mọi endpoint khai báo trong `packages/contracts/src/endpoints.ts` và đăng ký bằng `route()` — dev/test tự kiểm tra response khớp schema.

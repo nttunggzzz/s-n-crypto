@@ -20,9 +20,21 @@ import { syncFuturesFromBinance } from './modules/futures/config.ts';
 import { createBots } from './modules/bots/index.ts';
 import { seedSimRules, SimFeed, simSpecs } from './modules/market/sim/feed.ts';
 import { acquireInstanceLock, startStandbyServer } from './ops/singleInstance.ts';
+import { Alerter, FeedWatcher, telegramSink } from './ops/alerts.ts';
 
 const config = loadConfig();
 const version = process.env.RAILWAY_GIT_COMMIT_SHA?.slice(0, 7) ?? 'dev';
+const alerter = new Alerter(
+  config.TELEGRAM_BOT_TOKEN ? telegramSink(config.TELEGRAM_BOT_TOKEN, config.TELEGRAM_CHAT_ID) : null,
+  config.ALERT_ENV_NAME || process.env.RAILWAY_ENVIRONMENT_NAME || config.NODE_ENV,
+);
+// a crash restarts the container (Railway restart policy); the operator hears about it
+const crash = (what: string) => (err: unknown) => {
+  logger.fatal({ err }, what);
+  void alerter.send('crash', 'critical', `Server dừng vì lỗi (${what}): ${err instanceof Error ? err.message : String(err)} — đang khởi động lại.`, true).finally(() => process.exit(1));
+};
+process.on('uncaughtException', crash('uncaughtException'));
+process.on('unhandledRejection', crash('unhandledRejection'));
 
 // Invariant 5 — one instance: during a deploy the old container is still running. Answer health checks
 // as "standby" until it has stopped (it holds the lock), then start everything (migrations included).
@@ -31,7 +43,7 @@ const instanceLock = await acquireInstanceLock(config.DATABASE_URL, {
   onWait: () => logger.warn('another instance is running (deploy in progress?) — waiting for it to stop'),
   onLost: (err) => {
     logger.fatal({ err }, 'lost the instance lock — exiting so that two instances never run together');
-    process.exit(1);
+    void alerter.send('lock', 'critical', 'Mất khóa một-bản-duy-nhất (kết nối DB đứt) — server tự thoát để khởi động lại.', true).finally(() => process.exit(1));
   },
 });
 await standby.close();
@@ -106,13 +118,34 @@ futuresSim?.start();
 await futures.engine.start();
 bots.start();
 
-// Ledger reconciliation every 10 minutes (alerts are wired in P01).
-const reconTimer = setInterval(() => void reconcile(database.db).catch((err) => logger.error({ err }, 'reconciliation crashed')), 10 * 60_000);
+// Ledger reconciliation every 10 minutes; a mismatch means money is wrong somewhere → alert.
+const reconTimer = setInterval(
+  () =>
+    void reconcile(database.db)
+      .then((r) => {
+        if (!r.ok) {
+          const first = r.mismatches.slice(0, 3).map((m) => `${m.kind} ${m.account} ${m.asset} user ${m.userId}: ${m.field} ${m.actual} ≠ ${m.expected}`);
+          return alerter.send('recon', 'critical', `Đối soát sổ cái LỆCH: ${r.mismatches.length} chỗ.\n${first.join('\n')}`);
+        }
+      })
+      .catch((err) => {
+        logger.error({ err }, 'reconciliation crashed');
+        return alerter.send('recon-crash', 'warn', `Đối soát sổ cái không chạy được: ${err instanceof Error ? err.message : String(err)}`);
+      }),
+  10 * 60_000,
+);
 reconTimer.unref();
+// Market feeds: alert after 2 minutes of no live prices (orders and liquidations wait for live prices).
+const feedWatchers = [new FeedWatcher('Giá Spot', () => market.getMarketStatus(), alerter), new FeedWatcher('Giá Futures', () => futures.market.getMarketStatus(), alerter)];
+const feedTimer = setInterval(() => void Promise.all(feedWatchers.map((w) => w.check())), 30_000);
+feedTimer.unref();
 // Hourly account-value snapshots for the portfolio chart.
 exchange.portfolio.startHourly();
 
-server.listen(config.PORT, () => logger.info({ port: config.PORT, feed: config.MARKET_FEED }, 'server listening'));
+server.listen(config.PORT, () => {
+  logger.info({ port: config.PORT, feed: config.MARKET_FEED }, 'server listening');
+  void alerter.send('start', 'info', `Server đã chạy — phiên bản ${version}, giá ${config.MARKET_FEED}, đăng ký ${config.REGISTRATION}.`, true);
+});
 
 async function shutdown(signal: string) {
   logger.info({ signal }, 'shutting down');

@@ -28,7 +28,9 @@ Logic nghiệp vụ, giao diện.
 - [x] Khóa truy cập staging: chỉ đăng ký bằng mã mời (`REGISTRATION=invite`), mã đầu tiên tạo bằng `npm run admin:invite`
 - [ ] CI GitHub Actions — *sẵn `.github/workflows/ci.yml` (verify, e2e giá giả lập, build + chạy thử image); chờ repo GitHub*
 - [ ] Backup + thử khôi phục — *sẵn `.github/workflows/backup.yml`: pg_dump hằng đêm → khôi phục vào DB mới → `restore:check` (đối soát) → mã hóa AES-256; chờ secrets*
-- [ ] Sentry + cảnh báo Telegram
+- [x] Cảnh báo Telegram (`server/src/ops/alerts.ts`): khởi động, giá gián đoạn > 2 phút + khi chạy lại, đối soát lệch, crash — *chờ bot token*
+- [ ] Sentry (theo dõi lỗi chi tiết) — *chưa làm; log JSON + Telegram trước*
+- [x] Hướng dẫn triển khai từng bước: [docs/deploy/railway.md](../deploy/railway.md)
 
 **Giai đoạn 7**
 - [ ] Kiểm tra chịu tải (số kết nối realtime, số lệnh/giây)
