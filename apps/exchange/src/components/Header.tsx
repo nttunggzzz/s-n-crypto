@@ -2,12 +2,13 @@ import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useMarket } from '../context/MarketContext';
 import { Button, Badge, BrandLogo } from '@cex/ui';
+import { canOpenAdmin, appLinks } from '@cex/contracts';
 import { NotificationCenter } from './NotificationCenter.tsx';
 import { AvatarIcon } from './AvatarIcon.tsx';
 import { 
   Search, Bell, Moon, Globe, ChevronDown, 
   Wallet, History, CreditCard, Settings, Shield, LogOut, Copy, X, LayoutPanelLeft, User,
-  Bot, BarChart2
+  Bot, BarChart2, LayoutDashboard
 } from 'lucide-react';
 
 export interface HeaderProps {
@@ -162,6 +163,16 @@ export const Header: React.FC<HeaderProps> = ({ currentPath, onNavigate }) => {
             {/* Auth specific menus */}
             {isAuthenticated ? (
               <>
+                {canOpenAdmin(user) && (
+                  <a
+                    href={appLinks.admin.home(import.meta.env.VITE_ADMIN_ORIGIN)}
+                    data-testid="nav-admin"
+                    className="p-2 text-[var(--text-2,#a1a1aa)] hover:text-[var(--text,#f4f4f5)]"
+                    title="Quản trị"
+                  >
+                    <LayoutDashboard size={18} />
+                  </a>
+                )}
                 {/* Assets Dropdown */}
                 <div className="relative group h-full flex items-center">
                   <button 
@@ -216,6 +227,12 @@ export const Header: React.FC<HeaderProps> = ({ currentPath, onNavigate }) => {
                     </div>
                     
                     <div className="py-1 border-b border-[var(--line,#1d1e21)]">
+                      {canOpenAdmin(user) && (
+                        <a href={appLinks.admin.home(import.meta.env.VITE_ADMIN_ORIGIN)} className="px-4 py-2 hover:bg-[var(--panel-2,#141416)] cursor-pointer text-[13px] text-[var(--text,#f4f4f5)] flex items-center gap-2">
+                          <LayoutDashboard size={16} className="text-[var(--text-2,#a1a1aa)]" />
+                          Quản trị
+                        </a>
+                      )}
                       <div onClick={() => onNavigate('/settings')} className="px-4 py-2 hover:bg-[var(--panel-2,#141416)] cursor-pointer text-[13px] text-[var(--text,#f4f4f5)] flex items-center gap-2">
                         <User size={16} className="text-[var(--text-2,#a1a1aa)]" />
                         Hồ sơ

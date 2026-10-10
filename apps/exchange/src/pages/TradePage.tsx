@@ -18,6 +18,7 @@ import {
   formatDecimal,
 } from '@cex/ui';
 import { dec, floorToStep } from '@cex/core';
+import { TRADE_BLOCK_LABELS } from '@cex/contracts';
 
 export interface TradePageProps {
   symbolParam?: string;
@@ -32,6 +33,7 @@ export const TradePage: React.FC<TradePageProps> = ({ symbolParam, onNavigate })
     activeTicker,
     setActiveSymbol,
     tradingHalted,
+    activeTradeBlock,
   } = useMarket();
 
   const [selectedPrice, setSelectedPrice] = useState<string>('');
@@ -207,6 +209,12 @@ export const TradePage: React.FC<TradePageProps> = ({ symbolParam, onNavigate })
         defaultSymbol={activeSymbol}
         defaultPrice={activeTicker?.lastPrice || undefined}
       />
+
+      {activeTradeBlock && (
+        <div data-testid="trade-block-reason" className="bg-[var(--down,#f2475f)]/10 text-[var(--down,#f2475f)] px-4 py-2 text-sm text-center border-b border-[var(--down,#f2475f)]/20 font-medium">
+          {TRADE_BLOCK_LABELS[activeTradeBlock] || 'Giao dịch tạm thời bị khóa'}
+        </div>
+      )}
 
       {/* DESKTOP TRADING WORKSPACE (>= 1024px) */}
       <div className="hidden lg:flex flex-col gap-1 px-1 py-1 flex-1 max-w-[1920px] mx-auto w-full">

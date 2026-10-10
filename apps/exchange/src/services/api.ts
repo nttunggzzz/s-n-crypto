@@ -14,14 +14,9 @@ export function getApiClient(): ApiClient {
   return apiClientInstance;
 }
 
-export async function getRealtimeClient(): Promise<RealtimeClient> {
+export function getRealtimeClient(): RealtimeClient {
   if (!realtimeClientInstance) {
-    if (isMockEnabled) {
-      const { createMockRealtimeClient } = await import('@cex/contracts/mocks');
-      realtimeClientInstance = createMockRealtimeClient();
-    } else {
-      realtimeClientInstance = createRealtimeClient();
-    }
+    realtimeClientInstance = createRealtimeClient();
   }
   return realtimeClientInstance;
 }

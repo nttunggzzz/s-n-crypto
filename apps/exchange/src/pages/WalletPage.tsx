@@ -399,17 +399,22 @@ export const WalletPage: React.FC<WalletPageProps> = ({ onNavigate }) => {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {balances.items.map((b) => (
-                      <TableRow key={b.asset}>
-                        <TableCell className="font-bold flex items-center gap-2">
-                          <span className="w-6 h-6 rounded-full bg-[var(--color-bg-elevated,#1b1e27)] flex items-center justify-center text-xs font-black text-[var(--color-accent-secondary,#67e8f9)]">
-                            {b.asset.slice(0, 3)}
-                          </span>
-                          <span>{b.asset}</span>
-                        </TableCell>
-                        <TableCell className="text-right font-mono tabular-nums text-[var(--color-buy,#22c55e)]">
-                          {formatAmount(b.available)}
-                        </TableCell>
+                    {(() => {
+                      const items = [...balances.items];
+                      if (!items.some(i => i.asset === 'USDT')) {
+                        items.unshift({ asset: 'USDT', available: '0', locked: '0', total: '0', valueUsdt: '0' });
+                      }
+                      return items.map((b) => (
+                        <TableRow key={b.asset}>
+                          <TableCell className="font-bold flex items-center gap-2">
+                            <span className="w-6 h-6 rounded-full bg-[var(--color-bg-elevated,#1b1e27)] flex items-center justify-center text-xs font-black text-[var(--color-accent-secondary,#67e8f9)]">
+                              {b.asset.slice(0, 3)}
+                            </span>
+                            <span>{b.asset}</span>
+                          </TableCell>
+                          <TableCell data-testid={`spot-available-${b.asset}`} className="text-right font-mono tabular-nums text-[var(--color-buy,#22c55e)]">
+                            {formatAmount(b.available)}
+                          </TableCell>
                         <TableCell className="text-right font-mono tabular-nums text-[var(--color-text-muted,#6b7280)]">
                           {formatAmount(b.locked)}
                         </TableCell>
@@ -444,7 +449,8 @@ export const WalletPage: React.FC<WalletPageProps> = ({ onNavigate }) => {
                           </div>
                         </TableCell>
                       </TableRow>
-                    ))}
+                      ));
+                    })()}
                   </TableBody>
                 </Table>
               </div>

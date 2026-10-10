@@ -99,63 +99,58 @@ export const MarketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   // Initialize Realtime WebSocket and single tickers channel store
   useEffect(() => {
-    let unsubs: (() => void)[] = [];
-    let rtClient: RealtimeClient | null = null;
+    const unsubs: (() => void)[] = [];
     let storeInstance: TickerStore<Ticker> | null = null;
     let throttleTimer: ReturnType<typeof setTimeout> | null = null;
 
-    async function initRealtime() {
-      try {
-        rtClient = await getRealtimeClient();
-        setRealtimeClient(rtClient);
+    try {
+      const rtClient = getRealtimeClient();
+      setRealtimeClient(rtClient);
 
-        // Track connection status
-        unsubs.push(rtClient.onStatus((status) => setConnectionStatus(status)));
+      // Track connection status
+      unsubs.push(rtClient.onStatus((status) => setConnectionStatus(status)));
 
-        // Create unified TickerStore subscribed to single 'tickers' channel (REVIEW-03 A1)
-        storeInstance = createTickerStore(rtClient, 'spot');
-        tickerStoreRef.current = storeInstance;
-        setTickerStore(storeInstance);
+      // Create unified TickerStore subscribed to single 'tickers' channel (REVIEW-03 A1)
+      storeInstance = createTickerStore(rtClient, 'spot');
+      tickerStoreRef.current = storeInstance;
+      setTickerStore(storeInstance);
 
-        // Update local tickers map throttled (max once per 500ms) to avoid 50 renders/sec
-        unsubs.push(
-          storeInstance.subscribe(() => {
-            if (!throttleTimer) {
-              throttleTimer = setTimeout(() => {
-                throttleTimer = null;
-                if (storeInstance) {
-                  const map: Record<string, Ticker> = {};
-                  for (const t of storeInstance.all()) {
-                    map[t.symbol] = t;
-                  }
-                  setTickers(map);
+      // Update local tickers map throttled (max once per 500ms) to avoid 50 renders/sec
+      unsubs.push(
+        storeInstance.subscribe(() => {
+          if (!throttleTimer) {
+            throttleTimer = setTimeout(() => {
+              throttleTimer = null;
+              if (storeInstance) {
+                const map: Record<string, Ticker> = {};
+                for (const t of storeInstance.all()) {
+                  map[t.symbol] = t;
                 }
-              }, 500);
-            }
-          })
-        );
+                setTickers(map);
+              }
+            }, 500);
+          }
+        })
+      );
 
-        // Track exchange:status for halts / disabled symbols realtime (REVIEW-03 A6)
-        unsubs.push(
-          rtClient.subscribe('exchange:status', (status: ExchangeStatus) => {
-            setExchangeStatus(status);
-            setTradingHalted(status.tradingHalted);
-            setDisabledSymbols(status.disabledSymbols || []);
-          })
-        );
+      // Track exchange:status for halts / disabled symbols realtime (REVIEW-03 A6)
+      unsubs.push(
+        rtClient.subscribe('exchange:status', (status: ExchangeStatus) => {
+          setExchangeStatus(status);
+          setTradingHalted(status.tradingHalted);
+          setDisabledSymbols(status.disabledSymbols || []);
+        })
+      );
 
-        // Subscribe to market:status
-        unsubs.push(
-          rtClient.subscribe('market:status', (data) => {
-            setMarketStatus(data);
-          })
-        );
-      } catch {
-        setConnectionStatus('closed');
-      }
+      // Subscribe to market:status
+      unsubs.push(
+        rtClient.subscribe('market:status', (data) => {
+          setMarketStatus(data);
+        })
+      );
+    } catch {
+      setConnectionStatus('closed');
     }
-
-    initRealtime();
 
     return () => {
       if (throttleTimer) clearTimeout(throttleTimer);

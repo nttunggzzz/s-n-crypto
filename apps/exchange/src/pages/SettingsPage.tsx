@@ -75,6 +75,13 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate }) => {
   const [twoFactorPasswordInput, setTwoFactorPasswordInput] = useState('');
   const [processingTwoFactor, setProcessingTwoFactor] = useState(false);
 
+  // Regenerate Recovery Codes states (B5)
+  const [regenerateModalOpen, setRegenerateModalOpen] = useState(false);
+  const [regenerateCodeInput, setRegenerateCodeInput] = useState('');
+  const [regeneratingCodes, setRegeneratingCodes] = useState(false);
+  const [newRecoveryCodes, setNewRecoveryCodes] = useState<string[] | null>(null);
+  const [copiedCodes, setCopiedCodes] = useState(false);
+
   const fetchSecurityData = async () => {
     if (!isAuthenticated) return;
     setLoadingSec(true);
@@ -529,26 +536,42 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate }) => {
                     Bảo vệ tài khoản bằng mã TOTP 6 số từ Google Authenticator hoặc Authy
                   </div>
                 </div>
-                <Button
-                  variant={secOverview?.twoFactorEnabled ? 'secondary' : 'primary'}
-                  size="sm"
-                  onClick={() => {
-                    if (secOverview?.twoFactorEnabled) {
-                      setTwoFactorStep('DISABLE');
-                      setTwoFactorPasswordInput('');
-                      setTwoFactorCodeInput('');
-                      setTwoFactorModalOpen(true);
-                    } else {
-                      setTwoFactorStep('SETUP');
-                      setTwoFactorPasswordInput('');
-                      setTwoFactorCodeInput('');
-                      setTwoFactorSetupData(null);
-                      setTwoFactorModalOpen(true);
-                    }
-                  }}
-                >
-                  {secOverview?.twoFactorEnabled ? 'Tắt 2FA' : 'Bật ngay'}
-                </Button>
+                <div className="flex items-center gap-2">
+                  {secOverview?.twoFactorEnabled && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setRegenerateCodeInput('');
+                        setNewRecoveryCodes(null);
+                        setCopiedCodes(false);
+                        setRegenerateModalOpen(true);
+                      }}
+                    >
+                      Tạo lại mã khôi phục
+                    </Button>
+                  )}
+                  <Button
+                    variant={secOverview?.twoFactorEnabled ? 'secondary' : 'primary'}
+                    size="sm"
+                    onClick={() => {
+                      if (secOverview?.twoFactorEnabled) {
+                        setTwoFactorStep('DISABLE');
+                        setTwoFactorPasswordInput('');
+                        setTwoFactorCodeInput('');
+                        setTwoFactorModalOpen(true);
+                      } else {
+                        setTwoFactorStep('SETUP');
+                        setTwoFactorPasswordInput('');
+                        setTwoFactorCodeInput('');
+                        setTwoFactorSetupData(null);
+                        setTwoFactorModalOpen(true);
+                      }
+                    }}
+                  >
+                    {secOverview?.twoFactorEnabled ? 'Tắt 2FA' : 'Bật ngay'}
+                  </Button>
+                </div>
               </div>
             </div>
 
@@ -958,6 +981,112 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate }) => {
                 </Button>
                 <Button type="submit" variant="primary" loading={processingTwoFactor}>
                   Kích hoạt 2FA
+                </Button>
+              </div>
+            </form>
+          )}
+        </Modal>
+
+        {/* Regenerate Recovery Codes Modal (B5) */}
+        <Modal
+          isOpen={regenerateModalOpen}
+          onClose={() => {
+            setRegenerateModalOpen(false);
+            setNewRecoveryCodes(null);
+          }}
+          title="Tạo lại mã khôi phục 2FA"
+        >
+          {newRecoveryCodes ? (
+            <div className="space-y-4 text-xs">
+              <p className="text-[var(--text-2,#a1a1aa)] leading-relaxed">
+                Các mã khôi phục cũ đã bị hủy. Vui lòng lưu lại danh sách 10 mã khôi phục mới dưới đây:
+              </p>
+              <div className="grid grid-cols-2 gap-2 p-3 rounded-lg bg-[var(--panel-2,#141416)] border border-[var(--line,#1d1e21)] font-mono text-center">
+                {newRecoveryCodes.map((code, idx) => (
+                  <div key={idx} className="p-1.5 rounded bg-[var(--panel,#0a0a0b)] text-white text-xs select-all">
+                    {code}
+                  </div>
+                ))}
+              </div>
+              <div className="flex items-center justify-between pt-2">
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      navigator.clipboard.writeText(newRecoveryCodes.join('\n'));
+                      setCopiedCodes(true);
+                      setTimeout(() => setCopiedCodes(false), 2000);
+                    }}
+                  >
+                    {copiedCodes ? <Check size={14} className="mr-1 text-[var(--up,#1fc27a)]" /> : <Copy size={14} className="mr-1" />}
+                    {copiedCodes ? 'Đã chép' : 'Sao chép tất cả'}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const blob = new Blob([newRecoveryCodes.join('\n')], { type: 'text/plain;charset=utf-8' });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = `recovery-codes-${Date.now()}.txt`;
+                      a.click();
+                      URL.revokeObjectURL(url);
+                    }}
+                  >
+                    Tải về (.txt)
+                  </Button>
+                </div>
+                <Button
+                  variant="primary"
+                  onClick={() => {
+                    setRegenerateModalOpen(false);
+                    setNewRecoveryCodes(null);
+                  }}
+                >
+                  Tôi đã lưu các mã này
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                if (!regenerateCodeInput) return;
+                setRegeneratingCodes(true);
+                try {
+                  const res = await api.regenerateRecoveryCodes({ body: { code: regenerateCodeInput.trim() } });
+                  setNewRecoveryCodes(res.recoveryCodes);
+                  success('Đã tạo lại mã khôi phục mới thành công!');
+                } catch (err: unknown) {
+                  if (err instanceof ApiError) {
+                    toastError(getErrorMessage(err.code));
+                  } else {
+                    toastError('Không thể tạo lại mã khôi phục.');
+                  }
+                } finally {
+                  setRegeneratingCodes(false);
+                }
+              }}
+              className="space-y-4 text-xs"
+            >
+              <p className="text-[var(--text-2,#a1a1aa)]">
+                Nhập mã xác thực 2FA từ ứng dụng Google Authenticator để tạo lại bộ mã khôi phục mới.
+              </p>
+              <Input
+                label="Mã xác thực 2FA (6 chữ số)"
+                value={regenerateCodeInput}
+                onChange={(e) => setRegenerateCodeInput(e.target.value)}
+                placeholder="000000"
+                required
+              />
+              <div className="flex justify-end gap-3 pt-2">
+                <Button variant="secondary" onClick={() => setRegenerateModalOpen(false)}>
+                  Hủy
+                </Button>
+                <Button type="submit" variant="primary" loading={regeneratingCodes}>
+                  Tạo mã mới
                 </Button>
               </div>
             </form>

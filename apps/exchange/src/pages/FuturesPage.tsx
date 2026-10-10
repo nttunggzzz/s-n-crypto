@@ -11,7 +11,7 @@ import type {
   FuturesSymbolInfo,
   UserEvent,
 } from '@cex/contracts';
-import { countdown, resolveFuturesSymbol, ApiError } from '@cex/contracts';
+import { countdown, resolveFuturesSymbol, ApiError, TRADE_BLOCK_LABELS } from '@cex/contracts';
 import { getApiClient } from '../services/api.ts';
 import { getErrorMessage } from '../services/errors.ts';
 import { useAuth } from '../context/AuthContext.tsx';
@@ -66,16 +66,34 @@ export interface FuturesPageProps {
   onNavigate: (path: string) => void;
 }
 
+const KNOWN_1000: Record<string, string> = {
+  PEPEUSDT: '1000PEPEUSDT',
+  SHIBUSDT: '1000SHIBUSDT',
+  BONKUSDT: '1000BONKUSDT',
+  FLOKIUSDT: '1000FLOKIUSDT',
+};
+
+const resolveInitialFuturesSymbol = (raw: string): string => {
+  const upper = (raw || '').toUpperCase();
+  return KNOWN_1000[upper] || raw || 'BTCUSDT';
+};
+
 export const FuturesPage: React.FC<FuturesPageProps> = ({
   symbolParam = 'BTCUSDT',
   onNavigate,
 }) => {
   const { isAuthenticated } = useAuth();
-  const { symbols: spotSymbols, realtimeClient } = useMarket();
+  const { symbols: spotSymbols, realtimeClient, activeTradeBlock } = useMarket();
   const { success, error: toastError, info: toastInfo } = useToast();
   const api = getApiClient();
 
-  const [symbol, setSymbol] = useState(symbolParam);
+  const [symbol, setSymbol] = useState(() => {
+    const init = resolveInitialFuturesSymbol(symbolParam);
+    if (init !== symbolParam && typeof window !== 'undefined') {
+      window.history.replaceState({}, '', `/futures/${init}`);
+    }
+    return init;
+  });
   const [tickers, setTickers] = useState<FuturesTicker[]>([]);
   const [markPrice, setMarkPrice] = useState<MarkPrice | null>(null);
   const [account, setAccount] = useState<FuturesAccount | null>(null);
@@ -84,6 +102,7 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
   const [orderHistory, setOrderHistory] = useState<FuturesOrder[]>([]);
   const [positionHistory, setPositionHistory] = useState<FuturesPosition[]>([]);
   const [fundingHistory, setFundingHistory] = useState<FundingEvent[]>([]);
+  const [futuresTrades, setFuturesTrades] = useState<FuturesTrade[]>([]);
   const [symbolSettings, setSymbolSettings] = useState<FuturesSymbolSettings[]>([]);
   const [symbolInfos, setSymbolInfos] = useState<FuturesSymbolInfo[]>([]);
 
@@ -138,26 +157,19 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
 
   // Symbol resolution for Spot -> Futures (REVIEW-03 A4)
   useEffect(() => {
+    const fallback = resolveInitialFuturesSymbol(symbolParam);
     if (symbolInfos.length > 0) {
-      const resolved = resolveFuturesSymbol(symbolParam, symbolInfos, spotSymbols || []) || symbolParam;
+      const resolved = resolveFuturesSymbol(symbolParam, symbolInfos, spotSymbols || []) || fallback;
       if (resolved !== symbol) {
         setSymbol(resolved);
         if (resolved !== symbolParam) {
           window.history.replaceState({}, '', `/futures/${resolved}`);
         }
       }
-    } else {
-      const upper = symbolParam.toUpperCase();
-      const known1000: Record<string, string> = {
-        PEPEUSDT: '1000PEPEUSDT',
-        SHIBUSDT: '1000SHIBUSDT',
-        BONKUSDT: '1000BONKUSDT',
-        FLOKIUSDT: '1000FLOKIUSDT',
-      };
-      if (known1000[upper]) {
-        const mapped = known1000[upper];
-        setSymbol(mapped);
-        window.history.replaceState({}, '', `/futures/${mapped}`);
+    } else if (fallback !== symbol) {
+      setSymbol(fallback);
+      if (fallback !== symbolParam) {
+        window.history.replaceState({}, '', `/futures/${fallback}`);
       }
     }
   }, [symbolParam, symbolInfos, spotSymbols, symbol]);
@@ -180,7 +192,7 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
   const maxLeverage = currentSymbolInfo?.maxLeverage || 20;
 
   // Selected order tab
-  const [bottomTab, setBottomTab] = useState<'positions' | 'orders' | 'orderHistory' | 'posHistory' | 'funding'>('positions');
+  const [bottomTab, setBottomTab] = useState<'positions' | 'orders' | 'trades' | 'orderHistory' | 'posHistory' | 'funding'>('positions');
 
   // Order Form State
   const [orderType, setOrderType] = useState<'LIMIT' | 'MARKET'>('LIMIT');
@@ -196,10 +208,11 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
 
   // Load Initial Data
   const fetchData = useCallback(async () => {
+    const cur = resolveInitialFuturesSymbol(symbol);
     try {
       const [tRes, markRes, exInfo] = await Promise.all([
         api.futuresTickers(),
-        api.futuresMarkPrice({ params: { symbol } }).catch(() => null),
+        api.futuresMarkPrice({ params: { symbol: cur } }).catch(() => null),
         api.futuresExchangeInfo().catch(() => null),
       ]);
       setTickers(tRes.items);
@@ -210,7 +223,7 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
         const [acc, pos, ords, sets] = await Promise.all([
           api.futuresAccount().catch(() => null),
           api.futuresPositions().catch(() => ({ items: [] })),
-          api.futuresOpenOrders({ query: { symbol } }).catch(() => ({ items: [] })),
+          api.futuresOpenOrders({ query: { symbol: cur } }).catch(() => ({ items: [] })),
           api.futuresSymbolSettings().catch(() => ({ items: [] })),
         ]);
         if (acc) setAccount(acc);
@@ -228,15 +241,19 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
   // Fetch Tab Specific Histories
   const fetchTabHistory = useCallback(async () => {
     if (!isAuthenticated) return;
+    const cur = resolveInitialFuturesSymbol(symbol);
     try {
       if (bottomTab === 'orderHistory') {
-        const res = await api.futuresOrderHistory({ query: { symbol, limit: 50 } });
+        const res = await api.futuresOrderHistory({ query: { symbol: cur, limit: 50 } });
         setOrderHistory(res.items);
+      } else if (bottomTab === 'trades') {
+        const res = await api.futuresMyTrades({ query: { symbol: cur, limit: 50 } });
+        setFuturesTrades(res.items);
       } else if (bottomTab === 'posHistory') {
         const res = await api.futuresPositionHistory({ query: { limit: 50 } });
         setPositionHistory(res.items);
       } else if (bottomTab === 'funding') {
-        const res = await api.futuresFundingHistory({ params: { symbol }, query: { limit: 30 } });
+        const res = await api.futuresFundingHistory({ params: { symbol: cur }, query: { limit: 30 } });
         setFundingHistory(res.items);
       }
     } catch {}
@@ -664,6 +681,12 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
         </div>
       </div>
 
+      {activeTradeBlock && (
+        <div data-testid="trade-block-reason" className="bg-[var(--down,#f2475f)]/10 text-[var(--down,#f2475f)] px-4 py-2 text-sm text-center border-b border-[var(--down,#f2475f)]/20 font-medium">
+          {TRADE_BLOCK_LABELS[activeTradeBlock] || 'Giao dịch tạm thời bị khóa'}
+        </div>
+      )}
+
       {/* 3. Main Workspace: Desktop Grid */}
       <div className="flex-1 flex flex-col lg:flex-row p-1 gap-1">
         {/* Left / Middle: Chart, Orderbook & Trades */}
@@ -704,6 +727,14 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
                   }`}
                 >
                   Lệnh đang chờ ({openOrders.length})
+                </button>
+                <button
+                  onClick={() => setBottomTab('trades')}
+                  className={`pb-1 border-b-2 transition-colors cursor-pointer ${
+                    bottomTab === 'trades' ? 'border-[var(--accent,#818cf8)] text-white' : 'border-transparent text-[var(--text-3,#63636b)] hover:text-white'
+                  }`}
+                >
+                  Lịch sử khớp
                 </button>
                 <button
                   onClick={() => setBottomTab('orderHistory')}
@@ -915,10 +946,149 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
                     </TableBody>
                   </Table>
                 )
+              ) : bottomTab === 'trades' ? (
+                futuresTrades.length === 0 ? (
+                  <EmptyState title="Chưa có lượt khớp lệnh Futures" description="Lịch sử các giao dịch đã khớp của hợp đồng sẽ hiển thị tại đây." />
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Thời gian</TableHead>
+                        <TableHead>Cặp</TableHead>
+                        <TableHead>Chiều</TableHead>
+                        <TableHead className="text-right">Giá khớp</TableHead>
+                        <TableHead className="text-right">Khối lượng</TableHead>
+                        <TableHead className="text-right">Phí</TableHead>
+                        <TableHead className="text-right">Lãi/Lỗ đã chốt</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {futuresTrades.map((tr) => {
+                        const pnlVal = tr.realizedPnl ? parseFloat(tr.realizedPnl) : 0;
+                        return (
+                          <TableRow key={tr.id}>
+                            <TableCell className="font-mono text-[var(--text-3,#63636b)]">
+                              {new Date(tr.createdAt).toLocaleTimeString('vi-VN')}
+                            </TableCell>
+                            <TableCell className="font-bold">{tr.symbol}</TableCell>
+                            <TableCell className={tr.side === 'BUY' ? 'text-[var(--up,#1fc27a)] font-bold' : 'text-[var(--down,#f2475f)] font-bold'}>
+                              {tr.side === 'BUY' ? 'MUA' : 'BÁN'}
+                            </TableCell>
+                            <TableCell className="text-right font-mono">{formatDecimal(tr.price)}</TableCell>
+                            <TableCell className="text-right font-mono">{formatDecimal(tr.quantity)}</TableCell>
+                            <TableCell className="text-right font-mono text-[var(--text-3,#63636b)]">{formatDecimal(tr.fee)} {tr.feeAsset}</TableCell>
+                            <TableCell className={`text-right font-mono font-bold ${pnlVal > 0 ? 'text-[var(--up,#1fc27a)]' : pnlVal < 0 ? 'text-[var(--down,#f2475f)]' : 'text-white'}`}>
+                              {tr.realizedPnl ? `${pnlVal > 0 ? '+' : ''}${formatDecimal(tr.realizedPnl)} USDT` : '—'}
+                            </TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                )
+              ) : bottomTab === 'orderHistory' ? (
+                orderHistory.length === 0 ? (
+                  <EmptyState title="Không có lịch sử lệnh Futures" description="Các lệnh đã đóng hoặc hủy sẽ hiển thị tại đây." />
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Thời gian</TableHead>
+                        <TableHead>Cặp</TableHead>
+                        <TableHead>Chiều / Loại</TableHead>
+                        <TableHead className="text-right">Giá đặt</TableHead>
+                        <TableHead className="text-right">Khối lượng</TableHead>
+                        <TableHead className="text-right">Đã khớp</TableHead>
+                        <TableHead className="text-center">Trạng thái</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {orderHistory.map((ord) => (
+                        <TableRow key={ord.id}>
+                          <TableCell className="font-mono text-[var(--text-3,#63636b)]">
+                            {new Date(ord.createdAt).toLocaleTimeString('vi-VN')}
+                          </TableCell>
+                          <TableCell className="font-bold">{ord.symbol}</TableCell>
+                          <TableCell className={ord.side === 'BUY' ? 'text-[var(--up,#1fc27a)]' : 'text-[var(--down,#f2475f)]'}>
+                            {ord.side === 'BUY' ? 'MUA' : 'BÁN'} {ord.type}
+                          </TableCell>
+                          <TableCell className="text-right font-mono">{formatDecimal(ord.price)}</TableCell>
+                          <TableCell className="text-right font-mono">{formatDecimal(ord.quantity)}</TableCell>
+                          <TableCell className="text-right font-mono text-[var(--text-3,#63636b)]">{formatDecimal(ord.executedQty)}</TableCell>
+                          <TableCell className="text-center">
+                            <Badge variant={ord.status === 'FILLED' ? 'success' : 'secondary'} size="sm">{ord.status}</Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )
+              ) : bottomTab === 'posHistory' ? (
+                positionHistory.length === 0 ? (
+                  <EmptyState title="Chưa có lịch sử vị thế" description="Lịch sử các vị thế đã đóng sẽ hiển thị tại đây." />
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Thời gian đóng</TableHead>
+                        <TableHead>Cặp</TableHead>
+                        <TableHead>Chiều</TableHead>
+                        <TableHead className="text-right">Giá vào TB</TableHead>
+                        <TableHead className="text-right">Khối lượng</TableHead>
+                        <TableHead className="text-right">Ký quỹ</TableHead>
+                        <TableHead className="text-center">Trạng thái</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {positionHistory.map((pos) => (
+                        <TableRow key={pos.id}>
+                          <TableCell className="font-mono text-[var(--text-3,#63636b)]">
+                            {pos.closedAt ? new Date(pos.closedAt).toLocaleTimeString('vi-VN') : '—'}
+                          </TableCell>
+                          <TableCell className="font-bold">{pos.symbol}</TableCell>
+                          <TableCell className={pos.side === 'LONG' ? 'text-[var(--up,#1fc27a)]' : 'text-[var(--down,#f2475f)]'}>
+                            {pos.side} {pos.leverage}×
+                          </TableCell>
+                          <TableCell className="text-right font-mono">{formatDecimal(pos.entryPrice)}</TableCell>
+                          <TableCell className="text-right font-mono">{formatDecimal(pos.quantity)}</TableCell>
+                          <TableCell className="text-right font-mono">{formatDecimal(pos.margin)} USDT</TableCell>
+                          <TableCell className="text-center">
+                            <Badge variant="secondary" size="sm">ĐÃ ĐÓNG</Badge>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )
               ) : (
-                <div className="py-12 text-center text-xs text-[var(--text-3,#63636b)]">
-                  Đang tải dữ liệu lịch sử...
-                </div>
+                fundingHistory.length === 0 ? (
+                  <EmptyState title="Chưa có lịch sử Funding" description="Các kỳ thanh toán funding của hợp đồng sẽ hiển thị tại đây." />
+                ) : (
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Thời gian</TableHead>
+                        <TableHead className="text-right">Funding Rate</TableHead>
+                        <TableHead className="text-right">Giá đánh dấu</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {fundingHistory.map((f, idx) => (
+                        <TableRow key={idx}>
+                          <TableCell className="font-mono text-[var(--text-3,#63636b)]">
+                            {new Date(f.fundingTime).toLocaleString('vi-VN')}
+                          </TableCell>
+                          <TableCell className="text-right font-mono text-[var(--warn,#f59e0b)] font-semibold">
+                            {(parseFloat(f.fundingRate) * 100).toFixed(4)}%
+                          </TableCell>
+                          <TableCell className="text-right font-mono text-[var(--accent,#818cf8)]">
+                            {formatDecimal(f.markPrice)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )
               )}
             </div>
           </div>

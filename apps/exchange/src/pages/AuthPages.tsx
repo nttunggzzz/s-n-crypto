@@ -2,19 +2,46 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext.tsx';
 import { getApiClient } from '../services/api.ts';
 import { Button, Input, Card, CheckIcon, AlertCircleIcon } from '@cex/ui';
+import { safeNext, appLinks } from '@cex/contracts';
 
 export interface AuthPageProps {
   onNavigate: (path: string) => void;
 }
 
 export const LoginPage: React.FC<AuthPageProps> = ({ onNavigate }) => {
-  const { login, loginTwoFactor } = useAuth();
+  const { login, loginTwoFactor, isAuthenticated, sessionEndedMessage } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [twoFactorChallenge, setTwoFactorChallenge] = useState<string | null>(null);
   const [twoFactorCode, setTwoFactorCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [nextParam, setNextParam] = useState<string | null>(null);
+
+  useEffect(() => {
+    const next = new URLSearchParams(window.location.search).get('next');
+    if (next) setNextParam(next);
+  }, []);
+
+  useEffect(() => {
+    if (isAuthenticated && nextParam) {
+      const dest = safeNext(nextParam, [import.meta.env.VITE_ADMIN_ORIGIN || ''].filter(Boolean)) ?? '/trade/BTCUSDT';
+      if (dest.startsWith('http')) {
+        window.location.href = dest;
+      } else {
+        onNavigate(dest);
+      }
+    }
+  }, [isAuthenticated, nextParam, onNavigate]);
+
+  const handleSuccessNavigate = () => {
+    const dest = safeNext(nextParam, [import.meta.env.VITE_ADMIN_ORIGIN || ''].filter(Boolean)) ?? '/trade/BTCUSDT';
+    if (dest.startsWith('http')) {
+      window.location.href = dest;
+    } else {
+      onNavigate(dest);
+    }
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -27,7 +54,7 @@ export const LoginPage: React.FC<AuthPageProps> = ({ onNavigate }) => {
     const res = await login({ email, password });
     setLoading(false);
     if (res.success) {
-      onNavigate('/trade/BTCUSDT');
+      handleSuccessNavigate();
     } else if ('twoFactorRequired' in res && res.twoFactorRequired) {
       setTwoFactorChallenge(res.challengeToken);
       setError(null);
@@ -47,7 +74,7 @@ export const LoginPage: React.FC<AuthPageProps> = ({ onNavigate }) => {
     const res = await loginTwoFactor(twoFactorChallenge, twoFactorCode.trim());
     setLoading(false);
     if (res.success) {
-      onNavigate('/trade/BTCUSDT');
+      handleSuccessNavigate();
     } else {
       setError(res.error || 'Mã xác thực 2FA không chính xác.');
     }
@@ -85,10 +112,10 @@ export const LoginPage: React.FC<AuthPageProps> = ({ onNavigate }) => {
             </p>
           </div>
 
-          {error && (
+          {(error || sessionEndedMessage) && (
             <div className="mb-6 p-3 rounded-[var(--radius-md,8px)] bg-[var(--down,#f2475f)]/10 border border-[var(--down,#f2475f)]/20 text-sm text-[var(--down,#f2475f)] flex items-center gap-2">
               <AlertCircleIcon size={18} className="shrink-0" />
-              <span>{error}</span>
+              <span>{error || sessionEndedMessage}</span>
             </div>
           )}
 

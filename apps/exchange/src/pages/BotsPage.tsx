@@ -69,9 +69,10 @@ export const BotsPage: React.FC<BotsPageProps> = ({ onNavigate }) => {
   const searchParams = useMemo(() => new URLSearchParams(window.location.search), []);
   const initialTab = searchParams.get('tab') === 'dca' ? 'dca' : 'grid';
   const initialGridId = searchParams.get('grid');
+  const initialSymbol = searchParams.get('symbol') || 'BTCUSDT';
 
   const [activeTab, setActiveTab] = useState<'grid' | 'dca'>(initialTab);
-  const [subTab, setSubTab] = useState<'running' | 'history'>('running');
+  const [subTab, setSubTab] = useState<'all' | 'running' | 'history'>('all');
 
   // Balances
   const [balances, setBalances] = useState<Balances | null>(null);
@@ -81,7 +82,7 @@ export const BotsPage: React.FC<BotsPageProps> = ({ onNavigate }) => {
   const [loadingGridBots, setLoadingGridBots] = useState(false);
 
   // Create Grid Bot Form states
-  const [gridSymbol, setGridSymbol] = useState('BTCUSDT');
+  const [gridSymbol, setGridSymbol] = useState(initialSymbol);
   const [lowerPrice, setLowerPrice] = useState('');
   const [upperPrice, setUpperPrice] = useState('');
   const [gridCount, setGridCount] = useState(10);
@@ -110,13 +111,14 @@ export const BotsPage: React.FC<BotsPageProps> = ({ onNavigate }) => {
   const [loadingDcaPlans, setLoadingDcaPlans] = useState(false);
 
   // Create DCA Form states
-  const [dcaSymbol, setDcaSymbol] = useState('BTCUSDT');
+  const [dcaSymbol, setDcaSymbol] = useState(initialSymbol);
   const [dcaQuoteAmount, setDcaQuoteAmount] = useState('50');
-  const [dcaInterval, setDcaInterval] = useState<DcaInterval>('WEEKLY');
+  const [dcaInterval, setDcaInterval] = useState<DcaInterval>('DAILY');
   const [dcaHour, setDcaHour] = useState(9);
   const [dcaDayOfWeek, setDcaDayOfWeek] = useState(1); // 1 = Monday
   const [dcaDayOfMonth, setDcaDayOfMonth] = useState(1);
   const [creatingDca, setCreatingDca] = useState(false);
+  const [createDcaModalOpen, setCreateDcaModalOpen] = useState(false);
 
   // DCA Modals
   const [editDcaPlan, setEditDcaPlan] = useState<DcaPlan | null>(null);
@@ -360,8 +362,8 @@ export const BotsPage: React.FC<BotsPageProps> = ({ onNavigate }) => {
   };
 
   // Create DCA Plan
-  const handleCreateDcaPlan = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleCreateDcaPlan = async (e?: React.SyntheticEvent) => {
+    e?.preventDefault();
     if (!dcaQuoteAmount || parseFloat(dcaQuoteAmount) <= 0) {
       toastError('Vui lòng nhập số tiền hợp lệ.');
       return;
@@ -379,6 +381,7 @@ export const BotsPage: React.FC<BotsPageProps> = ({ onNavigate }) => {
         },
       });
       success(`Đã tạo kế hoạch Mua định kỳ ${dcaSymbol}!`);
+      setCreateDcaModalOpen(false);
       fetchDcaPlans();
       setDcaQuoteAmount('50');
     } catch (err: unknown) {
@@ -456,7 +459,7 @@ export const BotsPage: React.FC<BotsPageProps> = ({ onNavigate }) => {
 
   // Format Frequency Vietnamese String
   const formatDcaFrequency = (plan: DcaPlan) => {
-    const hourStr = `${plan.hour.toString().padStart(2, '0')}:00`;
+    const hourStr = `${plan.hour.toString().padStart(2, '0')}:00 (GMT+7)`;
     if (plan.interval === 'DAILY') {
       return `Hằng ngày lúc ${hourStr}`;
     }
@@ -530,6 +533,7 @@ export const BotsPage: React.FC<BotsPageProps> = ({ onNavigate }) => {
             Bot lưới (Grid Bot)
           </button>
           <button
+            data-testid="bots-tab-dca"
             onClick={() => setActiveTab('dca')}
             className={`px-4 py-2 rounded-md text-xs font-bold transition-all cursor-pointer ${
               activeTab === 'dca'
@@ -549,9 +553,19 @@ export const BotsPage: React.FC<BotsPageProps> = ({ onNavigate }) => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* Left / Center 2 Cols: Running Bots & History */}
           <div className="lg:col-span-2 space-y-4">
-            {/* Sub-tabs: Đang chạy vs Lịch sử */}
+            {/* Sub-tabs: Tất cả vs Đang chạy vs Lịch sử */}
             <div className="flex items-center justify-between pb-2 border-b border-[var(--line,#1d1e21)]">
               <div className="flex items-center gap-4 text-xs font-semibold">
+                <button
+                  onClick={() => setSubTab('all')}
+                  className={`pb-2 border-b-2 transition-colors cursor-pointer ${
+                    subTab === 'all'
+                      ? 'border-[var(--accent,#818cf8)] text-white'
+                      : 'border-transparent text-[var(--text-3,#63636b)] hover:text-[var(--text-2,#a1a1aa)]'
+                  }`}
+                >
+                  Tất cả ({gridBotsList.length})
+                </button>
                 <button
                   onClick={() => setSubTab('running')}
                   className={`pb-2 border-b-2 transition-colors cursor-pointer ${
@@ -590,29 +604,50 @@ export const BotsPage: React.FC<BotsPageProps> = ({ onNavigate }) => {
                   <Skeleton key={i} height={140} className="w-full rounded-xl" />
                 ))}
               </div>
-            ) : subTab === 'running' ? (
-              runningGridBots.length === 0 ? (
-                <EmptyState
-                  title="Chưa có bot lưới nào đang chạy"
-                  description="Hãy thiết lập thông số bên cạnh để khởi chạy bot lưới đầu tiên của bạn."
-                />
-              ) : (
+            ) : (() => {
+              const displayedBots = subTab === 'running'
+                ? runningGridBots
+                : subTab === 'history'
+                ? historyGridBots
+                : gridBotsList;
+
+              if (displayedBots.length === 0) {
+                return (
+                  <EmptyState
+                    title="Chưa có bot lưới nào"
+                    description="Hãy thiết lập thông số bên cạnh để khởi chạy bot lưới đầu tiên của bạn."
+                  />
+                );
+              }
+
+              return (
                 <div className="space-y-4">
-                  {runningGridBots.map((bot) => {
-                    const pnlNum = parseFloat(bot.totalPnl || '0');
+                  {displayedBots.map((bot) => {
+                    const isRunning = bot.status === 'RUNNING';
+                    const pnlVal = bot.totalPnl !== null && bot.totalPnl !== undefined ? parseFloat(bot.totalPnl) : null;
                     return (
                       <div
                         key={bot.id}
-                        className="p-5 rounded-xl bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)] hover:border-[var(--line,#1d1e21)]/80 transition-all space-y-4"
+                        data-testid="grid-bot-card"
+                        className={`p-5 rounded-xl bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)] hover:border-[var(--line,#1d1e21)]/80 transition-all space-y-4 ${
+                          !isRunning ? 'opacity-90' : ''
+                        }`}
                       >
                         <div className="flex items-center justify-between">
                           <div className="flex items-center gap-2">
                             <span className="font-bold text-base text-[var(--text,#f4f4f5)]">{bot.symbol}</span>
-                            <Badge variant="success" size="sm" className="bg-[var(--up,#1fc27a)]/10 text-[var(--up,#1fc27a)] border-none">
-                              Đang chạy
-                            </Badge>
+                            {isRunning ? (
+                              <Badge variant="success" size="sm" className="bg-[var(--up,#1fc27a)]/10 text-[var(--up,#1fc27a)] border-none">
+                                Đang chạy
+                              </Badge>
+                            ) : (
+                              <Badge variant="secondary" size="sm">
+                                Đã dừng
+                              </Badge>
+                            )}
                             <span className="text-[11px] text-[var(--text-3,#63636b)]">
                               {bot.mode === 'ARITHMETIC' ? 'Số học' : 'Hình học'} · {bot.gridCount} lưới
+                              {!isRunning && bot.stopReason && ` · ${formatStopReason(bot.stopReason)}`}
                             </span>
                           </div>
 
@@ -625,34 +660,41 @@ export const BotsPage: React.FC<BotsPageProps> = ({ onNavigate }) => {
                             >
                               Chi tiết
                             </Button>
-                            <Button
-                              variant="secondary"
-                              size="sm"
-                              onClick={() => {
-                                setStoppingBot(bot);
-                                setStoppingSellBase(false);
-                              }}
-                              className="text-xs text-[var(--down,#f2475f)]"
-                            >
-                              Dừng
-                            </Button>
+                            {isRunning && (
+                              <Button
+                                data-testid="grid-bot-stop"
+                                variant="secondary"
+                                size="sm"
+                                onClick={() => {
+                                  setStoppingBot(bot);
+                                  setStoppingSellBase(false);
+                                }}
+                                className="text-xs text-[var(--down,#f2475f)]"
+                              >
+                                Dừng
+                              </Button>
+                            )}
                           </div>
                         </div>
 
                         {/* Metrics Grid */}
                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 p-3 rounded-lg bg-[var(--panel-2,#141416)] text-xs font-mono">
                           <div>
-                            <span className="text-[10px] text-[var(--text-3,#63636b)] block">Tổng Lãi/Lỗ:</span>
+                            <span className="text-[10px] text-[var(--text-3,#63636b)] block">
+                              {isRunning ? 'Tổng Lãi/Lỗ:' : 'Kết quả cuối:'}
+                            </span>
                             <span
                               className={`font-bold ${
-                                pnlNum > 0
+                                pnlVal === null
+                                  ? 'text-[var(--text-3,#63636b)]'
+                                  : pnlVal > 0
                                   ? 'text-[var(--up,#1fc27a)]'
-                                  : pnlNum < 0
+                                  : pnlVal < 0
                                   ? 'text-[var(--down,#f2475f)]'
                                   : 'text-[var(--text,#f4f4f5)]'
                               }`}
                             >
-                              {pnlNum > 0 ? '+' : ''}{formatDecimal(bot.totalPnl, { decimals: 2 })} USDT
+                              {pnlVal === null ? '—' : `${pnlVal > 0 ? '+' : ''}${formatDecimal(bot.totalPnl, { decimals: 2 })} USDT`}
                             </span>
                           </div>
                           <div>
@@ -666,8 +708,16 @@ export const BotsPage: React.FC<BotsPageProps> = ({ onNavigate }) => {
                             <span className="text-[var(--text,#f4f4f5)]">{bot.completedRounds} vòng</span>
                           </div>
                           <div>
-                            <span className="text-[10px] text-[var(--text-3,#63636b)] block">Lệnh đang mở:</span>
-                            <span className="text-[var(--text,#f4f4f5)]">{bot.openOrders} lệnh</span>
+                            <span className="text-[10px] text-[var(--text-3,#63636b)] block">
+                              {isRunning ? 'Lệnh đang mở:' : 'Thời gian dừng:'}
+                            </span>
+                            <span className="text-[var(--text,#f4f4f5)]">
+                              {isRunning
+                                ? `${bot.openOrders} lệnh`
+                                : bot.stoppedAt
+                                ? new Date(bot.stoppedAt).toLocaleString('vi-VN')
+                                : '—'}
+                            </span>
                           </div>
                         </div>
 
@@ -680,66 +730,8 @@ export const BotsPage: React.FC<BotsPageProps> = ({ onNavigate }) => {
                     );
                   })}
                 </div>
-              )
-            ) : (
-              /* History Grid Bots */
-              historyGridBots.length === 0 ? (
-                <EmptyState
-                  title="Không có lịch sử bot lưới"
-                  description="Các bot lưới đã dừng hoặc kết thúc sẽ hiển thị tại đây."
-                />
-              ) : (
-                <div className="space-y-4">
-                  {historyGridBots.map((bot) => (
-                    <div
-                      key={bot.id}
-                      className="p-5 rounded-xl bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)] space-y-3 opacity-90"
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span className="font-bold text-sm text-[var(--text,#f4f4f5)]">{bot.symbol}</span>
-                          <Badge variant="secondary" size="sm">Đã dừng</Badge>
-                          <span className="text-[10px] text-[var(--text-3,#63636b)]">
-                            Lý do: {formatStopReason(bot.stopReason)}
-                          </span>
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleOpenDetails(bot)}
-                          className="text-xs text-[var(--text-3,#63636b)]"
-                        >
-                          Chi tiết
-                        </Button>
-                      </div>
-
-                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 p-3 rounded-lg bg-[var(--panel-2,#141416)] text-xs font-mono">
-                        <div>
-                          <span className="text-[10px] text-[var(--text-3,#63636b)] block">Kết quả cuối:</span>
-                          <span className="font-bold text-[var(--text,#f4f4f5)]">
-                            {formatDecimal(bot.totalPnl, { decimals: 2 })} USDT
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-[10px] text-[var(--text-3,#63636b)] block">Lãi lưới:</span>
-                          <span className="text-[var(--up,#1fc27a)] font-semibold">
-                            +{formatDecimal(bot.gridProfit, { decimals: 2 })} USDT
-                          </span>
-                        </div>
-                        <div>
-                          <span className="text-[10px] text-[var(--text-3,#63636b)] block">Số vòng:</span>
-                          <span>{bot.completedRounds}</span>
-                        </div>
-                        <div>
-                          <span className="text-[10px] text-[var(--text-3,#63636b)] block">Thời gian dừng:</span>
-                          <span className="text-[10px]">{bot.stoppedAt ? new Date(bot.stoppedAt).toLocaleString('vi-VN') : '—'}</span>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )
-            )}
+              );
+            })()}
           </div>
 
           {/* Right Col: Create Grid Bot Form */}
@@ -753,6 +745,7 @@ export const BotsPage: React.FC<BotsPageProps> = ({ onNavigate }) => {
               <div>
                 <label className="block text-xs font-semibold text-[var(--text-2,#a1a1aa)] mb-1">Cặp giao dịch</label>
                 <select
+                  data-testid="grid-symbol"
                   value={gridSymbol}
                   onChange={(e) => {
                     setGridSymbol(e.target.value);
@@ -783,11 +776,13 @@ export const BotsPage: React.FC<BotsPageProps> = ({ onNavigate }) => {
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <Input
+                    data-testid="grid-lower"
                     placeholder="Giá thấp"
                     value={lowerPrice}
                     onChange={(e) => setLowerPrice(e.target.value)}
                   />
                   <Input
+                    data-testid="grid-upper"
                     placeholder="Giá cao"
                     value={upperPrice}
                     onChange={(e) => setUpperPrice(e.target.value)}
@@ -799,15 +794,15 @@ export const BotsPage: React.FC<BotsPageProps> = ({ onNavigate }) => {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-semibold text-[var(--text-2,#a1a1aa)] mb-1">
-                    Số lưới: <span className="text-white font-mono">{gridCount}</span>
+                    Số lưới (2–100)
                   </label>
-                  <input
-                    type="range"
-                    min="2"
-                    max="100"
+                  <Input
+                    data-testid="grid-count"
+                    type="number"
+                    min={2}
+                    max={100}
                     value={gridCount}
-                    onChange={(e) => setGridCount(parseInt(e.target.value))}
-                    className="w-full cursor-pointer accent-[var(--accent,#818cf8)]"
+                    onChange={(e) => setGridCount(parseInt(e.target.value) || 2)}
                   />
                 </div>
                 <div>
@@ -844,6 +839,7 @@ export const BotsPage: React.FC<BotsPageProps> = ({ onNavigate }) => {
                   </span>
                 </div>
                 <Input
+                  data-testid="grid-investment"
                   placeholder="Số USDT đầu tư"
                   value={gridInvestment}
                   onChange={(e) => {
@@ -885,7 +881,7 @@ export const BotsPage: React.FC<BotsPageProps> = ({ onNavigate }) => {
                 <div className="p-3 rounded-lg bg-[var(--panel-2,#141416)] border border-[var(--line,#1d1e21)] space-y-1.5 text-xs">
                   <div className="flex justify-between">
                     <span className="text-[var(--text-3,#63636b)]">Lãi mỗi lưới (sau phí):</span>
-                    <span className="text-[var(--up,#1fc27a)] font-bold font-mono">
+                    <span data-testid="grid-preview-profit" className="text-[var(--up,#1fc27a)] font-bold font-mono">
                       {(parseFloat(gridPreviewData.profitPerGridMin) * 100).toFixed(2)}% –{' '}
                       {(parseFloat(gridPreviewData.profitPerGridMax) * 100).toFixed(2)}%
                     </span>
@@ -912,6 +908,7 @@ export const BotsPage: React.FC<BotsPageProps> = ({ onNavigate }) => {
               ) : null}
 
               <Button
+                data-testid="grid-create"
                 variant="primary"
                 fullWidth
                 disabled={!gridPreviewData || previewLoading}
@@ -936,7 +933,7 @@ export const BotsPage: React.FC<BotsPageProps> = ({ onNavigate }) => {
                 <button
                   onClick={() => setSubTab('running')}
                   className={`pb-2 border-b-2 transition-colors cursor-pointer ${
-                    subTab === 'running'
+                    subTab !== 'history'
                       ? 'border-[var(--accent,#818cf8)] text-white'
                       : 'border-transparent text-[var(--text-3,#63636b)] hover:text-[var(--text-2,#a1a1aa)]'
                   }`}
@@ -971,7 +968,7 @@ export const BotsPage: React.FC<BotsPageProps> = ({ onNavigate }) => {
                   <Skeleton key={i} height={140} className="w-full rounded-xl" />
                 ))}
               </div>
-            ) : subTab === 'running' ? (
+            ) : subTab !== 'history' ? (
               runningDcaPlans.length === 0 ? (
                 <EmptyState
                   title="Chưa có kế hoạch Mua định kỳ nào"
@@ -992,6 +989,7 @@ export const BotsPage: React.FC<BotsPageProps> = ({ onNavigate }) => {
                     return (
                       <div
                         key={plan.id}
+                        data-testid="dca-plan-card"
                         className="p-5 rounded-xl bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)] space-y-4"
                       >
                         <div className="flex items-center justify-between">
@@ -1010,6 +1008,7 @@ export const BotsPage: React.FC<BotsPageProps> = ({ onNavigate }) => {
 
                           <div className="flex items-center gap-2">
                             <Button
+                              data-testid="dca-pause"
                               variant="outline"
                               size="sm"
                               onClick={() => handleToggleDcaStatus(plan)}
@@ -1031,6 +1030,7 @@ export const BotsPage: React.FC<BotsPageProps> = ({ onNavigate }) => {
                               <Edit2 size={13} />
                             </Button>
                             <Button
+                              data-testid="dca-cancel"
                               variant="ghost"
                               size="sm"
                               onClick={() => setCancelDcaPlanItem(plan)}
@@ -1147,6 +1147,7 @@ export const BotsPage: React.FC<BotsPageProps> = ({ onNavigate }) => {
               <div>
                 <label className="block text-xs font-semibold text-[var(--text-2,#a1a1aa)] mb-1">Cặp giao dịch</label>
                 <select
+                  data-testid="dca-symbol"
                   value={dcaSymbol}
                   onChange={(e) => setDcaSymbol(e.target.value)}
                   className="w-full bg-[var(--panel-2,#141416)] border border-[var(--line,#1d1e21)] rounded-lg px-3 py-2 text-xs text-white"
@@ -1163,6 +1164,7 @@ export const BotsPage: React.FC<BotsPageProps> = ({ onNavigate }) => {
               <div>
                 <label className="block text-xs font-semibold text-[var(--text-2,#a1a1aa)] mb-1">Số USDT mỗi kỳ</label>
                 <Input
+                  data-testid="dca-amount"
                   value={dcaQuoteAmount}
                   onChange={(e) => setDcaQuoteAmount(e.target.value)}
                   placeholder="50"
@@ -1174,20 +1176,16 @@ export const BotsPage: React.FC<BotsPageProps> = ({ onNavigate }) => {
               {/* Interval Selection */}
               <div>
                 <label className="block text-xs font-semibold text-[var(--text-2,#a1a1aa)] mb-1">Tần suất mua</label>
-                <div className="grid grid-cols-3 gap-1 bg-[var(--panel-2,#141416)] p-0.5 rounded border border-[var(--line,#1d1e21)]">
-                  {(['DAILY', 'WEEKLY', 'MONTHLY'] as DcaInterval[]).map((iv) => (
-                    <button
-                      key={iv}
-                      type="button"
-                      onClick={() => setDcaInterval(iv)}
-                      className={`py-1.5 text-xs font-semibold rounded cursor-pointer ${
-                        dcaInterval === iv ? 'bg-[var(--accent,#818cf8)] text-black' : 'text-[var(--text-3,#63636b)]'
-                      }`}
-                    >
-                      {iv === 'DAILY' ? 'Hằng ngày' : iv === 'WEEKLY' ? 'Hằng tuần' : 'Hằng tháng'}
-                    </button>
-                  ))}
-                </div>
+                <select
+                  data-testid="dca-interval"
+                  value={dcaInterval}
+                  onChange={(e) => setDcaInterval(e.target.value as DcaInterval)}
+                  className="w-full bg-[var(--panel-2,#141416)] border border-[var(--line,#1d1e21)] rounded-lg px-3 py-2 text-xs text-white"
+                >
+                  <option value="DAILY">Hằng ngày</option>
+                  <option value="WEEKLY">Hằng tuần</option>
+                  <option value="MONTHLY">Hằng tháng</option>
+                </select>
               </div>
 
               {/* Day of Week for WEEKLY */}
@@ -1244,7 +1242,13 @@ export const BotsPage: React.FC<BotsPageProps> = ({ onNavigate }) => {
                 * Nếu sàn tạm dừng đúng giờ mua, kỳ đó sẽ được bỏ qua và không mua bù.
               </p>
 
-              <Button type="submit" variant="primary" fullWidth loading={creatingDca}>
+              <Button
+                data-testid="dca-create"
+                type="button"
+                variant="primary"
+                fullWidth
+                onClick={() => setCreateDcaModalOpen(true)}
+              >
                 Bắt đầu Mua định kỳ
               </Button>
             </form>
@@ -1296,8 +1300,57 @@ export const BotsPage: React.FC<BotsPageProps> = ({ onNavigate }) => {
             <Button variant="secondary" onClick={() => setCreateGridModalOpen(false)}>
               Hủy
             </Button>
-            <Button variant="primary" loading={creatingGrid} onClick={handleCreateGridBot}>
+            <Button
+              data-testid="bot-confirm"
+              variant="primary"
+              loading={creatingGrid}
+              onClick={handleCreateGridBot}
+            >
               Xác nhận khởi chạy
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Confirm Create DCA Plan Modal */}
+      <Modal
+        isOpen={createDcaModalOpen}
+        onClose={() => setCreateDcaModalOpen(false)}
+        title="Xác nhận tạo kế hoạch Mua định kỳ"
+      >
+        <div className="space-y-4 text-xs">
+          <p className="text-[var(--text-2,#a1a1aa)] leading-relaxed">
+            Hệ thống sẽ tự động đặt lệnh Mua theo chu kỳ đã thiết lập.
+          </p>
+
+          <div className="p-3 rounded-lg bg-[var(--panel-2,#141416)] border border-[var(--line,#1d1e21)] space-y-2 font-mono">
+            <div className="flex justify-between">
+              <span className="text-[var(--text-3,#63636b)]">Cặp:</span>
+              <span className="text-white font-bold">{dcaSymbol}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[var(--text-3,#63636b)]">Số tiền mỗi kỳ:</span>
+              <span className="text-[var(--up,#1fc27a)] font-bold">{dcaQuoteAmount} USDT</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[var(--text-3,#63636b)]">Tần suất:</span>
+              <span className="text-white">
+                {dcaInterval === 'DAILY' ? 'Hằng ngày' : dcaInterval === 'WEEKLY' ? `Hằng tuần (Thứ ${dcaDayOfWeek + 1})` : `Hằng tháng (Ngày ${dcaDayOfMonth})`} lúc {dcaHour}:00 (GMT+7)
+              </span>
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-3 pt-2">
+            <Button variant="secondary" onClick={() => setCreateDcaModalOpen(false)}>
+              Hủy
+            </Button>
+            <Button
+              data-testid="bot-confirm"
+              variant="primary"
+              loading={creatingDca}
+              onClick={handleCreateDcaPlan}
+            >
+              Xác nhận
             </Button>
           </div>
         </div>
@@ -1315,24 +1368,13 @@ export const BotsPage: React.FC<BotsPageProps> = ({ onNavigate }) => {
           </p>
 
           <div className="space-y-2 p-3 rounded-lg bg-[var(--panel-2,#141416)] border border-[var(--line,#1d1e21)]">
-            <span className="font-semibold text-white block mb-1">Xử lý coin bot đang giữ:</span>
             <label className="flex items-center gap-2 cursor-pointer">
               <input
-                type="radio"
-                name="sellBase"
-                checked={!stoppingSellBase}
-                onChange={() => setStoppingSellBase(false)}
-                className="accent-[var(--accent,#818cf8)]"
-              />
-              <span className="text-[var(--text-2,#a1a1aa)]">Giữ coin trong ví Spot</span>
-            </label>
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="radio"
-                name="sellBase"
+                type="checkbox"
+                data-testid="grid-stop-sell-base"
                 checked={stoppingSellBase}
-                onChange={() => setStoppingSellBase(true)}
-                className="accent-[var(--accent,#818cf8)]"
+                onChange={(e) => setStoppingSellBase(e.target.checked)}
+                className="accent-[var(--accent,#818cf8)] rounded cursor-pointer"
               />
               <span className="text-[var(--text-2,#a1a1aa)]">Bán coin bot đang giữ sang USDT (Lệnh thị trường)</span>
             </label>
@@ -1342,7 +1384,12 @@ export const BotsPage: React.FC<BotsPageProps> = ({ onNavigate }) => {
             <Button variant="secondary" onClick={() => setStoppingBot(null)}>
               Hủy bỏ
             </Button>
-            <Button variant="primary" loading={stoppingAction} onClick={handleStopGridBot}>
+            <Button
+              data-testid="grid-stop-confirm"
+              variant="primary"
+              loading={stoppingAction}
+              onClick={handleStopGridBot}
+            >
               Xác nhận dừng bot
             </Button>
           </div>
@@ -1476,7 +1523,12 @@ export const BotsPage: React.FC<BotsPageProps> = ({ onNavigate }) => {
             <Button variant="secondary" onClick={() => setCancelDcaPlanItem(null)}>
               Không hủy
             </Button>
-            <Button variant="primary" loading={cancelingDca} onClick={handleConfirmCancelDca}>
+            <Button
+              data-testid="dca-cancel-confirm"
+              variant="primary"
+              loading={cancelingDca}
+              onClick={handleConfirmCancelDca}
+            >
               Xác nhận hủy
             </Button>
           </div>

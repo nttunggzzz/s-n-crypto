@@ -31,6 +31,8 @@ interface AuthContextType {
   logout: () => Promise<void>;
   resendVerification: () => Promise<{ success: boolean; error?: string }>;
   refreshUser: () => Promise<void>;
+  sessionEnded: boolean;
+  sessionEndedMessage: string | null;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -38,12 +40,14 @@ const AuthContext = createContext<AuthContextType | null>(null);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<Me | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [sessionEnded, setSessionEnded] = useState(false);
+  const [sessionEndedMessage, setSessionEndedMessage] = useState<string | null>(null);
 
   const api = getApiClient();
 
-  const reconnectRt = async () => {
+  const reconnectRt = () => {
     try {
-      const rt = await getRealtimeClient();
+      const rt = getRealtimeClient();
       rt.reconnect();
     } catch {
       // ignore
@@ -88,22 +92,39 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     syncPreferences();
 
     let unsubError: (() => void) | undefined;
-    getRealtimeClient().then((rt) => {
+    let unsubClose: (() => void) | undefined;
+    try {
+      const rt = getRealtimeClient();
       unsubError = rt.onError((err) => {
         if (err.channel === 'user' && err.code === 'UNAUTHENTICATED') {
           api.me().then(
             (me) => setUser(me),
-            () => {
+            (e) => {
               setUser(null);
-              rt.reconnect();
+              if (e instanceof ApiError && e.status === 401) {
+                setSessionEnded(true);
+                setSessionEndedMessage('Phiên đăng nhập đã kết thúc');
+                window.location.href = '/login';
+              } else {
+                rt.reconnect();
+              }
             }
           );
         }
       });
-    }).catch(() => {});
+      unsubClose = rt.onClose((ev) => {
+        if (ev.code === 4401) {
+          setUser(null);
+          setSessionEnded(true);
+          setSessionEndedMessage('Phiên đăng nhập đã kết thúc');
+          window.location.href = '/login';
+        }
+      });
+    } catch {}
 
     return () => {
       unsubError?.();
+      unsubClose?.();
     };
   }, []);
 
@@ -201,6 +222,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         logout,
         resendVerification,
         refreshUser,
+        sessionEnded,
+        sessionEndedMessage,
       }}
     >
       {children}

@@ -114,16 +114,20 @@ export const MarketsPage: React.FC<MarketsPageProps> = ({ onNavigate }) => {
         setSparklinesMap(map);
       })
       .catch(() => {});
-
-    // Load futures contracts & tickers (B3)
-    Promise.all([
-      api.futuresTickers().catch(() => ({ items: [] })),
-      api.futuresExchangeInfo().catch(() => ({ symbols: [] })),
-    ]).then(([tRes, exRes]) => {
-      setFuturesTickersList(tRes.items);
-      setFuturesContracts(exRes.symbols);
-    }).catch(() => {});
   }, [isAuthenticated, api]);
+
+  // Load futures contracts & tickers lazily when futures tab is opened (B3)
+  useEffect(() => {
+    if (activeTab === 'futures' && futuresContracts.length === 0) {
+      Promise.all([
+        api.futuresTickers().catch(() => ({ items: [] })),
+        api.futuresExchangeInfo().catch(() => ({ symbols: [] })),
+      ]).then(([tRes, exRes]) => {
+        setFuturesTickersList(tRes.items);
+        setFuturesContracts(exRes.symbols);
+      }).catch(() => {});
+    }
+  }, [activeTab, futuresContracts.length, api]);
 
   const dismissAnnouncement = (id: string) => {
     const next = [...dismissedAnnouncements, id];

@@ -344,7 +344,7 @@ export const UserOrdersTabs: React.FC<UserOrdersTabsProps> = ({
                   const limitLeg = list.orders.find((o) => o.type === 'LIMIT');
                   const stopLeg = list.orders.find((o) => o.type === 'STOP_LIMIT' || o.type === 'STOP_MARKET');
                   return (
-                    <TableRow key={list.id} className="bg-[var(--accent,#818cf8)]/5 border-l-2 border-l-[var(--accent,#818cf8)]">
+                    <TableRow key={list.id} data-testid="open-order-row" className="bg-[var(--accent,#818cf8)]/5 border-l-2 border-l-[var(--accent,#818cf8)]">
                       <TableCell className="text-xs text-[var(--color-text-muted,#6b7280)] font-mono">
                         {new Date(list.createdAt).toLocaleTimeString('vi-VN', { hour12: false })}
                       </TableCell>
@@ -377,6 +377,7 @@ export const UserOrdersTabs: React.FC<UserOrdersTabsProps> = ({
                       </TableCell>
                       <TableCell className="text-right">
                         <Button
+                          data-testid="order-cancel"
                           variant="ghost"
                           size="sm"
                           loading={cancelingListId === list.id}
@@ -394,7 +395,7 @@ export const UserOrdersTabs: React.FC<UserOrdersTabsProps> = ({
                 {standaloneOpenOrders.map((ord) => {
                   const isTrailing = ord.type === 'TRAILING_STOP_MARKET';
                   return (
-                    <TableRow key={ord.id}>
+                    <TableRow key={ord.id} data-testid="open-order-row">
                       <TableCell className="text-xs text-[var(--color-text-muted,#6b7280)] font-mono">
                         {new Date(ord.createdAt).toLocaleTimeString('vi-VN', { hour12: false })}
                       </TableCell>
@@ -469,6 +470,7 @@ export const UserOrdersTabs: React.FC<UserOrdersTabsProps> = ({
                           </span>
                         ) : (
                           <Button
+                            data-testid="order-cancel"
                             variant="ghost"
                             size="sm"
                             loading={cancelingId === ord.id}
