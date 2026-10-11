@@ -1,4 +1,5 @@
 import type { MarketStatus } from '@cex/contracts';
+import type { Config } from '../config.ts';
 import { logger } from '../logger.ts';
 
 /**
@@ -52,6 +53,14 @@ export class Alerter {
       logger.error({ err, alert: key }, 'could not send the alert');
     }
   }
+}
+
+/** The operator alerter from the settings — used by the server (src/main.ts) and the host supervisor (scripts/hostStack.ts). */
+export function createAlerter(config: Pick<Config, 'TELEGRAM_BOT_TOKEN' | 'TELEGRAM_CHAT_ID' | 'ALERT_ENV_NAME' | 'NODE_ENV'>): Alerter {
+  return new Alerter(
+    config.TELEGRAM_BOT_TOKEN ? telegramSink(config.TELEGRAM_BOT_TOKEN, config.TELEGRAM_CHAT_ID) : null,
+    config.ALERT_ENV_NAME || process.env.RAILWAY_ENVIRONMENT_NAME || config.NODE_ENV,
+  );
 }
 
 /**
