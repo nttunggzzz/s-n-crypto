@@ -34,6 +34,9 @@ server/
                         faucet, reconciliation, pnlService (phân tích lãi lỗ), routes
   src/realtime       WebSocket /ws
   src/ops            singleInstance (khóa 1 bản + máy chủ chờ khi deploy), alerts (Telegram: giá gián đoạn, đối soát lệch, crash)
+                     restartPolicy (supervisor của sàn tự host tự khởi động lại server), memoryLog (bộ nhớ vào log mỗi 10 phút)
+  scripts/hostStack.ts sàn tự host (`npm run host`): PostgreSQL + supervisor chạy server (bản build dist/main.js nếu có)
+  scripts/build.ts   `npm run build -w @cex/server`: esbuild → server/dist/main.js (@cex/* vào bundle, thư viện npm để ngoài)
   src/lib/webApp.ts  phục vụ bản build app sàn ở / (WEB_DIST) và app admin ở /admin/ (ADMIN_WEB_DIST) cùng địa chỉ với API —
                      một lần đăng nhập cho cả hai; link giữa hai app: `appLinks` trong contracts (apps.ts)
   test/              globalSetup (PostgreSQL nhúng :5434), helpers
