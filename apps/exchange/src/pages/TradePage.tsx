@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useMemo } from 'react';
-import { Star, Settings2, BarChart2, Bell, Search } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { Star, Settings2, Bell, Search } from 'lucide-react';
+import { useMediaQuery } from '../hooks/useMediaQuery.ts';
 import { useMarket } from '../context/MarketContext.tsx';
 import { CandlestickChart } from '../components/trading/CandlestickChart.tsx';
 import { Orderbook } from '../components/trading/Orderbook.tsx';
@@ -10,7 +11,6 @@ import { PriceAlertModal } from '../components/PriceAlertModal.tsx';
 import {
   PriceText,
   PercentChange,
-  SymbolBadge,
   StaleBadge,
   BottomSheet,
   Button,
@@ -26,6 +26,7 @@ export interface TradePageProps {
 }
 
 export const TradePage: React.FC<TradePageProps> = ({ symbolParam, onNavigate }) => {
+  const isDesktop = useMediaQuery('(min-width: 1024px)');
   const {
     symbols,
     tickers,
@@ -33,7 +34,6 @@ export const TradePage: React.FC<TradePageProps> = ({ symbolParam, onNavigate })
     activeSymbolInfo,
     activeTicker,
     setActiveSymbol,
-    tradingHalted,
     activeTradeBlock,
   } = useMarket();
 
@@ -43,6 +43,55 @@ export const TradePage: React.FC<TradePageProps> = ({ symbolParam, onNavigate })
   const [orderRefreshTrigger, setOrderRefreshTrigger] = useState(0);
   const [alertModalOpen, setAlertModalOpen] = useState(false);
   const [marketSearch, setMarketSearch] = useState('');
+
+  const [favorites, setFavorites] = useState<string[]>(() => {
+    try {
+      const raw = localStorage.getItem('cex_favorites');
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  const [pairSwitcherOpen, setPairSwitcherOpen] = useState(false);
+  const [pairSearch, setPairSearch] = useState('');
+  const pairSwitcherRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!pairSwitcherOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (pairSwitcherRef.current && !pairSwitcherRef.current.contains(e.target as Node)) {
+        setPairSwitcherOpen(false);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setPairSwitcherOpen(false);
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [pairSwitcherOpen]);
+
+  const toggleFavorite = (sym: string) => {
+    setFavorites((prev) => {
+      const next = prev.includes(sym) ? prev.filter((s) => s !== sym) : [...prev, sym];
+      try {
+        localStorage.setItem('cex_favorites', JSON.stringify(next));
+      } catch {}
+      return next;
+    });
+  };
+
+  const isFavorite = favorites.includes(activeSymbol);
+
+  const switcherFilteredSymbols = useMemo(() => {
+    if (!pairSearch) return symbols;
+    const q = pairSearch.toUpperCase();
+    return symbols.filter((s) => s.symbol.includes(q) || s.baseAsset.includes(q));
+  }, [symbols, pairSearch]);
 
   const filteredSymbols = useMemo(() => {
     return symbols.filter((s) => {
@@ -54,10 +103,11 @@ export const TradePage: React.FC<TradePageProps> = ({ symbolParam, onNavigate })
 
   // Sync route param with activeSymbol
   useEffect(() => {
-    if (symbolParam && symbolParam !== activeSymbol) {
-      const exists = symbols.some((s) => s.symbol === symbolParam);
+    if (symbolParam && symbolParam.toUpperCase() !== activeSymbol) {
+      const target = symbolParam.toUpperCase();
+      const exists = symbols.some((s) => s.symbol === target);
       if (exists) {
-        setActiveSymbol(symbolParam);
+        setActiveSymbol(target);
       }
     }
   }, [symbolParam, activeSymbol, symbols, setActiveSymbol]);
@@ -96,44 +146,88 @@ export const TradePage: React.FC<TradePageProps> = ({ symbolParam, onNavigate })
         <div className="flex items-center gap-4 flex-wrap w-full md:w-auto">
           {/* Symbol & Star */}
           <div className="flex items-center gap-3">
-            <button className="text-[var(--text-3,#63636b)] hover:text-[var(--accent,#818cf8)] transition-colors">
-              <Star size={18} />
+            <button
+              onClick={() => toggleFavorite(activeSymbol)}
+              className={`p-1 transition-colors cursor-pointer ${
+                isFavorite ? 'text-amber-400' : 'text-[var(--text-3,#63636b)] hover:text-amber-400'
+              }`}
+              title={isFavorite ? 'Xóa khỏi danh sách ưa thích' : 'Thêm vào danh sách ưa thích'}
+            >
+              <Star size={18} fill={isFavorite ? 'currentColor' : 'none'} />
             </button>
-            <div className="relative group">
-              <div className="flex items-center gap-2 cursor-pointer py-1">
+            <div className="relative" ref={pairSwitcherRef}>
+              <button
+                type="button"
+                onClick={() => setPairSwitcherOpen((p) => !p)}
+                className="flex items-center gap-2 cursor-pointer py-1 px-1.5 rounded-md hover:bg-white/5 transition-colors"
+                aria-expanded={pairSwitcherOpen}
+              >
                 <span className="text-xl font-bold font-sans tracking-tight">
                   {activeSymbolInfo?.baseAsset}<span className="text-[var(--text-3,#63636b)]">/{activeSymbolInfo?.quoteAsset}</span>
                 </span>
-                <span className="text-[10px] text-[var(--text-2,#a1a1aa)] bg-[var(--panel-2,#141416)] px-1 py-0.5 rounded">10x</span>
-                <span className="text-[10px] text-[var(--text-3,#63636b)] ml-1">▼</span>
-              </div>
+                <span className={`text-[10px] text-[var(--text-3,#63636b)] ml-1 transition-transform duration-200 ${pairSwitcherOpen ? 'rotate-180' : ''}`}>▼</span>
+              </button>
 
-              {/* Quick Switch Dropdown */}
-              <div className="hidden group-hover:block absolute left-0 top-full mt-0 w-[300px] bg-[var(--panel-2,#141416)] border border-[var(--line,#1d1e21)] rounded-[var(--radius-lg,10px)] shadow-2xl py-2 z-50 max-h-80 overflow-y-auto">
-                <div className="px-3 pb-2 border-b border-[var(--line,#1d1e21)] mb-2 flex items-center gap-2 text-xs">
-                  <span className="text-[var(--text,#f4f4f5)] font-bold">USDT</span>
-                  <span className="text-[var(--text-3,#63636b)]">USDC</span>
-                  <span className="text-[var(--text-3,#63636b)]">Crypto</span>
+              {/* Quick Switch Popover */}
+              {pairSwitcherOpen && (
+                <div className="absolute left-0 top-full mt-1 w-[320px] bg-[var(--panel-2,#141416)] border border-[var(--line,#1d1e21)] rounded-[var(--radius-lg,10px)] shadow-2xl py-2 z-50 overflow-hidden">
+                  <div className="px-3 pb-2 border-b border-[var(--line,#1d1e21)]">
+                    <div className="flex items-center gap-2 bg-[var(--panel,#0a0a0b)] px-2.5 py-1.5 rounded-lg border border-[var(--line,#1d1e21)]">
+                      <Search size={14} className="text-[var(--text-3,#63636b)]" />
+                      <input
+                        type="text"
+                        placeholder="Tìm cặp spot (BTC, ETH...)"
+                        value={pairSearch}
+                        onChange={(e) => setPairSearch(e.target.value)}
+                        autoFocus
+                        className="bg-transparent text-xs text-[var(--text,#f4f4f5)] focus:outline-none w-full"
+                      />
+                    </div>
+                  </div>
+                  <div className="max-h-72 overflow-y-auto divide-y divide-[var(--line,#1d1e21)]/30">
+                    {switcherFilteredSymbols.map((s) => {
+                      const t = tickers[s.symbol];
+                      const isFav = favorites.includes(s.symbol);
+                      return (
+                        <div
+                          key={s.symbol}
+                          onClick={() => {
+                            if (s.enabled) {
+                              setActiveSymbol(s.symbol);
+                              onNavigate(`/trade/${s.symbol}`);
+                              setPairSwitcherOpen(false);
+                            }
+                          }}
+                          className={`w-full px-3 py-2 text-left text-xs flex items-center justify-between cursor-pointer hover:bg-white/5 transition-colors ${
+                            !s.enabled ? 'opacity-40 cursor-not-allowed' : ''
+                          } ${s.symbol === activeSymbol ? 'bg-[var(--accent,#818cf8)]/10 text-[var(--accent,#818cf8)]' : ''}`}
+                        >
+                          <div className="flex items-center gap-2">
+                            <span
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleFavorite(s.symbol);
+                              }}
+                              className={`cursor-pointer ${isFav ? 'text-amber-400' : 'text-zinc-600 hover:text-amber-400'}`}
+                            >
+                              <Star size={13} fill={isFav ? 'currentColor' : 'none'} />
+                            </span>
+                            <span className="font-semibold">{s.baseAsset} <span className="text-[var(--text-3,#63636b)] font-normal">/{s.quoteAsset}</span></span>
+                          </div>
+                          {t && (
+                            <div className="text-right font-mono tabular-nums">
+                              <div className="font-semibold">{formatDecimal(t.lastPrice)}</div>
+                              <div className={`text-[10px] ${t.priceChangePercent?.startsWith('-') ? 'text-[#f6465d]' : 'text-[#00c087]'}`}>
+                                {t.priceChangePercent?.startsWith('-') ? '' : '+'}{parseFloat(t.priceChangePercent || '0').toFixed(2)}%
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
-                {symbols.map((s) => (
-                  <button
-                    key={s.symbol}
-                    onClick={() => {
-                      if (s.enabled) {
-                        setActiveSymbol(s.symbol);
-                        onNavigate(`/trade/${s.symbol}`);
-                      }
-                    }}
-                    disabled={!s.enabled}
-                    className={`w-full px-3 py-1.5 text-left text-xs flex items-center justify-between cursor-pointer hover:bg-[var(--line,#1d1e21)] transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
-                      s.symbol === activeSymbol ? 'bg-[var(--line,#1d1e21)]' : ''
-                    }`}
-                  >
-                    <span className="font-semibold">{s.symbol.replace('USDT', '')} <span className="text-[var(--text-3,#63636b)] font-normal">/USDT</span></span>
-                    {!s.enabled && <span className="text-[9px] text-[var(--text-3,#63636b)]">Tắt</span>}
-                  </button>
-                ))}
-              </div>
+              )}
             </div>
           </div>
 
@@ -150,13 +244,11 @@ export const TradePage: React.FC<TradePageProps> = ({ symbolParam, onNavigate })
                   />
                 )}
               </span>
-              <span className="text-[11px] text-[var(--text-2,#a1a1aa)] font-mono">
-                {activeTicker?.lastPrice ? (
-                  <span>≈ {formatDecimal(activeTicker.lastPrice, { decimals: activeSymbolInfo?.pricePrecision ?? 8 })} USDT</span>
-                ) : (
-                  <span>—</span>
-                )}
-              </span>
+              {activeSymbolInfo?.quoteAsset !== 'USDT' && activeTicker?.lastPrice && (
+                <span className="text-[11px] text-[var(--text-2,#a1a1aa)] font-mono">
+                  ≈ {formatDecimal(activeTicker.lastPrice, { decimals: activeSymbolInfo?.pricePrecision ?? 8 })} {activeSymbolInfo?.quoteAsset}
+                </span>
+              )}
             </div>
           </div>
           
@@ -206,8 +298,11 @@ export const TradePage: React.FC<TradePageProps> = ({ symbolParam, onNavigate })
               <Bell size={13} className="text-[var(--accent,#818cf8)]" /> Cảnh báo
             </button>
 
-            <button className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-[var(--radius-sm,4px)] bg-[var(--panel-2,#141416)] border border-[var(--line,#1d1e21)] text-[11px] text-[var(--text-2,#a1a1aa)] hover:text-[var(--text,#f4f4f5)] transition-colors">
-              <Settings2 size={14} /> Chuyên nghiệp
+            <button
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-[var(--radius-sm,4px)] bg-[var(--panel-2,#141416)] border border-[var(--line,#1d1e21)] text-[11px] text-[var(--text-2,#a1a1aa)] hover:text-[var(--text,#f4f4f5)] transition-colors cursor-default"
+              title="Đang ở chế độ Pro Trader tiêu chuẩn"
+            >
+              <Settings2 size={14} className="text-[var(--accent,#818cf8)]" /> Chế độ Pro
             </button>
           </div>
         </div>
@@ -227,11 +322,12 @@ export const TradePage: React.FC<TradePageProps> = ({ symbolParam, onNavigate })
       )}
 
       {/* DESKTOP TRADING WORKSPACE (>= 1024px) */}
-      <div className="hidden lg:flex flex-col gap-1 px-1 py-1 flex-1 max-w-[1920px] mx-auto w-full">
+      {isDesktop ? (
+        <div className="flex flex-col gap-1 px-1 py-1 flex-1 max-w-[1920px] mx-auto w-full">
         {/* Top Section */}
-        <div className="flex flex-1 gap-1 h-[600px] min-h-[500px]">
+        <div className="flex flex-none gap-1 h-[clamp(520px,calc(100vh-18rem),720px)] min-h-0">
           {/* Sidebar: Market List (xl only) */}
-          <div className="hidden xl:flex w-[260px] flex-col bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)] rounded-[var(--radius-lg,10px)] overflow-hidden shrink-0">
+          <div className="hidden xl:flex w-[260px] flex-col bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)] rounded-[var(--radius-lg,10px)] overflow-hidden shrink-0 min-h-0">
             <div className="p-2.5 border-b border-[var(--line,#1d1e21)] flex items-center justify-between">
               <span className="font-semibold text-[var(--text,#f4f4f5)] text-xs">Thị trường</span>
               <span className="text-[10px] text-[var(--text-3,#63636b)]">{filteredSymbols.length} cặp</span>
@@ -248,7 +344,7 @@ export const TradePage: React.FC<TradePageProps> = ({ symbolParam, onNavigate })
                 />
               </div>
             </div>
-            <div className="flex-1 overflow-y-auto divide-y divide-[var(--line,#1d1e21)]/30">
+            <div className="flex-1 overflow-y-auto min-h-0 divide-y divide-[var(--line,#1d1e21)]/30">
               {filteredSymbols.map((s) => {
                 const tick = tickers[s.symbol];
                 const isSelected = s.symbol === activeSymbol;
@@ -290,26 +386,25 @@ export const TradePage: React.FC<TradePageProps> = ({ symbolParam, onNavigate })
           </div>
 
           {/* Center: Chart */}
-          <div className="flex-1 flex flex-col min-w-[400px]">
+          <div className="flex-1 flex flex-col min-w-[400px] min-h-0">
             <CandlestickChart symbol={activeSymbol} />
           </div>
 
           {/* Middle Right: Orderbook & Trades */}
-          <div className="w-[300px] flex flex-col shrink-0 bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)] rounded-[var(--radius-lg,10px)] overflow-hidden">
-            {/* We'll turn this into tabs later according to spec, for now stack them or use 60/40 split */}
-            <div className="flex-1 min-h-[300px] border-b border-[var(--line,#1d1e21)] overflow-hidden">
+          <div className="w-[300px] flex flex-col shrink-0 min-h-0 bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)] rounded-[var(--radius-lg,10px)] overflow-hidden">
+            <div className="flex-1 min-h-0 border-b border-[var(--line,#1d1e21)] overflow-hidden">
               <Orderbook
                 symbol={activeSymbol}
                 onSelectPrice={handlePriceSelected}
               />
             </div>
-            <div className="h-[220px] overflow-hidden">
+            <div className="h-[220px] shrink-0 min-h-0 overflow-hidden">
               <MarketTrades symbol={activeSymbol} />
             </div>
           </div>
 
           {/* Far Right: Order Form */}
-          <div className="w-[320px] shrink-0">
+          <div className="w-[320px] shrink-0 min-h-0 overflow-y-auto max-h-full">
             <OrderForm
               symbol={activeSymbol}
               selectedPrice={selectedPrice}
@@ -327,9 +422,9 @@ export const TradePage: React.FC<TradePageProps> = ({ symbolParam, onNavigate })
           />
         </div>
       </div>
-
-      {/* MOBILE / TABLET WORKSPACE (< 1024px) */}
-      <div className="lg:hidden flex flex-col flex-1 p-2">
+      ) : (
+      /* MOBILE / TABLET WORKSPACE (< 1024px) */
+      <div className="flex flex-col flex-1 p-2">
         {/* Mobile View Switcher Tabs */}
         <div className="mb-2 bg-[var(--color-bg-surface,#111319)] border border-[var(--color-border-subtle,#1e212b)] rounded-[var(--radius-md,8px)] p-1">
           <Tabs
@@ -342,8 +437,12 @@ export const TradePage: React.FC<TradePageProps> = ({ symbolParam, onNavigate })
         </div>
 
         {/* Tab Content */}
-        <div className="flex-1">
-          {mobileTab === 'chart' && <CandlestickChart symbol={activeSymbol} />}
+        <div className="flex-1 min-h-[460px]">
+          {mobileTab === 'chart' && (
+            <div className="h-[460px]">
+              <CandlestickChart symbol={activeSymbol} />
+            </div>
+          )}
           {mobileTab === 'orderbook' && (
             <div className="h-[420px]">
               <Orderbook
@@ -402,6 +501,7 @@ export const TradePage: React.FC<TradePageProps> = ({ symbolParam, onNavigate })
           />
         </BottomSheet>
       </div>
+      )}
     </div>
   );
 };

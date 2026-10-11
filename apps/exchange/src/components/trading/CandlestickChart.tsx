@@ -135,6 +135,16 @@ const setupMASeries = (chart: IChartApi) => {
   return { ma5, ma10, ma20 };
 };
 
+const formatLegendTime = (timestamp?: number): string | null => {
+  if (!timestamp) return null;
+  const d = new Date(timestamp * 1000);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const utc = `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())} UTC`;
+  const vnD = new Date(d.getTime() + 7 * 3600 * 1000);
+  const vn = `${pad(vnD.getUTCHours())}:${pad(vnD.getUTCMinutes())} VN`;
+  return `${utc} | ${vn}`;
+};
+
 export const CandlestickChart: React.FC<CandlestickChartProps> = ({
   symbol,
   marketType = 'spot',
@@ -164,6 +174,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
     change: number;
     amplitude: number;
     volume: number;
+    time?: number;
   } | null>(null);
 
   const chartContainerRef = useRef<HTMLDivElement>(null);
@@ -178,6 +189,31 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
   const candlesListRef = useRef<FormattedCandle[]>([]);
   const needsFitContentRef = useRef<boolean>(true);
   const lastLegendUpdateRef = useRef<number>(0);
+
+  // 0. Reset candle cache and clear series data immediately when symbol or interval changes
+  useEffect(() => {
+    lastCandleRef.current = null;
+    candlesListRef.current = [];
+    needsFitContentRef.current = true;
+    setLegendData(null);
+    if (mainSeriesRef.current) {
+      try {
+        mainSeriesRef.current.setData([]);
+      } catch {}
+    }
+    if (volumeSeriesRef.current) {
+      try {
+        volumeSeriesRef.current.setData([]);
+      } catch {}
+    }
+    if (ma5SeriesRef.current) {
+      try {
+        ma5SeriesRef.current.setData([]);
+        ma10SeriesRef.current?.setData([]);
+        ma20SeriesRef.current?.setData([]);
+      } catch {}
+    }
+  }, [symbol, interval]);
 
   const api = getApiClient();
   const { activeSymbolInfo, activeTicker, exchangeInfo, realtimeClient, connectionStatus } = useMarket();
@@ -438,8 +474,17 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
         secondsVisible: false,
       },
       localization: {
-        locale: 'vi-VN',
-        dateFormat: 'dd/MM/yyyy',
+        locale: 'en-US',
+        dateFormat: 'yyyy-MM-dd',
+        timeFormatter: (timestamp: number) => {
+          const d = new Date(timestamp * 1000);
+          const yyyy = d.getUTCFullYear();
+          const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+          const dd = String(d.getUTCDate()).padStart(2, '0');
+          const hh = String(d.getUTCHours()).padStart(2, '0');
+          const min = String(d.getUTCMinutes()).padStart(2, '0');
+          return `${yyyy}-${mm}-${dd} ${hh}:${min} UTC`;
+        },
       },
       autoSize: true,
     });
@@ -493,7 +538,25 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
 
     // Crosshair move listener for Pro HUD Legend
     chart.subscribeCrosshairMove((param) => {
-      if (!param.time || !param.seriesData || !mainSeriesRef.current) return;
+      if (!param.time || !param.point || !param.seriesData || !mainSeriesRef.current) {
+        // Crosshair left chart area: revert legend to the latest candle
+        const last = lastCandleRef.current;
+        if (last) {
+          const chg = last.close - last.open;
+          const chgPct = (chg / (last.open || 1)) * 100;
+          setLegendData({
+            open: last.open,
+            high: last.high,
+            low: last.low,
+            close: last.close,
+            change: chgPct,
+            amplitude: ((last.high - last.low) / (last.low || 1)) * 100,
+            volume: last.volume,
+            time: last.time,
+          });
+        }
+        return;
+      }
       const data = param.seriesData.get(mainSeriesRef.current) as {
         open?: number;
         high?: number;
@@ -507,31 +570,21 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
         const l = data.low ?? 0;
         const c = data.close ?? 0;
         const chgPct = ((c - o) / (o || 1)) * 100;
-        setLegendData((prev) => ({
+        const volData = volumeSeriesRef.current ? (param.seriesData.get(volumeSeriesRef.current) as { value?: number } | undefined) : undefined;
+        setLegendData({
           open: o,
           high: h,
           low: l,
           close: c,
           change: chgPct,
           amplitude: ((h - l) / (l || 1)) * 100,
-          volume: prev?.volume || 0,
-        }));
+          volume: volData?.value ?? 0,
+          time: param.time as number,
+        });
       }
     });
-
-    // ResizeObserver fallback to guarantee accurate canvas size
-    const ro = new ResizeObserver((entries) => {
-      const entry = entries[0];
-      if (!entry || !chartRef.current) return;
-      const { width: w, height: h } = entry.contentRect;
-      if (w > 0 && h > 0) {
-        chartRef.current.resize(Math.round(w), Math.round(h));
-      }
-    });
-    ro.observe(container);
 
     return () => {
-      ro.disconnect();
       if (chartRef.current) {
         try {
           chartRef.current.remove();
@@ -674,6 +727,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
         change: chgPct,
         amplitude: ((last.high - last.low) / (last.low || 1)) * 100,
         volume: last.volume,
+        time: last.time,
       });
     }
 
@@ -841,6 +895,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
           change: chgPct,
           amplitude: ((h - l) / (l || 1)) * 100,
           volume: vol,
+          time: candleTime,
         });
       }
     });
@@ -895,23 +950,71 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
         change: chgPct,
         amplitude: ((updated.high - updated.low) / (updated.low || 1)) * 100,
         volume: prev?.volume || 0,
+        time: updated.time,
       }));
     }
   }, [activeTicker, symbol, chartType]);
 
-  // Handle Fullscreen resize trigger
+  // Keep price format updated if activeSymbolInfo changes without destroying series
   useEffect(() => {
-    if (!chartRef.current || !chartContainerRef.current) return;
-    const timer = setTimeout(() => {
-      const container = chartContainerRef.current;
-      if (container) {
-        const w = container.clientWidth;
-        const h = container.clientHeight;
-        if (w > 0 && h > 0) {
-          chartRef.current?.resize(w, h);
-          chartRef.current?.timeScale().fitContent();
+    if (!mainSeriesRef.current || !activeSymbolInfo) return;
+    const tick = activeSymbolInfo.tickSize || '0.01';
+    const precision = tick.includes('.') ? (tick.split('.')[1]?.length ?? 2) : 2;
+    const minMove = parseFloat(tick) || 0.01;
+    try {
+      mainSeriesRef.current.applyOptions({
+        priceFormat: {
+          type: 'price',
+          precision,
+          minMove,
+        },
+      });
+    } catch {}
+  }, [activeSymbolInfo]);
+
+  // 9. Theme Reactivity: apply options on theme change
+  useEffect(() => {
+    const updateThemeOptions = () => {
+      const chart = chartRef.current;
+      if (!chart) return;
+      const theme = document.documentElement.getAttribute('data-theme') || 'dark';
+      const isLight = theme === 'light';
+      chart.applyOptions({
+        layout: {
+          textColor: isLight ? '#3f3f46' : '#a1a1aa',
+        },
+        grid: {
+          vertLines: { color: isLight ? 'rgba(0, 0, 0, 0.06)' : 'rgba(255, 255, 255, 0.04)' },
+          horzLines: { color: isLight ? 'rgba(0, 0, 0, 0.06)' : 'rgba(255, 255, 255, 0.04)' },
+        },
+        rightPriceScale: {
+          borderColor: isLight ? 'rgba(0, 0, 0, 0.1)' : 'rgba(255, 255, 255, 0.08)',
+        },
+        timeScale: {
+          borderColor: isLight ? 'rgba(0, 0, 0, 0.1)' : 'rgba(255, 255, 255, 0.08)',
+        },
+      });
+    };
+
+    updateThemeOptions();
+
+    const observer = new MutationObserver((mutations) => {
+      for (const m of mutations) {
+        if (m.attributeName === 'data-theme' || m.attributeName === 'data-color-reversed') {
+          updateThemeOptions();
         }
       }
+    });
+
+    observer.observe(document.documentElement, { attributes: true });
+    return () => observer.disconnect();
+  }, []);
+
+  // Handle Fullscreen fitContent trigger
+  useEffect(() => {
+    if (!chartRef.current) return;
+    const timer = setTimeout(() => {
+      chartRef.current?.timeScale().fitContent();
     }, 50);
     return () => clearTimeout(timer);
   }, [isFullscreen]);
@@ -922,7 +1025,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
   return (
     <div
       className={`flex flex-col bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)] rounded-[var(--radius-lg,12px)] overflow-hidden select-none transition-all duration-300 shadow-sm ${
-        isFullscreen ? 'fixed inset-0 z-50 p-4 bg-[#0a0a0b]' : 'h-full min-h-[440px] flex-1'
+        isFullscreen ? 'fixed inset-0 z-50 p-4 bg-[#0a0a0b]' : 'h-full min-h-0 flex-1'
       }`}
     >
       {/* Top Header / Pro Trader Toolbar */}
@@ -1106,11 +1209,16 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
 
       {/* Main Chart Body */}
       {activeTab === 'chart' ? (
-        <div className="relative flex-1 w-full overflow-hidden min-h-[360px] h-full">
+        <div className="relative flex-1 min-h-0 w-full overflow-hidden">
           {/* Pro HUD Legend Bar */}
           {legendData && !fetchError && (
             <div className="absolute top-2 left-2 sm:top-2.5 sm:left-3 z-10 flex flex-wrap items-center gap-2 sm:gap-3 font-mono text-[10px] sm:text-[11px] tabular-nums text-[var(--text-2,#a1a1aa)] pointer-events-none bg-[var(--bg,#000000)]/85 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-lg backdrop-blur-md border border-[var(--line,#1d1e21)]/80 shadow-md max-w-[calc(100%-1rem)]">
               <span className="text-white font-bold">{symbol}</span>
+              {legendData.time && (
+                <span className="text-[10px] text-zinc-300 bg-white/10 px-1.5 py-0.5 rounded border border-white/10 hidden sm:inline-block font-mono">
+                  {formatLegendTime(legendData.time)}
+                </span>
+              )}
               <span>O: <strong className="text-[var(--text,#f4f4f5)]">{formatDecimal(legendData.open.toString())}</strong></span>
               <span>H: <strong className="text-[var(--text,#f4f4f5)]">{formatDecimal(legendData.high.toString())}</strong></span>
               <span>L: <strong className="text-[var(--text,#f4f4f5)]">{formatDecimal(legendData.low.toString())}</strong></span>
@@ -1131,18 +1239,24 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
           )}
 
           {/* Canvas container: ALWAYS MOUNTED IN THE DOM! */}
-          <div ref={chartContainerRef} className="w-full h-full" />
+          <div ref={chartContainerRef} className="absolute inset-0" />
 
-          {/* Loading Overlay */}
-          {loading && (
-            <div className="absolute inset-0 bg-[var(--panel,#0a0a0b)]/85 backdrop-blur-xs z-20 flex flex-col items-center justify-center gap-3">
-              <div className="w-8 h-8 border-2 border-[var(--accent,#818cf8)] border-t-transparent rounded-full animate-spin" />
-              <div className="flex flex-col items-center gap-1 font-mono text-xs">
-                <span className="text-[var(--text,#f4f4f5)] font-semibold">Đang tải nến {symbol} ({interval})...</span>
-                <span className="text-[10px] text-[var(--text-3,#63636b)]">Dữ liệu thị trường mô phỏng Binance</span>
-              </div>
-            </div>
-          )}
+          {/* Loading Overlay with subtle fade and 40% backdrop */}
+          <div
+            className={`absolute inset-0 bg-[var(--panel,#0a0a0b)]/40 backdrop-blur-[2px] z-20 flex flex-col items-center justify-center gap-3 transition-opacity duration-200 ${
+              loading ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
+            }`}
+          >
+            {loading && (
+              <>
+                <div className="w-7 h-7 border-2 border-[var(--accent,#818cf8)] border-t-transparent rounded-full animate-spin" />
+                <div className="flex flex-col items-center gap-1 font-mono text-xs">
+                  <span className="text-[var(--text,#f4f4f5)] font-semibold">Đang cập nhật {symbol} ({interval})...</span>
+                  <span className="text-[10px] text-[var(--text-3,#63636b)]">Dữ liệu thị trường Binance</span>
+                </div>
+              </>
+            )}
+          </div>
 
           {/* Error Overlay */}
           {!loading && fetchError && (
