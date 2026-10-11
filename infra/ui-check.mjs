@@ -94,9 +94,11 @@ try {
     try {
       git(ROOT, 'worktree', 'remove', '--force', dir);
     } catch {
-      rmSync(dir, { recursive: true, force: true });
-      git(ROOT, 'worktree', 'prune');
+      // removed below, then pruned
     }
+    // git leaves npm's workspace links behind (node_modules/@cex/*, junctions on Windows): rmSync removes the links, not their targets
+    rmSync(dir, { recursive: true, force: true });
+    git(ROOT, 'worktree', 'prune');
   }
 }
 process.stdout.write(`\nui-check ${branch} @ ${tip} + ${base} @ ${baseTip}\n${results.join('\n')}\n`);
