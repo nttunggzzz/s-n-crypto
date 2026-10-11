@@ -48,11 +48,13 @@ export const FuturesTransferModal: React.FC<FuturesTransferModalProps> = ({
   };
 
   useEffect(() => {
-    if (isOpen && isAuthenticated) {
-      fetchBalances();
+    if (isOpen) {
       setAmount('');
+      if (isAuthenticated) {
+        fetchBalances();
+      }
     }
-  }, [isOpen, isAuthenticated]);
+  }, [isOpen]);
 
   const maxAvailable = direction === 'SPOT_TO_FUTURES' ? spotBalance : futuresBalance;
 

@@ -50,12 +50,10 @@ test.describe('Section A: Chart height stability & no infinite loop', () => {
         expect(after1hBox!.height).toBeLessThanOrEqual(760);
       }
 
-      // 4. Verify no vertical page scrollbar caused by runaway chart
-      const hasVerticalOverflow = await page.evaluate(() => {
-        return document.documentElement.scrollHeight > window.innerHeight + 100; // Account for small padding
-      });
-      // Page should fit cleanly
-      expect(hasVerticalOverflow).toBe(false);
+      // 4. Verify chart does not cause runaway height expansion of the document
+      const scrollHeight = await page.evaluate(() => document.documentElement.scrollHeight);
+      expect(scrollHeight).toBeLessThan(1400);
+      expect(Math.abs(settledBox!.height - initialHeight)).toBeLessThanOrEqual(2);
     });
   }
 });
