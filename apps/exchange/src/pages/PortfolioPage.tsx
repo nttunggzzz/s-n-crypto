@@ -40,7 +40,7 @@ export const PortfolioPage: React.FC<PortfolioPageProps> = ({ onNavigate }) => {
     try {
       const data = await api.portfolio();
       setPortfolio(data);
-    } catch (err: any) {
+    } catch {
       setError('Không thể tải dữ liệu danh mục đầu tư.');
     } finally {
       setLoading(false);

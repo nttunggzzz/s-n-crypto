@@ -213,6 +213,7 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({ onNaviga
         onClick={() => setIsOpen(!isOpen)}
         className="p-2 text-[var(--text-2,#a1a1aa)] hover:text-[var(--text,#f4f4f5)] relative transition-colors cursor-pointer"
         title="Thông báo"
+        aria-label="Thông báo"
       >
         <Bell size={18} />
         {unreadCount > 0 && (

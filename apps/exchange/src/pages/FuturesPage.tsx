@@ -10,8 +10,11 @@ import type {
   FuturesTrade,
   FuturesSymbolInfo,
   UserEvent,
+  FuturesPlaceOrderRequest,
 } from '@cex/contracts';
 import { countdown, resolveFuturesSymbol, ApiError, TRADE_BLOCK_LABELS } from '@cex/contracts';
+
+type ClosePositionBody = { quantity?: string };
 import { getApiClient } from '../services/api.ts';
 import { getErrorMessage } from '../services/errors.ts';
 import { useAuth } from '../context/AuthContext.tsx';
@@ -109,7 +112,7 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
   // Ticking now for countdown
   const [now, setNow] = useState(Date.now());
   const [confirmOrdersPref, setConfirmOrdersPref] = useState(true);
-  const [confirmOrderData, setConfirmOrderData] = useState<{ side: 'BUY' | 'SELL'; body: any } | null>(null);
+  const [confirmOrderData, setConfirmOrderData] = useState<{ side: 'BUY' | 'SELL'; body: FuturesPlaceOrderRequest } | null>(null);
   const [showContractSelector, setShowContractSelector] = useState(false);
   const [contractSearch, setContractSearch] = useState('');
 
@@ -409,19 +412,29 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
       return;
     }
 
-    const body: any = {
-      symbol,
-      side: orderSide,
-      type: orderType,
-      quantity: calculatedQty.toString(),
-      reduceOnly,
-    };
-    if (orderType === 'LIMIT') body.price = price;
-    if (enableTpSl) {
-      body.tpsl = {};
-      if (orderTpPrice) body.tpsl.takeProfitPrice = orderTpPrice;
-      if (orderSlPrice) body.tpsl.stopLossPrice = orderSlPrice;
-    }
+    const tpslPayload = enableTpSl ? {
+      ...(orderTpPrice ? { takeProfitPrice: orderTpPrice } : {}),
+      ...(orderSlPrice ? { stopLossPrice: orderSlPrice } : {}),
+    } : undefined;
+
+    const body: FuturesPlaceOrderRequest = orderType === 'LIMIT'
+      ? {
+          symbol,
+          side: orderSide,
+          type: 'LIMIT',
+          price,
+          quantity: calculatedQty.toString(),
+          reduceOnly,
+          ...(tpslPayload && Object.keys(tpslPayload).length > 0 ? { tpsl: tpslPayload } : {}),
+        }
+      : {
+          symbol,
+          side: orderSide,
+          type: 'MARKET',
+          quantity: calculatedQty.toString(),
+          reduceOnly,
+          ...(tpslPayload && Object.keys(tpslPayload).length > 0 ? { tpsl: tpslPayload } : {}),
+        };
 
     if (confirmOrdersPref) {
       setConfirmOrderData({ side: orderSide, body });
@@ -430,7 +443,7 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
     }
   };
 
-  const executePlaceOrder = async (body: any, orderSide: 'BUY' | 'SELL') => {
+  const executePlaceOrder = async (body: FuturesPlaceOrderRequest, orderSide: 'BUY' | 'SELL') => {
     setSubmittingOrder(true);
     try {
       await api.futuresPlaceOrder({ body });
@@ -452,10 +465,7 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
   // Close Position handler
   const handleClosePosition = async (pos: FuturesPosition, marketCloseAll = true) => {
     try {
-      const body: any = { positionId: pos.id };
-      if (!marketCloseAll && closeQtyInput) {
-        body.quantity = closeQtyInput;
-      }
+      const body: ClosePositionBody = marketCloseAll || !closeQtyInput ? {} : { quantity: closeQtyInput };
       await api.futuresClosePosition({
         params: { symbol: pos.symbol },
         body,
@@ -1513,7 +1523,7 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
               <span className="text-[var(--text-3,#63636b)]">Khối lượng:</span>
               <span className="font-mono text-white font-bold">{confirmOrderData.body.quantity}</span>
             </div>
-            {confirmOrderData.body.price && (
+            {confirmOrderData.body.type === 'LIMIT' && (
               <div className="flex items-center justify-between pb-2 border-b border-[var(--line,#1d1e21)]">
                 <span className="text-[var(--text-3,#63636b)]">Mức giá:</span>
                 <span className="font-mono text-white font-bold">{confirmOrderData.body.price} USDT</span>

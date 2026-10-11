@@ -68,6 +68,14 @@ export const UserOrdersTabs: React.FC<UserOrdersTabsProps> = ({
     return params;
   }, [hideOtherPairs, symbol, dateFilter]);
 
+  const exportQuery = useMemo(() => {
+    const sp = new URLSearchParams();
+    if (filterParams.symbol) sp.set('symbol', filterParams.symbol);
+    if (filterParams.from) sp.set('from', filterParams.from);
+    if (filterParams.to) sp.set('to', filterParams.to);
+    return sp.toString();
+  }, [filterParams]);
+
   // Load orders data
   const fetchData = useCallback(async () => {
     if (!isAuthenticated) return;
@@ -232,7 +240,7 @@ export const UserOrdersTabs: React.FC<UserOrdersTabsProps> = ({
         <Tabs
           tabs={tabs}
           activeId={activeTab}
-          onChange={(id) => setActiveTab(id as any)}
+          onChange={(id) => setActiveTab(id as 'open' | 'history' | 'trades')}
           variant="underline"
           size="sm"
         />
@@ -269,7 +277,7 @@ export const UserOrdersTabs: React.FC<UserOrdersTabsProps> = ({
           {/* CSV Export links */}
           {activeTab === 'history' && (
             <a
-              href={`/api/v1/export/orders.csv?${new URLSearchParams(filterParams as any).toString()}`}
+              href={`/api/v1/export/orders.csv?${exportQuery}`}
               download="orders.csv"
               className="flex items-center gap-1 text-[11px] text-[var(--text-2,#a1a1aa)] hover:text-[var(--accent,#818cf8)] bg-[var(--panel-2,#141416)] border border-[var(--line,#1d1e21)] px-2 py-1 rounded"
               title="Xuất file CSV lịch sử lệnh"
@@ -281,7 +289,7 @@ export const UserOrdersTabs: React.FC<UserOrdersTabsProps> = ({
 
           {activeTab === 'trades' && (
             <a
-              href={`/api/v1/export/trades.csv?${new URLSearchParams(filterParams as any).toString()}`}
+              href={`/api/v1/export/trades.csv?${exportQuery}`}
               download="trades.csv"
               className="flex items-center gap-1 text-[11px] text-[var(--text-2,#a1a1aa)] hover:text-[var(--accent,#818cf8)] bg-[var(--panel-2,#141416)] border border-[var(--line,#1d1e21)] px-2 py-1 rounded"
               title="Xuất file CSV lịch sử khớp"

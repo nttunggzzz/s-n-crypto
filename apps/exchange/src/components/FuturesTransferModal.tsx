@@ -127,6 +127,7 @@ export const FuturesTransferModal: React.FC<FuturesTransferModalProps> = ({
               onClick={handleSwapDirection}
               className="p-1.5 rounded-full bg-[var(--line,#1d1e21)] hover:bg-[var(--accent,#818cf8)] text-white hover:text-black transition-colors cursor-pointer"
               title="Đổi chiều chuyển tiền"
+              aria-label="Đổi chiều chuyển tiền"
             >
               <ArrowLeftRight size={14} />
             </button>

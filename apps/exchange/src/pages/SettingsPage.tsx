@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import type { SessionInfo, AvatarId, SecurityOverview, LoginEvent } from '@cex/contracts';
+import type { SessionInfo, AvatarId, SecurityOverview, LoginEvent, Preferences, CandleInterval } from '@cex/contracts';
 import { ApiError } from '@cex/contracts';
+
+type UpdatePreferencesInput = Partial<Preferences>;
 import { getApiClient } from '../services/api.ts';
 import { getErrorMessage } from '../services/errors.ts';
 import { useAuth } from '../context/AuthContext.tsx';
@@ -118,7 +120,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate }) => {
   const [theme, setTheme] = useState<'system' | 'light' | 'dark'>('dark');
   const [colorReversed, setColorReversed] = useState(false);
   const [confirmOrders, setConfirmOrders] = useState(true);
-  const [defaultInterval, setDefaultInterval] = useState<string>('15m');
+  const [defaultInterval, setDefaultInterval] = useState<CandleInterval>('15m');
   const [locale, setLocale] = useState<'vi' | 'en'>('vi');
 
   useEffect(() => {
@@ -136,7 +138,9 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate }) => {
         })
         .catch(() => {});
     } else {
-      const savedTheme = (localStorage.getItem('cex_theme') as any) || 'dark';
+      const rawTheme = localStorage.getItem('cex_theme');
+      const savedTheme: 'system' | 'light' | 'dark' =
+        rawTheme === 'light' || rawTheme === 'system' || rawTheme === 'dark' ? rawTheme : 'dark';
       setTheme(savedTheme);
       document.documentElement.setAttribute('data-theme', savedTheme);
 
@@ -146,7 +150,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate }) => {
     }
   }, [isAuthenticated, api]);
 
-  const handleUpdatePref = async (patch: any) => {
+  const handleUpdatePref = async (patch: UpdatePreferencesInput) => {
     if (isAuthenticated) {
       try {
         await api.updatePreferences({ body: patch });
@@ -179,7 +183,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate }) => {
     success(`Đã ${next ? 'bật' : 'tắt'} hộp xác nhận đặt lệnh.`);
   };
 
-  const handleChangeInterval = (val: string) => {
+  const handleChangeInterval = (val: CandleInterval) => {
     setDefaultInterval(val);
     handleUpdatePref({ defaultInterval: val });
     success(`Đã lưu khung thời gian nến mặc định: ${val}.`);
@@ -1142,7 +1146,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate }) => {
                   <div className="text-xs text-[var(--text-3,#63636b)] mt-1">Khung nến tự động hiển thị khi vào trang giao dịch</div>
                 </div>
                 <div className="flex items-center gap-1 bg-[var(--panel-2,#141416)] p-1 rounded border border-[var(--line,#1d1e21)]">
-                  {['1m', '5m', '15m', '1h', '4h', '1d'].map((iv) => (
+                  {(['1m', '5m', '15m', '1h', '4h', '1d'] as CandleInterval[]).map((iv) => (
                     <button
                       key={iv}
                       onClick={() => handleChangeInterval(iv)}

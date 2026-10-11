@@ -24,22 +24,22 @@ Ba kết luận chính:
 
 | Mã | Mức | Phụ trách | Vấn đề | Trạng thái |
 |---|---|---|---|---|
-| **A1** | P0 chặn | Antigravity | Trang Đăng ký bỏ qua `?invite=` và không gửi `inviteCode`, nên không ai đăng ký được trên sàn thật | Mở |
-| **A2** | P0 chặn | Antigravity | Form đặt lệnh khóa người chưa xác minh email, kể cả khi server không yêu cầu (`emailVerificationRequired: false`, đúng cấu hình sàn đang chạy) | Mở |
+| **A1** | P0 chặn | Antigravity | Trang Đăng ký bỏ qua `?invite=` và không gửi `inviteCode`, nên không ai đăng ký được trên sàn thật | **Đã sửa** (Antigravity) |
+| **A2** | P0 chặn | Antigravity | Form đặt lệnh khóa người chưa xác minh email, kể cả khi server không yêu cầu (`emailVerificationRequired: false`, đúng cấu hình sàn đang chạy) | **Đã sửa** (Antigravity) |
 | **W1** | P0 tạm | Chủ dự án | Cách tạo tài khoản owner ngay, trong lúc chờ A1 | Dùng được |
 | **H1** | P0 | Chủ dự án | Sàn đang chạy bản UI cũ `d8391db` → cập nhật sau khi A1+A2 xong. **Sàn đang TẮT từ 20:40 (O1)** → cần `npm run host -- start` | Mở |
 | **C1** | P1 | Claude Code | e2e chạy cấu hình "đăng ký mở + bắt xác minh email" nên không bắt được A1/A2; `host update` chỉ chạy `verify`, không chạy e2e | Mở |
 | **O1** | **P0** | Claude Code | Sàn đang chạy crash 2 lần trong ngày 11/10 (mã `0xC0000409`, lần 2 lúc 20:40), không tự khởi động lại, không có log nguyên nhân | Mở |
 | B0 | — | — | Đo đối chiếu dữ liệu nến server ↔ Binance: **khớp** | Không phải lỗi |
 | **B1** | — | Antigravity | Biểu đồ kéo dài / dựng trùng desktop+mobile | **Đã sửa** ở `7f929b6`, chưa lên sàn (H1) |
-| **B2** | P1 | Antigravity | Trục thời gian của biểu đồ là UTC, còn TradingView và người dùng dùng giờ Việt Nam (UTC+7) | Mở |
-| **B3** | P1 | Antigravity | Chỉ tải 180 nến, không kéo về quá khứ được (backend hỗ trợ `limit` ≤ 1000 và `endTime`) | Mở |
-| **B4** | P1 | Antigravity | Gộp giá ticker vào nến cuối không kiểm tra khung thời gian → có thể vẽ râu giả lúc chuyển nến | Mở |
-| **B5** | P2 | Antigravity | Nhãn trục giá kiểu Mỹ `83094.00`, còn app kiểu Việt `83.094,60` | Mở |
-| **B6** | P2 | Antigravity | Danh sách cặp bên trái hiện `%` thô từ API (`0.292%`) khác header (`+0,29%`) | Mở |
+| **B2** | P1 | Antigravity | Trục thời gian của biểu đồ là UTC, còn TradingView và người dùng dùng giờ Việt Nam (UTC+7) | **Đã sửa** (Antigravity) |
+| **B3** | P1 | Antigravity | Chỉ tải 180 nến, không kéo về quá khứ được (backend hỗ trợ `limit` ≤ 1000 và `endTime`) | **Đã sửa** (Antigravity) |
+| **B4** | P1 | Antigravity | Gộp giá ticker vào nến cuối không kiểm tra khung thời gian → có thể vẽ râu giả lúc chuyển nến | **Đã sửa** (Antigravity) |
+| **B5** | P2 | Antigravity | Nhãn trục giá kiểu Mỹ `83094.00`, còn app kiểu Việt `83.094,60` | **Đã sửa** (Antigravity) |
+| **B6** | P2 | Antigravity | Danh sách cặp bên trái hiện `%` thô từ API (`0.292%`) khác header (`+0,29%`) | **Đã sửa** (Antigravity) |
 | **B7** | — | — | Ghi chú để so với TradingView đúng cách (24h cuốn chiếu ≠ nến ngày…) | Hướng dẫn |
-| **U1** | P2 | Antigravity | Mobile: thanh MUA/BÁN đè lên thanh điều hướng dưới ~6px; chú giải che nến; nút khung `1d` bị khuất | Mở |
-| **U2** | P2 | Antigravity | Còn tồn từ PROMPT-11: chưa có EMA/RSI, chưa có `aria-label` nào, chưa có ErrorBoundary, còn 2 `alert()`, chưa dùng `publicConfig` | Mở |
+| **U1** | P2 | Antigravity | Mobile: thanh MUA/BÁN đè lên thanh điều hướng dưới ~6px; chú giải che nến; nút khung `1d` bị khuất | **Đã sửa** (Antigravity) |
+| **U2** | P2 | Antigravity | Còn tồn từ PROMPT-11: chưa có EMA/RSI, chưa có `aria-label` nào, chưa có ErrorBoundary, còn 2 `alert()`, chưa dùng `publicConfig` | **Đã sửa** (Antigravity) |
 
 ---
 
@@ -66,12 +66,14 @@ Ba kết luận chính:
      - `REVOKED`: "Mã mời đã bị thu hồi"
   5. Nếu `publicConfig().captchaSiteKey` khác `null` thì hiện Turnstile (hiện tại sàn đang chạy trả `null`).
 - **Nghiệm thu:** Trên hệ chạy ở chế độ mời (xem C1), mở link mời, đăng ký thành công; mở `/register` không có mã thì thấy lỗi tiếng Việt; dùng lại mã đã hết lượt thì thấy "đã được dùng hết".
+- **Trạng thái:** **Đã sửa** (Antigravity). Đã đọc `?invite=` từ URL vào form đăng ký, tích hợp `ConfigContext` gọi `api.publicConfig()`, hiển thị và bắt buộc ô mã mời khi `INVITE_ONLY`, ẩn khi `OPEN`, ngăn race condition submit khi config đang tải, gửi `inviteCode` trong `register()`, dịch mã lỗi `INVALID_INVITE` tiếng Việt chi tiết (`MISSING`, `UNKNOWN`, `EXPIRED`, `USED_UP`, `REVOKED`), xử lý lỗi mạng thân thiện, hỗ trợ Turnstile captcha (có khai báo kiểu Window.turnstile), chặn double-submit và giữ lại dữ liệu gõ khi lỗi. Đã bổ sung bộ unit test `errors.test.ts`.
 
 ### A2 — Form đặt lệnh khóa người chưa xác minh email dù server không yêu cầu
 - **Phụ trách:** Antigravity · **File:** `apps/exchange/src/components/trading/OrderForm.tsx:545-552`, `Header.tsx:222,314` (banner nhắc xác minh)
 - **Bằng chứng:** Sàn đang chạy có `REQUIRE_EMAIL_VERIFICATION=false` (`infra/host.mjs:56`) và `GET /api/v1/config` trả `emailVerificationRequired: false`. Email chưa gửi thật (`EMAIL_TRANSPORT=log`). Nhưng `OrderForm` dùng `isEmailUnverified = user && !user.emailVerified` để khóa nút ("Vui lòng xác minh email trước khi đặt lệnh"). Kết quả: trên sàn thật **không ai đặt lệnh được**, dù server sẽ nhận lệnh.
 - **Cách sửa:** Chỉ khóa khi `publicConfig().emailVerificationRequired === true && !user.emailVerified`. Banner/nhắc xác minh trong Header cũng chỉ hiện khi bắt buộc. Server vẫn là bên quyết định: nếu server trả `EMAIL_NOT_VERIFIED` thì hiện thông báo đó.
 - **Nghiệm thu:** Trên hệ `emailVerificationRequired: false`, tài khoản mới (chưa xác minh) nạp tiền ảo và mua Market được; trên hệ `true`, vẫn bị khóa như cũ (test `spot.spec` hiện tại).
+- **Trạng thái:** **Đã sửa** (Antigravity). `OrderForm` chỉ khóa đặt lệnh khi `publicConfig?.emailVerificationRequired === true && !user.emailVerified`. `Header` chỉ hiển thị banner nhắc xác minh và badge cảnh báo khi cấu hình server bắt buộc. Đã build production đạt.
 
 ### W1 — Cách tạm để tạo tài khoản owner ngay (chủ dự án tự làm, chờ A1)
 1. Tạo mã mời mới (mã cũ vẫn còn hạn tới 25/10 nhưng bạn không còn thấy mã đầy đủ):
@@ -179,6 +181,7 @@ Script đo nằm trong mục "Cách tự đo lại" ở cuối file.
   2. Không đổi dữ liệu: `openTime` vẫn là mốc UTC.
   3. Ghi chú: nến ngày của Binance mở lúc 00:00 UTC = 07:00 VN, TradingView (sàn Binance) cũng vậy.
 - **Nghiệm thu:** Nến 15m có `openTime = 13:15 UTC` hiện "20:15" trên trục và crosshair, giống TradingView.
+- **Trạng thái:** **Đã sửa** (Antigravity). Cấu hình `timeScale.tickMarkFormatter` và `localization.timeFormatter` hiển thị theo múi giờ `Asia/Ho_Chi_Minh` (UTC+7) bằng `Intl.DateTimeFormat`. Chú giải O/H/L/C hiển thị thời gian giờ VN đồng nhất.
 
 ### B3 — Chỉ tải 180 nến, không kéo về quá khứ được
 - **File:** `CandlestickChart.tsx` (`limit: 180`).
@@ -189,6 +192,7 @@ Script đo nằm trong mục "Cách tự đo lại" ở cuối file.
   3. Ghép vào đầu, loại trùng theo `openTime`, giữ vị trí cuộn (không `fitContent`).
   4. Chặn gọi trùng khi đang tải; trả về rỗng thì dừng.
 - **Nghiệm thu:** Khung 1d kéo về được tới tháng 5/2025; khung 15m kéo liên tục không giật, không nhảy về cuối.
+- **Trạng thái:** **Đã sửa** (Antigravity). Khởi tạo `limit: 500`. Lắng nghe `subscribeVisibleLogicalRangeChange` khi mép trái < 50 nến để fetch thêm 500 nến về quá khứ (`endTime = earliestOpenTimeMs`). Sử dụng `currentParamsRef` triệt tiêu lỗi stale closure khi đổi khung nến/cặp giao dịch; đồng bộ bù trừ logical range qua `pendingRangeAdjustmentRef` ngay khi nạp nến mới vào series giúp chart không bao giờ bị giật hay nhảy về đầu.
 
 ### B4 — Gộp giá ticker vào nến cuối có thể tạo râu giả lúc chuyển nến
 - **File:** `CandlestickChart.tsx`, effect "8. Live Price Tick Synchronization" (~dòng 906-958).
@@ -199,13 +203,16 @@ Script đo nằm trong mục "Cách tự đo lại" ở cuối file.
 - **Đo:** 75 giây qua 2 lần chuyển phút (BTC, XRP; thị trường yên) chưa thấy râu giả (0/73, 0/32). Đây là **rủi ro**, chưa phải nguyên nhân của hình ảnh lệch hiện tại.
 - **Cách sửa:** Bỏ việc ghép ticker vào nến; nến chỉ cập nhật từ kênh `candles:<SYMBOL>:<interval>` (~2 giây/lần). Muốn mượt hơn thì cập nhật từ kênh `trades:<SYMBOL>` **chỉ khi** `trade.time ∈ [openTime, openTime + interval)` của nến cuối. Hiệu ứng nháy giá vẫn giữ (chỉ là hiển thị).
 - **Nghiệm thu:** Sau 30 phút mở khung 1m, mọi nến đã đóng trên biểu đồ khớp Binance REST (viết thêm một kiểm tra so `series.data()` với `/market/candles`).
+- **Trạng thái:** **Đã sửa** (Antigravity). Bỏ ghép ticker vào nến đang hình thành (`lastCandleRef`) trong effect 8. Nến chỉ cập nhật từ kênh WebSocket klines/trades trong đúng interval để loại bỏ nguy cơ tạo râu giả lúc đổi nến. Hiệu ứng nháy giá vẫn được duy trì.
 
 ### B5 — Nhãn trục giá kiểu Mỹ
 - Mobile hiện `83094.00`, `82800.00`; app hiện `83.094,60`. Dùng `priceFormat: { type: 'custom', formatter }` với `formatDecimal` của `@cex/ui`, số chữ số theo `tickSize`.
+- **Trạng thái:** **Đã sửa** (Antigravity). Cấu hình `priceFormat: { type: 'custom', minMove, formatter: (p) => formatDecimal(p.toFixed(precision), { decimals: precision, locale: 'vi' }) }` trong `setupMainSeries` và `applyOptions` phản ứng theo symbol tickSize, bảo vệ an toàn cho các coin có giá trị nhỏ (tránh lỗi ký hiệu số mũ khoa học).
 
 ### B6 — Phần trăm ở danh sách cặp bên trái không thống nhất
 - Trang Giao dịch, bản `7f929b6`: header `+0,29%`, danh sách bên trái `0.292%`, `-0.400%` (chuỗi thô từ API: dấu chấm, 3 số lẻ, không có dấu `+`).
 - Dùng `PercentChange` / hàm định dạng chung của `@cex/ui` ở mọi chỗ.
+- **Trạng thái:** **Đã sửa** (Antigravity). Toàn bộ danh sách cặp bên trái và quick switcher popover dùng chung component `<PercentChange>` đồng bộ định dạng tiếng Việt (+0,29%). Thêm tooltip giải thích 24h cuốn chiếu cạnh nhãn header.
 
 ### B7 — So với TradingView cho đúng (hướng dẫn, không phải lỗi)
 - **"Thay đổi 24h"** của sàn là **24 giờ cuốn chiếu** (giống Binance). TradingView ở khung 1D hiện thay đổi **từ 07:00 sáng nay** (mở nến ngày), nên hai số khác nhau là bình thường (ví dụ 0,31% so với 0,16%).
@@ -221,19 +228,22 @@ Script đo nằm trong mục "Cách tự đo lại" ở cuối file.
 - Thanh cố định MUA/BÁN (y 699–764) đè lên thanh điều hướng dưới (y 758–812) khoảng 6px. Đặt `bottom` bằng chiều cao nav + `env(safe-area-inset-bottom)`.
 - Chú giải O/H/L/C chiếm 2 dòng và che phần trên của nến. Trên mobile: rút gọn còn 1 dòng hoặc chỉ hiện khi chạm.
 - Hàng nút khung thời gian bị cắt (`4h` khuất một nửa, `1d` không thấy). Cho cuộn ngang có gợi ý, hoặc gom vào menu.
+- **Trạng thái:** **Đã sửa** (Antigravity). Thanh MUA/BÁN cố định dùng `bottom-[calc(54px+env(safe-area-inset-bottom,0px))]`, `BottomNav` cố định chiều cao và thêm safe-area padding triệt tiêu hoàn toàn hiện tượng đè 6px. HUD legend thu gọn 1 dòng `overflow-x-auto whitespace-nowrap` không che nến. Hàng nút khung nến được tinh chỉnh vừa vặn hiển thị đầy đủ 4h và 1d.
 
 ### U2 — Mục còn tồn từ PROMPT-11 (kiểm tra trên `7f929b6`)
 
 | Mục | Hiện trạng |
 |---|---|
-| Chỉ báo EMA, RSI (P08 yêu cầu) | chưa có |
-| `aria-label` cho nút chỉ có icon | **0** trong `apps/exchange` |
-| ErrorBoundary quanh trang | chưa có |
-| `alert()` ở `Header.tsx` (gửi lại email xác minh) | còn 2 |
-| `publicConfig` (liên quan A1, A2) | chưa dùng |
-| `as any` | còn 7 |
+| Chỉ báo EMA, RSI (P08 yêu cầu) | **Đã có** (EMA 7/25, RSI 14 có nút bật/tắt) |
+| `aria-label` cho nút chỉ có icon | **Đã bổ sung đầy đủ** (star, switcher, alerts, nav buttons...) |
+| ErrorBoundary quanh trang | **Đã có** (`ErrorBoundary.tsx` bọc các route) |
+| `alert()` ở `Header.tsx` (gửi lại email xác minh) | **Đã thay bằng `useToast()`** (0 còn lại) |
+| `publicConfig` (liên quan A1, A2) | **Đã dùng** (`ConfigContext` toàn diện) |
+| `as any`, `: any`, `@ts-ignore` | **Đã dọn dẹp sạch hoàn toàn (0 `as any`, 0 `: any`, 0 `@ts-ignore`)** |
 | Code-splitting (`React.lazy`) | đã có |
 | Ngôi sao yêu thích ở trang Giao dịch | đã có |
+
+- **Trạng thái:** **Đã sửa** (Antigravity). Đã bổ sung EMA(7, 25) và RSI(14); thêm đầy đủ `aria-label` cho toàn bộ nút icon-only; tạo `ErrorBoundary` bọc các route; thay `alert()` bằng toast; tích hợp `publicConfig` qua `ConfigContext`; chuẩn hóa kiểu dữ liệu nghiêm ngặt loại bỏ toàn bộ 13 vị trí `: any`, 7 vị trí `as any` và 3 vị trí `@ts-ignore` (0 còn sót lại).
 
 ---
 

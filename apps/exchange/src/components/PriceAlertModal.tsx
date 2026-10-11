@@ -275,6 +275,7 @@ export const PriceAlertModal: React.FC<PriceAlertModalProps> = ({
                       disabled={deletingId === alt.id}
                       className="text-[var(--text-3,#63636b)] hover:text-[var(--down,#f2475f)] p-1.5 rounded hover:bg-[var(--line,#1d1e21)] cursor-pointer transition-colors"
                       title="Xóa cảnh báo"
+                      aria-label="Xóa cảnh báo"
                     >
                       <Trash2 size={15} />
                     </button>

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext.tsx';
+import { useConfig } from '../context/ConfigContext.tsx';
 import { getApiClient } from '../services/api.ts';
 import { Button, Input, Card, CheckIcon, AlertCircleIcon } from '@cex/ui';
 import { safeNext, appLinks } from '@cex/contracts';
@@ -205,31 +206,114 @@ export const LoginPage: React.FC<AuthPageProps> = ({ onNavigate }) => {
 
 export const RegisterPage: React.FC<AuthPageProps> = ({ onNavigate }) => {
   const { register } = useAuth();
+  const { publicConfig, isLoading: isConfigLoading } = useConfig();
   const [email, setEmail] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [password, setPassword] = useState('');
+  const [inviteCode, setInviteCode] = useState(() => new URLSearchParams(window.location.search).get('invite') || '');
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const turnstileContainerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const inv = new URLSearchParams(window.location.search).get('invite');
+    if (inv) {
+      setInviteCode(inv);
+    }
+  }, []);
+
+  // Optional Cloudflare Turnstile handling when captchaSiteKey is provided by the server
+  useEffect(() => {
+    if (!publicConfig?.captchaSiteKey || !turnstileContainerRef.current) return;
+    const siteKey = publicConfig.captchaSiteKey;
+    const container = turnstileContainerRef.current;
+
+    const renderWidget = () => {
+      if (window.turnstile && container) {
+        window.turnstile.render(container, {
+          sitekey: siteKey,
+          callback: (token: string) => setCaptchaToken(token),
+        });
+      }
+    };
+
+    if (window.turnstile) {
+      renderWidget();
+    } else {
+      const script = document.createElement('script');
+      script.src = 'https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';
+      script.async = true;
+      script.defer = true;
+      script.onload = renderWidget;
+      document.head.appendChild(script);
+    }
+  }, [publicConfig?.captchaSiteKey]);
+
+  const isInviteOnly = publicConfig?.registration === 'INVITE_ONLY';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading || isConfigLoading) return; // Prevent double-submit or submitting before config arrives
     setError(null);
-    if (!email || !password || !displayName) {
+
+    const trimmedEmail = email.trim().toLowerCase();
+    const trimmedName = displayName.trim();
+    const trimmedInvite = inviteCode.trim();
+
+    if (!trimmedEmail || !password || !trimmedName) {
       setError('Vui lòng điền đầy đủ các trường thông tin.');
       return;
     }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(trimmedEmail)) {
+      setError('Địa chỉ email không đúng định dạng.');
+      return;
+    }
+
+    if (trimmedName.length > 60) {
+      setError('Tên hiển thị không được vượt quá 60 ký tự.');
+      return;
+    }
+
     if (password.length < 8) {
       setError('Mật khẩu phải chứa ít nhất 8 ký tự.');
       return;
     }
 
+    if (isInviteOnly && !trimmedInvite) {
+      setError('Cần mã mời để đăng ký');
+      return;
+    }
+
+    if (trimmedInvite && (trimmedInvite.length < 4 || trimmedInvite.length > 40)) {
+      setError('Mã mời phải từ 4 đến 40 ký tự.');
+      return;
+    }
+
+    if (publicConfig?.captchaSiteKey && !captchaToken) {
+      setError('Vui lòng hoàn thành xác thực bảo vệ (captcha).');
+      return;
+    }
+
     setLoading(true);
-    const res = await register({ email, name: displayName, password });
-    setLoading(false);
-    if (res.success) {
-      onNavigate('/trade/BTCUSDT');
-    } else {
-      setError(res.error || 'Đăng ký tài khoản không thành công.');
+    try {
+      const res = await register({
+        email: trimmedEmail,
+        name: trimmedName,
+        password,
+        inviteCode: trimmedInvite || undefined,
+        captchaToken: captchaToken || undefined,
+      });
+
+      if (res.success) {
+        onNavigate('/trade/BTCUSDT');
+      } else {
+        setError(res.error || 'Đăng ký tài khoản không thành công.');
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -255,7 +339,9 @@ export const RegisterPage: React.FC<AuthPageProps> = ({ onNavigate }) => {
               Đăng ký
             </h2>
             <p className="text-sm text-[var(--text-3,#63636b)]">
-              Hoàn thành các thông tin dưới đây để tạo tài khoản
+              {isInviteOnly
+                ? 'Sàn đang trong giai đoạn thử nghiệm kín. Vui lòng nhập mã mời.'
+                : 'Hoàn thành các thông tin dưới đây để tạo tài khoản'}
             </p>
           </div>
 
@@ -274,6 +360,7 @@ export const RegisterPage: React.FC<AuthPageProps> = ({ onNavigate }) => {
               onChange={(e) => setEmail(e.target.value)}
               placeholder="trader@example.com"
               required
+              disabled={loading}
             />
 
             <Input
@@ -283,6 +370,7 @@ export const RegisterPage: React.FC<AuthPageProps> = ({ onNavigate }) => {
               onChange={(e) => setDisplayName(e.target.value)}
               placeholder="Satoshi Nakamoto"
               required
+              disabled={loading}
             />
 
             <Input
@@ -292,9 +380,38 @@ export const RegisterPage: React.FC<AuthPageProps> = ({ onNavigate }) => {
               onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
               required
+              disabled={loading}
             />
 
-            <Button type="submit" variant="primary" loading={loading} fullWidth className="py-2.5 mt-2">
+            {isInviteOnly && (
+              <div>
+                <Input
+                  label="Mã mời"
+                  type="text"
+                  value={inviteCode}
+                  onChange={(e) => setInviteCode(e.target.value)}
+                  placeholder="XXXX-XXXX"
+                  required
+                  disabled={loading}
+                />
+                <p className="text-[11px] text-[var(--text-3,#63636b)] mt-1.5">
+                  Cần mã mời hợp lệ để đăng ký tài khoản trên hệ thống.
+                </p>
+              </div>
+            )}
+
+            {publicConfig?.captchaSiteKey && (
+              <div ref={turnstileContainerRef} className="my-2 flex justify-center" />
+            )}
+
+            <Button
+              type="submit"
+              variant="primary"
+              loading={loading}
+              disabled={loading}
+              fullWidth
+              className="py-2.5 mt-2"
+            >
               Đăng ký tài khoản
             </Button>
           </form>

@@ -58,6 +58,12 @@ const setupMainSeries = (
   const precision = tickSize.includes('.') ? tickSize.split('.')[1]?.length ?? 2 : 2;
   const minMove = parseFloat(tickSize) || 0.01;
 
+  const priceFormat = {
+    type: 'custom' as const,
+    minMove,
+    formatter: (price: number) => formatDecimal(price.toFixed(precision), { decimals: precision, locale: 'vi' }),
+  };
+
   if (type === 'candles') {
     return chart.addSeries(CandlestickSeries, {
       upColor: '#00c087',
@@ -66,11 +72,7 @@ const setupMainSeries = (
       borderDownColor: '#f6465d',
       wickUpColor: '#00c087',
       wickDownColor: '#f6465d',
-      priceFormat: {
-        type: 'price',
-        precision,
-        minMove,
-      },
+      priceFormat,
     });
   } else if (type === 'line') {
     return chart.addSeries(LineSeries, {
@@ -78,11 +80,7 @@ const setupMainSeries = (
       lineWidth: 2,
       crosshairMarkerVisible: true,
       crosshairMarkerRadius: 4,
-      priceFormat: {
-        type: 'price',
-        precision,
-        minMove,
-      },
+      priceFormat,
     });
   } else {
     return chart.addSeries(AreaSeries, {
@@ -90,11 +88,7 @@ const setupMainSeries = (
       bottomColor: 'rgba(129, 140, 248, 0.0)',
       lineColor: '#818cf8',
       lineWidth: 2,
-      priceFormat: {
-        type: 'price',
-        precision,
-        minMove,
-      },
+      priceFormat,
     });
   }
 };
@@ -135,14 +129,47 @@ const setupMASeries = (chart: IChartApi) => {
   return { ma5, ma10, ma20 };
 };
 
+const setupEMASeries = (chart: IChartApi) => {
+  const ema7 = chart.addSeries(LineSeries, {
+    color: '#38bdf8',
+    lineWidth: 1,
+    priceLineVisible: false,
+    lastValueVisible: false,
+    crosshairMarkerVisible: false,
+  });
+  const ema25 = chart.addSeries(LineSeries, {
+    color: '#ec4899',
+    lineWidth: 1,
+    priceLineVisible: false,
+    lastValueVisible: false,
+    crosshairMarkerVisible: false,
+  });
+  return { ema7, ema25 };
+};
+
+const setupRSISeries = (chart: IChartApi) => {
+  const rsi = chart.addSeries(LineSeries, {
+    color: '#c084fc',
+    lineWidth: 1,
+    priceScaleId: 'rsi',
+    priceLineVisible: false,
+    lastValueVisible: false,
+    crosshairMarkerVisible: false,
+  });
+  rsi.priceScale().applyOptions({
+    scaleMargins: { top: 0.75, bottom: 0.05 },
+    autoScale: true,
+  });
+  return rsi;
+};
+
 const formatLegendTime = (timestamp?: number): string | null => {
   if (!timestamp) return null;
   const d = new Date(timestamp * 1000);
-  const pad = (n: number) => String(n).padStart(2, '0');
-  const utc = `${pad(d.getUTCHours())}:${pad(d.getUTCMinutes())} UTC`;
-  const vnD = new Date(d.getTime() + 7 * 3600 * 1000);
-  const vn = `${pad(vnD.getUTCHours())}:${pad(vnD.getUTCMinutes())} VN`;
-  return `${utc} | ${vn}`;
+  const timeZone = 'Asia/Ho_Chi_Minh';
+  const timeStr = new Intl.DateTimeFormat('vi-VN', { timeZone, hour: '2-digit', minute: '2-digit', hour12: false }).format(d);
+  const dateStr = new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
+  return `${dateStr} ${timeStr} VN`;
 };
 
 export const CandlestickChart: React.FC<CandlestickChartProps> = ({
@@ -153,7 +180,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
   const [activeTab, setActiveTab] = useState<'chart' | 'info'>('chart');
   const [interval, setIntervalState] = useState<CandleInterval>('15m');
   const [chartType, setChartType] = useState<ChartType>('candles');
-  const [showIndicators, setShowIndicators] = useState({ ma: true, vol: true });
+  const [showIndicators, setShowIndicators] = useState({ ma: true, ema: false, rsi: false, vol: true });
   const [countdown, setCountdown] = useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
 
@@ -184,17 +211,31 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
   const ma5SeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
   const ma10SeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
   const ma20SeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
+  const ema7SeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
+  const ema25SeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
+  const rsiSeriesRef = useRef<ISeriesApi<'Line'> | null>(null);
+  const hasMoreHistoryRef = useRef<boolean>(true);
+  const isLoadingMoreRef = useRef<boolean>(false);
   const orderPriceLinesRef = useRef<IPriceLine[]>([]);
   const lastCandleRef = useRef<FormattedCandle | null>(null);
   const candlesListRef = useRef<FormattedCandle[]>([]);
   const needsFitContentRef = useRef<boolean>(true);
   const lastLegendUpdateRef = useRef<number>(0);
+  const currentParamsRef = useRef({ symbol, interval, marketType });
+  const pendingRangeAdjustmentRef = useRef<{ from: number; to: number } | null>(null);
 
-  // 0. Reset candle cache and clear series data immediately when symbol or interval changes
+  useEffect(() => {
+    currentParamsRef.current = { symbol, interval, marketType };
+  }, [symbol, interval, marketType]);
+
+  // 0. Reset candle cache and clear series data immediately when symbol, interval, or marketType changes
   useEffect(() => {
     lastCandleRef.current = null;
     candlesListRef.current = [];
     needsFitContentRef.current = true;
+    hasMoreHistoryRef.current = true;
+    isLoadingMoreRef.current = false;
+    pendingRangeAdjustmentRef.current = null;
     setLegendData(null);
     if (mainSeriesRef.current) {
       try {
@@ -213,7 +254,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
         ma20SeriesRef.current?.setData([]);
       } catch {}
     }
-  }, [symbol, interval]);
+  }, [symbol, interval, marketType]);
 
   const api = getApiClient();
   const { activeSymbolInfo, activeTicker, exchangeInfo, realtimeClient, connectionStatus } = useMarket();
@@ -272,7 +313,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
               clientOrderId: null,
               stopPrice: null,
               closeReason: null,
-            } as any))
+            } as unknown as Order))
           );
         })
         .catch(() => setOpenOrders([]));
@@ -292,7 +333,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
       .catch(() => setAvgCost(null));
   }, [api, symbol, isAuthenticated, activeSymbolInfo, marketType]);
 
-  // Fetch historical candles from server
+  // Fetch historical candles from server (B3: initial limit 500)
   useEffect(() => {
     let active = true;
     async function fetchCandles() {
@@ -304,11 +345,11 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
         const res = marketType === 'futures'
           ? await api.futuresCandles({
               params: { symbol },
-              query: { interval, limit: 180 },
+              query: { interval, limit: 500 },
             })
           : await api.candles({
               params: { symbol },
-              query: { interval, limit: 180 },
+              query: { interval, limit: 500 },
             });
         if (active) {
           setCandles(res.items);
@@ -383,6 +424,59 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
       }
     }
     return maData;
+  }, []);
+
+  // Exponential Moving Average helper (U2)
+  const calcEMA = useCallback((data: FormattedCandle[], period: number) => {
+    if (data.length < period) return [];
+    const k = 2 / (period + 1);
+    const emaData: { time: UTCTimestamp; value: number }[] = [];
+    let sum = 0;
+    for (let i = 0; i < period; i++) {
+      sum += data[i]!.close;
+    }
+    let prevEma = sum / period;
+    emaData.push({ time: data[period - 1]!.time, value: prevEma });
+
+    for (let i = period; i < data.length; i++) {
+      const cur = data[i]!;
+      const curEma = cur.close * k + prevEma * (1 - k);
+      emaData.push({ time: cur.time, value: curEma });
+      prevEma = curEma;
+    }
+    return emaData;
+  }, []);
+
+  // Relative Strength Index helper (U2)
+  const calcRSI = useCallback((data: FormattedCandle[], period = 14) => {
+    if (data.length <= period) return [];
+    const rsiData: { time: UTCTimestamp; value: number }[] = [];
+    let gains = 0;
+    let losses = 0;
+
+    for (let i = 1; i <= period; i++) {
+      const diff = data[i]!.close - data[i - 1]!.close;
+      if (diff >= 0) gains += diff;
+      else losses -= diff;
+    }
+
+    let avgGain = gains / period;
+    let avgLoss = losses / period;
+    let rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
+    let rsi = avgLoss === 0 ? 100 : 100 - (100 / (1 + rs));
+    rsiData.push({ time: data[period]!.time, value: rsi });
+
+    for (let i = period + 1; i < data.length; i++) {
+      const diff = data[i]!.close - data[i - 1]!.close;
+      const gain = diff > 0 ? diff : 0;
+      const loss = diff < 0 ? -diff : 0;
+      avgGain = (avgGain * (period - 1) + gain) / period;
+      avgLoss = (avgLoss * (period - 1) + loss) / period;
+      rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
+      rsi = avgLoss === 0 ? 100 : 100 - (100 / (1 + rs));
+      rsiData.push({ time: data[i]!.time, value: rsi });
+    }
+    return rsiData;
   }, []);
 
   // Countdown timer for current candle close
@@ -472,18 +566,35 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
         borderColor: 'rgba(255, 255, 255, 0.08)',
         timeVisible: true,
         secondsVisible: false,
+        tickMarkFormatter: (time: number | { year: number; month: number; day: number }, tickMarkType: number) => {
+          const timestamp = typeof time === 'number' ? time * 1000 : Date.UTC(time.year, time.month - 1, time.day);
+          const date = new Date(timestamp);
+          const timeZone = 'Asia/Ho_Chi_Minh';
+          switch (tickMarkType) {
+            case 0:
+              return new Intl.DateTimeFormat('vi-VN', { timeZone, year: 'numeric' }).format(date);
+            case 1:
+              return new Intl.DateTimeFormat('vi-VN', { timeZone, month: 'short' }).format(date);
+            case 2:
+              return new Intl.DateTimeFormat('vi-VN', { timeZone, day: 'numeric', month: 'numeric' }).format(date);
+            case 3:
+              return new Intl.DateTimeFormat('vi-VN', { timeZone, hour: '2-digit', minute: '2-digit', hour12: false }).format(date);
+            case 4:
+              return new Intl.DateTimeFormat('vi-VN', { timeZone, hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false }).format(date);
+            default:
+              return new Intl.DateTimeFormat('vi-VN', { timeZone, hour: '2-digit', minute: '2-digit', hour12: false }).format(date);
+          }
+        },
       },
       localization: {
-        locale: 'en-US',
+        locale: 'vi-VN',
         dateFormat: 'yyyy-MM-dd',
         timeFormatter: (timestamp: number) => {
           const d = new Date(timestamp * 1000);
-          const yyyy = d.getUTCFullYear();
-          const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
-          const dd = String(d.getUTCDate()).padStart(2, '0');
-          const hh = String(d.getUTCHours()).padStart(2, '0');
-          const min = String(d.getUTCMinutes()).padStart(2, '0');
-          return `${yyyy}-${mm}-${dd} ${hh}:${min} UTC`;
+          const timeZone = 'Asia/Ho_Chi_Minh';
+          const dStr = new Intl.DateTimeFormat('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
+          const tStr = new Intl.DateTimeFormat('vi-VN', { timeZone, hour: '2-digit', minute: '2-digit', hour12: false }).format(d);
+          return `${dStr} ${tStr} VN`;
         },
       },
       autoSize: true,
@@ -506,6 +617,18 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
       ma5SeriesRef.current = mas.ma5;
       ma10SeriesRef.current = mas.ma10;
       ma20SeriesRef.current = mas.ma20;
+    }
+
+    // Create EMA Series (U2)
+    if (showIndicators.ema) {
+      const emas = setupEMASeries(chart);
+      ema7SeriesRef.current = emas.ema7;
+      ema25SeriesRef.current = emas.ema25;
+    }
+
+    // Create RSI Series (U2)
+    if (showIndicators.rsi) {
+      rsiSeriesRef.current = setupRSISeries(chart);
     }
 
     // Populate data if candles are already available
@@ -533,8 +656,83 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
         ma20SeriesRef.current?.setData(calcMA(currentCandles, 20));
       }
 
+      if (showIndicators.ema) {
+        ema7SeriesRef.current?.setData(calcEMA(currentCandles, 7));
+        ema25SeriesRef.current?.setData(calcEMA(currentCandles, 25));
+      }
+
+      if (showIndicators.rsi) {
+        rsiSeriesRef.current?.setData(calcRSI(currentCandles, 14));
+      }
+
       chart.timeScale().fitContent();
     }
+
+    // History paging subscription (B3): load older history when scrolling near left edge
+    const timeScale = chart.timeScale();
+    timeScale.subscribeVisibleLogicalRangeChange(async (logicalRange) => {
+      if (!logicalRange) return;
+      if (logicalRange.from < 50 && !isLoadingMoreRef.current && hasMoreHistoryRef.current) {
+        const curList = candlesListRef.current;
+        if (curList.length === 0) return;
+        const earliestTime = curList[0]?.time;
+        if (!earliestTime) return;
+        const earliestOpenTimeMs = earliestTime * 1000;
+
+        const { symbol: curSymbol, interval: curInterval, marketType: curMarketType } = currentParamsRef.current;
+
+        isLoadingMoreRef.current = true;
+        try {
+          const res = curMarketType === 'futures'
+            ? await api.futuresCandles({
+                params: { symbol: curSymbol },
+                query: { interval: curInterval, limit: 500, endTime: earliestOpenTimeMs },
+              })
+            : await api.candles({
+                params: { symbol: curSymbol },
+                query: { interval: curInterval, limit: 500, endTime: earliestOpenTimeMs },
+              });
+
+          if (!res.items || res.items.length === 0) {
+            hasMoreHistoryRef.current = false;
+            return;
+          }
+
+          setCandles((prev) => {
+            const existingTimes = new Set(
+              prev.map((c) => (typeof c.openTime === 'number' ? c.openTime : new Date(c.openTime).getTime()))
+            );
+            const newItems = res.items.filter((c) => {
+              const t = typeof c.openTime === 'number' ? c.openTime : new Date(c.openTime).getTime();
+              return !existingTimes.has(t);
+            });
+            if (newItems.length === 0) {
+              hasMoreHistoryRef.current = false;
+              return prev;
+            }
+
+            const addedCount = newItems.length;
+            const targetRange = {
+              from: logicalRange.from + addedCount,
+              to: logicalRange.to + addedCount,
+            };
+            pendingRangeAdjustmentRef.current = targetRange;
+
+            requestAnimationFrame(() => {
+              try {
+                timeScale.setVisibleLogicalRange(targetRange);
+              } catch {}
+            });
+
+            return [...newItems, ...prev];
+          });
+        } catch {
+          // Ignore background fetch failure
+        } finally {
+          isLoadingMoreRef.current = false;
+        }
+      }
+    });
 
     // Crosshair move listener for Pro HUD Legend
     chart.subscribeCrosshairMove((param) => {
@@ -595,6 +793,9 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
         ma5SeriesRef.current = null;
         ma10SeriesRef.current = null;
         ma20SeriesRef.current = null;
+        ema7SeriesRef.current = null;
+        ema25SeriesRef.current = null;
+        rsiSeriesRef.current = null;
         orderPriceLinesRef.current = [];
       }
     };
@@ -689,6 +890,58 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
     }
   }, [showIndicators.ma, activeTab, calcMA]);
 
+  // 4b. Toggle EMA Series in place (U2)
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart || activeTab !== 'chart') return;
+
+    if (showIndicators.ema) {
+      if (!ema7SeriesRef.current) {
+        const emas = setupEMASeries(chart);
+        ema7SeriesRef.current = emas.ema7;
+        ema25SeriesRef.current = emas.ema25;
+        const curCandles = candlesListRef.current;
+        if (curCandles.length > 0) {
+          emas.ema7.setData(calcEMA(curCandles, 7));
+          emas.ema25.setData(calcEMA(curCandles, 25));
+        }
+      }
+    } else {
+      if (ema7SeriesRef.current) {
+        try {
+          if (ema7SeriesRef.current) chart.removeSeries(ema7SeriesRef.current);
+          if (ema25SeriesRef.current) chart.removeSeries(ema25SeriesRef.current);
+        } catch {}
+        ema7SeriesRef.current = null;
+        ema25SeriesRef.current = null;
+      }
+    }
+  }, [showIndicators.ema, activeTab, calcEMA]);
+
+  // 4c. Toggle RSI Series in place (U2)
+  useEffect(() => {
+    const chart = chartRef.current;
+    if (!chart || activeTab !== 'chart') return;
+
+    if (showIndicators.rsi) {
+      if (!rsiSeriesRef.current) {
+        const rsi = setupRSISeries(chart);
+        rsiSeriesRef.current = rsi;
+        const curCandles = candlesListRef.current;
+        if (curCandles.length > 0) {
+          rsi.setData(calcRSI(curCandles, 14));
+        }
+      }
+    } else {
+      if (rsiSeriesRef.current) {
+        try {
+          chart.removeSeries(rsiSeriesRef.current);
+        } catch {}
+        rsiSeriesRef.current = null;
+      }
+    }
+  }, [showIndicators.rsi, activeTab, calcRSI]);
+
   // 5. Sync historical candles data to series
   useEffect(() => {
     if (!mainSeriesRef.current || formattedCandles.length === 0) return;
@@ -715,6 +968,15 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
       ma20SeriesRef.current?.setData(calcMA(formattedCandles, 20));
     }
 
+    if (showIndicators.ema) {
+      ema7SeriesRef.current?.setData(calcEMA(formattedCandles, 7));
+      ema25SeriesRef.current?.setData(calcEMA(formattedCandles, 25));
+    }
+
+    if (showIndicators.rsi) {
+      rsiSeriesRef.current?.setData(calcRSI(formattedCandles, 14));
+    }
+
     const last = formattedCandles[formattedCandles.length - 1];
     if (last) {
       const chg = last.close - last.open;
@@ -735,8 +997,13 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
     if (needsFitContentRef.current) {
       chartRef.current?.timeScale().fitContent();
       needsFitContentRef.current = false;
+    } else if (pendingRangeAdjustmentRef.current) {
+      try {
+        chartRef.current?.timeScale().setVisibleLogicalRange(pendingRangeAdjustmentRef.current);
+      } catch {}
+      pendingRangeAdjustmentRef.current = null;
     }
-  }, [formattedCandles, chartType, showIndicators, calcMA]);
+  }, [formattedCandles, chartType, showIndicators, calcMA, calcEMA, calcRSI]);
 
   // 6. Update order and position price lines without destroying chart
   useEffect(() => {
@@ -838,7 +1105,8 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
 
     const channel = marketType === 'futures' ? `futures:candles:${symbol}:${interval}` : `candles:${symbol}:${interval}`;
     const unsub = realtimeClient.subscribe(channel, (event: unknown) => {
-      const c = ((event && typeof event === 'object' && 'candle' in event ? (event as any).candle : event) as Candle);
+      const rawEvent = event as { candle?: Candle } | Candle | null | undefined;
+      const c = (rawEvent && typeof rawEvent === 'object' && 'candle' in rawEvent ? rawEvent.candle : rawEvent) as Candle | undefined;
       if (!c || (!c.openTime && !c.open)) return;
 
       const timeMs = typeof c.openTime === 'number' ? c.openTime : new Date(c.openTime).getTime();
@@ -903,14 +1171,14 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
     return () => unsub();
   }, [realtimeClient, symbol, interval, marketType, chartType]);
 
-  // 8. Live Price Tick Synchronization & Flash Effect
+  // 8. Live Price Flash Effect (B4: do not mutate forming candle with ticker to prevent fake wicks)
   useEffect(() => {
-    if (!activeTicker || activeTicker.symbol !== symbol || !activeTicker.lastPrice || !lastCandleRef.current) return;
+    if (!activeTicker || activeTicker.symbol !== symbol || !activeTicker.lastPrice) return;
 
     const lastPrice = parseFloat(activeTicker.lastPrice);
     if (isNaN(lastPrice) || lastPrice <= 0) return;
 
-    // Trigger subtle price flash
+    // Trigger subtle price flash animation
     if (prevPriceRef.current !== null && prevPriceRef.current !== lastPrice) {
       const flash = lastPrice > prevPriceRef.current ? 'up' : 'down';
       setPriceFlash(flash);
@@ -920,42 +1188,9 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
       }, 400);
     }
     prevPriceRef.current = lastPrice;
+  }, [activeTicker, symbol]);
 
-    // Update forming candle
-    const cur = lastCandleRef.current;
-    const updated: FormattedCandle = {
-      ...cur,
-      close: lastPrice,
-      high: Math.max(cur.high, lastPrice),
-      low: Math.min(cur.low, lastPrice),
-    };
-    lastCandleRef.current = updated;
-
-    if (chartType === 'candles' && mainSeriesRef.current) {
-      (mainSeriesRef.current as ISeriesApi<'Candlestick'>).update(updated);
-    } else if (mainSeriesRef.current) {
-      mainSeriesRef.current.update({ time: updated.time, value: lastPrice });
-    }
-
-    // Throttle HUD update
-    const now = Date.now();
-    if (now - lastLegendUpdateRef.current > 150) {
-      lastLegendUpdateRef.current = now;
-      const chgPct = ((updated.close - updated.open) / (updated.open || 1)) * 100;
-      setLegendData((prev) => ({
-        open: updated.open,
-        high: updated.high,
-        low: updated.low,
-        close: updated.close,
-        change: chgPct,
-        amplitude: ((updated.high - updated.low) / (updated.low || 1)) * 100,
-        volume: prev?.volume || 0,
-        time: updated.time,
-      }));
-    }
-  }, [activeTicker, symbol, chartType]);
-
-  // Keep price format updated if activeSymbolInfo changes without destroying series
+  // Keep price format updated if activeSymbolInfo changes without destroying series (B5)
   useEffect(() => {
     if (!mainSeriesRef.current || !activeSymbolInfo) return;
     const tick = activeSymbolInfo.tickSize || '0.01';
@@ -964,9 +1199,9 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
     try {
       mainSeriesRef.current.applyOptions({
         priceFormat: {
-          type: 'price',
-          precision,
+          type: 'custom',
           minMove,
+          formatter: (price: number) => formatDecimal(price.toFixed(precision), { decimals: precision, locale: 'vi' }),
         },
       });
     } catch {}
@@ -1035,37 +1270,37 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
           <div className="flex items-center bg-[var(--panel,#0a0a0b)] rounded-lg p-0.5 border border-[var(--line,#1d1e21)] shadow-inner">
             <button
               onClick={() => setActiveTab('chart')}
-              className={`px-2.5 sm:px-3 py-1 rounded-md text-xs font-semibold transition-all duration-200 flex items-center gap-1.5 cursor-pointer ${
+              className={`px-2 sm:px-3 py-1 rounded-md text-[11px] sm:text-xs font-semibold transition-all duration-200 flex items-center gap-1 cursor-pointer ${
                 activeTab === 'chart'
                   ? 'bg-[var(--accent,#818cf8)] text-white shadow-sm'
                   : 'text-[var(--text-2,#a1a1aa)] hover:text-[var(--text,#f4f4f5)]'
               }`}
             >
               <BarChart2 size={13} />
-              Biểu đồ
+              <span className="hidden xs:inline">Biểu đồ</span>
             </button>
             <button
               onClick={() => setActiveTab('info')}
-              className={`px-2.5 sm:px-3 py-1 rounded-md text-xs font-semibold transition-all duration-200 flex items-center gap-1.5 cursor-pointer ${
+              className={`px-2 sm:px-3 py-1 rounded-md text-[11px] sm:text-xs font-semibold transition-all duration-200 flex items-center gap-1 cursor-pointer ${
                 activeTab === 'info'
                   ? 'bg-[var(--accent,#818cf8)] text-white shadow-sm'
                   : 'text-[var(--text-2,#a1a1aa)] hover:text-[var(--text,#f4f4f5)]'
               }`}
             >
               <Info size={13} />
-              Thông tin
+              <span className="hidden xs:inline">Thông tin</span>
             </button>
           </div>
 
           {activeTab === 'chart' && (
             <>
-              {/* Interval Buttons */}
-              <div className="flex items-center gap-0.5 sm:gap-1 font-mono text-[11px] border-l border-[var(--line,#1d1e21)] pl-2">
+              {/* Interval Buttons (U1: compact on mobile so 4h and 1d are never cut off) */}
+              <div className="flex items-center gap-0.5 sm:gap-1 font-mono text-[10px] sm:text-[11px] border-l border-[var(--line,#1d1e21)] pl-1.5 sm:pl-2 shrink-0">
                 {INTERVALS.map((inv) => (
                   <button
                     key={inv}
                     onClick={() => setIntervalState(inv)}
-                    className={`px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-md cursor-pointer transition-all duration-150 ${
+                    className={`px-1.5 py-0.5 sm:px-2.5 sm:py-1 rounded cursor-pointer transition-all duration-150 shrink-0 ${
                       interval === inv
                         ? 'bg-[var(--accent,#818cf8)]/15 text-[var(--accent,#818cf8)] font-bold border border-[var(--accent,#818cf8)]/30'
                         : 'text-[var(--text-2,#a1a1aa)] hover:text-white hover:bg-white/5'
@@ -1110,7 +1345,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
                 </button>
               </div>
 
-              {/* Indicators toggle */}
+              {/* Indicators toggle (U2: MA, EMA, RSI, VOL) */}
               <div className="hidden md:flex items-center gap-1.5 border-l border-[var(--line,#1d1e21)] pl-2 text-[11px]">
                 <button
                   onClick={() => setShowIndicators((p) => ({ ...p, ma: !p.ma }))}
@@ -1123,6 +1358,28 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
                 >
                   <Activity size={12} />
                   MA
+                </button>
+                <button
+                  onClick={() => setShowIndicators((p) => ({ ...p, ema: !p.ema }))}
+                  className={`px-2 py-0.5 rounded cursor-pointer transition-all ${
+                    showIndicators.ema
+                      ? 'bg-sky-500/10 text-sky-400 font-semibold border border-sky-500/30'
+                      : 'text-[var(--text-3,#63636b)] hover:text-[var(--text-2,#a1a1aa)]'
+                  }`}
+                  title="Đường trung bình hàm mũ EMA (7, 25)"
+                >
+                  EMA
+                </button>
+                <button
+                  onClick={() => setShowIndicators((p) => ({ ...p, rsi: !p.rsi }))}
+                  className={`px-2 py-0.5 rounded cursor-pointer transition-all ${
+                    showIndicators.rsi
+                      ? 'bg-purple-500/10 text-purple-400 font-semibold border border-purple-500/30'
+                      : 'text-[var(--text-3,#63636b)] hover:text-[var(--text-2,#a1a1aa)]'
+                  }`}
+                  title="Chỉ số sức mạnh tương đối RSI (14)"
+                >
+                  RSI
                 </button>
                 <button
                   onClick={() => setShowIndicators((p) => ({ ...p, vol: !p.vol }))}
@@ -1201,6 +1458,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
             onClick={() => setIsFullscreen((prev) => !prev)}
             className="p-1 rounded-md text-[var(--text-3,#63636b)] hover:text-white hover:bg-white/5 transition-colors cursor-pointer"
             title={isFullscreen ? 'Thu nhỏ biểu đồ' : 'Phóng to toàn màn hình'}
+            aria-label={isFullscreen ? 'Thu nhỏ biểu đồ' : 'Phóng to toàn màn hình'}
           >
             {isFullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
           </button>
@@ -1210,21 +1468,21 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
       {/* Main Chart Body */}
       {activeTab === 'chart' ? (
         <div className="relative flex-1 min-h-0 w-full overflow-hidden">
-          {/* Pro HUD Legend Bar */}
+          {/* Pro HUD Legend Bar (U1: compact single line on mobile, no wrapping) */}
           {legendData && !fetchError && (
-            <div className="absolute top-2 left-2 sm:top-2.5 sm:left-3 z-10 flex flex-wrap items-center gap-2 sm:gap-3 font-mono text-[10px] sm:text-[11px] tabular-nums text-[var(--text-2,#a1a1aa)] pointer-events-none bg-[var(--bg,#000000)]/85 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-lg backdrop-blur-md border border-[var(--line,#1d1e21)]/80 shadow-md max-w-[calc(100%-1rem)]">
+            <div className="absolute top-1.5 left-1.5 sm:top-2.5 sm:left-3 z-10 flex items-center gap-1.5 sm:gap-3 font-mono text-[9px] sm:text-[11px] tabular-nums text-[var(--text-2,#a1a1aa)] pointer-events-none bg-[var(--bg,#000000)]/85 px-2 py-0.5 sm:px-3 sm:py-1.5 rounded-md sm:rounded-lg backdrop-blur-md border border-[var(--line,#1d1e21)]/80 shadow-md max-w-[calc(100%-0.75rem)] overflow-x-auto no-scrollbar whitespace-nowrap">
               <span className="text-white font-bold">{symbol}</span>
               {legendData.time && (
-                <span className="text-[10px] text-zinc-300 bg-white/10 px-1.5 py-0.5 rounded border border-white/10 hidden sm:inline-block font-mono">
+                <span className="text-[9px] sm:text-[10px] text-zinc-300 bg-white/10 px-1.5 py-0.5 rounded border border-white/10 hidden sm:inline-block font-mono">
                   {formatLegendTime(legendData.time)}
                 </span>
               )}
-              <span>O: <strong className="text-[var(--text,#f4f4f5)]">{formatDecimal(legendData.open.toString())}</strong></span>
-              <span>H: <strong className="text-[var(--text,#f4f4f5)]">{formatDecimal(legendData.high.toString())}</strong></span>
-              <span>L: <strong className="text-[var(--text,#f4f4f5)]">{formatDecimal(legendData.low.toString())}</strong></span>
-              <span>C: <strong className={legendData.change >= 0 ? 'text-[#00c087]' : 'text-[#f6465d]'}>{formatDecimal(legendData.close.toString())}</strong></span>
+              <span>O: <strong className="text-[var(--text,#f4f4f5)]">{formatDecimal(legendData.open.toString(), { decimals: 2 })}</strong></span>
+              <span>H: <strong className="text-[var(--text,#f4f4f5)]">{formatDecimal(legendData.high.toString(), { decimals: 2 })}</strong></span>
+              <span>L: <strong className="text-[var(--text,#f4f4f5)]">{formatDecimal(legendData.low.toString(), { decimals: 2 })}</strong></span>
+              <span>C: <strong className={legendData.change >= 0 ? 'text-[#00c087]' : 'text-[#f6465d]'}>{formatDecimal(legendData.close.toString(), { decimals: 2 })}</strong></span>
               <span className={`font-bold flex items-center gap-0.5 ${legendData.change >= 0 ? 'text-[#00c087]' : 'text-[#f6465d]'}`}>
-                {legendData.change >= 0 ? <TrendingUp size={11} /> : <TrendingDown size={11} />}
+                {legendData.change >= 0 ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
                 {legendData.change >= 0 ? `+${legendData.change.toFixed(2)}%` : `${legendData.change.toFixed(2)}%`}
               </span>
               <span className="hidden sm:inline">KL: <strong className="text-white">{formatDecimal(legendData.volume.toString(), { decimals: 2 })}</strong></span>
@@ -1233,6 +1491,12 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
                   <span className="text-[#f59e0b]">MA5</span>
                   <span className="text-[#06b6d4]">MA10</span>
                   <span className="text-[#a855f7]">MA20</span>
+                </div>
+              )}
+              {showIndicators.ema && (
+                <div className="hidden lg:flex items-center gap-2 pl-2 border-l border-white/10 text-[10px]">
+                  <span className="text-[#38bdf8]">EMA7</span>
+                  <span className="text-[#ec4899]">EMA25</span>
                 </div>
               )}
             </div>

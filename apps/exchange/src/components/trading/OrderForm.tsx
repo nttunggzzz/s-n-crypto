@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import type { Balances, OrderSide, TimeInForce } from '@cex/contracts';
+import type { Balances, OrderSide, TimeInForce, PlaceOrderRequest, PlaceOcoRequest } from '@cex/contracts';
 import { ApiError } from '@cex/contracts';
 import {
   dec,
@@ -15,11 +15,22 @@ import {
 import { getApiClient } from '../../services/api.ts';
 import { getErrorMessage } from '../../services/errors.ts';
 import { useAuth } from '../../context/AuthContext.tsx';
+import { useConfig } from '../../context/ConfigContext.tsx';
 import { useMarket } from '../../context/MarketContext.tsx';
 import { Button, DecimalInput, useToast, formatDecimal, Modal } from '@cex/ui';
 import { Calculator, ArrowUpRight, ArrowDownRight, Info } from 'lucide-react';
 
 export type OrderTab = 'LIMIT' | 'MARKET' | 'STOP_LIMIT' | 'STOP_MARKET' | 'TRAILING' | 'OCO';
+
+export type OrderPayload =
+  | { isOco: true; body: PlaceOcoRequest }
+  | { isOco: false; body: PlaceOrderRequest };
+
+export interface OrderTpSlPayload {
+  takeProfitPrice?: string;
+  stopLossPrice?: string;
+  stopLossLimitPrice?: string;
+}
 
 export interface OrderFormProps {
   symbol: string;
@@ -35,6 +46,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({
   onNavigateToLogin,
 }) => {
   const { user, isAuthenticated } = useAuth();
+  const { publicConfig } = useConfig();
   const { activeSymbolInfo, activeTicker, exchangeInfo, tradingHalted, disabledSymbols, realtimeClient } = useMarket();
   const { success, error: toastError } = useToast();
   const api = getApiClient();
@@ -69,7 +81,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({
 
   // Confirm Order Modal
   const [confirmOrdersPref, setConfirmOrdersPref] = useState(true);
-  const [confirmModalData, setConfirmModalData] = useState<any | null>(null);
+  const [confirmModalData, setConfirmModalData] = useState<OrderPayload | null>(null);
 
   const [balances, setBalances] = useState<Balances | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -320,7 +332,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({
   }, [exchangeInfo, side, orderType, quoteOrderQty, quantity, price, activeTicker]);
 
   // Real order dispatching
-  const dispatchOrder = async (orderPayload: any) => {
+  const dispatchOrder = async (orderPayload: OrderPayload) => {
     setSubmitting(true);
     try {
       if (orderPayload.isOco) {
@@ -374,7 +386,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({
       const clientOrderId = crypto.randomUUID().replaceAll('-', '');
 
       // Common TP/SL building block
-      let tpslPayload: any = undefined;
+      let tpslPayload: OrderTpSlPayload | undefined = undefined;
       if (side === 'BUY' && enableTpSl && (orderType === 'LIMIT' || orderType === 'MARKET')) {
         if (!takeProfitPrice && !stopLossPrice) {
           setValidationError('Vui lòng nhập ít nhất mức Chốt lời hoặc Cắt lỗ.');
@@ -386,7 +398,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({
         if (stopLossLimitPrice) tpslPayload.stopLossLimitPrice = stopLossLimitPrice;
       }
 
-      let payload: any = null;
+      let payload: OrderPayload | null = null;
 
       if (orderType === 'LIMIT') {
         if (!price || !quantity) {
@@ -414,21 +426,38 @@ export const OrderForm: React.FC<OrderFormProps> = ({
           },
         };
       } else if (orderType === 'MARKET') {
-        const body: any = { symbol, side, type: 'MARKET', clientOrderId };
         if (marketInputMode === 'quote') {
           if (!quoteOrderQty) return setValidationError('Vui lòng nhập số tiền USDT muốn giao dịch.');
           if (dec(quoteOrderQty).lt(dec(rules.minNotional))) {
             return setValidationError(`Giá trị lệnh tối thiểu là ${rules.minNotional} USDT.`);
           }
-          body.quoteOrderQty = quoteOrderQty;
+          payload = {
+            isOco: false,
+            body: {
+              symbol,
+              side,
+              type: 'MARKET',
+              clientOrderId,
+              quoteOrderQty,
+              ...(tpslPayload ? { tpsl: tpslPayload } : {}),
+            },
+          };
         } else {
           if (!quantity) return setValidationError('Vui lòng nhập khối lượng muốn giao dịch.');
           const qErr = checkQuantity(rules, dec(quantity));
           if (qErr) return setValidationError(getErrorMessage(qErr));
-          body.quantity = quantity;
+          payload = {
+            isOco: false,
+            body: {
+              symbol,
+              side,
+              type: 'MARKET',
+              clientOrderId,
+              quantity,
+              ...(tpslPayload ? { tpsl: tpslPayload } : {}),
+            },
+          };
         }
-        if (tpslPayload) body.tpsl = tpslPayload;
-        payload = { isOco: false, body };
       } else if (orderType === 'STOP_LIMIT') {
         if (!stopPrice || !price || !quantity) {
           return setValidationError('Vui lòng nhập mức giá kích hoạt, giá đặt lệnh và khối lượng.');
@@ -458,15 +487,19 @@ export const OrderForm: React.FC<OrderFormProps> = ({
         const sErr = checkPrice(rules, dec(stopPrice));
         if (sErr) return setValidationError(getErrorMessage(sErr));
 
-        const body: any = { symbol, side, type: 'STOP_MARKET', stopPrice, clientOrderId };
         if (side === 'BUY') {
           if (!quoteOrderQty) return setValidationError('Lệnh Mua Stop-Market cần nhập số USDT (quoteOrderQty).');
-          body.quoteOrderQty = quoteOrderQty;
+          payload = {
+            isOco: false,
+            body: { symbol, side, type: 'STOP_MARKET', stopPrice, clientOrderId, quoteOrderQty },
+          };
         } else {
           if (!quantity) return setValidationError('Lệnh Bán Stop-Market cần nhập số lượng coin.');
-          body.quantity = quantity;
+          payload = {
+            isOco: false,
+            body: { symbol, side, type: 'STOP_MARKET', stopPrice, clientOrderId, quantity },
+          };
         }
-        payload = { isOco: false, body };
       } else if (orderType === 'TRAILING') {
         const pctNum = parseFloat(trailingPercent);
         if (isNaN(pctNum) || pctNum < 0.1 || pctNum > 20) {
@@ -474,23 +507,35 @@ export const OrderForm: React.FC<OrderFormProps> = ({
         }
         const trailingDeltaBips = Math.round(pctNum * 100);
 
-        const body: any = {
-          symbol,
-          side,
-          type: 'TRAILING_STOP_MARKET',
-          trailingDeltaBips,
-          clientOrderId,
-        };
-        if (activationPrice) body.activationPrice = activationPrice;
-
         if (side === 'BUY') {
           if (!quoteOrderQty) return setValidationError('Lệnh Mua Trailing cần nhập số USDT.');
-          body.quoteOrderQty = quoteOrderQty;
+          payload = {
+            isOco: false,
+            body: {
+              symbol,
+              side,
+              type: 'TRAILING_STOP_MARKET',
+              trailingDeltaBips,
+              clientOrderId,
+              quoteOrderQty,
+              ...(activationPrice ? { activationPrice } : {}),
+            },
+          };
         } else {
           if (!quantity) return setValidationError('Lệnh Bán Trailing cần nhập số lượng coin.');
-          body.quantity = quantity;
+          payload = {
+            isOco: false,
+            body: {
+              symbol,
+              side,
+              type: 'TRAILING_STOP_MARKET',
+              trailingDeltaBips,
+              clientOrderId,
+              quantity,
+              ...(activationPrice ? { activationPrice } : {}),
+            },
+          };
         }
-        payload = { isOco: false, body };
       } else if (orderType === 'OCO') {
         if (!quantity || !price || !stopPrice) {
           return setValidationError('Vui lòng nhập đầy đủ Khối lượng, Giá chốt lời (Limit) và Giá kích hoạt cắt lỗ (Stop).');
@@ -515,16 +560,18 @@ export const OrderForm: React.FC<OrderFormProps> = ({
           }
         }
 
-        const body: any = {
-          symbol,
-          side,
-          quantity,
-          price,
-          stopPrice,
-          clientListId: clientOrderId,
+        payload = {
+          isOco: true,
+          body: {
+            symbol,
+            side,
+            quantity,
+            price,
+            stopPrice,
+            clientListId: clientOrderId,
+            ...(stopLimitPrice ? { stopLimitPrice } : {}),
+          },
         };
-        if (stopLimitPrice) body.stopLimitPrice = stopLimitPrice;
-        payload = { isOco: true, body };
       }
 
       if (!payload) return;
@@ -542,7 +589,8 @@ export const OrderForm: React.FC<OrderFormProps> = ({
 
   const isPriceInvalid = activeTicker?.status === 'UNAVAILABLE' || activeTicker?.status === 'STALE';
   const isSymbolDisabled = !activeSymbolInfo?.enabled || (disabledSymbols && disabledSymbols.includes(symbol));
-  const isEmailUnverified = user && !user.emailVerified;
+  const isEmailVerificationRequired = publicConfig?.emailVerificationRequired ?? false;
+  const isEmailUnverified = isEmailVerificationRequired && !!user && !user.emailVerified;
 
   const cannotTradeReason = tradingHalted
     ? 'Sàn đang tạm dừng giao dịch'
@@ -1037,42 +1085,42 @@ export const OrderForm: React.FC<OrderFormProps> = ({
               </span>
             </div>
 
-            {confirmModalData.body.price && (
+            {'price' in confirmModalData.body && Boolean(confirmModalData.body.price) && (
               <div className="flex items-center justify-between pb-2 border-b border-[var(--color-border-subtle,#1e212b)]">
                 <span className="text-[var(--color-text-muted,#6b7280)]">Mức giá:</span>
-                <span className="font-mono text-white">{confirmModalData.body.price} {quoteAsset}</span>
+                <span className="font-mono text-white">{String(confirmModalData.body.price)} {quoteAsset}</span>
               </div>
             )}
 
-            {confirmModalData.body.stopPrice && (
+            {'stopPrice' in confirmModalData.body && Boolean(confirmModalData.body.stopPrice) && (
               <div className="flex items-center justify-between pb-2 border-b border-[var(--color-border-subtle,#1e212b)]">
                 <span className="text-[var(--color-text-muted,#6b7280)]">Giá kích hoạt (Stop):</span>
-                <span className="font-mono text-[var(--color-accent-primary,#818cf8)]">{confirmModalData.body.stopPrice} {quoteAsset}</span>
+                <span className="font-mono text-[var(--color-accent-primary,#818cf8)]">{String(confirmModalData.body.stopPrice)} {quoteAsset}</span>
               </div>
             )}
 
-            {confirmModalData.body.quantity && (
+            {'quantity' in confirmModalData.body && Boolean(confirmModalData.body.quantity) && (
               <div className="flex items-center justify-between pb-2 border-b border-[var(--color-border-subtle,#1e212b)]">
                 <span className="text-[var(--color-text-muted,#6b7280)]">Khối lượng:</span>
-                <span className="font-mono text-white">{confirmModalData.body.quantity} {baseAsset}</span>
+                <span className="font-mono text-white">{String(confirmModalData.body.quantity)} {baseAsset}</span>
               </div>
             )}
 
-            {confirmModalData.body.quoteOrderQty && (
+            {'quoteOrderQty' in confirmModalData.body && Boolean(confirmModalData.body.quoteOrderQty) && (
               <div className="flex items-center justify-between pb-2 border-b border-[var(--color-border-subtle,#1e212b)]">
                 <span className="text-[var(--color-text-muted,#6b7280)]">Số tiền thanh toán:</span>
-                <span className="font-mono text-white">{confirmModalData.body.quoteOrderQty} USDT</span>
+                <span className="font-mono text-white">{String(confirmModalData.body.quoteOrderQty)} USDT</span>
               </div>
             )}
 
-            {confirmModalData.body.tpsl && (
+            {'tpsl' in confirmModalData.body && Boolean(confirmModalData.body.tpsl) && (
               <div className="p-2 rounded bg-[var(--color-bg-base,#08090c)] border border-[var(--color-border-default,#272a33)] flex flex-col gap-1">
                 <span className="font-bold text-[var(--color-text-primary,#f3f4f6)]">Kèm TP/SL:</span>
-                {confirmModalData.body.tpsl.takeProfitPrice && (
-                  <div className="text-[var(--color-buy,#22c55e)]">Chốt lời: {confirmModalData.body.tpsl.takeProfitPrice}</div>
+                {(confirmModalData.body.tpsl as OrderTpSlPayload).takeProfitPrice && (
+                  <div className="text-[var(--color-buy,#22c55e)]">Chốt lời: {(confirmModalData.body.tpsl as OrderTpSlPayload).takeProfitPrice}</div>
                 )}
-                {confirmModalData.body.tpsl.stopLossPrice && (
-                  <div className="text-[var(--color-sell,#f87171)]">Cắt lỗ: {confirmModalData.body.tpsl.stopLossPrice}</div>
+                {(confirmModalData.body.tpsl as OrderTpSlPayload).stopLossPrice && (
+                  <div className="text-[var(--color-sell,#f87171)]">Cắt lỗ: {(confirmModalData.body.tpsl as OrderTpSlPayload).stopLossPrice}</div>
                 )}
               </div>
             )}

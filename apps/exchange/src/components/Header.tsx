@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { useConfig } from '../context/ConfigContext.tsx';
 import { useMarket } from '../context/MarketContext';
-import { Button, Badge, BrandLogo } from '@cex/ui';
+import { Button, Badge, BrandLogo, useToast } from '@cex/ui';
 import { canOpenAdmin, appLinks } from '@cex/contracts';
 import { NotificationCenter } from './NotificationCenter.tsx';
 import { AvatarIcon } from './AvatarIcon.tsx';
@@ -18,15 +19,17 @@ export interface HeaderProps {
 
 export const Header: React.FC<HeaderProps> = ({ currentPath, onNavigate }) => {
   const { user, isAuthenticated, logout, resendVerification } = useAuth();
+  const { publicConfig } = useConfig();
   const { connectionStatus, activeSymbol } = useMarket();
+  const { success, error: toastError } = useToast();
   const [hideBanner, setHideBanner] = useState(false);
 
   const handleResend = async () => {
     const res = await resendVerification();
     if (res.success) {
-      alert('Đã gửi lại email xác minh.');
+      success('Đã gửi lại email xác minh.');
     } else {
-      alert(res.error || 'Không thể gửi lại email xác minh.');
+      toastError(res.error || 'Không thể gửi lại email xác minh.');
     }
   };
 
@@ -206,6 +209,7 @@ export const Header: React.FC<HeaderProps> = ({ currentPath, onNavigate }) => {
                   <button 
                     onClick={() => onNavigate('/settings')}
                     className="flex items-center cursor-pointer"
+                    aria-label="Tài khoản người dùng"
                   >
                     <AvatarIcon avatarId={user?.avatar} size={28} fallbackText={user?.name || user?.email || 'U'} />
                   </button>
@@ -215,11 +219,11 @@ export const Header: React.FC<HeaderProps> = ({ currentPath, onNavigate }) => {
                       <div className="text-[13px] text-[var(--text,#f4f4f5)] font-medium truncate">{user?.name || user?.email}</div>
                       <div className="text-[11px] text-[var(--text-3,#63636b)] flex items-center gap-1.5 font-mono">
                         UID: {user?.uid || '—'}
-                        <button onClick={copyUid} className="hover:text-[var(--text,#f4f4f5)] cursor-pointer" title="Sao chép UID">
+                        <button onClick={copyUid} className="hover:text-[var(--text,#f4f4f5)] cursor-pointer" title="Sao chép UID" aria-label="Sao chép UID">
                           <Copy size={12} />
                         </button>
                       </div>
-                      {!user?.emailVerified && (
+                      {publicConfig?.emailVerificationRequired && !user?.emailVerified && (
                         <div className="mt-1">
                           <Badge variant="warning" size="sm">Chưa xác minh</Badge>
                         </div>
@@ -283,16 +287,16 @@ export const Header: React.FC<HeaderProps> = ({ currentPath, onNavigate }) => {
 
             {/* Dev Tools & Theme/Lang (Minimal) */}
             <div className="hidden sm:flex items-center gap-1 border-l border-[var(--line,#1d1e21)] ml-2 pl-2">
-              <button className="p-1.5 text-[var(--text-2,#a1a1aa)] hover:text-[var(--text,#f4f4f5)]" title="Giao diện">
+              <button className="p-1.5 text-[var(--text-2,#a1a1aa)] hover:text-[var(--text,#f4f4f5)]" title="Giao diện" aria-label="Giao diện">
                 <Moon size={16} />
               </button>
-              <button className="p-1.5 text-[var(--text-2,#a1a1aa)] hover:text-[var(--text,#f4f4f5)]" title="Ngôn ngữ">
+              <button className="p-1.5 text-[var(--text-2,#a1a1aa)] hover:text-[var(--text,#f4f4f5)]" title="Ngôn ngữ" aria-label="Ngôn ngữ">
                 <Globe size={16} />
               </button>
               {import.meta.env.DEV && (
                 <button 
                   onClick={() => onNavigate('/__ui')}
-                  className="p-1.5 text-[var(--text-2,#a1a1aa)] hover:text-[var(--accent,#818cf8)]" title="UI Kit"
+                  className="p-1.5 text-[var(--text-2,#a1a1aa)] hover:text-[var(--accent,#818cf8)]" title="UI Kit" aria-label="UI Kit"
                 >
                   <LayoutPanelLeft size={16} />
                 </button>
@@ -311,12 +315,12 @@ export const Header: React.FC<HeaderProps> = ({ currentPath, onNavigate }) => {
             </div>
           )}
           
-          {user && !user.emailVerified && (
+          {publicConfig?.emailVerificationRequired && user && !user.emailVerified && (
             <div className="h-8 bg-[var(--warn,#f5b544)]/10 border-b border-[var(--warn,#f5b544)]/20 px-4 text-[11px] text-[var(--warn,#f5b544)] flex items-center justify-between font-medium">
               <span>Tài khoản chưa xác minh email. Một số tính năng sẽ bị giới hạn.</span>
               <div className="flex items-center gap-3">
                 <button onClick={handleResend} className="underline hover:brightness-125">Gửi lại link</button>
-                <button onClick={() => setHideBanner(true)}><X size={14} className="opacity-70 hover:opacity-100" /></button>
+                <button onClick={() => setHideBanner(true)} aria-label="Đóng thông báo"><X size={14} className="opacity-70 hover:opacity-100" /></button>
               </div>
             </div>
           )}

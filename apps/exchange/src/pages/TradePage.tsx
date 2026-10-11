@@ -152,6 +152,7 @@ export const TradePage: React.FC<TradePageProps> = ({ symbolParam, onNavigate })
                 isFavorite ? 'text-amber-400' : 'text-[var(--text-3,#63636b)] hover:text-amber-400'
               }`}
               title={isFavorite ? 'Xóa khỏi danh sách ưa thích' : 'Thêm vào danh sách ưa thích'}
+              aria-label={isFavorite ? 'Xóa khỏi danh sách ưa thích' : 'Thêm vào danh sách ưa thích'}
             >
               <Star size={18} fill={isFavorite ? 'currentColor' : 'none'} />
             </button>
@@ -161,6 +162,7 @@ export const TradePage: React.FC<TradePageProps> = ({ symbolParam, onNavigate })
                 onClick={() => setPairSwitcherOpen((p) => !p)}
                 className="flex items-center gap-2 cursor-pointer py-1 px-1.5 rounded-md hover:bg-white/5 transition-colors"
                 aria-expanded={pairSwitcherOpen}
+                aria-label="Chọn cặp giao dịch"
               >
                 <span className="text-xl font-bold font-sans tracking-tight">
                   {activeSymbolInfo?.baseAsset}<span className="text-[var(--text-3,#63636b)]">/{activeSymbolInfo?.quoteAsset}</span>
@@ -204,6 +206,8 @@ export const TradePage: React.FC<TradePageProps> = ({ symbolParam, onNavigate })
                         >
                           <div className="flex items-center gap-2">
                             <span
+                              role="button"
+                              aria-label={isFav ? `Xóa ${s.symbol} khỏi danh sách ưa thích` : `Thêm ${s.symbol} vào danh sách ưa thích`}
                               onClick={(e) => {
                                 e.stopPropagation();
                                 toggleFavorite(s.symbol);
@@ -217,8 +221,8 @@ export const TradePage: React.FC<TradePageProps> = ({ symbolParam, onNavigate })
                           {t && (
                             <div className="text-right font-mono tabular-nums">
                               <div className="font-semibold">{formatDecimal(t.lastPrice)}</div>
-                              <div className={`text-[10px] ${t.priceChangePercent?.startsWith('-') ? 'text-[#f6465d]' : 'text-[#00c087]'}`}>
-                                {t.priceChangePercent?.startsWith('-') ? '' : '+'}{parseFloat(t.priceChangePercent || '0').toFixed(2)}%
+                              <div className="text-[10px] font-semibold">
+                                <PercentChange percent={t.priceChangePercent} />
                               </div>
                             </div>
                           )}
@@ -253,7 +257,7 @@ export const TradePage: React.FC<TradePageProps> = ({ symbolParam, onNavigate })
           </div>
           
           <div className="flex flex-col items-end md:items-start md:ml-2">
-             <span className="text-[10px] text-[var(--text-3,#63636b)]">Thay đổi 24h</span>
+             <span className="text-[10px] text-[var(--text-3,#63636b)] cursor-help" title="Thay đổi trong 24 giờ cuốn chiếu (giống Binance)">Thay đổi 24h</span>
              <span className="font-mono text-xs font-semibold">
                <PercentChange percent={activeTicker?.priceChangePercent} />
              </span>
@@ -294,6 +298,7 @@ export const TradePage: React.FC<TradePageProps> = ({ symbolParam, onNavigate })
               onClick={() => setAlertModalOpen(true)}
               className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-[var(--radius-sm,4px)] bg-[var(--panel-2,#141416)] border border-[var(--line,#1d1e21)] text-[11px] text-[var(--text-2,#a1a1aa)] hover:text-[var(--text,#f4f4f5)] transition-colors cursor-pointer"
               title="Đặt cảnh báo giá"
+              aria-label="Đặt cảnh báo giá"
             >
               <Bell size={13} className="text-[var(--accent,#818cf8)]" /> Cảnh báo
             </button>
@@ -301,6 +306,7 @@ export const TradePage: React.FC<TradePageProps> = ({ symbolParam, onNavigate })
             <button
               className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-[var(--radius-sm,4px)] bg-[var(--panel-2,#141416)] border border-[var(--line,#1d1e21)] text-[11px] text-[var(--text-2,#a1a1aa)] hover:text-[var(--text,#f4f4f5)] transition-colors cursor-default"
               title="Đang ở chế độ Pro Trader tiêu chuẩn"
+              aria-label="Chế độ Pro"
             >
               <Settings2 size={14} className="text-[var(--accent,#818cf8)]" /> Chế độ Pro
             </button>
@@ -348,10 +354,10 @@ export const TradePage: React.FC<TradePageProps> = ({ symbolParam, onNavigate })
               {filteredSymbols.map((s) => {
                 const tick = tickers[s.symbol];
                 const isSelected = s.symbol === activeSymbol;
-                const isUp = tick && !tick.priceChangePercent?.startsWith('-');
                 return (
                   <button
                     key={s.symbol}
+                    aria-label={`Giao dịch cặp ${s.symbol}`}
                     onClick={() => {
                       if (s.enabled) {
                         setActiveSymbol(s.symbol);
@@ -375,8 +381,8 @@ export const TradePage: React.FC<TradePageProps> = ({ symbolParam, onNavigate })
                       <div className="text-xs text-[var(--text,#f4f4f5)] font-semibold">
                         {tick?.lastPrice ? formatDecimal(tick.lastPrice, { decimals: s.pricePrecision ?? 2 }) : '—'}
                       </div>
-                      <div className={`text-[10px] font-semibold ${isUp ? 'text-[var(--up,#1fc27a)]' : 'text-[var(--down,#f2475f)]'}`}>
-                        {tick?.priceChangePercent ? `${tick.priceChangePercent}%` : '—'}
+                      <div className="text-[10px] font-semibold">
+                        <PercentChange percent={tick?.priceChangePercent} />
                       </div>
                     </div>
                   </button>
@@ -465,7 +471,7 @@ export const TradePage: React.FC<TradePageProps> = ({ symbolParam, onNavigate })
         </div>
 
         {/* Mobile Sticky Action Bar */}
-        <div className="fixed bottom-12 left-0 right-0 p-3 bg-[var(--color-bg-surface,#111319)]/95 backdrop-blur-md border-t border-[var(--color-border-subtle,#1e212b)] flex items-center gap-3 z-30">
+        <div className="fixed bottom-[calc(54px+env(safe-area-inset-bottom,0px))] left-0 right-0 p-3 bg-[var(--color-bg-surface,#111319)]/95 backdrop-blur-md border-t border-[var(--color-border-subtle,#1e212b)] flex items-center gap-3 z-30">
           <Button
             variant="buy"
             fullWidth

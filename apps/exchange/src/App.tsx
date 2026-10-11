@@ -1,6 +1,8 @@
 import React, { useState, useEffect, Suspense, lazy } from 'react';
+import { ConfigProvider } from './context/ConfigContext.tsx';
 import { AuthProvider } from './context/AuthContext.tsx';
 import { MarketProvider, useMarket } from './context/MarketContext.tsx';
+import { ErrorBoundary } from './components/common/ErrorBoundary.tsx';
 import { Header } from './components/Header.tsx';
 import { BottomNav } from './components/BottomNav.tsx';
 import { DevToolbar } from './components/DevToolbar.tsx';
@@ -110,15 +112,17 @@ const AppContent: React.FC = () => {
 
       {/* Page Content */}
       <main className="flex-1 w-full flex flex-col">
-        <Suspense
-          fallback={
-            <div className="flex-1 flex items-center justify-center p-12">
-              <div className="w-8 h-8 border-2 border-[var(--accent,#818cf8)] border-t-transparent rounded-full animate-spin" />
-            </div>
-          }
-        >
-          {renderPage()}
-        </Suspense>
+        <ErrorBoundary>
+          <Suspense
+            fallback={
+              <div className="flex-1 flex items-center justify-center p-12">
+                <div className="w-8 h-8 border-2 border-[var(--accent,#818cf8)] border-t-transparent rounded-full animate-spin" />
+              </div>
+            }
+          >
+            {renderPage()}
+          </Suspense>
+        </ErrorBoundary>
       </main>
 
       {/* Mobile Bottom Navigation Bar */}
@@ -133,11 +137,13 @@ const AppContent: React.FC = () => {
 export const App: React.FC = () => {
   return (
     <ToastProvider>
-      <AuthProvider>
-        <MarketProvider>
-          <AppContent />
-        </MarketProvider>
-      </AuthProvider>
+      <ConfigProvider>
+        <AuthProvider>
+          <MarketProvider>
+            <AppContent />
+          </MarketProvider>
+        </AuthProvider>
+      </ConfigProvider>
     </ToastProvider>
   );
 };

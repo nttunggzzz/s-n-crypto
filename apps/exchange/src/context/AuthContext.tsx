@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import type { Me } from '@cex/contracts';
 import { ApiError } from '@cex/contracts';
 import { getApiClient, getRealtimeClient } from '../services/api.ts';
-import { getErrorMessage } from '../services/errors.ts';
+import { formatApiError } from '../services/errors.ts';
 
 export interface LoginInput {
   email: string;
@@ -13,6 +13,7 @@ export interface RegisterInput {
   email: string;
   password: string;
   name: string;
+  inviteCode?: string;
   captchaToken?: string;
 }
 
@@ -113,11 +114,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           );
         }
       });
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const rtAny = rt as any;
-      if (typeof rtAny.onClose === 'function') {
-        // @ts-ignore – onClose is not in the public RealtimeClient type but is implemented
-        unsubClose = rtAny.onClose((ev: CloseEvent) => {
+      const rtWithClose = rt as unknown as { onClose?: (cb: (ev: CloseEvent) => void) => () => void };
+      if (typeof rtWithClose.onClose === 'function') {
+        unsubClose = rtWithClose.onClose((ev: CloseEvent) => {
           if (ev?.code === 4401) {
             setUser(null);
             setSessionEnded(true);
@@ -152,16 +151,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       return { success: false, error: 'Đăng nhập không thành công.' };
     } catch (err: unknown) {
-      if (err instanceof ApiError) {
-        if (err.code === 'RATE_LIMITED' && err.details && 'retryAfterSeconds' in err.details) {
-          return {
-            success: false,
-            error: `Bạn đang thao tác quá nhanh. Thử lại sau ${err.details.retryAfterSeconds} giây.`,
-          };
-        }
-        return { success: false, error: getErrorMessage(err.code) };
-      }
-      return { success: false, error: 'Đăng nhập không thành công.' };
+      return { success: false, error: formatApiError(err, 'Đăng nhập không thành công.') };
     }
   };
 
@@ -172,10 +162,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await reconnectRt();
       return { success: true };
     } catch (err: unknown) {
-      if (err instanceof ApiError) {
-        return { success: false, error: getErrorMessage(err.code) };
-      }
-      return { success: false, error: 'Mã xác thực 2FA không chính xác hoặc đã hết hạn.' };
+      return { success: false, error: formatApiError(err, 'Mã xác thực 2FA không chính xác hoặc đã hết hạn.') };
     }
   };
 
@@ -186,10 +173,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await reconnectRt();
       return { success: true };
     } catch (err: unknown) {
-      if (err instanceof ApiError) {
-        return { success: false, error: getErrorMessage(err.code) };
-      }
-      return { success: false, error: 'Đăng ký tài khoản không thành công.' };
+      return { success: false, error: formatApiError(err, 'Đăng ký tài khoản không thành công.') };
     }
   };
 
@@ -209,10 +193,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await api.resendVerification();
       return { success: true };
     } catch (err: unknown) {
-      if (err instanceof ApiError) {
-        return { success: false, error: getErrorMessage(err.code) };
-      }
-      return { success: false, error: 'Không thể gửi lại email xác minh.' };
+      return { success: false, error: formatApiError(err, 'Không thể gửi lại email xác minh.') };
     }
   };
 
