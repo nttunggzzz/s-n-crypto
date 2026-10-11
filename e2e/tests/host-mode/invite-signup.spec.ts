@@ -1,5 +1,5 @@
 import type { Locator, Page } from '@playwright/test';
-import { apiGet, createInvite, expect, expectCleanText, newAccount, test } from '../../fixtures.ts';
+import { apiGet, apiPost, createInvite, expect, expectCleanText, newAccount, test } from '../../fixtures.ts';
 
 /**
  * Project `host-mode`: the stack configured like the owner's live server (`npm run host`) — sign-up only with an
@@ -32,10 +32,17 @@ const isRegister = (r: { url(): string; request(): { method(): string } }) =>
 async function faucetAndMarketBuy(page: Page) {
   await page.goto('/assets');
   const faucet = page.getByRole('button', { name: /Nạp ngay|xác minh email/i });
+  const usable = /^Nạp ngay [^()]*$/;
+  // soft: a wrongly locked faucet is reported, then the test claims through the API so the order form is checked in the same run
   await expect
+    .configure({ soft: true })
     .poll(() => buttonState(faucet), 'server không bắt xác minh email (emailVerificationRequired: false) → nút nạp tiền ảo phải bấm được')
-    .toMatch(/^Nạp ngay [^()]*$/);
-  await faucet.click();
+    .toMatch(usable);
+  if (usable.test(await buttonState(faucet))) await faucet.click();
+  else {
+    await apiPost(page, '/api/v1/wallet/faucet');
+    await page.reload();
+  }
   await expect(page.locator('body')).toContainText('10.000,00');
   await expectCleanText(page);
 
