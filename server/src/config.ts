@@ -33,7 +33,10 @@ const Env = z.object({
   TURNSTILE_SITE_KEY: z.string().default(''),
   /** open = anyone can sign up · invite = an invite code is required (closed staging). Default: invite in production, open otherwise. */
   REGISTRATION: z.enum(['open', 'invite']).optional(),
-  /** Email delivery: "log" prints links to the server log, "file" appends JSON lines to EMAIL_OUTBOX (dev / e2e only). */
+  /**
+   * Email delivery: "resend" (production) · "log" prints the emails to the server log (dev; in production only
+   * with REGISTRATION=invite, before a mail domain exists) · "file" appends JSON lines to EMAIL_OUTBOX (e2e).
+   */
   EMAIL_TRANSPORT: z.enum(['log', 'file', 'resend']).default('log'),
   EMAIL_OUTBOX: z.string().default('.email-outbox.jsonl'),
   RESEND_API_KEY: z.string().default(''),
@@ -64,8 +67,11 @@ const DEV_DATA_KEY = Buffer.alloc(32, 'cex-dev-only-not-a-secret').toString('bas
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const parsed = Env.parse(env);
-  if (parsed.NODE_ENV === 'production' && parsed.EMAIL_TRANSPORT !== 'resend') {
-    throw new Error(`EMAIL_TRANSPORT=${parsed.EMAIL_TRANSPORT} is not allowed in production`);
+  const registration = parsed.REGISTRATION ?? (parsed.NODE_ENV === 'production' ? 'invite' : 'open');
+  // Production sends real email (Resend). Exception: a closed server (invite-only) run before a mail domain
+  // exists may log emails instead — only invited people can sign up, and the operator reads the links in the log.
+  if (parsed.NODE_ENV === 'production' && parsed.EMAIL_TRANSPORT !== 'resend' && !(parsed.EMAIL_TRANSPORT === 'log' && registration === 'invite')) {
+    throw new Error(`EMAIL_TRANSPORT=${parsed.EMAIL_TRANSPORT} is not allowed in production (only "resend", or "log" with REGISTRATION=invite)`);
   }
   if (parsed.NODE_ENV === 'production' && parsed.MARKET_FEED === 'sim') {
     throw new Error('MARKET_FEED=sim (synthetic prices) is not allowed in production');
@@ -81,7 +87,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   }
   return {
     ...parsed,
-    REGISTRATION: parsed.REGISTRATION ?? (parsed.NODE_ENV === 'production' ? 'invite' : 'open'),
+    REGISTRATION: registration,
     symbols: parsed.SYMBOLS.split(',').map((s) => s.trim().toUpperCase()).filter(Boolean),
     isProd: parsed.NODE_ENV === 'production',
     dataKey: parsed.DATA_ENCRYPTION_KEY || DEV_DATA_KEY,

@@ -57,12 +57,16 @@ npm run verify        # cổng gộp main: typecheck mọi workspace (cả UI) +
 npm run lint          # ESLint: backend/contracts/core/infra/e2e lỗi là chặn; apps/*, packages/ui chỉ cảnh báo
 npm run ui-coverage   # endpoint nào backend có mà app chưa gọi (--strict: thiếu là lỗi)
 npm run ui-check -- [nhánh] [--e2e]   # nhánh UI (mặc định ui/gd2-exchange) gộp main trong worktree tạm → verify (+ e2e)
+npm run host -- update | start | invite "<tên>" | set-role <email> owner | status
+                      # chạy sàn cho người dùng thật trên máy này (trước Railway): bản riêng ../crypto-host, dữ liệu
+                      #   ../crypto-host-data, :8090 + link https trycloudflare — docs/deploy/may-ca-nhan.md
 npm run e2e           # test trình duyệt (Playwright, Edge cài sẵn): build apps/exchange, dựng hệ riêng
                       #   DB :5436 + server :5190 phục vụ cả API, /ws và bản build app (giá giả lập, email ra .e2e/outbox.jsonl)
 ```
 Quy tắc tích hợp backend ↔ hợp đồng ↔ UI: [docs/parts/README.md](docs/parts/README.md#quy-tắc-tích-hợp--để-backend-hợp-đồng-và-giao-diện-luôn-khớp-nhau)
 
 Triển khai: `Dockerfile` + `railway.json` (một service: API + /ws + app sàn ở `/` + app admin ở `/admin/`), hướng dẫn [docs/deploy/railway.md](docs/deploy/railway.md); CI `.github/workflows/`.
+Hiện tại (chưa thuê Railway) sàn chạy trên máy chủ dự án: [docs/deploy/may-ca-nhan.md](docs/deploy/may-ca-nhan.md) (`npm run host`).
 
 ## Bất biến (KHÔNG được phá)
 1. **Mọi thay đổi số dư đi qua `applyBalanceChanges()`** (server/src/modules/exchange/ledger.ts) trong transaction; mỗi thay đổi = 1 dòng `ledger_entries`. Không `UPDATE balances` ở chỗ khác.
