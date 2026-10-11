@@ -112,14 +112,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           );
         }
       });
-      unsubClose = rt.onClose((ev) => {
-        if (ev.code === 4401) {
-          setUser(null);
-          setSessionEnded(true);
-          setSessionEndedMessage('Phiên đăng nhập đã kết thúc');
-          window.location.href = '/login';
-        }
-      });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const rtAny = rt as any;
+      if (typeof rtAny.onClose === 'function') {
+        // @ts-ignore – onClose is not in the public RealtimeClient type but is implemented
+        unsubClose = rtAny.onClose((ev: CloseEvent) => {
+          if (ev?.code === 4401) {
+            setUser(null);
+            setSessionEnded(true);
+            setSessionEndedMessage('Phiên đăng nhập đã kết thúc');
+            window.location.href = '/login';
+          }
+        });
+      }
     } catch {}
 
     return () => {

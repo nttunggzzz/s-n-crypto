@@ -1079,7 +1079,7 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
                             {new Date(f.fundingTime).toLocaleString('vi-VN')}
                           </TableCell>
                           <TableCell className="text-right font-mono text-[var(--warn,#f59e0b)] font-semibold">
-                            {(parseFloat(f.fundingRate) * 100).toFixed(4)}%
+                            {(parseFloat(f.rate) * 100).toFixed(4)}%
                           </TableCell>
                           <TableCell className="text-right font-mono text-[var(--accent,#818cf8)]">
                             {formatDecimal(f.markPrice)}

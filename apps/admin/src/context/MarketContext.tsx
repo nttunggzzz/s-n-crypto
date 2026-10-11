@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { getApiClient, getRealtimeClient } from '../services/api';
+import type { ExchangeStatus } from '@cex/contracts';
 
 interface MarketContextType {
   tradingHalted: boolean;
@@ -14,18 +15,17 @@ export const MarketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   const refreshHaltState = async () => {
     try {
-      const state = await api.getTradingState();
-      setTradingHalted(state.halted);
+      const settings = await api.adminGetSettings();
+      setTradingHalted(settings.tradingHalted);
     } catch {}
   };
 
   useEffect(() => {
     refreshHaltState();
-    
+
     const rt = getRealtimeClient();
-    const unsub = rt.subscribe('system', (data: any) => {
-      if (data.type === 'trading_halted') setTradingHalted(true);
-      if (data.type === 'trading_resumed') setTradingHalted(false);
+    const unsub = rt.subscribe('exchange:status', (data: ExchangeStatus) => {
+      setTradingHalted(data.tradingHalted);
     });
 
     return () => unsub();

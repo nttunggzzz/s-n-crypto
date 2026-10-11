@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { getApiClient } from '../services/api';
+import type { AuditLogEntry } from '@cex/contracts';
 
 export const AuditLogsPage: React.FC = () => {
-  const [logs, setLogs] = useState<any[]>([]);
+  const [logs, setLogs] = useState<AuditLogEntry[]>([]);
   const api = getApiClient();
 
   useEffect(() => {
-    api.adminGetAuditLogs({ limit: 50 }).then((res) => setLogs(res.items)).catch(() => {});
+    api.adminAuditLogs({ query: { limit: 50 } }).then((res) => setLogs(res.items)).catch(() => {});
   }, []);
 
   return (
@@ -27,8 +28,8 @@ export const AuditLogsPage: React.FC = () => {
           <tbody>
             {logs.map((l) => (
               <tr key={l.id} data-testid="audit-row" className="border-t border-line hover:bg-line/30">
-                <td className="px-4 py-3 text-text-2">{new Date(l.timestamp).toLocaleString('vi-VN')}</td>
-                <td className="px-4 py-3 font-medium">{l.actorEmail}</td>
+                <td className="px-4 py-3 text-text-2">{new Date(l.createdAt).toLocaleString('vi-VN')}</td>
+                <td className="px-4 py-3 font-medium">{l.actor?.email ?? '(hệ thống)'}</td>
                 <td className="px-4 py-3"><span className="px-2 py-1 bg-line rounded text-xs">{l.action}</span></td>
                 <td className="px-4 py-3">{l.targetId || '-'}</td>
                 <td className="px-4 py-3 text-text-2">{l.reason}</td>

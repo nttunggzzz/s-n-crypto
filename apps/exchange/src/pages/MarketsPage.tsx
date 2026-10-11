@@ -23,7 +23,7 @@ import {
   formatDecimal,
 } from '@cex/ui';
 
-import { Star, Bell, X } from 'lucide-react';
+import { Star, Bell, X, Sparkles, TrendingUp, Zap, ArrowRight, Activity } from 'lucide-react';
 
 export interface MarketsPageProps {
   onNavigate: (path: string) => void;
@@ -60,8 +60,16 @@ const SparklineSvg: React.FC<{ points?: string[]; isPositive?: boolean }> = ({ p
 
 export const MarketsPage: React.FC<MarketsPageProps> = ({ onNavigate }) => {
   const { symbols, tickers, exchangeInfo, isLoading, error, refreshMarketData, setActiveSymbol } = useMarket();
-  const { isAuthenticated } = useAuth();
+  const { user, isAuthenticated } = useAuth();
   const api = getApiClient();
+
+  const btcTicker = tickers['BTCUSDT'] || null;
+  const ethTicker = tickers['ETHUSDT'] || null;
+  const topGainer = React.useMemo(() => {
+    const list = Object.values(tickers);
+    if (list.length === 0) return null;
+    return [...list].sort((a, b) => parseFloat(b.priceChangePercent || '0') - parseFloat(a.priceChangePercent || '0'))[0] || null;
+  }, [tickers]);
 
   const [search, setSearch] = useState('');
   const [activeTab, setActiveTab] = useState<'all' | 'futures' | 'favorites'>('all');
@@ -182,6 +190,150 @@ export const MarketsPage: React.FC<MarketsPageProps> = ({ onNavigate }) => {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 pb-20 md:pb-6 space-y-6">
+      {/* User Welcome & Hero Section */}
+      {isAuthenticated ? (
+        <div className="relative overflow-hidden rounded-2xl border border-[var(--line,#1d1e21)] bg-gradient-to-r from-[var(--panel,#0a0a0b)] via-[var(--panel-2,#141416)] to-[var(--panel,#0a0a0b)] p-6 shadow-md transition-all">
+          <div className="absolute top-0 right-0 -mt-12 -mr-12 w-96 h-96 rounded-full bg-[var(--accent,#818cf8)]/10 blur-3xl pointer-events-none" />
+          <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+            <div className="space-y-2">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[var(--accent,#818cf8)]/15 border border-[var(--accent,#818cf8)]/30 text-[var(--accent,#818cf8)] text-xs font-semibold">
+                <Sparkles size={13} className="animate-spin" style={{ animationDuration: '6s' }} />
+                Nền tảng giao dịch chuyên nghiệp v2.0
+              </div>
+              <h2 className="text-xl sm:text-2xl font-bold text-white tracking-tight flex items-center gap-2">
+                Chào mừng trở lại, <span className="text-[var(--accent,#818cf8)]">{user?.name}</span> 👋
+              </h2>
+              <p className="text-xs text-[var(--text-2,#a1a1aa)] max-w-xl leading-relaxed">
+                Tối ưu hóa chiến lược danh mục với công cụ giao dịch đa tầng: Spot, Futures đòn bẩy 50x và hệ thống Bot tự động.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                onClick={() => onNavigate('/trade/BTCUSDT')}
+                className="px-4 py-2 rounded-xl bg-[var(--accent,#818cf8)] text-white text-xs font-bold hover:bg-[var(--accent,#818cf8)]/90 transition-all shadow-md shadow-[var(--accent,#818cf8)]/20 flex items-center gap-1.5 cursor-pointer hover:scale-105 duration-200"
+              >
+                <TrendingUp size={14} /> Giao dịch Spot
+              </button>
+              <button
+                onClick={() => onNavigate('/futures/BTCUSDT')}
+                className="px-4 py-2 rounded-xl bg-[var(--panel-2,#141416)] border border-[var(--line,#1d1e21)] text-white text-xs font-semibold hover:border-[var(--accent,#818cf8)]/50 transition-all flex items-center gap-1.5 cursor-pointer hover:scale-105 duration-200"
+              >
+                <Zap size={14} className="text-yellow-400" /> Futures
+              </button>
+              <button
+                onClick={() => onNavigate('/bots')}
+                className="px-4 py-2 rounded-xl bg-[var(--panel-2,#141416)] border border-[var(--line,#1d1e21)] text-white text-xs font-semibold hover:border-[var(--accent,#818cf8)]/50 transition-all flex items-center gap-1.5 cursor-pointer hover:scale-105 duration-200"
+              >
+                Bot tự động
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="relative overflow-hidden rounded-2xl border border-[var(--line,#1d1e21)] bg-gradient-to-r from-[var(--panel,#0a0a0b)] via-[var(--panel-2,#141416)] to-[var(--panel,#0a0a0b)] p-6 sm:p-8 shadow-xl">
+          <div className="absolute top-0 right-0 -mt-16 -mr-16 w-96 h-96 rounded-full bg-[var(--accent,#818cf8)]/15 blur-3xl pointer-events-none" />
+          <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+            <div className="space-y-3">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[var(--accent,#818cf8)]/15 border border-[var(--accent,#818cf8)]/30 text-[var(--accent,#818cf8)] text-xs font-semibold">
+                <Sparkles size={13} className="animate-spin" style={{ animationDuration: '6s' }} />
+                Sàn giao dịch mô phỏng thế hệ mới
+              </div>
+              <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight leading-tight">
+                Giao dịch tài sản số chuẩn quốc tế, <br className="hidden sm:inline" />
+                <span className="bg-gradient-to-r from-[var(--accent,#818cf8)] via-indigo-300 to-purple-400 bg-clip-text text-transparent">Khớp lệnh siêu tốc &amp; Bền vững</span>
+              </h2>
+              <p className="text-xs sm:text-sm text-[var(--text-2,#a1a1aa)] max-w-xl leading-relaxed">
+                Trải nghiệm toàn diện nền tảng CEX hiện đại: Spot, Futures USDT-M đòn bẩy 50x, Bot lưới và Mua định kỳ DCA với luồng dữ liệu thời gian thực.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                onClick={() => onNavigate('/register')}
+                className="px-5 py-2.5 rounded-xl bg-[var(--accent,#818cf8)] text-white text-xs font-bold hover:bg-[var(--accent,#818cf8)]/90 transition-all shadow-lg shadow-[var(--accent,#818cf8)]/25 flex items-center gap-2 cursor-pointer hover:scale-105 duration-200"
+              >
+                Đăng ký tài khoản <ArrowRight size={14} />
+              </button>
+              <button
+                onClick={() => onNavigate('/login')}
+                className="px-5 py-2.5 rounded-xl bg-[var(--panel-2,#141416)] border border-[var(--line,#1d1e21)] text-white text-xs font-semibold hover:border-white/30 transition-all cursor-pointer hover:scale-105 duration-200"
+              >
+                Đăng nhập
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Top Market Highlights Row */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {/* Card 1: BTC/USDT */}
+        <div
+          onClick={() => onNavigate('/trade/BTCUSDT')}
+          className="p-4 rounded-xl border border-[var(--line,#1d1e21)] bg-[var(--panel,#0a0a0b)] hover:border-[var(--accent,#818cf8)]/50 hover:-translate-y-1 transition-all duration-300 cursor-pointer shadow-sm relative group overflow-hidden"
+        >
+          <div className="flex items-center justify-between text-xs mb-2">
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-white text-sm">BTC / USDT</span>
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--panel-2,#141416)] text-[var(--text-3,#63636b)] border border-[var(--line,#1d1e21)] font-mono">Dẫn đầu</span>
+            </div>
+            <SparklineSvg points={sparklinesMap['BTCUSDT']?.points} isPositive={parseFloat(btcTicker?.priceChangePercent || '0') >= 0} />
+          </div>
+          <div className="flex items-baseline justify-between mt-3 font-mono">
+            <span className="text-base font-bold text-white">
+              {btcTicker && btcTicker.lastPrice ? formatDecimal(btcTicker.lastPrice) : '84.320,00'}
+            </span>
+            <span className={`text-xs font-bold px-2 py-0.5 rounded ${parseFloat(btcTicker?.priceChangePercent || '0') >= 0 ? 'text-[var(--up,#1fc27a)] bg-[var(--up,#1fc27a)]/10' : 'text-[var(--down,#f2475f)] bg-[var(--down,#f2475f)]/10'}`}>
+              {parseFloat(btcTicker?.priceChangePercent || '0') >= 0 ? '+' : ''}{btcTicker && btcTicker.priceChangePercent ? parseFloat(btcTicker.priceChangePercent).toFixed(2) : '+1.45'}%
+            </span>
+          </div>
+        </div>
+
+        {/* Card 2: Top Gainer */}
+        <div
+          onClick={() => topGainer && onNavigate(`/trade/${topGainer.symbol}`)}
+          className="p-4 rounded-xl border border-[var(--line,#1d1e21)] bg-[var(--panel,#0a0a0b)] hover:border-[var(--accent,#818cf8)]/50 hover:-translate-y-1 transition-all duration-300 cursor-pointer shadow-sm relative group overflow-hidden"
+        >
+          <div className="flex items-center justify-between text-xs mb-2">
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-white text-sm">{topGainer?.symbol || 'ETH / USDT'}</span>
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--up,#1fc27a)]/10 text-[var(--up,#1fc27a)] border border-[var(--up,#1fc27a)]/20 font-mono">Tăng mạnh</span>
+            </div>
+            <SparklineSvg points={topGainer ? sparklinesMap[topGainer.symbol]?.points : undefined} isPositive={true} />
+          </div>
+          <div className="flex items-baseline justify-between mt-3 font-mono">
+            <span className="text-base font-bold text-white">
+              {topGainer && topGainer.lastPrice ? formatDecimal(topGainer.lastPrice) : '—'}
+            </span>
+            <span className="text-xs font-bold px-2 py-0.5 rounded text-[var(--up,#1fc27a)] bg-[var(--up,#1fc27a)]/10">
+              +{topGainer && topGainer.priceChangePercent ? parseFloat(topGainer.priceChangePercent).toFixed(2) : '0.00'}%
+            </span>
+          </div>
+        </div>
+
+        {/* Card 3: Futures Highlight */}
+        <div
+          onClick={() => onNavigate('/futures/BTCUSDT')}
+          className="p-4 rounded-xl border border-[var(--line,#1d1e21)] bg-[var(--panel,#0a0a0b)] hover:border-[var(--accent,#818cf8)]/50 hover:-translate-y-1 transition-all duration-300 cursor-pointer shadow-sm relative group overflow-hidden"
+        >
+          <div className="flex items-center justify-between text-xs mb-2">
+            <div className="flex items-center gap-2">
+              <span className="font-bold text-white text-sm">Futures BTC-PERP</span>
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-[var(--accent,#818cf8)]/10 text-[var(--accent,#818cf8)] border border-[var(--accent,#818cf8)]/20 font-mono">50×</span>
+            </div>
+            <span className="text-[10px] text-[var(--text-3,#63636b)] font-mono flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-[var(--up,#1fc27a)] animate-pulse" /> Live
+            </span>
+          </div>
+          <div className="flex items-baseline justify-between mt-3 font-mono">
+            <span className="text-xs text-[var(--text-3,#63636b)]">
+              Funding: <span className="text-[var(--up,#1fc27a)] font-bold">0,0100%</span>
+            </span>
+            <span className="text-xs font-semibold text-[var(--accent,#818cf8)] flex items-center gap-1">
+              Khám phá <ArrowRight size={12} />
+            </span>
+          </div>
+        </div>
+      </div>
       {/* B2: Active Announcements Banner */}
       {activeAnnouncements.length > 0 && (
         <div className="space-y-2">

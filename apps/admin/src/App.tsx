@@ -37,7 +37,7 @@ const AppContent: React.FC = () => {
     if (normalized === '/admin') return <OverviewPage />;
     if (normalized === '/admin/users') return <UsersPage onNavigate={navigate} />;
     if (normalized.startsWith('/admin/users/')) {
-      const id = normalized.split('/')[3];
+      const id = normalized.split('/')[3] ?? '';
       return <UserDetailPage userId={id} onNavigate={navigate} />;
     }
     if (normalized === '/admin/symbols') return <PlaceholderPage title="Cặp giao dịch" />;

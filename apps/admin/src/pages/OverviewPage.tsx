@@ -33,9 +33,9 @@ export const OverviewPage: React.FC = () => {
     setIsSubmitting(true);
     try {
       if (confirmType === 'HALT') {
-        await api.adminHaltTrading({ reason });
+        await api.adminHaltTrading({ body: { reason, confirm: 'HALT' } });
       } else {
-        await api.adminResumeTrading({ reason });
+        await api.adminResumeTrading({ body: { reason, confirm: 'RESUME' } });
       }
       await refreshHaltState();
       setIsConfirmOpen(false);
@@ -53,15 +53,15 @@ export const OverviewPage: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
         <div className="bg-panel border border-line p-4 rounded">
           <div className="text-text-2 text-sm mb-1">Tổng người dùng</div>
-          <div className="text-2xl font-bold">{overview?.totalUsers ?? '-'}</div>
+          <div className="text-2xl font-bold">{overview?.users?.total ?? '-'}</div>
         </div>
         <div className="bg-panel border border-line p-4 rounded">
           <div className="text-text-2 text-sm mb-1">Lệnh đang mở</div>
-          <div className="text-2xl font-bold">{overview?.openOrders ?? '-'}</div>
+          <div className="text-2xl font-bold">{overview?.orders?.open ?? '-'}</div>
         </div>
         <div className="bg-panel border border-line p-4 rounded">
           <div className="text-text-2 text-sm mb-1">Giao dịch 24h</div>
-          <div className="text-2xl font-bold">{overview?.trades24h ?? '-'}</div>
+          <div className="text-2xl font-bold">{overview?.trades?.last24h ?? '-'}</div>
         </div>
       </div>
 

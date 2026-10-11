@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Star, Settings2, BarChart2, Bell } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Star, Settings2, BarChart2, Bell, Search } from 'lucide-react';
 import { useMarket } from '../context/MarketContext.tsx';
 import { CandlestickChart } from '../components/trading/CandlestickChart.tsx';
 import { Orderbook } from '../components/trading/Orderbook.tsx';
@@ -28,6 +28,7 @@ export interface TradePageProps {
 export const TradePage: React.FC<TradePageProps> = ({ symbolParam, onNavigate }) => {
   const {
     symbols,
+    tickers,
     activeSymbol,
     activeSymbolInfo,
     activeTicker,
@@ -41,6 +42,15 @@ export const TradePage: React.FC<TradePageProps> = ({ symbolParam, onNavigate })
   const [mobileOrderSheetOpen, setMobileOrderSheetOpen] = useState(false);
   const [orderRefreshTrigger, setOrderRefreshTrigger] = useState(0);
   const [alertModalOpen, setAlertModalOpen] = useState(false);
+  const [marketSearch, setMarketSearch] = useState('');
+
+  const filteredSymbols = useMemo(() => {
+    return symbols.filter((s) => {
+      if (!marketSearch) return true;
+      const q = marketSearch.toUpperCase();
+      return s.symbol.includes(q) || s.baseAsset.includes(q);
+    });
+  }, [symbols, marketSearch]);
 
   // Sync route param with activeSymbol
   useEffect(() => {
@@ -221,12 +231,61 @@ export const TradePage: React.FC<TradePageProps> = ({ symbolParam, onNavigate })
         {/* Top Section */}
         <div className="flex flex-1 gap-1 h-[600px] min-h-[500px]">
           {/* Sidebar: Market List (xl only) */}
-          <div className="hidden xl:flex w-[280px] flex-col bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)] rounded-[var(--radius-lg,10px)] overflow-hidden">
-            <div className="px-3 py-2 border-b border-[var(--line,#1d1e21)] font-semibold text-[var(--text,#f4f4f5)] text-sm">
-              Thị trường
+          <div className="hidden xl:flex w-[260px] flex-col bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)] rounded-[var(--radius-lg,10px)] overflow-hidden shrink-0">
+            <div className="p-2.5 border-b border-[var(--line,#1d1e21)] flex items-center justify-between">
+              <span className="font-semibold text-[var(--text,#f4f4f5)] text-xs">Thị trường</span>
+              <span className="text-[10px] text-[var(--text-3,#63636b)]">{filteredSymbols.length} cặp</span>
             </div>
-            <div className="p-3 text-[11px] text-[var(--text-3,#63636b)] text-center mt-10">
-              Danh sách cặp giao dịch (Đang cập nhật)
+            <div className="p-2 border-b border-[var(--line,#1d1e21)]">
+              <div className="relative">
+                <Search size={12} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[var(--text-3,#63636b)] pointer-events-none" />
+                <input
+                  type="text"
+                  placeholder="Tìm cặp..."
+                  value={marketSearch}
+                  onChange={(e) => setMarketSearch(e.target.value)}
+                  className="w-full bg-[var(--panel-2,#141416)] border border-[var(--line,#1d1e21)] rounded-[var(--radius-sm,4px)] pl-7 pr-2 py-1 text-xs text-[var(--text,#f4f4f5)] placeholder-[var(--text-3,#63636b)] focus:outline-none focus:border-[var(--accent,#818cf8)]"
+                />
+              </div>
+            </div>
+            <div className="flex-1 overflow-y-auto divide-y divide-[var(--line,#1d1e21)]/30">
+              {filteredSymbols.map((s) => {
+                const tick = tickers[s.symbol];
+                const isSelected = s.symbol === activeSymbol;
+                const isUp = tick && !tick.priceChangePercent?.startsWith('-');
+                return (
+                  <button
+                    key={s.symbol}
+                    onClick={() => {
+                      if (s.enabled) {
+                        setActiveSymbol(s.symbol);
+                        onNavigate(`/trade/${s.symbol}`);
+                      }
+                    }}
+                    disabled={!s.enabled}
+                    className={`w-full px-3 py-2 text-left flex items-center justify-between transition-colors cursor-pointer ${
+                      isSelected ? 'bg-[var(--line,#1d1e21)]' : 'hover:bg-[var(--panel-2,#141416)]'
+                    } ${!s.enabled ? 'opacity-40 cursor-not-allowed' : ''}`}
+                  >
+                    <div>
+                      <div className="font-semibold text-xs text-[var(--text,#f4f4f5)]">
+                        {s.baseAsset}<span className="text-[10px] text-[var(--text-3,#63636b)] font-normal">/{s.quoteAsset}</span>
+                      </div>
+                      <div className="text-[10px] text-[var(--text-3,#63636b)]">
+                        {tick?.volume ? `Vol: ${formatDecimal(tick.volume, { decimals: 0 })}` : '—'}
+                      </div>
+                    </div>
+                    <div className="text-right font-mono">
+                      <div className="text-xs text-[var(--text,#f4f4f5)] font-semibold">
+                        {tick?.lastPrice ? formatDecimal(tick.lastPrice, { decimals: s.pricePrecision ?? 2 }) : '—'}
+                      </div>
+                      <div className={`text-[10px] font-semibold ${isUp ? 'text-[var(--up,#1fc27a)]' : 'text-[var(--down,#f2475f)]'}`}>
+                        {tick?.priceChangePercent ? `${tick.priceChangePercent}%` : '—'}
+                      </div>
+                    </div>
+                  </button>
+                );
+              })}
             </div>
           </div>
 
