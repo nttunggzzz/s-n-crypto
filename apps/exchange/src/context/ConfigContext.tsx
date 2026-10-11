@@ -48,3 +48,4 @@ export const ConfigProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 };
 
 export const useConfig = (): ConfigContextType => useContext(ConfigContext);
+export const usePublicConfig = useConfig;
