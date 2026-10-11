@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import type { Balances, FaucetStatus, LedgerEntry, FuturesAccount } from '@cex/contracts';
+import type { Balances, Balance, FaucetStatus, LedgerEntry, FuturesAccount } from '@cex/contracts';
 import { ApiError } from '@cex/contracts';
 import { getApiClient } from '../services/api.ts';
 import { getErrorMessage } from '../services/errors.ts';
@@ -90,26 +90,46 @@ export const WalletPage: React.FC<WalletPageProps> = ({ onNavigate }) => {
     const unsub = realtimeClient.subscribe('user', (event: unknown) => {
       const ev = event as {
         kind: string;
+        balance?: Balance;
         asset?: string;
         available?: string;
         locked?: string;
         account?: FuturesAccount;
       };
 
-      if (ev.kind === 'balance' && ev.asset) {
+      const b = ev.balance || (ev.asset ? {
+        asset: ev.asset,
+        available: ev.available || '0',
+        locked: ev.locked || '0',
+        total: (parseFloat(ev.available || '0') + parseFloat(ev.locked || '0')).toString(),
+        valueUsdt: ev.asset === 'USDT' ? ev.available || '0' : null,
+      } : null);
+
+      if (ev.kind === 'balance' && b) {
         // Update local item row immediately
         setBalances((prev) => {
-          if (!prev) return prev;
-          const updated = prev.items.map((item) => {
-            if (item.asset === ev.asset) {
-              return {
-                ...item,
-                available: ev.available || item.available,
-                locked: ev.locked || item.locked,
-              };
-            }
-            return item;
-          });
+          if (!prev) {
+            return {
+              items: [b],
+              totalValueUsdt: b.asset === 'USDT' ? b.available : '0',
+              unpricedAssets: [],
+            };
+          }
+          const exists = prev.items.some((item) => item.asset === b.asset);
+          const updated = exists
+            ? prev.items.map((item) => {
+                if (item.asset === b.asset) {
+                  return {
+                    ...item,
+                    available: b.available,
+                    locked: b.locked ?? item.locked,
+                    total: b.total ?? item.total,
+                    valueUsdt: b.valueUsdt ?? item.valueUsdt,
+                  };
+                }
+                return item;
+              })
+            : [...prev.items, b];
           return { ...prev, items: updated };
         });
 
@@ -117,8 +137,8 @@ export const WalletPage: React.FC<WalletPageProps> = ({ onNavigate }) => {
         if (debounceTimerRef.current) clearTimeout(debounceTimerRef.current);
         debounceTimerRef.current = setTimeout(async () => {
           try {
-            const b = await api.balances();
-            setBalances(b);
+            const fresh = await api.balances();
+            setBalances(fresh);
           } catch {}
         }, 1000);
       } else if (ev.kind === 'futuresAccount' && ev.account) {
@@ -383,7 +403,7 @@ export const WalletPage: React.FC<WalletPageProps> = ({ onNavigate }) => {
                   <Skeleton key={i} height={48} className="w-full" />
                 ))}
               </div>
-            ) : !balances || balances.items.length === 0 ? (
+            ) : !balances ? (
               <EmptyState title="Không có tài sản" description="Ví của bạn hiện đang trống." />
             ) : (
               <div className="bg-[var(--color-bg-surface,#111319)] border border-[var(--color-border-subtle,#1e212b)] rounded-[var(--radius-lg,12px)] overflow-hidden shadow-xl">
