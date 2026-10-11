@@ -1,187 +1,766 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { getApiClient } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { ConfirmDialog } from '../components/ConfirmDialog';
-import type { AdminUserDetail } from '@cex/contracts';
+import { appLinks, type AdminUserDetail, type Order, type LedgerEntry, type FuturesPosition, type GridBot, type DcaPlan, type LoginEvent } from '@cex/contracts';
+import { Copy, Check, ExternalLink, ShieldAlert, ArrowDownUp, AlertCircle } from 'lucide-react';
 
-interface AdjustModalState {
-  open: boolean;
-  asset: string;
-  amount: string;
+interface UserDetailPageProps {
+  userId: string;
+  onNavigate: (path: string) => void;
 }
 
-export const UserDetailPage: React.FC<{ userId: string; onNavigate: (path: string) => void }> = ({ userId, onNavigate }) => {
+export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNavigate }) => {
+  const { user: currentUser, hasPerm } = useAuth();
   const [detail, setDetail] = useState<AdminUserDetail | null>(null);
-  const { hasPerm } = useAuth();
-  const api = getApiClient();
+  const [actualId, setActualId] = useState<string>('');
+  const [activeTab, setActiveTab] = useState<'balances' | 'orders' | 'ledger' | 'futures' | 'bots' | 'logins'>('balances');
+  const [copiedUid, setCopiedUid] = useState(false);
 
+  // Evidence state
+  const [recentLogins, setRecentLogins] = useState<LoginEvent[]>([]);
+  const [recentLedger, setRecentLedger] = useState<LedgerEntry[]>([]);
+
+  // Tab detailed data
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [ordersType, setOrdersType] = useState<'true' | 'false'>('true');
+  const [ledgerEntries, setLedgerEntries] = useState<LedgerEntry[]>([]);
+  const [positions, setPositions] = useState<FuturesPosition[]>([]);
+  const [positionsType, setPositionsType] = useState<'true' | 'false'>('true');
+  const [userBots, setUserBots] = useState<{ grid: GridBot[]; dca: DcaPlan[] }>({ grid: [], dca: [] });
+  const [allLogins, setAllLogins] = useState<LoginEvent[]>([]);
+
+  // Dialogs & Modals
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [confirmAction, setConfirmAction] = useState<'LOCK' | 'UNLOCK' | 'RESET'>('LOCK');
-  const [adjustModal, setAdjustModal] = useState<AdjustModalState>({ open: false, asset: 'USDT', amount: '' });
+  const [confirmAction, setConfirmAction] = useState<'LOCK' | 'UNLOCK' | 'RESET' | 'STOP_BOT' | 'CANCEL_DCA' | null>(null);
+  const [selectedBotId, setSelectedBotId] = useState<string | null>(null);
+  const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
 
-  const loadUser = () => {
-    api.adminGetUser({ params: { userId } }).then(setDetail).catch(() => {});
-  };
+  // Adjust balance modal
+  const [adjustOpen, setAdjustOpen] = useState(false);
+  const [adjustAsset, setAdjustAsset] = useState('USDT');
+  const [adjustAmount, setAdjustAmount] = useState('');
+  const [adjustReason, setAdjustReason] = useState('');
+  const [adjustError, setAdjustError] = useState<string | null>(null);
+  const [auditNotification, setAuditNotification] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const api = getApiClient();
+  const exchangeOrigin = import.meta.env.VITE_EXCHANGE_ORIGIN;
+
+  const loadUserData = useCallback(async () => {
+    try {
+      let targetId = userId;
+      // If userId is a UID (all digits), lookup UUID via adminListUsers
+      if (/^\d+$/.test(userId)) {
+        const list = await api.adminListUsers({ query: { q: userId, limit: 1 } });
+        if (list.items.length > 0) {
+          targetId = list.items[0]!.id;
+        }
+      }
+      setActualId(targetId);
+
+      const d = await api.adminGetUser({ params: { userId: targetId } });
+      setDetail(d);
+
+      // Fetch evidence: 5 recent logins and 5 recent ledger entries
+      api.adminUserLoginHistory({ params: { userId: targetId }, query: { limit: 5 } })
+        .then((r) => setRecentLogins(r.items))
+        .catch(() => {});
+
+      api.adminUserLedger({ params: { userId: targetId }, query: { limit: 5 } })
+        .then((r) => setRecentLedger(r.items))
+        .catch(() => {});
+    } catch (e) {
+      console.error(e);
+    }
+  }, [api, userId]);
 
   useEffect(() => {
-    loadUser();
-  }, [userId]);
+    loadUserData();
+  }, [loadUserData]);
 
-  if (!detail) return <div className="p-6 text-[var(--text-2,#a1a1aa)]">Đang tải...</div>;
+  // Load tab-specific data when tab changes
+  useEffect(() => {
+    if (!actualId) return;
+
+    if (activeTab === 'orders') {
+      api.adminUserOrders({ params: { userId: actualId }, query: { open: ordersType, limit: 50 } })
+        .then((r) => setOrders(r.items))
+        .catch(() => {});
+    } else if (activeTab === 'ledger') {
+      api.adminUserLedger({ params: { userId: actualId }, query: { limit: 50 } })
+        .then((r) => setLedgerEntries(r.items))
+        .catch(() => {});
+    } else if (activeTab === 'futures') {
+      api.adminUserFuturesPositions({ params: { userId: actualId }, query: { open: positionsType, limit: 50 } })
+        .then((r) => setPositions(r.items))
+        .catch(() => {});
+    } else if (activeTab === 'bots') {
+      api.adminUserBots({ params: { userId: actualId } })
+        .then((r) => setUserBots(r))
+        .catch(() => {});
+    } else if (activeTab === 'logins') {
+      api.adminUserLoginHistory({ params: { userId: actualId }, query: { limit: 50 } })
+        .then((r) => setAllLogins(r.items))
+        .catch(() => {});
+    }
+  }, [actualId, activeTab, ordersType, positionsType, api]);
+
+  if (!detail) {
+    return <div className="p-8 text-center text-[var(--text-2,#a1a1aa)]">Đang tải thông tin chi tiết người dùng...</div>;
+  }
 
   const u = detail.user;
   const isLocked = u.status === 'locked';
+  const isSelf = currentUser?.id === u.id;
+  const isProtected = u.isBot || isSelf;
 
-  const handleConfirm = async (reason: string) => {
+  const copyUid = () => {
+    navigator.clipboard.writeText(u.uid);
+    setCopiedUid(true);
+    setTimeout(() => setCopiedUid(false), 2000);
+  };
+
+  // Preview for balance adjustment
+  const currentAssetBal = detail.balances.find((b) => b.asset === adjustAsset);
+  const currentAvailable = currentAssetBal ? parseFloat(currentAssetBal.available) : 0;
+  const adjustAmt = parseFloat(adjustAmount) || 0;
+  const calculatedAfter = (currentAvailable + adjustAmt).toFixed(8).replace(/\.?0+$/, '');
+
+  const handleAdjustSubmit = async () => {
+    if (!adjustReason || adjustReason.trim().length < 5) return;
+    setIsSubmitting(true);
+    setAdjustError(null);
+    try {
+      const res = await api.adminAdjustBalance({
+        params: { userId: detail.user.id },
+        body: { asset: adjustAsset, amount: adjustAmount, reason: adjustReason },
+      });
+      setAuditNotification(`Đã điều chỉnh số dư thành công! Mã nhật ký: ${res.auditLogId}`);
+      setAdjustOpen(false);
+      setAdjustAmount('');
+      setAdjustReason('');
+      loadUserData();
+    } catch (err: any) {
+      if (err?.code === 'INSUFFICIENT_BALANCE') {
+        setAdjustError(`Khách chỉ còn ${currentAvailable} ${adjustAsset} khả dụng. Không thể trừ quá số dư này.`);
+      } else {
+        setAdjustError(err?.message || 'Có lỗi xảy ra khi điều chỉnh số dư.');
+      }
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleConfirmAction = async (reason: string) => {
+    setIsSubmitting(true);
     try {
       if (confirmAction === 'LOCK') {
-        await api.adminLockUser({ params: { userId }, body: { reason } });
+        await api.adminLockUser({ params: { userId: detail.user.id }, body: { reason } });
       } else if (confirmAction === 'UNLOCK') {
-        await api.adminUnlockUser({ params: { userId }, body: { reason } });
+        await api.adminUnlockUser({ params: { userId: detail.user.id }, body: { reason } });
       } else if (confirmAction === 'RESET') {
-        await api.adminResetAccount({ params: { userId }, body: { reason, confirm: 'RESET' } });
+        await api.adminResetAccount({ params: { userId: detail.user.id }, body: { reason, confirm: 'RESET' } });
+      } else if (confirmAction === 'STOP_BOT' && selectedBotId) {
+        await api.adminStopGridBot({ params: { userId: detail.user.id, botId: selectedBotId }, body: { reason, sellBase: false } });
+      } else if (confirmAction === 'CANCEL_DCA' && selectedPlanId) {
+        await api.adminCancelDcaPlan({ params: { userId: detail.user.id, planId: selectedPlanId }, body: { reason } });
       }
-      loadUser();
+      setConfirmOpen(false);
+      loadUserData();
     } catch (e) {
       console.error(e);
     } finally {
-      setConfirmOpen(false);
+      setIsSubmitting(false);
     }
   };
-
-  const handleAdjustConfirm = async (reason: string) => {
-    try {
-      await api.adminAdjustBalance({
-        params: { userId },
-        body: { asset: adjustModal.asset, amount: adjustModal.amount, reason },
-      });
-      setAdjustModal({ open: false, asset: 'USDT', amount: '' });
-      loadUser();
-    } catch (e) {
-      console.error(e);
-    }
-  };
-
-  // Compute preview of balance adjustment
-  const currentBalance = detail.balances.find((b) => b.asset === adjustModal.asset);
-  const currentAvailable = currentBalance ? parseFloat(currentBalance.available) : 0;
-  const adjustAmt = parseFloat(adjustModal.amount) || 0;
-  const afterBalance = (currentAvailable + adjustAmt).toFixed(8).replace(/\.?0+$/, '');
 
   return (
-    <div className="p-6">
-      <button
-        onClick={() => onNavigate('/admin/users')}
-        className="text-[var(--text-2,#a1a1aa)] hover:text-[var(--text,#f4f4f5)] mb-4 flex items-center gap-1 text-sm"
-      >
-        ← Quay lại
-      </button>
+    <div className="p-6 max-w-7xl mx-auto space-y-6">
+      {/* Top breadcrumb */}
+      <div className="flex items-center justify-between">
+        <button
+          onClick={() => onNavigate('/admin/users')}
+          className="text-sm text-[var(--text-2,#a1a1aa)] hover:text-[var(--text,#f4f4f5)] flex items-center gap-1.5 transition-colors"
+        >
+          ← Quay lại danh sách người dùng
+        </button>
 
-      <div className="flex items-start justify-between mb-6 gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-bold">{u.email}</h1>
-          <div className="text-[var(--text-2,#a1a1aa)] mt-1 text-sm">
-            UID: {u.uid} · Tên: {u.name} · Vai trò: {u.role}
-          </div>
-          <div
-            className="mt-2 text-sm font-medium"
-            data-testid="admin-user-status"
-            data-status={isLocked ? 'locked' : 'active'}
-          >
-            Trạng thái:{' '}
-            <span className={isLocked ? 'text-[var(--down,#f2475f)]' : 'text-[var(--up,#1fc27a)]'}>
-              {isLocked ? 'Đã khóa' : 'Hoạt động'}
-            </span>
-          </div>
-          {u.isBot && (
-            <div className="mt-1 text-xs text-[var(--text-3,#63636b)]">Tài khoản Bot (chỉ xem)</div>
-          )}
-        </div>
-
-        {!u.isBot && (
-          <div className="flex gap-2 flex-wrap">
-            {hasPerm('balances.adjust') && (
-              <button
-                data-testid="admin-adjust-open"
-                onClick={() => setAdjustModal({ open: true, asset: 'USDT', amount: '' })}
-                className="px-3 py-1.5 rounded border border-[var(--line,#1d1e21)] text-[var(--text,#f4f4f5)] text-sm hover:bg-[var(--panel-2,#141416)]"
-              >
-                Điều chỉnh số dư
-              </button>
-            )}
-
-            {hasPerm('users.lock') && (
-              isLocked ? (
-                <button
-                  data-testid="admin-unlock-open"
-                  onClick={() => { setConfirmAction('UNLOCK'); setConfirmOpen(true); }}
-                  className="px-3 py-1.5 rounded bg-[var(--up,#1fc27a)]/10 border border-[var(--up,#1fc27a)]/30 text-[var(--up,#1fc27a)] text-sm hover:bg-[var(--up,#1fc27a)]/20"
-                >
-                  Mở khóa
-                </button>
-              ) : (
-                <button
-                  data-testid="admin-lock-open"
-                  onClick={() => { setConfirmAction('LOCK'); setConfirmOpen(true); }}
-                  className="px-3 py-1.5 rounded bg-[var(--down,#f2475f)]/10 border border-[var(--down,#f2475f)]/30 text-[var(--down,#f2475f)] text-sm hover:bg-[var(--down,#f2475f)]/20"
-                >
-                  Khóa tài khoản
-                </button>
-              )
-            )}
-
-            {hasPerm('accounts.reset') && (
-              <button
-                onClick={() => { setConfirmAction('RESET'); setConfirmOpen(true); }}
-                className="px-3 py-1.5 rounded bg-[var(--down,#f2475f)]/10 border border-[var(--down,#f2475f)]/30 text-[var(--down,#f2475f)] text-sm hover:bg-[var(--down,#f2475f)]/20"
-              >
-                Reset tài khoản
-              </button>
-            )}
+        {auditNotification && (
+          <div className="px-3 py-1.5 rounded-lg bg-[var(--up,#1fc27a)]/10 border border-[var(--up,#1fc27a)]/30 text-xs text-[var(--up,#1fc27a)] flex items-center gap-2">
+            <span>{auditNotification}</span>
+            <button onClick={() => setAuditNotification(null)} className="font-bold ml-1">×</button>
           </div>
         )}
       </div>
 
-      {/* Balances */}
-      <div className="bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)] rounded overflow-hidden mb-6">
-        <div className="px-4 py-3 border-b border-[var(--line,#1d1e21)] font-medium text-sm">
-          Số dư tài khoản · Tổng: {detail.totalValueUsdt} USDT
+      {/* User Header Profile */}
+      <div className="bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)] rounded-xl p-6 shadow-lg">
+        <div className="flex items-start justify-between flex-wrap gap-6">
+          <div>
+            <div className="flex items-center gap-3">
+              <h1 className="text-2xl font-bold text-[var(--text,#f4f4f5)]">{u.email}</h1>
+              <div
+                data-testid="admin-user-status"
+                data-status={u.status}
+                className={`text-xs px-2.5 py-0.5 rounded-full font-semibold uppercase tracking-wider ${
+                  isLocked
+                    ? 'bg-[var(--down,#f2475f)]/15 text-[var(--down,#f2475f)] border border-[var(--down,#f2475f)]/30'
+                    : 'bg-[var(--up,#1fc27a)]/15 text-[var(--up,#1fc27a)] border border-[var(--up,#1fc27a)]/30'
+                }`}
+              >
+                {isLocked ? 'Đã khóa' : 'Hoạt động'}
+              </div>
+              {u.isBot && (
+                <span className="text-xs px-2 py-0.5 rounded bg-amber-950/40 text-amber-400 border border-amber-800/40">
+                  Bot hệ thống
+                </span>
+              )}
+            </div>
+
+            <div className="flex items-center gap-6 mt-3 text-sm text-[var(--text-2,#a1a1aa)] flex-wrap">
+              <div className="flex items-center gap-1.5 font-mono">
+                <span className="text-[var(--text-3,#63636b)]">UID:</span>
+                <span className="text-[var(--text,#f4f4f5)] font-bold">{u.uid}</span>
+                <button
+                  onClick={copyUid}
+                  className="p-1 rounded hover:bg-[var(--line,#1d1e21)] text-[var(--text-3,#63636b)] hover:text-[var(--text,#f4f4f5)]"
+                  title="Sao chép UID"
+                >
+                  {copiedUid ? <Check size={12} className="text-[var(--up,#1fc27a)]" /> : <Copy size={12} />}
+                </button>
+              </div>
+              <div><span className="text-[var(--text-3,#63636b)]">Tên:</span> {u.name || '—'}</div>
+              <div><span className="text-[var(--text-3,#63636b)]">Vai trò:</span> <span className="font-semibold uppercase text-[var(--accent,#818cf8)]">{u.role}</span></div>
+              <div><span className="text-[var(--text-3,#63636b)]">2FA:</span> {u.twoFactorEnabled ? <span className="text-[var(--up,#1fc27a)]">Đã bật</span> : 'Chưa bật'}</div>
+              <div><span className="text-[var(--text-3,#63636b)]">Phiên hoạt động:</span> {detail.activeSessions}</div>
+            </div>
+          </div>
+
+          {/* Action Buttons */}
+          {!isProtected && (
+            <div className="flex items-center gap-2.5 flex-wrap">
+              {hasPerm('balances.adjust') && (
+                <button
+                  data-testid="admin-adjust-open"
+                  onClick={() => setAdjustOpen(true)}
+                  className="px-3.5 py-2 rounded-lg bg-[var(--line,#1d1e21)] hover:bg-[var(--line,#1d1e21)]/80 text-sm font-medium text-[var(--text,#f4f4f5)] flex items-center gap-1.5 border border-[var(--line,#1d1e21)] transition-colors"
+                >
+                  <ArrowDownUp size={15} />
+                  <span>Điều chỉnh số dư</span>
+                </button>
+              )}
+
+              {hasPerm('users.lock') && (
+                isLocked ? (
+                  <button
+                    data-testid="admin-unlock-open"
+                    onClick={() => { setConfirmAction('UNLOCK'); setConfirmOpen(true); }}
+                    className="px-3.5 py-2 rounded-lg bg-[var(--up,#1fc27a)]/10 hover:bg-[var(--up,#1fc27a)]/20 text-sm font-medium text-[var(--up,#1fc27a)] border border-[var(--up,#1fc27a)]/30 transition-colors"
+                  >
+                    Mở khóa tài khoản
+                  </button>
+                ) : (
+                  <button
+                    data-testid="admin-lock-open"
+                    onClick={() => { setConfirmAction('LOCK'); setConfirmOpen(true); }}
+                    className="px-3.5 py-2 rounded-lg bg-[var(--down,#f2475f)]/10 hover:bg-[var(--down,#f2475f)]/20 text-sm font-medium text-[var(--down,#f2475f)] border border-[var(--down,#f2475f)]/30 transition-colors"
+                  >
+                    Khóa tài khoản
+                  </button>
+                )
+              )}
+
+              {hasPerm('accounts.reset') && (
+                <button
+                  onClick={() => { setConfirmAction('RESET'); setConfirmOpen(true); }}
+                  className="px-3.5 py-2 rounded-lg bg-red-950/30 hover:bg-red-950/50 text-sm font-medium text-red-400 border border-red-800/40 transition-colors"
+                >
+                  Reset tài khoản
+                </button>
+              )}
+            </div>
+          )}
         </div>
-        <table className="w-full text-sm text-left">
-          <thead className="bg-[var(--line,#1d1e21)]/40">
-            <tr>
-              <th className="px-4 py-2 text-[var(--text-2,#a1a1aa)]">Tài sản</th>
-              <th className="px-4 py-2 text-[var(--text-2,#a1a1aa)]">Khả dụng</th>
-              <th className="px-4 py-2 text-[var(--text-2,#a1a1aa)]">Đã khóa</th>
-            </tr>
-          </thead>
-          <tbody>
-            {detail.balances.map((b) => (
-              <tr key={b.asset} className="border-t border-[var(--line,#1d1e21)]">
-                <td className="px-4 py-2 font-medium">{b.asset}</td>
-                <td className="px-4 py-2 font-mono">{b.available}</td>
-                <td className="px-4 py-2 font-mono text-[var(--text-2,#a1a1aa)]">{b.locked}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+
+        {/* Section 2.3: Bằng chứng gian lận ngay dưới nút khóa */}
+        {!isProtected && hasPerm('users.lock') && (
+          <div className="mt-6 pt-6 border-t border-[var(--line,#1d1e21)]">
+            <div className="flex items-center gap-2 mb-3">
+              <ShieldAlert size={16} className="text-amber-400" />
+              <h3 className="text-xs font-bold uppercase tracking-wider text-[var(--text-2,#a1a1aa)]">
+                Bằng chứng kiểm tra an toàn (5 lần đăng nhập & 5 dòng sổ cái gần nhất)
+              </h3>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* 5 Logins */}
+              <div className="bg-[var(--bg,#000000)]/60 rounded-lg p-3 border border-[var(--line,#1d1e21)] text-xs">
+                <div className="font-semibold text-[var(--text-2,#a1a1aa)] mb-2">Đăng nhập gần nhất:</div>
+                {recentLogins.length === 0 ? (
+                  <div className="text-[var(--text-3,#63636b)]">Chưa có lịch sử đăng nhập</div>
+                ) : (
+                  <div className="space-y-1.5">
+                    {recentLogins.map((lg) => (
+                      <div key={lg.id} className="flex items-center justify-between font-mono">
+                        <span className="text-[var(--text-3,#63636b)]">{new Date(lg.at).toLocaleString('vi-VN')}</span>
+                        <span className="text-[var(--text-2,#a1a1aa)]">{lg.ip || '—'}</span>
+                        <span className="truncate max-w-[120px] text-[var(--text-3,#63636b)]" title={lg.device || ''}>{lg.device || '—'}</span>
+                        <span className={lg.success ? 'text-[var(--up,#1fc27a)]' : 'text-[var(--down,#f2475f)]'}>
+                          {lg.result === 'OK' ? 'Thành công' : lg.result}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* 5 Ledger */}
+              <div className="bg-[var(--bg,#000000)]/60 rounded-lg p-3 border border-[var(--line,#1d1e21)] text-xs">
+                <div className="font-semibold text-[var(--text-2,#a1a1aa)] mb-2">Biến động số dư gần nhất:</div>
+                {recentLedger.length === 0 ? (
+                  <div className="text-[var(--text-3,#63636b)]">Chưa có biến động số dư</div>
+                ) : (
+                  <div className="space-y-1.5">
+                    {recentLedger.map((ld) => (
+                      <div key={ld.id} className="flex items-center justify-between font-mono">
+                        <span className="text-[var(--text-3,#63636b)]">{new Date(ld.createdAt).toLocaleTimeString('vi-VN')}</span>
+                        <span className="font-semibold text-[var(--text,#f4f4f5)]">{ld.asset}</span>
+                        <span className={parseFloat(ld.deltaAvailable) >= 0 ? 'text-[var(--up,#1fc27a)]' : 'text-[var(--down,#f2475f)]'}>
+                          {parseFloat(ld.deltaAvailable) > 0 ? `+${ld.deltaAvailable}` : ld.deltaAvailable}
+                        </span>
+                        <span className="text-[var(--text-3,#63636b)]">{ld.type}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
+      {/* Tabs */}
+      <div className="border-b border-[var(--line,#1d1e21)] flex gap-6 text-sm">
+        <button
+          onClick={() => setActiveTab('balances')}
+          className={`pb-3 font-semibold transition-colors ${activeTab === 'balances' ? 'border-b-2 border-[var(--accent,#818cf8)] text-[var(--accent,#818cf8)]' : 'text-[var(--text-2,#a1a1aa)] hover:text-[var(--text,#f4f4f5)]'}`}
+        >
+          Số dư & Ví
+        </button>
+        <button
+          onClick={() => setActiveTab('orders')}
+          className={`pb-3 font-semibold transition-colors ${activeTab === 'orders' ? 'border-b-2 border-[var(--accent,#818cf8)] text-[var(--accent,#818cf8)]' : 'text-[var(--text-2,#a1a1aa)] hover:text-[var(--text,#f4f4f5)]'}`}
+        >
+          Lệnh Spot ({detail.openOrders} mở)
+        </button>
+        <button
+          onClick={() => setActiveTab('ledger')}
+          className={`pb-3 font-semibold transition-colors ${activeTab === 'ledger' ? 'border-b-2 border-[var(--accent,#818cf8)] text-[var(--accent,#818cf8)]' : 'text-[var(--text-2,#a1a1aa)] hover:text-[var(--text,#f4f4f5)]'}`}
+        >
+          Sổ cái biến động
+        </button>
+        <button
+          onClick={() => setActiveTab('futures')}
+          className={`pb-3 font-semibold transition-colors ${activeTab === 'futures' ? 'border-b-2 border-[var(--accent,#818cf8)] text-[var(--accent,#818cf8)]' : 'text-[var(--text-2,#a1a1aa)] hover:text-[var(--text,#f4f4f5)]'}`}
+        >
+          Vị thế Futures ({detail.futures.openPositions})
+        </button>
+        <button
+          onClick={() => setActiveTab('bots')}
+          className={`pb-3 font-semibold transition-colors ${activeTab === 'bots' ? 'border-b-2 border-[var(--accent,#818cf8)] text-[var(--accent,#818cf8)]' : 'text-[var(--text-2,#a1a1aa)] hover:text-[var(--text,#f4f4f5)]'}`}
+        >
+          Bot ({detail.bots.runningGrid}) & DCA ({detail.bots.activeDca})
+        </button>
+        <button
+          onClick={() => setActiveTab('logins')}
+          className={`pb-3 font-semibold transition-colors ${activeTab === 'logins' ? 'border-b-2 border-[var(--accent,#818cf8)] text-[var(--accent,#818cf8)]' : 'text-[var(--text-2,#a1a1aa)] hover:text-[var(--text,#f4f4f5)]'}`}
+        >
+          Lịch sử Đăng nhập
+        </button>
+      </div>
+
+      {/* Tab Contents */}
+      {activeTab === 'balances' && (
+        <div className="space-y-6">
+          {/* Spot Balances */}
+          <div className="bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)] rounded-xl overflow-hidden shadow">
+            <div className="px-5 py-4 border-b border-[var(--line,#1d1e21)] flex items-center justify-between">
+              <span className="font-bold text-sm text-[var(--text,#f4f4f5)]">Số dư Spot</span>
+              <span className="text-sm font-mono text-[var(--text-2,#a1a1aa)]">
+                Ước tính: <strong className="text-[var(--text,#f4f4f5)] font-bold">{detail.totalValueUsdt}</strong> USDT
+              </span>
+            </div>
+            <table className="w-full text-left text-sm">
+              <thead className="bg-[var(--line,#1d1e21)]/30 border-b border-[var(--line,#1d1e21)]">
+                <tr>
+                  <th className="px-5 py-3 font-semibold text-xs text-[var(--text-2,#a1a1aa)] uppercase">Tài sản</th>
+                  <th className="px-5 py-3 font-semibold text-xs text-[var(--text-2,#a1a1aa)] uppercase">Khả dụng</th>
+                  <th className="px-5 py-3 font-semibold text-xs text-[var(--text-2,#a1a1aa)] uppercase">Đang khóa</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[var(--line,#1d1e21)]">
+                {detail.balances.map((b) => (
+                  <tr key={b.asset} className="hover:bg-[var(--line,#1d1e21)]/10">
+                    <td className="px-5 py-3 font-bold text-[var(--text,#f4f4f5)]">{b.asset}</td>
+                    <td className="px-5 py-3 font-mono text-[var(--text,#f4f4f5)]">{b.available}</td>
+                    <td className="px-5 py-3 font-mono text-[var(--text-3,#63636b)]">{b.locked}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Futures Wallet */}
+          <div className="bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)] rounded-xl p-5 shadow">
+            <h3 className="font-bold text-sm text-[var(--text,#f4f4f5)] mb-4">Ví Hợp đồng Futures</h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm font-mono">
+              <div className="bg-[var(--bg,#000000)] p-3 rounded-lg border border-[var(--line,#1d1e21)]">
+                <div className="text-xs text-[var(--text-3,#63636b)] mb-1">Số dư ví</div>
+                <div className="font-bold text-[var(--text,#f4f4f5)]">{detail.futures.walletBalance} USDT</div>
+              </div>
+              <div className="bg-[var(--bg,#000000)] p-3 rounded-lg border border-[var(--line,#1d1e21)]">
+                <div className="text-xs text-[var(--text-3,#63636b)] mb-1">Khả dụng</div>
+                <div className="font-bold text-[var(--text,#f4f4f5)]">{detail.futures.available} USDT</div>
+              </div>
+              <div className="bg-[var(--bg,#000000)] p-3 rounded-lg border border-[var(--line,#1d1e21)]">
+                <div className="text-xs text-[var(--text-3,#63636b)] mb-1">Ký quỹ vị thế</div>
+                <div className="font-bold text-[var(--text,#f4f4f5)]">{detail.futures.positionMargin} USDT</div>
+              </div>
+              <div className="bg-[var(--bg,#000000)] p-3 rounded-lg border border-[var(--line,#1d1e21)]">
+                <div className="text-xs text-[var(--text-3,#63636b)] mb-1">PnL chưa thực hiện</div>
+                <div className={`font-bold ${parseFloat(detail.futures.unrealizedPnl || '0') >= 0 ? 'text-[var(--up,#1fc27a)]' : 'text-[var(--down,#f2475f)]'}`}>
+                  {detail.futures.unrealizedPnl || '0.00000000'} USDT
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Orders Tab */}
+      {activeTab === 'orders' && (
+        <div className="bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)] rounded-xl overflow-hidden shadow">
+          <div className="p-4 border-b border-[var(--line,#1d1e21)] flex items-center gap-3">
+            <button
+              onClick={() => setOrdersType('true')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${ordersType === 'true' ? 'bg-[var(--accent,#818cf8)] text-white' : 'bg-[var(--bg,#000000)] text-[var(--text-2,#a1a1aa)]'}`}
+            >
+              Lệnh đang mở
+            </button>
+            <button
+              onClick={() => setOrdersType('false')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${ordersType === 'false' ? 'bg-[var(--accent,#818cf8)] text-white' : 'bg-[var(--bg,#000000)] text-[var(--text-2,#a1a1aa)]'}`}
+            >
+              Lịch sử lệnh
+            </button>
+          </div>
+          <table className="w-full text-left text-sm">
+            <thead className="bg-[var(--line,#1d1e21)]/30 border-b border-[var(--line,#1d1e21)]">
+              <tr>
+                <th className="px-4 py-3 font-semibold text-xs text-[var(--text-2,#a1a1aa)]">Mã lệnh</th>
+                <th className="px-4 py-3 font-semibold text-xs text-[var(--text-2,#a1a1aa)]">Cặp</th>
+                <th className="px-4 py-3 font-semibold text-xs text-[var(--text-2,#a1a1aa)]">Loại</th>
+                <th className="px-4 py-3 font-semibold text-xs text-[var(--text-2,#a1a1aa)]">Phe</th>
+                <th className="px-4 py-3 font-semibold text-xs text-[var(--text-2,#a1a1aa)]">Giá</th>
+                <th className="px-4 py-3 font-semibold text-xs text-[var(--text-2,#a1a1aa)]">Khối lượng</th>
+                <th className="px-4 py-3 font-semibold text-xs text-[var(--text-2,#a1a1aa)]">Khớp</th>
+                <th className="px-4 py-3 font-semibold text-xs text-[var(--text-2,#a1a1aa)]">Trạng thái</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[var(--line,#1d1e21)] font-mono text-xs">
+              {orders.map((o) => (
+                <tr key={o.id} className="hover:bg-[var(--line,#1d1e21)]/10">
+                  <td className="px-4 py-3 text-[var(--text-3,#63636b)]">{o.id.slice(0, 8)}...</td>
+                  <td className="px-4 py-3 font-bold">
+                    <a
+                      href={appLinks.exchange.trade(o.symbol, exchangeOrigin)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[var(--accent,#818cf8)] hover:underline inline-flex items-center gap-1 font-sans"
+                    >
+                      {o.symbol} <ExternalLink size={10} />
+                    </a>
+                  </td>
+                  <td className="px-4 py-3">{o.type}</td>
+                  <td className={`px-4 py-3 font-bold ${o.side === 'BUY' ? 'text-[var(--up,#1fc27a)]' : 'text-[var(--down,#f2475f)]'}`}>{o.side}</td>
+                  <td className="px-4 py-3">{o.price || 'Thị trường'}</td>
+                  <td className="px-4 py-3">{o.quantity || o.quoteOrderQty}</td>
+                  <td className="px-4 py-3">{o.executedQty}</td>
+                  <td className="px-4 py-3 text-[var(--text-2,#a1a1aa)]">{o.status}</td>
+                </tr>
+              ))}
+              {orders.length === 0 && (
+                <tr>
+                  <td colSpan={8} className="px-4 py-10 text-center text-[var(--text-3,#63636b)]">Không có lệnh nào</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Ledger Tab */}
+      {activeTab === 'ledger' && (
+        <div className="bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)] rounded-xl overflow-hidden shadow">
+          <table className="w-full text-left text-sm">
+            <thead className="bg-[var(--line,#1d1e21)]/30 border-b border-[var(--line,#1d1e21)]">
+              <tr>
+                <th className="px-4 py-3 font-semibold text-xs text-[var(--text-2,#a1a1aa)]">Thời gian</th>
+                <th className="px-4 py-3 font-semibold text-xs text-[var(--text-2,#a1a1aa)]">Tài sản</th>
+                <th className="px-4 py-3 font-semibold text-xs text-[var(--text-2,#a1a1aa)]">Biến động khả dụng</th>
+                <th className="px-4 py-3 font-semibold text-xs text-[var(--text-2,#a1a1aa)]">Số dư sau</th>
+                <th className="px-4 py-3 font-semibold text-xs text-[var(--text-2,#a1a1aa)]">Loại</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[var(--line,#1d1e21)] font-mono text-xs">
+              {ledgerEntries.map((l) => (
+                <tr key={l.id} className="hover:bg-[var(--line,#1d1e21)]/10">
+                  <td className="px-4 py-3 text-[var(--text-3,#63636b)]">{new Date(l.createdAt).toLocaleString('vi-VN')}</td>
+                  <td className="px-4 py-3 font-bold text-[var(--text,#f4f4f5)]">{l.asset}</td>
+                  <td className={`px-4 py-3 font-bold ${parseFloat(l.deltaAvailable) >= 0 ? 'text-[var(--up,#1fc27a)]' : 'text-[var(--down,#f2475f)]'}`}>
+                    {parseFloat(l.deltaAvailable) > 0 ? `+${l.deltaAvailable}` : l.deltaAvailable}
+                  </td>
+                  <td className="px-4 py-3">{l.availableAfter}</td>
+                  <td className="px-4 py-3 text-[var(--text-2,#a1a1aa)]">{l.type}</td>
+                </tr>
+              ))}
+              {ledgerEntries.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="px-4 py-10 text-center text-[var(--text-3,#63636b)]">Chưa có giao dịch sổ cái</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Futures Positions Tab */}
+      {activeTab === 'futures' && (
+        <div className="bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)] rounded-xl overflow-hidden shadow">
+          <div className="p-4 border-b border-[var(--line,#1d1e21)] flex items-center gap-3">
+            <button
+              onClick={() => setPositionsType('true')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${positionsType === 'true' ? 'bg-[var(--accent,#818cf8)] text-white' : 'bg-[var(--bg,#000000)] text-[var(--text-2,#a1a1aa)]'}`}
+            >
+              Vị thế đang mở
+            </button>
+            <button
+              onClick={() => setPositionsType('false')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${positionsType === 'false' ? 'bg-[var(--accent,#818cf8)] text-white' : 'bg-[var(--bg,#000000)] text-[var(--text-2,#a1a1aa)]'}`}
+            >
+              Lịch sử vị thế
+            </button>
+          </div>
+          <table className="w-full text-left text-sm">
+            <thead className="bg-[var(--line,#1d1e21)]/30 border-b border-[var(--line,#1d1e21)]">
+              <tr>
+                <th className="px-4 py-3 font-semibold text-xs text-[var(--text-2,#a1a1aa)]">Hợp đồng</th>
+                <th className="px-4 py-3 font-semibold text-xs text-[var(--text-2,#a1a1aa)]">Vị thế</th>
+                <th className="px-4 py-3 font-semibold text-xs text-[var(--text-2,#a1a1aa)]">Khối lượng</th>
+                <th className="px-4 py-3 font-semibold text-xs text-[var(--text-2,#a1a1aa)]">Giá vào</th>
+                <th className="px-4 py-3 font-semibold text-xs text-[var(--text-2,#a1a1aa)]">Giá đánh dấu</th>
+                <th className="px-4 py-3 font-semibold text-xs text-[var(--text-2,#a1a1aa)]">PnL chưa chốt</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[var(--line,#1d1e21)] font-mono text-xs">
+              {positions.map((p) => (
+                <tr key={p.id} className="hover:bg-[var(--line,#1d1e21)]/10">
+                  <td className="px-4 py-3 font-bold">
+                    <a
+                      href={appLinks.exchange.futures(p.symbol, exchangeOrigin)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[var(--accent,#818cf8)] hover:underline inline-flex items-center gap-1 font-sans"
+                    >
+                      {p.symbol} <ExternalLink size={10} />
+                    </a>
+                  </td>
+                  <td className={`px-4 py-3 font-bold ${p.side === 'LONG' ? 'text-[var(--up,#1fc27a)]' : 'text-[var(--down,#f2475f)]'}`}>
+                    {p.side} {p.leverage}x
+                  </td>
+                  <td className="px-4 py-3">{p.quantity}</td>
+                  <td className="px-4 py-3">{p.entryPrice}</td>
+                  <td className="px-4 py-3">{p.markPrice || '—'}</td>
+                  <td className={`px-4 py-3 font-bold ${parseFloat(p.unrealizedPnl || '0') >= 0 ? 'text-[var(--up,#1fc27a)]' : 'text-[var(--down,#f2475f)]'}`}>
+                    {p.unrealizedPnl || '0.00000000'} USDT
+                  </td>
+                </tr>
+              ))}
+              {positions.length === 0 && (
+                <tr>
+                  <td colSpan={6} className="px-4 py-10 text-center text-[var(--text-3,#63636b)]">Không có vị thế nào</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Bots Tab */}
+      {activeTab === 'bots' && (
+        <div className="space-y-6">
+          {/* Grid Bots */}
+          <div className="bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)] rounded-xl overflow-hidden shadow">
+            <div className="px-4 py-3 border-b border-[var(--line,#1d1e21)] font-bold text-sm text-[var(--text,#f4f4f5)]">
+              Grid Trading Bots
+            </div>
+            <table className="w-full text-left text-sm">
+              <thead className="bg-[var(--line,#1d1e21)]/30 border-b border-[var(--line,#1d1e21)] text-xs text-[var(--text-2,#a1a1aa)]">
+                <tr>
+                  <th className="px-4 py-3">ID Bot</th>
+                  <th className="px-4 py-3">Cặp</th>
+                  <th className="px-4 py-3">Biên độ giá</th>
+                  <th className="px-4 py-3">Lưới</th>
+                  <th className="px-4 py-3">Vốn đầu tư</th>
+                  <th className="px-4 py-3">Trạng thái</th>
+                  <th className="px-4 py-3 text-right">Thao tác</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[var(--line,#1d1e21)] font-mono text-xs">
+                {userBots.grid.map((b) => (
+                  <tr key={b.id} className="hover:bg-[var(--line,#1d1e21)]/10">
+                    <td className="px-4 py-3">{b.id}</td>
+                    <td className="px-4 py-3 font-bold text-[var(--text,#f4f4f5)]">{b.symbol}</td>
+                    <td className="px-4 py-3">{b.lowerPrice} - {b.upperPrice}</td>
+                    <td className="px-4 py-3">{b.gridCount}</td>
+                    <td className="px-4 py-3">{b.investment} USDT</td>
+                    <td className="px-4 py-3 text-[var(--accent,#818cf8)]">{b.status}</td>
+                    <td className="px-4 py-3 text-right font-sans">
+                      {hasPerm('bots.manage') && b.status === 'RUNNING' && (
+                        <button
+                          onClick={() => { setSelectedBotId(b.id); setConfirmAction('STOP_BOT'); setConfirmOpen(true); }}
+                          className="px-2.5 py-1 rounded bg-[var(--down,#f2475f)]/10 hover:bg-[var(--down,#f2475f)]/20 text-[var(--down,#f2475f)] text-xs border border-[var(--down,#f2475f)]/30"
+                        >
+                          Dừng bot
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+                {userBots.grid.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="px-4 py-8 text-center text-[var(--text-3,#63636b)] font-sans">Người dùng chưa tạo Grid Bot nào</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* DCA Plans */}
+          <div className="bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)] rounded-xl overflow-hidden shadow">
+            <div className="px-4 py-3 border-b border-[var(--line,#1d1e21)] font-bold text-sm text-[var(--text,#f4f4f5)]">
+              Kế hoạch mua định kỳ (DCA)
+            </div>
+            <table className="w-full text-left text-sm">
+              <thead className="bg-[var(--line,#1d1e21)]/30 border-b border-[var(--line,#1d1e21)] text-xs text-[var(--text-2,#a1a1aa)]">
+                <tr>
+                  <th className="px-4 py-3">ID Kế hoạch</th>
+                  <th className="px-4 py-3">Cặp mua</th>
+                  <th className="px-4 py-3">Số tiền mỗi lần</th>
+                  <th className="px-4 py-3">Chu kỳ</th>
+                  <th className="px-4 py-3">Trạng thái</th>
+                  <th className="px-4 py-3 text-right">Thao tác</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[var(--line,#1d1e21)] font-mono text-xs">
+                {userBots.dca.map((d) => (
+                  <tr key={d.id} className="hover:bg-[var(--line,#1d1e21)]/10">
+                    <td className="px-4 py-3">{d.id}</td>
+                    <td className="px-4 py-3 font-bold text-[var(--text,#f4f4f5)]">{d.symbol}</td>
+                    <td className="px-4 py-3">{d.quoteAmount} USDT</td>
+                    <td className="px-4 py-3">{d.interval}</td>
+                    <td className="px-4 py-3 text-[var(--accent,#818cf8)]">{d.status}</td>
+                    <td className="px-4 py-3 text-right font-sans">
+                      {hasPerm('bots.manage') && d.status === 'ACTIVE' && (
+                        <button
+                          onClick={() => { setSelectedPlanId(d.id); setConfirmAction('CANCEL_DCA'); setConfirmOpen(true); }}
+                          className="px-2.5 py-1 rounded bg-[var(--down,#f2475f)]/10 hover:bg-[var(--down,#f2475f)]/20 text-[var(--down,#f2475f)] text-xs border border-[var(--down,#f2475f)]/30"
+                        >
+                          Hủy kế hoạch
+                        </button>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+                {userBots.dca.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-8 text-center text-[var(--text-3,#63636b)] font-sans">Người dùng chưa tạo kế hoạch DCA nào</td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Logins Tab */}
+      {activeTab === 'logins' && (
+        <div className="bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)] rounded-xl overflow-hidden shadow">
+          <table className="w-full text-left text-sm">
+            <thead className="bg-[var(--line,#1d1e21)]/30 border-b border-[var(--line,#1d1e21)] text-xs text-[var(--text-2,#a1a1aa)]">
+              <tr>
+                <th className="px-4 py-3">Thời gian</th>
+                <th className="px-4 py-3">Địa chỉ IP</th>
+                <th className="px-4 py-3">Thiết bị / Trình duyệt</th>
+                <th className="px-4 py-3">Đặc điểm</th>
+                <th className="px-4 py-3">Kết quả</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-[var(--line,#1d1e21)] font-mono text-xs">
+              {allLogins.map((lg) => (
+                <tr key={lg.id} className="hover:bg-[var(--line,#1d1e21)]/10">
+                  <td className="px-4 py-3 text-[var(--text-3,#63636b)]">{new Date(lg.at).toLocaleString('vi-VN')}</td>
+                  <td className="px-4 py-3">{lg.ip || '—'}</td>
+                  <td className="px-4 py-3 text-[var(--text-2,#a1a1aa)] max-w-xs truncate" title={lg.device || ''}>{lg.device || '—'}</td>
+                  <td className="px-4 py-3">
+                    {lg.newDevice && (
+                      <span className="px-2 py-0.5 rounded bg-amber-950/40 text-amber-400 border border-amber-800/40 text-[10px] font-sans">
+                        Thiết bị mới
+                      </span>
+                    )}
+                  </td>
+                  <td className={`px-4 py-3 font-semibold ${lg.success ? 'text-[var(--up,#1fc27a)]' : 'text-[var(--down,#f2475f)]'}`}>
+                    {lg.result === 'OK' ? 'Thành công' : lg.result}
+                  </td>
+                </tr>
+              ))}
+              {allLogins.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="px-4 py-10 text-center text-[var(--text-3,#63636b)] font-sans">Chưa có dữ liệu đăng nhập</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
+
       {/* Adjust Balance Modal */}
-      {adjustModal.open && (
-        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-          <div className="bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)] rounded-lg w-full max-w-md p-6 flex flex-col gap-4">
-            <h2 className="text-lg font-bold">Điều chỉnh số dư</h2>
-            <p className="text-[var(--text-2,#a1a1aa)] text-sm">
-              Nhập số dương để cộng, số âm để trừ. Hành động sẽ được ghi nhật ký.
-            </p>
-            <div className="flex flex-col gap-2">
-              <label className="text-sm font-medium text-[var(--text-2,#a1a1aa)]">Tài sản</label>
+      {adjustOpen && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)] rounded-xl w-full max-w-md p-6 flex flex-col gap-4 shadow-2xl">
+            <div>
+              <h2 className="text-lg font-bold text-[var(--text,#f4f4f5)]">Thêm / bớt tiền cho khách</h2>
+              <p className="text-xs text-[var(--text-2,#a1a1aa)] mt-1">
+                Nhập số dương để cộng tiền, số âm để trừ tiền (ví dụ: <code className="text-white">500</code> hoặc <code className="text-white">-250.5</code>).
+              </p>
+            </div>
+
+            {adjustError && (
+              <div className="p-3 rounded-lg bg-[var(--down,#f2475f)]/10 border border-[var(--down,#f2475f)]/20 text-xs text-[var(--down,#f2475f)] flex items-start gap-2">
+                <AlertCircle size={16} className="shrink-0 mt-0.5" />
+                <span>{adjustError}</span>
+              </div>
+            )}
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-semibold uppercase text-[var(--text-2,#a1a1aa)]">Tài sản</label>
               <select
                 data-testid="adjust-asset"
-                value={adjustModal.asset}
-                onChange={(e) => setAdjustModal((m) => ({ ...m, asset: e.target.value }))}
-                className="bg-[var(--bg,#000)] border border-[var(--line,#1d1e21)] rounded px-3 py-2 text-[var(--text,#f4f4f5)] outline-none"
+                value={adjustAsset}
+                onChange={(e) => setAdjustAsset(e.target.value)}
+                className="bg-[var(--bg,#000000)] border border-[var(--line,#1d1e21)] rounded-lg px-3 py-2 text-sm text-[var(--text,#f4f4f5)] outline-none focus:border-[var(--accent,#818cf8)]"
               >
                 {detail.balances.length > 0
                   ? detail.balances.map((b) => <option key={b.asset} value={b.asset}>{b.asset}</option>)
@@ -189,95 +768,100 @@ export const UserDetailPage: React.FC<{ userId: string; onNavigate: (path: strin
                 }
               </select>
             </div>
-            <div className="flex flex-col gap-2">
-              <label className="text-sm font-medium text-[var(--text-2,#a1a1aa)]">Số tiền (có dấu)</label>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-semibold uppercase text-[var(--text-2,#a1a1aa)]">Số tiền (có dấu)</label>
               <input
                 data-testid="adjust-amount"
                 type="number"
-                value={adjustModal.amount}
-                onChange={(e) => setAdjustModal((m) => ({ ...m, amount: e.target.value }))}
-                placeholder="500 hoặc -100"
-                className="bg-[var(--bg,#000)] border border-[var(--line,#1d1e21)] rounded px-3 py-2 text-[var(--text,#f4f4f5)] outline-none"
+                step="any"
+                value={adjustAmount}
+                onChange={(e) => setAdjustAmount(e.target.value)}
+                placeholder="500 hoặc -250.5"
+                className="bg-[var(--bg,#000000)] border border-[var(--line,#1d1e21)] rounded-lg px-3 py-2 text-sm text-[var(--text,#f4f4f5)] outline-none focus:border-[var(--accent,#818cf8)] font-mono"
               />
             </div>
-            {adjustModal.amount && (
+
+            {adjustAmount && (
               <div
                 data-testid="adjust-preview"
-                className="text-sm bg-[var(--panel-2,#141416)] rounded p-3 font-mono"
+                className="p-3 rounded-lg bg-[var(--bg,#000000)] border border-[var(--line,#1d1e21)] text-xs font-mono"
               >
-                {currentAvailable.toFixed(2)} → {afterBalance} {adjustModal.asset}
+                <div className="text-[var(--text-3,#63636b)] mb-1">Xem trước số dư:</div>
+                <div className="text-[var(--text,#f4f4f5)] font-semibold">
+                  {currentAvailable.toFixed(2)} → {calculatedAfter} {adjustAsset} ({adjustAmt >= 0 ? `+${adjustAmt}` : adjustAmt})
+                </div>
               </div>
             )}
-            <div className="flex flex-col gap-2">
-              <label className="text-sm font-medium text-[var(--text-2,#a1a1aa)]">Lý do (tối thiểu 5 ký tự)</label>
-              <AdjustReasonForm
-                asset={adjustModal.asset}
-                amount={adjustModal.amount}
-                onConfirm={handleAdjustConfirm}
-                onCancel={() => setAdjustModal({ open: false, asset: 'USDT', amount: '' })}
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-semibold uppercase text-[var(--text-2,#a1a1aa)]">
+                Lý do thao tác <span className="text-[var(--down,#f2475f)]">*</span> (≥ 5 ký tự)
+              </label>
+              <textarea
+                data-testid="confirm-reason"
+                className="w-full bg-[var(--bg,#000000)] border border-[var(--line,#1d1e21)] rounded-lg p-2.5 text-sm text-[var(--text,#f4f4f5)] resize-none h-20 outline-none focus:border-[var(--accent,#818cf8)]"
+                value={adjustReason}
+                onChange={(e) => setAdjustReason(e.target.value)}
+                placeholder="Nhập lý do điều chỉnh số dư..."
               />
+            </div>
+
+            <div className="flex justify-end gap-3 mt-2 pt-2 border-t border-[var(--line,#1d1e21)]">
+              <button
+                type="button"
+                onClick={() => setAdjustOpen(false)}
+                className="px-4 py-2 rounded-lg border border-[var(--line,#1d1e21)] text-sm text-[var(--text-2,#a1a1aa)] hover:bg-[var(--line,#1d1e21)]/40 transition-colors"
+                disabled={isSubmitting}
+              >
+                Hủy
+              </button>
+              <button
+                data-testid="confirm-submit"
+                type="button"
+                onClick={handleAdjustSubmit}
+                disabled={!adjustAmount || !adjustReason || adjustReason.trim().length < 5 || isSubmitting}
+                className="px-4 py-2 rounded-lg bg-[var(--accent,#818cf8)] text-white text-sm font-medium hover:brightness-110 disabled:opacity-40 transition-all"
+              >
+                {isSubmitting ? 'Đang xử lý...' : 'Xác nhận điều chỉnh'}
+              </button>
             </div>
           </div>
         </div>
       )}
 
+      {/* Shared Confirmation Dialog */}
       <ConfirmDialog
         isOpen={confirmOpen}
         title={
-          confirmAction === 'LOCK' ? 'Khóa tài khoản' :
+          confirmAction === 'LOCK' ? 'Khóa tài khoản nghi gian lận' :
           confirmAction === 'UNLOCK' ? 'Mở khóa tài khoản' :
-          'Reset tài khoản'
+          confirmAction === 'RESET' ? 'Reset toàn bộ tài khoản' :
+          confirmAction === 'STOP_BOT' ? 'Dừng Grid Trading Bot' :
+          confirmAction === 'CANCEL_DCA' ? 'Hủy kế hoạch mua định kỳ' :
+          'Xác nhận thao tác'
         }
         consequenceText={
-          confirmAction === 'LOCK'
-            ? 'Người dùng sẽ bị đăng xuất khỏi mọi thiết bị và không thể đăng nhập lại cho đến khi được mở khóa.'
-            : confirmAction === 'UNLOCK'
-            ? 'Người dùng sẽ có thể đăng nhập lại.'
-            : 'Tất cả số dư, lệnh, bots sẽ bị xóa. Không thể hoàn tác.'
+          confirmAction === 'LOCK' ? 'Khóa = đăng xuất mọi thiết bị ngay; lệnh đang mở vẫn giữ; người dùng không đăng nhập lại được cho tới khi mở khóa.' :
+          confirmAction === 'UNLOCK' ? 'Người dùng sẽ có thể đăng nhập lại vào web sàn và tiếp tục giao dịch bình thường.' :
+          confirmAction === 'RESET' ? 'Hủy toàn bộ lệnh mở, đưa toàn bộ số dư về 0, xóa lịch sử faucet. Không thể hoàn tác!' :
+          confirmAction === 'STOP_BOT' ? 'Hủy toàn bộ lệnh đang mở của bot này. Thao tác sẽ được ghi vào nhật ký.' :
+          confirmAction === 'CANCEL_DCA' ? 'Hủy kế hoạch định kỳ này. Thao tác sẽ được ghi vào nhật ký.' :
+          'Hành động này sẽ được ghi nhận vào nhật ký quản trị của sàn.'
+        }
+        quickReasons={
+          confirmAction === 'LOCK' ? [
+            'Nhiều tài khoản cùng thiết bị',
+            'Nạp tiền bất thường',
+            'Nghi chiếm tài khoản',
+            'Yêu cầu hỗ trợ từ khách hàng',
+          ] : undefined
         }
         requirePhrase={confirmAction === 'RESET' ? 'RESET' : undefined}
-        onConfirm={handleConfirm}
+        onConfirm={handleConfirmAction}
         onCancel={() => setConfirmOpen(false)}
+        isSubmitting={isSubmitting}
       />
     </div>
-  );
-};
-
-// Inline form to avoid prop drilling through ConfirmDialog for adjust
-const AdjustReasonForm: React.FC<{
-  asset: string;
-  amount: string;
-  onConfirm: (reason: string) => void;
-  onCancel: () => void;
-}> = ({ onConfirm, onCancel }) => {
-  const [reason, setReason] = useState('');
-  const isValid = reason.trim().length >= 5;
-
-  return (
-    <>
-      <textarea
-        data-testid="confirm-reason"
-        className="w-full bg-[var(--bg,#000)] border border-[var(--line,#1d1e21)] rounded p-2 text-[var(--text,#f4f4f5)] resize-none h-20 outline-none focus:border-[var(--accent,#818cf8)]"
-        value={reason}
-        onChange={(e) => setReason(e.target.value)}
-        placeholder="Nhập lý do..."
-      />
-      <div className="flex justify-end gap-3 mt-2">
-        <button
-          onClick={onCancel}
-          className="px-3 py-1.5 rounded border border-[var(--line,#1d1e21)] text-sm text-[var(--text-2,#a1a1aa)] hover:bg-[var(--panel-2,#141416)]"
-        >
-          Hủy
-        </button>
-        <button
-          data-testid="confirm-submit"
-          onClick={() => isValid && onConfirm(reason)}
-          disabled={!isValid}
-          className="px-3 py-1.5 rounded bg-[var(--accent,#818cf8)] text-white text-sm disabled:opacity-40 hover:brightness-110"
-        >
-          Xác nhận
-        </button>
-      </div>
-    </>
   );
 };

@@ -8,9 +8,15 @@ import { AdminSidebar } from './components/AdminSidebar';
 import { OverviewPage } from './pages/OverviewPage';
 import { UsersPage } from './pages/UsersPage';
 import { UserDetailPage } from './pages/UserDetailPage';
+import { SymbolsPage } from './pages/SymbolsPage';
+import { FuturesSymbolsPage } from './pages/FuturesSymbolsPage';
+import { AssetsPage } from './pages/AssetsPage';
+import { AnnouncementsPage } from './pages/AnnouncementsPage';
+import { InvitesPage } from './pages/InvitesPage';
+import { SettingsPage } from './pages/SettingsPage';
 import { AuditLogsPage } from './pages/AuditLogsPage';
-
-const PlaceholderPage = ({ title }: { title: string }) => <div className="p-6"><h1 className="text-2xl font-bold">{title}</h1><p className="mt-4 text-text-2">Trang này đang được phát triển.</p></div>;
+import { ReconciliationPage } from './pages/ReconciliationPage';
+import { RolesPage } from './pages/RolesPage';
 
 const AppContent: React.FC = () => {
   // Vite sets base='/admin/', so pathname might be '/admin/' or '/admin/users'
@@ -40,21 +46,21 @@ const AppContent: React.FC = () => {
       const id = normalized.split('/')[3] ?? '';
       return <UserDetailPage userId={id} onNavigate={navigate} />;
     }
-    if (normalized === '/admin/symbols') return <PlaceholderPage title="Cặp giao dịch" />;
-    if (normalized === '/admin/futures') return <PlaceholderPage title="Hợp đồng Futures" />;
-    if (normalized === '/admin/assets') return <PlaceholderPage title="Thông tin coin" />;
-    if (normalized === '/admin/announcements') return <PlaceholderPage title="Thông báo" />;
-    if (normalized === '/admin/invites') return <PlaceholderPage title="Mã mời" />;
-    if (normalized === '/admin/settings') return <PlaceholderPage title="Cấu hình sàn" />;
+    if (normalized === '/admin/symbols') return <SymbolsPage />;
+    if (normalized === '/admin/futures') return <FuturesSymbolsPage />;
+    if (normalized === '/admin/assets') return <AssetsPage />;
+    if (normalized === '/admin/announcements') return <AnnouncementsPage />;
+    if (normalized === '/admin/invites') return <InvitesPage />;
+    if (normalized === '/admin/settings') return <SettingsPage />;
     if (normalized === '/admin/audit-logs') return <AuditLogsPage />;
-    if (normalized === '/admin/reconciliation') return <PlaceholderPage title="Đối soát" />;
-    if (normalized === '/admin/roles') return <PlaceholderPage title="Vai trò" />;
+    if (normalized === '/admin/reconciliation') return <ReconciliationPage />;
+    if (normalized === '/admin/roles') return <RolesPage />;
 
     return <OverviewPage />;
   };
 
   return (
-    <div className="flex flex-col h-screen bg-bg text-text font-sans overflow-hidden">
+    <div className="flex flex-col h-screen bg-[var(--bg,#000000)] text-[var(--text,#f4f4f5)] font-sans overflow-hidden">
       <AdminHeader />
       <div className="flex flex-1 overflow-hidden">
         <AdminSidebar currentPath={currentPath} onNavigate={navigate} />
