@@ -61,19 +61,32 @@ const startServer = () => {
     env: { ...process.env, DATABASE_URL: url, SHUTDOWN_ON_STDIN_END: '1' },
   });
   child.stdin?.on('error', () => {}); // the pipe breaks when the server dies; nothing to do here
-  child.on('error', (err) => console.error(`[host] server process error: ${err.message}`));
-  child.on('exit', (code, signal) => onServerExit(code, signal));
+  child.on('error', (err) => {
+    console.error(`[host] server process error: ${err.message}`);
+    // a process that never started emits no 'exit': treat it as an exit, or nothing would restart it
+    if (child.pid === undefined) onServerExit(child, null, null);
+  });
+  child.on('exit', (code, signal) => onServerExit(child, code, signal));
   api = child;
 };
 
-const onServerExit = (code: number | null, signal: NodeJS.Signals | null) => {
+/** Ctrl+C in the host window reaches the server too (same console): it may exit before our own handler runs. */
+const STOP_GRACE_MS = 1500;
+
+const onServerExit = (child: ChildProcess, code: number | null, signal: NodeJS.Signals | null) => {
+  if (api !== child) return; // already handled ('error' then 'exit')
   api = null;
   const exit = describeExit(code, signal);
   if (stopping) {
     console.log(`[host] server exited (${exit})`);
     return; // stop() is waiting for it
   }
-  const uptime = Date.now() - startedAt;
+  // decide a moment later: an exit caused by the operator's Ctrl+C is followed by stop() — no restart, no alert
+  setTimeout(() => (stopping ? console.log(`[host] server exited (${exit})`) : scheduleRestart(exit)), STOP_GRACE_MS);
+};
+
+const scheduleRestart = (exit: string) => {
+  const uptime = Date.now() - startedAt - STOP_GRACE_MS;
   const next = nextRestart(streak, uptime);
   streak = next.streak;
   restarts++;

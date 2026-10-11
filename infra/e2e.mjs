@@ -90,7 +90,12 @@ async function ready(s) {
   } catch {
     return false; // not up yet
   }
-  const config = await (await fetch(`http://localhost:${s.web}/api/v1/config`)).json();
+  let config;
+  try {
+    config = await (await fetch(`http://localhost:${s.web}/api/v1/config`)).json();
+  } catch {
+    return false; // went away between the two calls (or not JSON yet): ask again
+  }
   for (const [key, want] of Object.entries(s.config)) {
     if (config[key] !== want) throw new Error(`the ${s.mode} stack says ${key}=${JSON.stringify(config[key])} in /api/v1/config, expected ${JSON.stringify(want)}`);
   }
