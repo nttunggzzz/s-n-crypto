@@ -16,3 +16,6 @@ legacy/crypto_intelligence.db
 legacy/public/*.tar.gz
 .email-outbox.jsonl
 .e2e/
+
+# Claude Code agent worktrees (temporary checkouts)
+.claude/worktrees/

@@ -4,7 +4,8 @@
 //   ../crypto-host        code being served (main + the UI branch merged, built, tested)
 //   ../crypto-host-data   .env.host (settings + secrets, never in git), pgdata/ (database), backups/, logs/
 //
-//   npm run host -- update [ui-branch|--no-ui] [--skip-verify]   refresh the served code (server must be stopped)
+//   npm run host -- update [ui-branch|--no-ui] [--skip-verify] [--skip-e2e]   refresh the served code (server must be stopped);
+//                                           verify + browser tests (incl. the host-mode project: invite sign-up, no email check)
 //   npm run host -- start [--no-tunnel]     database + server on :8090 + public HTTPS link (Cloudflare quick tunnel)
 //   npm run host -- invite "<who>" [uses] [days]                 invite code + link (server running or not)
 //   npm run host -- set-role <email> <user|support|admin|owner>  e.g. make yourself owner
@@ -156,6 +157,8 @@ async function update() {
   if (await busy(PORT)) fail(`the server is running on :${PORT} — stop it (Ctrl+C in its window) before updating`);
   const noUi = args.includes('--no-ui');
   const skipVerify = args.includes('--skip-verify');
+  // browser tests need the web app; --skip-verify skips them too (a quick, unverified update)
+  const skipE2e = skipVerify || args.includes('--skip-e2e');
   const branch = args.find((a) => !a.startsWith('--')) ?? 'ui/gd2-exchange';
   const main = git(ROOT, 'rev-parse', '--short', 'main');
   rmSync(path.join(DATA, 'version.json'), { force: true }); // `start` refuses until this update has passed
@@ -201,10 +204,17 @@ async function update() {
   }
   // the server runs as a plain-Node bundle (server/dist/main.js), not through tsx's module-loading hooks (O1)
   if ((await run('npm', ['run', 'build', '-w', '@cex/server'], { cwd: WT })) !== 0) fail('build of the server failed');
+  // the browser tests, including the `host-mode` project that runs the app with this server's settings (invite-only
+  // sign-up, no email check): verify alone passed while nobody could sign up on the live exchange (C1)
+  const e2e = !existsSync(path.join(WT, 'apps/exchange/package.json')) ? 'no web app' : skipE2e ? 'skipped' : 'passed';
+  if (e2e === 'passed' && (await run('npm', ['run', 'e2e'], { cwd: WT })) !== 0) {
+    fail(`browser tests failed — not ready to serve (start refuses). Report: ${path.join(WT, '.e2e', 'report')} (npx playwright show-report .e2e/report in ${WT}).
+  To serve this code anyway (e.g. a fix that cannot wait for the failing part): npm run host -- update --skip-e2e`);
+  }
   mkdirSync(DATA, { recursive: true });
-  const version = { main, ui: ui ? `${branch}@${ui}` : null, verified: !skipVerify, at: new Date().toISOString() };
+  const version = { main, ui: ui ? `${branch}@${ui}` : null, verified: !skipVerify, e2e, at: new Date().toISOString() };
   writeFileSync(path.join(DATA, 'version.json'), JSON.stringify(version, null, 2));
-  say(`[host] ready: main @ ${main}${ui ? ` + ${branch} @ ${ui}` : ''}${skipVerify ? ' (NOT verified)' : ' (verified)'} — start with: npm run host -- start`);
+  say(`[host] ready: main @ ${main}${ui ? ` + ${branch} @ ${ui}` : ''}${skipVerify ? ' (NOT verified)' : ' (verified)'}, browser tests: ${e2e} — start with: npm run host -- start`);
 }
 
 async function start() {
@@ -323,6 +333,6 @@ switch (cmd) {
     await status();
     break;
   default:
-    say('usage: npm run host -- update [ui-branch|--no-ui] [--skip-verify] | start [--no-tunnel] | invite "<who>" [uses] [days] | set-role <email> <role> | stop | status');
+    say('usage: npm run host -- update [ui-branch|--no-ui] [--skip-verify] [--skip-e2e] | start [--no-tunnel] | invite "<who>" [uses] [days] | set-role <email> <role> | stop | status');
     process.exit(cmd ? 1 : 0);
 }
