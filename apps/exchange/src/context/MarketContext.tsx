@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useSyncExternalStore } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef, useSyncExternalStore } from 'react';
 import type { ExchangeInfo, SymbolInfo, Ticker, MarketStatus, ExchangeStatus, TradeBlock } from '@cex/contracts';
 import { createTickerStore, type TickerStore, type RealtimeClient, type RealtimeStatus, spotTradeBlock } from '@cex/contracts';
 import { getApiClient, getRealtimeClient } from '../services/api.ts';
@@ -32,7 +32,15 @@ export const MarketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const [symbols, setSymbols] = useState<SymbolInfo[]>([]);
   const [tickers, setTickers] = useState<Record<string, Ticker>>({});
   const [tickerStore, setTickerStore] = useState<TickerStore<Ticker> | null>(null);
-  const [activeSymbol, setActiveSymbolState] = useState<string>('BTCUSDT');
+  const [activeSymbol, setActiveSymbolState] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const match = window.location.pathname.match(/\/trade\/([A-Z0-9]+)/i);
+      if (match && match[1]) return match[1].toUpperCase();
+      const saved = localStorage.getItem('cex_active_symbol');
+      if (saved) return saved;
+    }
+    return 'BTCUSDT';
+  });
   const [connectionStatus, setConnectionStatus] = useState<RealtimeStatus>('connecting');
   const [marketStatus, setMarketStatus] = useState<MarketStatus | null>(null);
   const [exchangeStatus, setExchangeStatus] = useState<ExchangeStatus | null>(null);
@@ -90,10 +98,6 @@ export const MarketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   // Initial fetch
   useEffect(() => {
-    const savedSymbol = localStorage.getItem('cex_active_symbol');
-    if (savedSymbol) {
-      setActiveSymbolState(savedSymbol);
-    }
     refreshMarketData();
   }, [refreshMarketData]);
 
@@ -170,34 +174,57 @@ export const MarketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     [disabledSymbols, symbols]
   );
 
-  const activeSymbolInfo = symbols.find((s) => s.symbol === activeSymbol) || null;
+  const activeSymbolInfo = useMemo(() => symbols.find((s) => s.symbol === activeSymbol) || null, [symbols, activeSymbol]);
   const activeTicker = tickers[activeSymbol] || null;
-  const activeTradeBlock = spotTradeBlock(activeSymbol, exchangeStatus, activeTicker);
+  const activeTradeBlock = useMemo(() => spotTradeBlock(activeSymbol, exchangeStatus, activeTicker), [activeSymbol, exchangeStatus, activeTicker]);
+
+  const value = useMemo(
+    () => ({
+      exchangeInfo,
+      symbols,
+      tickers,
+      tickerStore,
+      activeSymbol,
+      activeSymbolInfo,
+      activeTicker,
+      connectionStatus,
+      marketStatus,
+      exchangeStatus,
+      tradingHalted,
+      disabledSymbols,
+      activeTradeBlock,
+      isLoading,
+      error,
+      setActiveSymbol,
+      refreshMarketData,
+      realtimeClient,
+      isSymbolDisabled,
+    }),
+    [
+      exchangeInfo,
+      symbols,
+      tickers,
+      tickerStore,
+      activeSymbol,
+      activeSymbolInfo,
+      activeTicker,
+      connectionStatus,
+      marketStatus,
+      exchangeStatus,
+      tradingHalted,
+      disabledSymbols,
+      activeTradeBlock,
+      isLoading,
+      error,
+      setActiveSymbol,
+      refreshMarketData,
+      realtimeClient,
+      isSymbolDisabled,
+    ]
+  );
 
   return (
-    <MarketContext.Provider
-      value={{
-        exchangeInfo,
-        symbols,
-        tickers,
-        tickerStore,
-        activeSymbol,
-        activeSymbolInfo,
-        activeTicker,
-        connectionStatus,
-        marketStatus,
-        exchangeStatus,
-        tradingHalted,
-        disabledSymbols,
-        activeTradeBlock,
-        isLoading,
-        error,
-        setActiveSymbol,
-        refreshMarketData,
-        realtimeClient,
-        isSymbolDisabled,
-      }}
-    >
+    <MarketContext.Provider value={value}>
       {children}
     </MarketContext.Provider>
   );

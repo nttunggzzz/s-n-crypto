@@ -63,25 +63,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     document.documentElement.setAttribute('data-color-reversed', upColor === 'RED' ? 'true' : 'false');
   };
 
-  const syncPreferences = async () => {
-    try {
-      const pref = await api.getPreferences();
-      applyThemeAndColor(pref.theme, pref.upColor);
-    } catch {
-      const savedTheme = localStorage.getItem('cex_theme') || 'dark';
-      const savedReversed = localStorage.getItem('cex_color_reversed') === 'true';
-      applyThemeAndColor(savedTheme, savedReversed ? 'RED' : 'GREEN');
+  const syncPreferences = async (isAuth = false) => {
+    if (isAuth) {
+      try {
+        const pref = await api.getPreferences();
+        applyThemeAndColor(pref.theme, pref.upColor);
+        return;
+      } catch {}
     }
+    const savedTheme = localStorage.getItem('cex_theme') || 'dark';
+    const savedReversed = localStorage.getItem('cex_color_reversed') === 'true';
+    applyThemeAndColor(savedTheme, savedReversed ? 'RED' : 'GREEN');
   };
 
   const refreshUser = async () => {
     try {
       const me = await api.me();
       setUser(me);
-      await syncPreferences();
+      await syncPreferences(true);
     } catch {
       setUser(null);
-      syncPreferences();
+      syncPreferences(false);
     } finally {
       setIsLoading(false);
     }
@@ -89,7 +91,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   useEffect(() => {
     refreshUser();
-    syncPreferences();
 
     let unsubError: (() => void) | undefined;
     let unsubClose: (() => void) | undefined;
