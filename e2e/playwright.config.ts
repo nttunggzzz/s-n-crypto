@@ -1,6 +1,9 @@
 import { defineConfig } from '@playwright/test';
 
-/** Run through `npm run e2e` (it builds the app and starts the isolated stack first). */
+/** Tests that need the host-mode stack (:5191 — invite-only sign-up, no email verification). */
+const HOST_MODE = /[\\/]host-mode[\\/]/;
+
+/** Run through `npm run e2e` (it builds the app and starts the two isolated stacks first). */
 export default defineConfig({
   testDir: './tests',
   outputDir: '../.e2e/results',
@@ -21,7 +24,10 @@ export default defineConfig({
     trace: 'retain-on-failure',
   },
   projects: [
-    { name: 'desktop', use: {} },
-    { name: 'mobile', use: { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true }, grep: /@mobile/ },
+    // the default stack (:5190): open sign-up, email verification required (development defaults)
+    { name: 'desktop', use: {}, testIgnore: HOST_MODE },
+    { name: 'mobile', use: { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true }, grep: /@mobile/, testIgnore: HOST_MODE },
+    // the stack configured like the owner's live server (`npm run host`): what real users get
+    { name: 'host-mode', testDir: './tests/host-mode', use: { baseURL: 'http://localhost:5191' } },
   ],
 });

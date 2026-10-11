@@ -33,32 +33,56 @@ const parse = (payload: string | Buffer): Record<string, unknown> | null => {
 };
 
 /**
+ * An API refusal a test provokes on purpose (e.g. signing up without an invite code): the browser's
+ * "Failed to load resource: … status of <status>" console error for that call is not a failure, as long as
+ * the server answered with exactly this error `code`. Set per test with `test.use({ expectedApiErrors: [...] })`
+ * inside a `test.describe`, so every other test keeps the full guard.
+ */
+export interface ExpectedApiError {
+  method: string;
+  path: string;
+  status: number;
+  code: string;
+}
+
+/**
  * Every test fails if the page logs an error, throws, if any API call returns 5xx or
  * VALIDATION_ERROR (= the UI sent something the contract does not allow), or if the realtime
- * server refuses a subscription (unknown channel, too many channels). 401 before signing in is fine.
+ * server refuses a subscription (unknown channel, too many channels). 401 before signing in is fine,
+ * and so are the refusals the test declared in `expectedApiErrors`.
  */
-export const test = base.extend<{ guard: void; realtime: RealtimeLog }>({
+export const test = base.extend<{ guard: void; realtime: RealtimeLog; expectedApiErrors: ExpectedApiError[] }>({
+  expectedApiErrors: [[], { option: true }],
   realtime: async ({ page }, use) => {
     const log: RealtimeLog = { subscribed: [], refused: [] };
     watchRealtime(page, log);
     await use(log);
   },
   guard: [
-    async ({ page }, use) => {
+    async ({ page, expectedApiErrors }, use) => {
       const problems: string[] = [];
       const rt: RealtimeLog = { subscribed: [], refused: [] };
       watchRealtime(page, rt);
+      // the console error of a failed request names the status; its location is the request URL
+      const expectedConsole = (text: string, url: string) => {
+        const status = Number(/status of (\d{3})/.exec(text)?.[1]);
+        if (!status) return false;
+        const pathname = URL.canParse(url) ? new URL(url).pathname : '';
+        return expectedApiErrors.some((e) => e.status === status && e.path === pathname);
+      };
       page.on('pageerror', (e) => problems.push(`page error: ${e.message}`));
       page.on('console', (m) => {
-        if (m.type() === 'error' && !/status of 401/.test(m.text())) problems.push(`console: ${m.text()}`);
+        if (m.type() === 'error' && !/status of 401/.test(m.text()) && !expectedConsole(m.text(), m.location().url)) problems.push(`console: ${m.text()}`);
       });
       page.on('response', async (r) => {
         const u = new URL(r.url());
         if (!u.pathname.startsWith('/api/')) return;
         if (r.status() >= 500) problems.push(`HTTP ${r.status()} ${r.request().method()} ${u.pathname}`);
-        if (r.status() === 400) {
+        const expected = expectedApiErrors.find((e) => e.status === r.status() && e.method === r.request().method() && e.path === u.pathname);
+        if (r.status() === 400 || expected) {
           const body = (await r.json().catch(() => null)) as { error?: { code?: string; message?: string } } | null;
           if (body?.error?.code === 'VALIDATION_ERROR') problems.push(`contract violation: ${r.request().method()} ${u.pathname}${u.search} → ${body.error.message}`);
+          else if (expected && body?.error?.code !== expected.code) problems.push(`HTTP ${r.status()} ${r.request().method()} ${u.pathname}: ${body?.error?.code ?? 'no error code'}, expected only ${expected.code}`);
         }
       });
       await use();
@@ -136,6 +160,29 @@ export function toStep(value: number, step: string): string {
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
+/** `stack.json` of an e2e stack (server/scripts/e2eStack.ts): default = :5190, host = host mode on :5191. */
+function stackInfo(stack: 'default' | 'host'): { databaseUrl: string; appUrl: string } {
+  return JSON.parse(readFileSync(path.join(ROOT, stack === 'host' ? '.e2e/host' : '.e2e', 'stack.json'), 'utf8')) as { databaseUrl: string; appUrl: string };
+}
+
+/**
+ * A fresh sign-up invite on the host-mode stack, made the way the operator does it (`npm run admin:invite`,
+ * i.e. scripts/createInvite.ts on that database). `link` is what the operator sends: `<app>/register?invite=<code>`.
+ */
+export function createInvite(note = 'Kiểm thử E2E', maxUses = 1): { code: string; link: string } {
+  const { databaseUrl, appUrl } = stackInfo('host');
+  const out = execFileSync(process.execPath, ['--import', 'tsx', 'scripts/createInvite.ts', note, String(maxUses), '1'], {
+    cwd: path.join(ROOT, 'server'),
+    env: { ...process.env, DATABASE_URL: databaseUrl, APP_URL: appUrl, NODE_ENV: 'development', REGISTRATION: 'invite', LOG_LEVEL: 'warn' },
+    encoding: 'utf8',
+    stdio: 'pipe',
+  });
+  const code = /^code: (\S+)$/m.exec(out)?.[1];
+  const link = /^link: (\S+)$/m.exec(out)?.[1];
+  if (!code || !link) throw new Error(`createInvite.ts printed no code/link:\n${out}`);
+  return { code, link };
+}
+
 /**
  * A fresh test account made staff (`support` | `admin` | `owner`) the way an operator does it: the
  * `admin:set-role` command on the e2e database, then 2FA turned on through the API (staff need it;
@@ -144,7 +191,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
  */
 export async function signUpStaff(page: Page, role: 'support' | 'admin' | 'owner' = 'admin') {
   const acc = await signUp(page);
-  const { databaseUrl } = JSON.parse(readFileSync(path.join(ROOT, '.e2e/stack.json'), 'utf8')) as { databaseUrl: string };
+  const { databaseUrl } = stackInfo('default');
   execFileSync(process.execPath, ['--import', 'tsx', 'scripts/setRole.ts', acc.email, role], {
     cwd: path.join(ROOT, 'server'),
     env: { ...process.env, DATABASE_URL: databaseUrl, NODE_ENV: 'development', LOG_LEVEL: 'warn' },

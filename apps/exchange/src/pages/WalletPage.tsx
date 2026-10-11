@@ -4,6 +4,7 @@ import { ApiError } from '@cex/contracts';
 import { getApiClient } from '../services/api.ts';
 import { getErrorMessage } from '../services/errors.ts';
 import { useAuth } from '../context/AuthContext.tsx';
+import { usePublicConfig } from '../context/ConfigContext.tsx';
 import { useMarket } from '../context/MarketContext.tsx';
 import {
   Card,
@@ -31,9 +32,13 @@ export interface WalletPageProps {
 
 export const WalletPage: React.FC<WalletPageProps> = ({ onNavigate }) => {
   const { isAuthenticated, user } = useAuth();
+  const { publicConfig } = usePublicConfig();
   const { realtimeClient } = useMarket();
   const { success, error: toastError } = useToast();
   const api = getApiClient();
+
+  const isEmailVerificationRequired = publicConfig?.emailVerificationRequired ?? false;
+  const isEmailUnverified = isEmailVerificationRequired && Boolean(user && !user.emailVerified);
 
   const [walletTab, setWalletTab] = useState<'spot' | 'futures'>('spot');
 
@@ -378,11 +383,11 @@ export const WalletPage: React.FC<WalletPageProps> = ({ onNavigate }) => {
                 variant="primary"
                 fullWidth
                 loading={faucetClaiming}
-                disabled={!faucetStatus?.canClaim || !!countdown || Boolean(user && !user.emailVerified)}
+                disabled={!faucetStatus?.canClaim || !!countdown || isEmailUnverified}
                 onClick={handleClaimFaucet}
                 className="py-2.5 font-bold"
               >
-                {user && !user.emailVerified
+                {isEmailUnverified
                   ? 'Xác minh email để nạp tiền'
                   : countdown
                   ? `Thời gian chờ: ${countdown}`

@@ -1,26 +1,27 @@
 // `npm run e2e`: browser tests of the real web app against the real server (synthetic prices).
 //   1. build apps/exchange and apps/admin (production builds, mocks off)
-//   2. start the isolated stack (server/scripts/e2eStack.ts: db :5436, server + web app on :5190)
-//   3. run Playwright (e2e/) — extra args go to Playwright, e.g. `npm run e2e -- --headed`
+//   2. start two isolated stacks (server/scripts/e2eStack.ts), each = PostgreSQL + server serving API, /ws and the apps:
+//        default  db :5436, web :5190 (.e2e/)       open sign-up + email verification (development defaults)
+//        host     db :5437, web :5191 (.e2e/host/)  the owner's live server config: invite-only, no email verification
+//   3. run Playwright (e2e/) — extra args go to Playwright, e.g. `npm run e2e -- --headed`, `-- --project=host-mode`
 // Locally the tests drive the installed Microsoft Edge (no browser download); CI installs Chromium.
+// When the owner's live exchange answers on :8090, the whole run goes below-normal priority (yieldToLiveExchange).
 import { existsSync, readdirSync } from 'node:fs';
-import net from 'node:net';
 import path from 'node:path';
-import { ROOT, run } from './workspaces.mjs';
+import { ROOT, portBusy as busy, run, yieldToLiveExchange } from './workspaces.mjs';
 
-const PORTS = { db: 5436, web: 5190 };
+/** Same ports and folders as E2E_MODES in server/scripts/e2eStack.ts; `config` = what GET /api/v1/config must say. */
+const STACKS = [
+  { mode: 'default', db: 5436, web: 5190, pgdata: path.join(ROOT, '.e2e/pgdata'), config: { registration: 'OPEN', emailVerificationRequired: true } },
+  { mode: 'host', db: 5437, web: 5191, pgdata: path.join(ROOT, '.e2e/host/pgdata'), config: { registration: 'INVITE_ONLY', emailVerificationRequired: false } },
+];
 
 if (!existsSync(path.join(ROOT, 'apps/exchange/package.json'))) {
   process.stdout.write('[e2e] apps/exchange does not exist yet (the UI branch is not merged) — nothing to test\n');
   process.exit(0);
 }
+await yieldToLiveExchange('e2e');
 
-const busy = (port) =>
-  new Promise((resolve) => {
-    const s = net.connect(port, '127.0.0.1');
-    s.once('connect', () => (s.destroy(), resolve(true)));
-    s.once('error', () => (s.destroy(), resolve(false)));
-  });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 /** pg_ctl of the embedded PostgreSQL package (stops a database left over by a crashed run). */
 function pgCtl() {
@@ -33,15 +34,20 @@ function pgCtl() {
   }
   return null;
 }
-const PGDATA = path.join(ROOT, '.e2e/pgdata');
-if ((await busy(PORTS.db)) && existsSync(PGDATA) && pgCtl()) {
-  process.stdout.write('[e2e] stopping a database left over by a previous run\n');
-  await run(`"${pgCtl()}"`, ['stop', '-D', `"${PGDATA}"`, '-m', 'fast']);
+const pgStop = (s) => run(`"${pgCtl()}"`, ['stop', '-D', `"${s.pgdata}"`, '-m', 'fast']);
+
+for (const s of STACKS) {
+  if ((await busy(s.db)) && existsSync(s.pgdata) && pgCtl()) {
+    process.stdout.write(`[e2e] stopping a database left over by a previous run (${s.mode}, :${s.db})\n`);
+    await pgStop(s);
+  }
 }
-for (const [name, port] of Object.entries(PORTS)) {
-  if (await busy(port)) {
-    process.stderr.write(`[e2e] port ${port} (${name}) is already in use — is another e2e run still going?\n`);
-    process.exit(1);
+for (const s of STACKS) {
+  for (const [name, port] of [['db', s.db], ['web', s.web]]) {
+    if (await busy(port)) {
+      process.stderr.write(`[e2e] port ${port} (${s.mode} ${name}) is already in use — is another e2e run still going?\n`);
+      process.exit(1);
+    }
   }
 }
 
@@ -52,39 +58,66 @@ if (existsSync(path.join(ROOT, 'apps/admin/package.json'))) {
   if ((await run('npm', ['run', 'build', '-w', '@cex/admin-web'])) !== 0) process.exit(1);
 } else process.stdout.write('[e2e] apps/admin does not exist yet — the admin tests fail until it does (PROMPT-08)\n');
 
-let stack;
-/** Asks the stack to stop (it shuts PostgreSQL down cleanly when its stdin closes), then makes sure. */
-async function stopStack() {
-  if (!stack) return;
-  stack.stdin?.end();
-  for (let i = 0; i < 30 && (await busy(PORTS.web) || (await busy(PORTS.db))); i++) await sleep(500);
-  if (process.platform === 'win32') await run('taskkill', ['/pid', String(stack.pid), '/T', '/F']);
-  else stack.kill('SIGTERM');
-  if ((await busy(PORTS.db)) && pgCtl()) await run(`"${pgCtl()}"`, ['stop', '-D', `"${PGDATA}"`, '-m', 'fast']);
+/** Asks every stack to stop (each shuts PostgreSQL down cleanly when its stdin closes), then makes sure. */
+async function stopStacks() {
+  const started = STACKS.filter((s) => s.child);
+  for (const s of started) s.child.stdin?.end();
+  for (const s of started) {
+    for (let i = 0; i < 30 && ((await busy(s.web)) || (await busy(s.db))); i++) await sleep(500);
+    if (process.platform === 'win32') await run('taskkill', ['/pid', String(s.child.pid), '/T', '/F']);
+    else s.child.kill('SIGTERM');
+    if ((await busy(s.db)) && pgCtl()) await pgStop(s);
+    s.child = undefined;
+  }
 }
-process.on('SIGINT', () => void stopStack().then(() => process.exit(130)));
+process.on('SIGINT', () => void stopStacks().then(() => process.exit(130)));
 
-process.stdout.write('━━ start the e2e stack\n');
-void run('npx', ['tsx', 'server/scripts/e2eStack.ts'], { prefix: '[stack] ', stdin: 'pipe', env: { E2E_STOP_ON_STDIN_END: '1' }, onSpawn: (c) => (stack = c) });
+process.stdout.write('━━ start the e2e stacks\n');
+for (const s of STACKS) {
+  void run('npx', ['tsx', 'server/scripts/e2eStack.ts'], {
+    prefix: s.mode === 'default' ? '[stack] ' : `[stack:${s.mode}] `,
+    stdin: 'pipe',
+    env: { E2E_STOP_ON_STDIN_END: '1', E2E_MODE: s.mode },
+    onSpawn: (c) => (s.child = c),
+  });
+}
 
-const t0 = Date.now();
-for (;;) {
+/** Up = every pair LIVE; then the stack must tell the apps the configuration it stands for. */
+async function ready(s) {
   try {
-    const res = await fetch(`http://localhost:${PORTS.web}/api/v1/market/status`);
-    if (res.ok && (await res.json()).symbols?.every((s) => s.status === 'LIVE')) break;
+    const res = await fetch(`http://localhost:${s.web}/api/v1/market/status`);
+    if (!res.ok || !(await res.json()).symbols?.every((x) => x.status === 'LIVE')) return false;
   } catch {
-    // not up yet
+    return false; // not up yet
   }
-  if (Date.now() - t0 > 120_000) {
-    process.stderr.write('[e2e] the stack did not become ready in 2 minutes\n');
-    await stopStack();
-    process.exit(1);
+  let config;
+  try {
+    config = await (await fetch(`http://localhost:${s.web}/api/v1/config`)).json();
+  } catch {
+    return false; // went away between the two calls (or not JSON yet): ask again
   }
-  await new Promise((r) => setTimeout(r, 1000));
+  for (const [key, want] of Object.entries(s.config)) {
+    if (config[key] !== want) throw new Error(`the ${s.mode} stack says ${key}=${JSON.stringify(config[key])} in /api/v1/config, expected ${JSON.stringify(want)}`);
+  }
+  return true;
+}
+const t0 = Date.now();
+const pending = new Set(STACKS);
+try {
+  while (pending.size) {
+    for (const s of [...pending]) if (await ready(s)) pending.delete(s);
+    if (!pending.size) break;
+    if (Date.now() - t0 > 120_000) throw new Error(`stack(s) not ready in 2 minutes: ${[...pending].map((s) => s.mode).join(', ')}`);
+    await sleep(1000);
+  }
+} catch (err) {
+  process.stderr.write(`[e2e] ${err.message}\n`);
+  await stopStacks();
+  process.exit(1);
 }
 
 process.stdout.write('━━ playwright\n');
 const code = await run('npx', ['playwright', 'test', '-c', 'e2e/playwright.config.ts', ...process.argv.slice(2)]);
-await stopStack();
+await stopStacks();
 process.stdout.write(code === 0 ? '✓ e2e passed\n' : `✗ e2e failed (exit ${code}) — report: npx playwright show-report .e2e/report\n`);
 process.exit(code);

@@ -5,7 +5,7 @@
 > Sửa xong một mục thì đổi **Trạng thái**, ghi commit + lệnh đã chạy + kết quả thật vào cột/ô của mục đó. **Không xóa mục.**
 > Chỉ sửa trong phạm vi của mình (Antigravity: `apps/*`, `packages/ui`; Claude Code: `server/`, `packages/contracts`, `packages/core`, `infra/`, `e2e/`).
 
-Rà soát: **2026-10-11** (Claude Code). Cập nhật lần cuối: 2026-10-11.
+Rà soát: **2026-10-11** (Claude Code). Cập nhật lần cuối: 2026-10-11 tối (C1, O1 xong).
 
 ## 0. Bức tranh tổng thể
 
@@ -25,11 +25,11 @@ Ba kết luận chính:
 | Mã | Mức | Phụ trách | Vấn đề | Trạng thái |
 |---|---|---|---|---|
 | **A1** | P0 chặn | Antigravity | Trang Đăng ký bỏ qua `?invite=` và không gửi `inviteCode`, nên không ai đăng ký được trên sàn thật | **Đã sửa** (Antigravity) |
-| **A2** | P0 chặn | Antigravity | Form đặt lệnh khóa người chưa xác minh email, kể cả khi server không yêu cầu (`emailVerificationRequired: false`, đúng cấu hình sàn đang chạy) | **Đã sửa** (Antigravity) |
+| **A2** | P0 chặn | Antigravity | Form đặt lệnh **và nút nạp tiền ảo** khóa người chưa xác minh email, kể cả khi server không yêu cầu (`emailVerificationRequired: false`, đúng cấu hình sàn đang chạy) | **Đã sửa** (Antigravity) |
 | **W1** | P0 tạm | Chủ dự án | Cách tạo tài khoản owner ngay, trong lúc chờ A1 | Dùng được |
-| **H1** | P0 | Chủ dự án | Sàn đang chạy bản UI cũ `d8391db` → cập nhật sau khi A1+A2 xong. **Sàn đang TẮT từ 20:40 (O1)** → cần `npm run host -- start` | Mở |
-| **C1** | P1 | Claude Code | e2e chạy cấu hình "đăng ký mở + bắt xác minh email" nên không bắt được A1/A2; `host update` chỉ chạy `verify`, không chạy e2e | Mở |
-| **O1** | **P0** | Claude Code | Sàn đang chạy crash 2 lần trong ngày 11/10 (mã `0xC0000409`, lần 2 lúc 20:40), không tự khởi động lại, không có log nguyên nhân | Mở |
+| **H1** | P0 | Chủ dự án | Sàn đang chạy bản UI cũ `d8391db`. **Sàn đang TẮT từ 20:40 (O1)**. `update` giờ chạy cả e2e: trước khi có A1+A2 thì dùng `update --skip-e2e` | Mở |
+| **C1** | P1 | Claude Code | e2e chạy cấu hình "đăng ký mở + bắt xác minh email" nên không bắt được A1/A2; `host update` chỉ chạy `verify`, không chạy e2e | **Đã sửa** (`4e6ae6d`, `0747e95`) |
+| **O1** | **P0** | Claude Code | Sàn đang chạy crash 2 lần trong ngày 11/10 (mã `0xC0000409`, lần 2 lúc 20:40), không tự khởi động lại, không có log nguyên nhân | **Đã phòng hộ** (tự khởi động lại; `e266f2d`, `660ca51`). Nguyên nhân gốc chưa rõ |
 | B0 | — | — | Đo đối chiếu dữ liệu nến server ↔ Binance: **khớp** | Không phải lỗi |
 | **B1** | — | Antigravity | Biểu đồ kéo dài / dựng trùng desktop+mobile | **Đã sửa** ở `7f929b6`, chưa lên sàn (H1) |
 | **B2** | P1 | Antigravity | Trục thời gian của biểu đồ là UTC, còn TradingView và người dùng dùng giờ Việt Nam (UTC+7) | **Đã sửa** (Antigravity) |
@@ -69,9 +69,9 @@ Ba kết luận chính:
 - **Trạng thái:** **Đã sửa** (Antigravity). Đã đọc `?invite=` từ URL vào form đăng ký, tích hợp `ConfigContext` gọi `api.publicConfig()`, hiển thị và bắt buộc ô mã mời khi `INVITE_ONLY`, ẩn khi `OPEN`, ngăn race condition submit khi config đang tải, gửi `inviteCode` trong `register()`, dịch mã lỗi `INVALID_INVITE` tiếng Việt chi tiết (`MISSING`, `UNKNOWN`, `EXPIRED`, `USED_UP`, `REVOKED`), xử lý lỗi mạng thân thiện, hỗ trợ Turnstile captcha (có khai báo kiểu Window.turnstile), chặn double-submit và giữ lại dữ liệu gõ khi lỗi. Đã bổ sung bộ unit test `errors.test.ts`.
 
 ### A2 — Form đặt lệnh khóa người chưa xác minh email dù server không yêu cầu
-- **Phụ trách:** Antigravity · **File:** `apps/exchange/src/components/trading/OrderForm.tsx:545-552`, `Header.tsx:222,314` (banner nhắc xác minh)
+- **Phụ trách:** Antigravity · **File:** `apps/exchange/src/components/trading/OrderForm.tsx:545-552`, **`apps/exchange/src/pages/WalletPage.tsx:381-389`** (nút nạp tiền ảo: "Xác minh email để nạp tiền"), `Header.tsx:222,314` (banner nhắc xác minh)
 - **Bằng chứng:** Sàn đang chạy có `REQUIRE_EMAIL_VERIFICATION=false` (`infra/host.mjs:56`) và `GET /api/v1/config` trả `emailVerificationRequired: false`. Email chưa gửi thật (`EMAIL_TRANSPORT=log`). Nhưng `OrderForm` dùng `isEmailUnverified = user && !user.emailVerified` để khóa nút ("Vui lòng xác minh email trước khi đặt lệnh"). Kết quả: trên sàn thật **không ai đặt lệnh được**, dù server sẽ nhận lệnh.
-- **Cách sửa:** Chỉ khóa khi `publicConfig().emailVerificationRequired === true && !user.emailVerified`. Banner/nhắc xác minh trong Header cũng chỉ hiện khi bắt buộc. Server vẫn là bên quyết định: nếu server trả `EMAIL_NOT_VERIFIED` thì hiện thông báo đó.
+- **Cách sửa:** Chỉ khóa (form đặt lệnh **và** nút nạp tiền ảo) khi `publicConfig().emailVerificationRequired === true && !user.emailVerified`. Banner/nhắc xác minh trong Header cũng chỉ hiện khi bắt buộc. Server vẫn là bên quyết định: nếu server trả `EMAIL_NOT_VERIFIED` thì hiện thông báo đó.
 - **Nghiệm thu:** Trên hệ `emailVerificationRequired: false`, tài khoản mới (chưa xác minh) nạp tiền ảo và mua Market được; trên hệ `true`, vẫn bị khóa như cũ (test `spot.spec` hiện tại).
 - **Trạng thái:** **Đã sửa** (Antigravity). `OrderForm` chỉ khóa đặt lệnh khi `publicConfig?.emailVerificationRequired === true && !user.emailVerified`. `Header` chỉ hiển thị banner nhắc xác minh và badge cảnh báo khi cấu hình server bắt buộc. Đã build production đạt.
 
@@ -107,6 +107,10 @@ Ba kết luận chính:
      ```bash
      npm run host -- update
      ```
+     Từ `0747e95`, `update` chạy cả test trình duyệt, gồm nhóm `host-mode`. Khi A1/A2 chưa sửa, nhóm này đỏ: `update` dừng và **`start` từ chối chạy**, kể cả bản cũ. Muốn đưa bản sửa biểu đồ lên ngay (chấp nhận A1/A2 vẫn còn) thì chạy:
+     ```bash
+     npm run host -- update --skip-e2e
+     ```
   3. Khởi động lại:
      ```bash
      npm run host -- start
@@ -128,6 +132,21 @@ Ba kết luận chính:
   2. Viết test "mở link mời → đăng ký → nạp → mua Market" và "đăng ký không có mã → lỗi tiếng Việt". Tạo mã mời qua `scripts/createInvite.ts` với `DATABASE_URL` của hệ e2e.
   3. `host update`: chạy cả e2e (hoặc ít nhất dự án `host-mode`) trước khi ghi `version.json`; thêm cờ `--skip-e2e` cho trường hợp gấp.
 - **Nghiệm thu:** Trên `7f929b6` (chưa có A1/A2), dự án `host-mode` **phải đỏ**; sau khi Antigravity sửa thì xanh.
+- **Trạng thái: ĐÃ SỬA** (2026-10-11, `1315a83` → `4e6ae6d`, `0747e95`, `660ca51`):
+  - `npm run e2e` dựng 2 hệ:
+    - hệ thường: DB :5436, web :5190;
+    - hệ `host-mode`: DB :5437, web :5191, `.e2e/host/`, `REGISTRATION=invite`, `REQUIRE_EMAIL_VERIFICATION=false`.
+  - Trước khi chạy test, kiểm tra `/api/v1/config` của từng hệ có đúng cấu hình không.
+  - Fixture `createInvite()`; tùy chọn `expectedApiErrors` cho lỗi 4xx cố ý.
+  - 3 test trong `e2e/tests/host-mode/invite-signup.spec.ts`.
+  - `ui-check` có thêm `--base <ref>`, `--no-verify`, `--keep`. Khi e2e đỏ, báo cáo được chép ra `.e2e/ui-check/`.
+  - Khi sàn thật đang chạy (:8090), `ui-check`/`e2e` tự hạ độ ưu tiên CPU.
+  - `npm run host -- update` chạy cả e2e; thêm cờ `--skip-e2e`. `version.json` ghi `"e2e"`.
+  - **Kết quả thật** (`npm run ui-check -- --no-verify --e2e`, UI `48c9083` + main `55aae15`): **27 đạt, 3 đỏ (host-mode)**, đúng lý do:
+    - "đăng ký phải gửi mã mời lấy từ link (?invite=)", Expected mã, Received `""` (A1);
+    - nút nạp tiền "Xác minh email để nạp tiền (bị khóa)" và form "Vui lòng xác minh email trước khi đặt lệnh (bị khóa)" (A2);
+    - "sau khi bấm Đăng ký phải hiện thông báo nói rõ cần mã mời", Received 0 (A1 bước 4).
+  - `npm run verify` trên main: đạt, 213/213 test.
 
 ### O1 — Sàn đang chạy bị crash, không tự khởi động lại, không rõ nguyên nhân
 - **Phụ trách:** Claude Code · **File:** `server/scripts/hostStack.ts`, `infra/host.mjs`
@@ -147,6 +166,25 @@ Ba kết luận chính:
   4. Bản phục vụ người dùng không chạy qua tsx: build server ra JavaScript (esbuild/tsc) trong `host update` (và Dockerfile) rồi chạy `node dist/main.js`, bỏ hook nạp module lúc chạy thật.
   5. Trong lúc sàn đang phục vụ, không chạy `ui-check --e2e` / `verify` nặng trên cùng máy (hoặc hạ độ ưu tiên các tiến trình test).
 - **Nghiệm thu:** Giết tiến trình server bằng `taskkill /F` → sàn tự lên lại trong ≤ 30s, có tin Telegram; có file report khi gặp lỗi fatal.
+- **Trạng thái: ĐÃ PHÒNG HỘ, nguyên nhân gốc CHƯA RÕ** (2026-10-11, `89fd42b`/`e266f2d`, sửa sau review `660ca51`):
+  - `hostStack.ts` thành supervisor:
+    - server chết thì PostgreSQL vẫn chạy, server tự lên lại sau 5s → 30s → 2 phút; chạy ổn 10 phút thì đếm lại từ đầu (`src/ops/restartPolicy.ts` + test);
+    - gửi cảnh báo Telegram mức critical;
+    - log ghi giờ crash, thời gian đã chạy và mã thoát dạng hex;
+    - chờ 1,5s trước khi coi là crash, để Ctrl+C của chủ dự án không bị tính là crash;
+    - nếu tiến trình không tạo được thì cũng khởi động lại.
+  - Node chạy với `--report-on-fatalerror --report-directory=<crypto-host-data>/logs`.
+  - Server ghi bộ nhớ vào log mỗi 10 phút (`src/ops/memoryLog.ts`).
+  - Sàn chạy bằng **bản build** `server/dist/main.js` (`npm run build -w @cex/server`, esbuild, `scripts/build.ts`), không qua tsx. `update` build nó.
+  - `MIGRATIONS_DIR` tìm được từ cả mã nguồn lẫn bản build.
+  - **Kết quả thật** (hệ thử PG :5439, server :8091, bản build):
+    - `taskkill /F` server → "[host] server exited (1) — restarting in 5s (#1)" → trả lời lại sau **8,4s**, PostgreSQL chạy suốt;
+    - đóng stdin → "[host] server exited (0)", "[host] PostgreSQL stopped", không khởi động lại, cổng đóng.
+    - Ép hết bộ nhớ trên một tiến trình thử → có file `report.*.json`.
+  - **Còn lại:**
+    - Crash `0xC0000409` không để lại dòng lỗi nào, nên có thể là `abort` trong mã native (libuv/CRT). Loại này `--report-on-fatalerror` **không** bắt được.
+    - Muốn bắt cần bật Windows crash dump cho `node.exe` (registry `LocalDumps`). Đây là cài đặt hệ thống, **chủ dự án tự quyết**.
+    - Dockerfile (Railway) vẫn chạy tsx, chưa dùng bản build vì máy này không có docker để kiểm tra.
 
 ---
 

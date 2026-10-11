@@ -34,12 +34,17 @@ server/
                         faucet, reconciliation, pnlService (phân tích lãi lỗ), routes
   src/realtime       WebSocket /ws
   src/ops            singleInstance (khóa 1 bản + máy chủ chờ khi deploy), alerts (Telegram: giá gián đoạn, đối soát lệch, crash)
+                     restartPolicy (supervisor của sàn tự host tự khởi động lại server), memoryLog (bộ nhớ vào log mỗi 10 phút)
+  scripts/hostStack.ts sàn tự host (`npm run host`): PostgreSQL + supervisor chạy server (bản build dist/main.js nếu có)
+  scripts/build.ts   `npm run build -w @cex/server`: esbuild → server/dist/main.js (@cex/* vào bundle, thư viện npm để ngoài)
   src/lib/webApp.ts  phục vụ bản build app sàn ở / (WEB_DIST) và app admin ở /admin/ (ADMIN_WEB_DIST) cùng địa chỉ với API —
                      một lần đăng nhập cho cả hai; link giữa hai app: `appLinks` trong contracts (apps.ts)
   test/              globalSetup (PostgreSQL nhúng :5434), helpers
-  scripts/e2eStack.ts hệ chạy cho test trình duyệt (server phục vụ bản build production của app qua WEB_DIST, như khi deploy)
+  scripts/e2eStack.ts hệ chạy cho test trình duyệt (server phục vụ bản build production của app qua WEB_DIST, như khi deploy);
+                     E2E_MODE=default (đăng ký mở + bắt xác minh email) | host (cấu hình như sàn thật: chỉ mã mời, không bắt xác minh)
 e2e/                 Playwright: fixtures (chặn lỗi console / 5xx / VALIDATION_ERROR / kênh realtime bị từ chối),
-                     tests/*.spec.ts (luồng chính + test nghiệm thu REVIEW-xx cho giao diện)
+                     tests/*.spec.ts (luồng chính + test nghiệm thu REVIEW-xx cho giao diện),
+                     tests/host-mode/*.spec.ts (dự án `host-mode` trên hệ :5191: đăng ký bằng link mời, không xác minh email)
 legacy/              code AI Studio cũ
 ```
 
@@ -58,12 +63,16 @@ npm run dev -- --sim  # như trên nhưng giá GIẢ LẬP (không cần Binance
 npm run verify        # cổng gộp main: typecheck mọi workspace (cả UI) + lint + test + build app + báo cáo API app chưa dùng
 npm run lint          # ESLint: backend/contracts/core/infra/e2e lỗi là chặn; apps/*, packages/ui chỉ cảnh báo
 npm run ui-coverage   # endpoint nào backend có mà app chưa gọi (--strict: thiếu là lỗi)
-npm run ui-check -- [nhánh] [--e2e]   # nhánh UI (mặc định ui/gd2-exchange) gộp main trong worktree tạm → verify (+ e2e)
+npm run ui-check -- [nhánh] [--base <ref>] [--e2e] [--no-verify] [--keep]
+                      # nhánh UI (mặc định ui/gd2-exchange) gộp <ref> (mặc định main) trong worktree tạm → verify (+ e2e);
+                      #   --no-verify: bỏ verify (chỉ chạy e2e nếu có --e2e); e2e đỏ → báo cáo chép ra .e2e/ui-check/
 npm run host -- update | start | invite "<tên>" | set-role <email> owner | status
                       # chạy sàn cho người dùng thật trên máy này (trước Railway): bản riêng ../crypto-host, dữ liệu
                       #   ../crypto-host-data, :8090 + link https trycloudflare — docs/deploy/may-ca-nhan.md
-npm run e2e           # test trình duyệt (Playwright, Edge cài sẵn): build apps/exchange, dựng hệ riêng
-                      #   DB :5436 + server :5190 phục vụ cả API, /ws và bản build app (giá giả lập, email ra .e2e/outbox.jsonl)
+npm run e2e           # test trình duyệt (Playwright, Edge cài sẵn): build apps/exchange, dựng 2 hệ riêng, mỗi hệ phục vụ
+                      #   cả API, /ws và bản build app (giá giả lập): DB :5436 + server :5190 (email ra .e2e/outbox.jsonl) và
+                      #   hệ host-mode DB :5437 + server :5191 (.e2e/host/; như sàn thật: REGISTRATION=invite,
+                      #   REQUIRE_EMAIL_VERIFICATION=false). Sàn thật đang chạy (:8090) → e2e/ui-check tự hạ độ ưu tiên CPU
 ```
 Quy tắc tích hợp backend ↔ hợp đồng ↔ UI: [docs/parts/README.md](docs/parts/README.md#quy-tắc-tích-hợp--để-backend-hợp-đồng-và-giao-diện-luôn-khớp-nhau)
 
