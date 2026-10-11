@@ -12,12 +12,12 @@ export interface EmailSender {
   send(msg: EmailMessage): Promise<void>;
 }
 
-/** Development: prints the email (with its link) to the server log. Refused in production by config. */
+/** Prints the email (with its link) to the server log: development, or a closed production server before a mail domain exists (config). */
 export class LogEmailSender implements EmailSender {
   readonly sent: EmailMessage[] = [];
   async send(msg: EmailMessage): Promise<void> {
     this.sent.push(msg);
-    logger.info({ to: msg.to, subject: msg.subject }, `EMAIL (dev log transport)\n${msg.text}`);
+    logger.info({ to: msg.to, subject: msg.subject }, `EMAIL (log transport — not sent)\n${msg.text}`);
   }
 }
 

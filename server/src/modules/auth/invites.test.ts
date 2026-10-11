@@ -99,4 +99,11 @@ describe('registration mode defaults', () => {
     expect(loadConfig({ NODE_ENV: 'development' }).REGISTRATION).toBe('open');
     expect(() => loadConfig({ TURNSTILE_SECRET: 'secret-only' })).toThrow(/go together/);
   });
+
+  it('production without a mail domain: emails to the log only on a closed (invite-only) server', () => {
+    const prod = { NODE_ENV: 'production', DATA_ENCRYPTION_KEY: Buffer.alloc(32, 1).toString('base64') };
+    expect(loadConfig({ ...prod, EMAIL_TRANSPORT: 'log' }).EMAIL_TRANSPORT).toBe('log');
+    expect(() => loadConfig({ ...prod, EMAIL_TRANSPORT: 'log', REGISTRATION: 'open' })).toThrow(/not allowed in production/);
+    expect(() => loadConfig({ ...prod, EMAIL_TRANSPORT: 'file' })).toThrow(/not allowed in production/);
+  });
 });

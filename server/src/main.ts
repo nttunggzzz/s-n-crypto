@@ -150,7 +150,7 @@ exchange.portfolio.startHourly();
 
 server.listen(config.PORT, () => {
   logger.info({ port: config.PORT, feed: config.MARKET_FEED }, 'server listening');
-  void alerter.send('start', 'info', `Server đã chạy — phiên bản ${version}, giá ${config.MARKET_FEED}, đăng ký ${config.REGISTRATION}.`, true);
+  void alerter.send('start', 'info', `Server đã chạy — phiên bản ${version}, giá ${config.MARKET_FEED}, đăng ký ${config.REGISTRATION}.\nĐịa chỉ: ${config.APP_URL}`, true);
 });
 
 async function shutdown(signal: string) {
@@ -171,3 +171,8 @@ async function shutdown(signal: string) {
 }
 process.on('SIGINT', () => void shutdown('SIGINT'));
 process.on('SIGTERM', () => void shutdown('SIGTERM'));
+// a supervisor that cannot send signals (Windows: npm run host) asks for a clean stop by closing stdin
+if (process.env.SHUTDOWN_ON_STDIN_END === '1') {
+  process.stdin.on('end', () => void shutdown('stdin closed'));
+  process.stdin.resume();
+}

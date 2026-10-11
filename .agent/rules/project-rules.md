@@ -3,6 +3,7 @@
 Bạn phụ trách **giao diện** của dự án sàn giao dịch ảo + web tín hiệu. Backend, dữ liệu, bảo mật và logic sàn do Claude Code phụ trách.
 
 ## Đọc trước khi làm
+- **`docs/LOI-HIEN-TAI.md` — danh sách lỗi đang mở (mục của Antigravity ghi "Phụ trách: Antigravity"). Sửa xong thì cập nhật Trạng thái + commit + lệnh đã chạy ngay trong file đó.**
 - `ROADMAP.md` — giai đoạn hiện tại và mục tiêu.
 - `docs/parts/README.md` — cách chia phần, quy trình phối hợp, quy tắc Git.
 - `packages/contracts/README.md` — cách gọi API, realtime, bật mock (MSW), 6 kịch bản trạng thái, quy tắc hiển thị số.
