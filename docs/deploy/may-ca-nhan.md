@@ -55,6 +55,12 @@ Nhờ tách thư mục, hai bên code tiếp mà người dùng không bị ản
 ## Cần biết
 - **Địa chỉ đổi mỗi lần khởi động** (link miễn phí không cố định). Người dùng cần link mới và đăng nhập lại. Có tên miền thì chuyển sang tunnel cố định.
 - **Máy tắt, ngủ hoặc mất mạng là sàn dừng.** Lệnh chờ không khớp được, mua định kỳ bỏ lỡ kỳ đó. Nên tắt chế độ ngủ khi đang chạy.
+- **Server tự khởi động lại khi bị crash** (database vẫn chạy): chờ 5 giây, rồi 30 giây, rồi 2 phút nếu vẫn chết liên tục;
+  chạy ổn 10 phút thì đếm lại từ đầu. Mỗi lần crash có dòng `[host] server exited (…) — restarting in …` trong log và
+  tin Telegram (nếu đã cài). Lỗi fatal của Node để lại file báo cáo `report.*.json` trong `crypto-host-data\logs\`.
+  Ctrl+C / `npm run host -- stop` vẫn tắt hẳn, không khởi động lại.
+- **Server chạy bằng bản build** `crypto-host\server\dist\main.js` (`update` build nó); không có bản build thì chạy thẳng mã nguồn qua tsx.
+- **Bộ nhớ** của server được ghi vào log mỗi 10 phút (dòng `"msg":"memory"`, `rssMb`, `heapUsedMb`).
 - **Email chưa gửi thật** (chưa có tên miền):
   - người dùng không cần xác minh email;
   - email "quên mật khẩu" nằm trong `crypto-host-data\logs\`: tìm dòng `EMAIL (log transport`, lấy link gửi cho người đó.

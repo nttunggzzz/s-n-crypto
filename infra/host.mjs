@@ -199,6 +199,8 @@ async function update() {
   } else if ((await run('npm', ['run', 'verify'], { cwd: WT })) !== 0) {
     fail('verify failed — not ready to serve (start refuses); fix the problem and run update again');
   }
+  // the server runs as a plain-Node bundle (server/dist/main.js), not through tsx's module-loading hooks (O1)
+  if ((await run('npm', ['run', 'build', '-w', '@cex/server'], { cwd: WT })) !== 0) fail('build of the server failed');
   mkdirSync(DATA, { recursive: true });
   const version = { main, ui: ui ? `${branch}@${ui}` : null, verified: !skipVerify, at: new Date().toISOString() };
   writeFileSync(path.join(DATA, 'version.json'), JSON.stringify(version, null, 2));

@@ -20,14 +20,12 @@ import { syncFuturesFromBinance } from './modules/futures/config.ts';
 import { createBots } from './modules/bots/index.ts';
 import { seedSimRules, SimFeed, simSpecs } from './modules/market/sim/feed.ts';
 import { acquireInstanceLock, startStandbyServer } from './ops/singleInstance.ts';
-import { Alerter, FeedWatcher, telegramSink } from './ops/alerts.ts';
+import { createAlerter, FeedWatcher } from './ops/alerts.ts';
+import { startMemoryLog } from './ops/memoryLog.ts';
 
 const config = loadConfig();
 const version = process.env.RAILWAY_GIT_COMMIT_SHA?.slice(0, 7) ?? 'dev';
-const alerter = new Alerter(
-  config.TELEGRAM_BOT_TOKEN ? telegramSink(config.TELEGRAM_BOT_TOKEN, config.TELEGRAM_CHAT_ID) : null,
-  config.ALERT_ENV_NAME || process.env.RAILWAY_ENVIRONMENT_NAME || config.NODE_ENV,
-);
+const alerter = createAlerter(config);
 // a crash restarts the container (Railway restart policy); the operator hears about it
 const crash = (what: string) => (err: unknown) => {
   logger.fatal({ err }, what);
@@ -147,6 +145,8 @@ const feedTimer = setInterval(() => void Promise.all(feedWatchers.map((w) => w.c
 feedTimer.unref();
 // Hourly account-value snapshots for the portfolio chart.
 exchange.portfolio.startHourly();
+// Process memory in the log every 10 minutes (a leak shows up before it kills the process).
+const stopMemoryLog = startMemoryLog();
 
 server.listen(config.PORT, () => {
   logger.info({ port: config.PORT, feed: config.MARKET_FEED }, 'server listening');
@@ -163,6 +163,7 @@ async function shutdown(signal: string) {
   bots.stop();
   exchange.matcher.stop();
   exchange.portfolio.stop();
+  stopMemoryLog();
   hub.close();
   server.close();
   await database.close();
