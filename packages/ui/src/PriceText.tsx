@@ -56,7 +56,7 @@ export const PriceText: React.FC<PriceTextProps> = ({
 
   return (
     <span
-      className={`tabular-nums font-mono transition-colors duration-150 inline-block px-1 rounded-[2px] ${textColor} ${flashClass} ${className}`}
+      className={`tabular-nums font-mono transition-colors duration-300 inline-block px-1 rounded-[2px] ${textColor} ${flashClass} ${className}`}
     >
       {formatted}
     </span>

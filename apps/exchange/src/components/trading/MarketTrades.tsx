@@ -23,7 +23,17 @@ export const MarketTrades: React.FC<MarketTradesProps> = ({ symbol, marketType =
         const res = marketType === 'futures'
           ? await api.futuresMarketTrades({ params: { symbol }, query: { limit: 25 } })
           : await api.marketTrades({ params: { symbol }, query: { limit: 25 } });
-        if (active) setTrades(res.items);
+        if (active) {
+          const seen = new Set<number | string>();
+          const deduped: MarketTrade[] = [];
+          for (const item of res.items) {
+            if (!seen.has(item.id)) {
+              seen.add(item.id);
+              deduped.push(item);
+            }
+          }
+          setTrades(deduped);
+        }
       } catch {
         if (active) setTrades([]);
       } finally {
@@ -42,7 +52,11 @@ export const MarketTrades: React.FC<MarketTradesProps> = ({ symbol, marketType =
     const channel = marketType === 'futures' ? `futures:trades:${symbol}` : `trades:${symbol}`;
     const unsub = realtimeClient.subscribe(channel, (data: unknown) => {
       const newTrade = data as MarketTrade;
-      setTrades((prev) => [newTrade, ...prev.slice(0, 24)]);
+      if (!newTrade || !newTrade.id) return;
+      setTrades((prev) => {
+        if (prev.some((t) => t.id === newTrade.id)) return prev;
+        return [newTrade, ...prev.slice(0, 24)];
+      });
     });
     return () => unsub();
   }, [realtimeClient, symbol, marketType]);
@@ -83,7 +97,7 @@ export const MarketTrades: React.FC<MarketTradesProps> = ({ symbol, marketType =
             return (
               <div
                 key={tr.id}
-                className="grid grid-cols-3 px-3 py-0.5 text-[11px] hover:bg-[var(--color-bg-elevated,#1b1e27)]/50 transition-colors"
+                className="grid grid-cols-3 px-3 py-0.5 text-[11px] hover:bg-[var(--color-bg-elevated,#1b1e27)]/50 transition-all duration-150 animate-[fadeIn_150ms_ease-out]"
               >
                 <span className={colorClass}>
                   {formatDecimal(tr.price, { decimals: activeSymbolInfo?.pricePrecision })}

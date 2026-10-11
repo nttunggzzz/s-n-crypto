@@ -35,4 +35,13 @@ export default defineConfig({
       },
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'lightweight-charts': ['lightweight-charts'],
+        },
+      },
+    },
+  },
 });

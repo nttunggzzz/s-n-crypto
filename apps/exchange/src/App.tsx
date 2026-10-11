@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense, lazy } from 'react';
 import { AuthProvider } from './context/AuthContext.tsx';
 import { MarketProvider, useMarket } from './context/MarketContext.tsx';
 import { Header } from './components/Header.tsx';
@@ -7,23 +7,21 @@ import { DevToolbar } from './components/DevToolbar.tsx';
 import { CommandPalette } from './components/CommandPalette.tsx';
 import { ToastProvider, SimulatedBanner } from '@cex/ui';
 
-// Pages
-import { MarketsPage } from './pages/MarketsPage.tsx';
-import { TradePage } from './pages/TradePage.tsx';
-import { FuturesPage } from './pages/FuturesPage.tsx';
-import { WalletPage } from './pages/WalletPage.tsx';
-import { PortfolioPage } from './pages/PortfolioPage.tsx';
-import { SettingsPage } from './pages/SettingsPage.tsx';
-import { BotsPage } from './pages/BotsPage.tsx';
-import { PnlAnalysisPage } from './pages/PnlAnalysisPage.tsx';
-import {
-  LoginPage,
-  RegisterPage,
-  ForgotPasswordPage,
-  ResetPasswordPage,
-  VerifyEmailPage,
-} from './pages/AuthPages.tsx';
-import { UiShowcasePage } from './pages/UiShowcasePage.tsx';
+// Lazy-loaded Pages for route code-splitting
+const MarketsPage = lazy(() => import('./pages/MarketsPage.tsx').then((m) => ({ default: m.MarketsPage })));
+const TradePage = lazy(() => import('./pages/TradePage.tsx').then((m) => ({ default: m.TradePage })));
+const FuturesPage = lazy(() => import('./pages/FuturesPage.tsx').then((m) => ({ default: m.FuturesPage })));
+const WalletPage = lazy(() => import('./pages/WalletPage.tsx').then((m) => ({ default: m.WalletPage })));
+const PortfolioPage = lazy(() => import('./pages/PortfolioPage.tsx').then((m) => ({ default: m.PortfolioPage })));
+const SettingsPage = lazy(() => import('./pages/SettingsPage.tsx').then((m) => ({ default: m.SettingsPage })));
+const BotsPage = lazy(() => import('./pages/BotsPage.tsx').then((m) => ({ default: m.BotsPage })));
+const PnlAnalysisPage = lazy(() => import('./pages/PnlAnalysisPage.tsx').then((m) => ({ default: m.PnlAnalysisPage })));
+const LoginPage = lazy(() => import('./pages/AuthPages.tsx').then((m) => ({ default: m.LoginPage })));
+const RegisterPage = lazy(() => import('./pages/AuthPages.tsx').then((m) => ({ default: m.RegisterPage })));
+const ForgotPasswordPage = lazy(() => import('./pages/AuthPages.tsx').then((m) => ({ default: m.ForgotPasswordPage })));
+const ResetPasswordPage = lazy(() => import('./pages/AuthPages.tsx').then((m) => ({ default: m.ResetPasswordPage })));
+const VerifyEmailPage = lazy(() => import('./pages/AuthPages.tsx').then((m) => ({ default: m.VerifyEmailPage })));
+const UiShowcasePage = lazy(() => import('./pages/UiShowcasePage.tsx').then((m) => ({ default: m.UiShowcasePage })));
 
 const AppContent: React.FC = () => {
   const [currentPath, setCurrentPath] = useState<string>(window.location.pathname || '/markets');
@@ -111,7 +109,17 @@ const AppContent: React.FC = () => {
       <CommandPalette onNavigate={navigate} />
 
       {/* Page Content */}
-      <main className="flex-1 w-full flex flex-col">{renderPage()}</main>
+      <main className="flex-1 w-full flex flex-col">
+        <Suspense
+          fallback={
+            <div className="flex-1 flex items-center justify-center p-12">
+              <div className="w-8 h-8 border-2 border-[var(--accent,#818cf8)] border-t-transparent rounded-full animate-spin" />
+            </div>
+          }
+        >
+          {renderPage()}
+        </Suspense>
+      </main>
 
       {/* Mobile Bottom Navigation Bar */}
       <BottomNav currentPath={currentPath} onNavigate={navigate} />
