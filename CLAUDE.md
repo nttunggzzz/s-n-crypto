@@ -2,6 +2,8 @@
 
 Kế hoạch: [ROADMAP.md](ROADMAP.md) · Phân phần & quy trình: [docs/parts/README.md](docs/parts/README.md) · Báo cáo tiến độ: [docs/reports/](docs/reports/)
 
+**Lỗi đang mở (đọc trước khi sửa lỗi, cập nhật trạng thái khi sửa xong):** [docs/LOI-HIEN-TAI.md](docs/LOI-HIEN-TAI.md)
+
 Code cũ từ Google AI Studio nằm trong `legacy/` — chỉ tham khảo, có lỗi đã biết (DB hỏng, backtest bịa số). Không import từ đó.
 
 ## Phân công
