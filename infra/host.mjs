@@ -8,6 +8,7 @@
 //   npm run host -- start [--no-tunnel]     database + server on :8090 + public HTTPS link (Cloudflare quick tunnel)
 //   npm run host -- invite "<who>" [uses] [days]                 invite code + link (server running or not)
 //   npm run host -- set-role <email> <user|support|admin|owner>  e.g. make yourself owner
+//   npm run host -- stop                    clean stop from another window (same as Ctrl+C in the host window)
 //   npm run host -- status
 //
 // The quick tunnel gives a NEW https://….trycloudflare.com address at every start (no domain needed); the
@@ -254,7 +255,18 @@ async function start() {
   };
   process.on('SIGINT', stop);
   process.on('SIGTERM', stop);
+  // `npm run host -- stop` from another window asks for a clean stop through this file
+  const stopFile = path.join(DATA, 'stop-request');
+  rmSync(stopFile, { force: true });
+  const stopWatch = setInterval(() => {
+    if (existsSync(stopFile)) {
+      rmSync(stopFile, { force: true });
+      clearInterval(stopWatch);
+      stop();
+    }
+  }, 1000);
   stack.on('exit', (code) => {
+    clearInterval(stopWatch);
     tunnel?.child.kill();
     log.end();
     say(`[host] stopped (${code})`);
@@ -299,10 +311,16 @@ switch (cmd) {
   case 'set-role':
     await withDatabase(() => serverScript('scripts/setRole.ts', args));
     break;
+  case 'stop':
+    if (!(await busy(PORT))) fail('the host is not running');
+    writeFileSync(path.join(DATA, 'stop-request'), new Date().toISOString());
+    for (let i = 0; i < 60 && ((await busy(PORT)) || (await busy(PG_PORT))); i++) await new Promise((r) => setTimeout(r, 500));
+    say((await busy(PORT)) || (await busy(PG_PORT)) ? '[host] still stopping — check its window' : '[host] stopped');
+    break;
   case 'status':
     await status();
     break;
   default:
-    say('usage: npm run host -- update [ui-branch|--no-ui] [--skip-verify] | start [--no-tunnel] | invite "<who>" [uses] [days] | set-role <email> <role> | status');
+    say('usage: npm run host -- update [ui-branch|--no-ui] [--skip-verify] | start [--no-tunnel] | invite "<who>" [uses] [days] | set-role <email> <role> | stop | status');
     process.exit(cmd ? 1 : 0);
 }

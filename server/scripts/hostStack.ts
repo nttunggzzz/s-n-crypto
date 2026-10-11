@@ -24,8 +24,8 @@ console.log(`[host] PostgreSQL ready on :${pgPort} (data: ${path.join(dataDir, '
 
 const api: ChildProcess = spawn(process.execPath, ['--import', 'tsx', 'src/main.ts'], {
   cwd: serverDir,
-  stdio: 'inherit',
-  env: { ...process.env, DATABASE_URL: url },
+  stdio: ['pipe', 'inherit', 'inherit'],
+  env: { ...process.env, DATABASE_URL: url, SHUTDOWN_ON_STDIN_END: '1' },
 });
 
 let stopping = false;
@@ -33,8 +33,9 @@ const stop = async (code = 0) => {
   if (stopping) return;
   stopping = true;
   if (api.exitCode === null) {
-    api.kill('SIGTERM');
-    await new Promise((r) => setTimeout(r, 3000));
+    api.stdin?.end(); // clean shutdown: stop matching and feeds, close the database, release the instance lock
+    for (let i = 0; i < 40 && api.exitCode === null; i++) await new Promise((r) => setTimeout(r, 250));
+    if (api.exitCode === null) api.kill();
   }
   await pg.stop().catch(() => {});
   console.log('[host] PostgreSQL stopped');
@@ -45,6 +46,6 @@ process.on('SIGTERM', () => void stop());
 process.stdin.on('end', () => void stop());
 process.stdin.resume();
 api.on('exit', (code) => {
-  console.error(`[host] server exited (${code})`);
-  void stop(code ?? 1);
+  console.log(`[host] server exited (${code})`);
+  void stop(stopping ? 0 : (code ?? 1));
 });

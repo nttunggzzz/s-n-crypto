@@ -47,7 +47,7 @@ Nhờ tách thư mục, hai bên code tiếp mà người dùng không bị ản
 | Việc | Lệnh |
 |---|---|
 | Bật sàn | `npm run host -- start` |
-| Tắt sàn | Ctrl+C trong cửa sổ đang chạy |
+| Tắt sàn | Ctrl+C trong cửa sổ đang chạy, hoặc `npm run host -- stop` từ cửa sổ khác |
 | Mời người dùng | `npm run host -- invite "<tên>" [số lượt] [số ngày]`, hoặc trang Quản trị → Mã mời |
 | Xem trạng thái | `npm run host -- status` |
 | Cập nhật code mới (Claude/Antigravity đã xong việc) | Ctrl+C → `npm run host -- update` → `npm run host -- start` |

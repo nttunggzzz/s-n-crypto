@@ -171,3 +171,8 @@ async function shutdown(signal: string) {
 }
 process.on('SIGINT', () => void shutdown('SIGINT'));
 process.on('SIGTERM', () => void shutdown('SIGTERM'));
+// a supervisor that cannot send signals (Windows: npm run host) asks for a clean stop by closing stdin
+if (process.env.SHUTDOWN_ON_STDIN_END === '1') {
+  process.stdin.on('end', () => void shutdown('stdin closed'));
+  process.stdin.resume();
+}
