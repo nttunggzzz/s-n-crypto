@@ -282,11 +282,6 @@ export const RegisterPage: React.FC<AuthPageProps> = ({ onNavigate }) => {
       return;
     }
 
-    if (isInviteOnly && !trimmedInvite) {
-      setError('Cần mã mời để đăng ký');
-      return;
-    }
-
     if (trimmedInvite && (trimmedInvite.length < 4 || trimmedInvite.length > 40)) {
       setError('Mã mời phải từ 4 đến 40 ký tự.');
       return;
@@ -352,7 +347,7 @@ export const RegisterPage: React.FC<AuthPageProps> = ({ onNavigate }) => {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="flex flex-col gap-5">
+          <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-5">
             <Input
               label="Địa chỉ Email"
               type="email"
@@ -391,7 +386,6 @@ export const RegisterPage: React.FC<AuthPageProps> = ({ onNavigate }) => {
                   value={inviteCode}
                   onChange={(e) => setInviteCode(e.target.value)}
                   placeholder="XXXX-XXXX"
-                  required
                   disabled={loading}
                 />
                 <p className="text-[11px] text-[var(--text-3,#63636b)] mt-1.5">
