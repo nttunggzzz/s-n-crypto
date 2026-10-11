@@ -17,6 +17,9 @@ permissions:
 
 jobs:
   backup:
+    # off until the cloud database exists: set the repository variable BACKUP_ENABLED=true
+    # (GitHub → Settings → Secrets and variables → Actions → Variables) together with the two secrets
+    if: ${{ vars.BACKUP_ENABLED == 'true' }}
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     services:

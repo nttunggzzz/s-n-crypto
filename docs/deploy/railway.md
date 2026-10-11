@@ -73,6 +73,7 @@ Nếu không dùng được `railway ssh`, chạy từ repo trên máy bằng UR
 GitHub → Settings → Secrets and variables → Actions:
 - `STAGING_DATABASE_URL`: Railway → PostgreSQL → Connect → **Public URL**. Máy GitHub ở ngoài Railway nên phải dùng địa chỉ public.
 - `BACKUP_PASSPHRASE`: chuỗi dài ngẫu nhiên. **Lưu riêng**, mất là không giải mã được bản sao lưu.
+- Tab **Variables** (không phải Secrets): `BACKUP_ENABLED` = `true`. Chưa đặt biến này thì workflow bỏ qua, không báo lỗi mỗi đêm.
 
 Mỗi đêm lúc 02:00 GMT+7, workflow `Backup database` chạy 4 bước:
 1. `pg_dump`;
