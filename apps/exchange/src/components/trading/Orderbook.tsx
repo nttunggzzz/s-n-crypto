@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import type { Depth } from '@cex/contracts';
 import { dec, floorToStep, ceilToStep, ZERO, Dec } from '@cex/core';
 import { getApiClient } from '../../services/api.ts';
@@ -50,6 +50,9 @@ export const Orderbook: React.FC<OrderbookProps> = ({ symbol, marketType = 'spot
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'all' | 'buy' | 'sell'>('all');
   const [groupMode, setGroupMode] = useState<number>(1);
+  const [latestTrade, setLatestTrade] = useState<{ price: string; isBuyerMaker: boolean } | null>(null);
+  const [flashingKeys, setFlashingKeys] = useState<Set<string>>(new Set());
+  const prevQtyMapRef = useRef<Map<string, string>>(new Map());
   
   const api = getApiClient();
   const { realtimeClient, activeTicker, activeSymbolInfo } = useMarket();
@@ -84,13 +87,72 @@ export const Orderbook: React.FC<OrderbookProps> = ({ symbol, marketType = 'spot
   }, [api, symbol, groupMode, marketType]);
 
   useEffect(() => {
-    if (!realtimeClient || groupMode > 1) return; // if grouping, we use polling for now
+    if (!realtimeClient || groupMode > 1) return;
     const channel = marketType === 'futures' ? `futures:depth:${symbol}` : `depth:${symbol}`;
     const unsub = realtimeClient.subscribe(channel, (data: unknown) => {
       setDepth(data as Depth);
     });
     return () => unsub();
   }, [realtimeClient, symbol, groupMode, marketType]);
+
+  // Subscribe to latest trades for mid-bar execution price
+  useEffect(() => {
+    if (!realtimeClient) return;
+    const channel = marketType === 'futures' ? `futures:trades:${symbol}` : `trades:${symbol}`;
+    const unsub = realtimeClient.subscribe(channel, (data: unknown) => {
+      const t = data as { price?: string; isBuyerMaker?: boolean };
+      if (t?.price) {
+        setLatestTrade({ price: t.price, isBuyerMaker: !!t.isBuyerMaker });
+      }
+    });
+    return () => unsub();
+  }, [realtimeClient, symbol, marketType]);
+
+  // Track depth quantity changes and flash affected rows for 250ms
+  useEffect(() => {
+    if (!depth) return;
+    const newFlashing = new Set<string>();
+    const prevMap = prevQtyMapRef.current;
+    const nextMap = new Map<string, string>();
+
+    [...depth.asks, ...depth.bids].forEach(([p, q]) => {
+      nextMap.set(p, q);
+      const prev = prevMap.get(p);
+      if (prev !== undefined && prev !== q) {
+        newFlashing.add(p);
+      }
+    });
+
+    prevQtyMapRef.current = nextMap;
+
+    if (newFlashing.size > 0) {
+      setFlashingKeys(newFlashing);
+      const timer = setTimeout(() => {
+        setFlashingKeys(new Set());
+      }, 250);
+      return () => clearTimeout(timer);
+    }
+  }, [depth]);
+
+  const spreadInfo = useMemo(() => {
+    if (!depth || !depth.asks.length || !depth.bids.length) return null;
+    const bestAsk = depth.asks[0]?.[0];
+    const bestBid = depth.bids[0]?.[0];
+    if (!bestAsk || !bestBid) return null;
+    try {
+      const askD = dec(bestAsk);
+      const bidD = dec(bestBid);
+      const spread = askD.minus(bidD);
+      if (spread.lt(ZERO)) return null;
+      const spreadPct = spread.div(askD).mul(100).toNumber();
+      return {
+        spread: spread.toString(),
+        spreadPct,
+      };
+    } catch {
+      return null;
+    }
+  }, [depth]);
 
   const { asksWithBars, bidsWithBars, ratioAsk = 50, ratioBid = 50 } = useMemo(() => {
     if (!depth) return { asksWithBars: [], bidsWithBars: [], ratioAsk: 50, ratioBid: 50 };
@@ -186,25 +248,25 @@ export const Orderbook: React.FC<OrderbookProps> = ({ symbol, marketType = 'spot
         <div className="flex-1 flex flex-col justify-between py-1 font-mono tabular-nums overflow-hidden group">
           {viewMode !== 'buy' && (
             <div className={`flex flex-col gap-[1px] justify-end ${viewMode==='all' ? 'h-[45%]' : 'h-[90%]'} overflow-hidden`}>
-              {asksWithBars.map((item, idx) => (
+              {asksWithBars.map((item) => (
                 <div
-                  key={`ask-${idx}`}
+                  key={`ask-${item.price}`}
                   onClick={() => {
                     const tick = activeSymbolInfo?.tickSize;
                     const p = tick ? floorToStep(dec(item.price), dec(tick)).toString() : item.price;
                     onSelectPrice(p);
                   }}
-                  className="relative grid grid-cols-2 px-3 py-0.5 cursor-pointer hover:bg-[var(--panel-2,#141416)] text-[11.5px]"
+                  className="relative grid grid-cols-2 px-3 h-[19px] min-h-[19px] items-center cursor-pointer hover:bg-[var(--panel-2,#141416)] text-[11.5px]"
                   title={`Tổng ${formatDecimal(item.total.toString(), {decimals:4})} ${activeSymbolInfo?.baseAsset} | ~${formatDecimal((item.total * parseFloat(item.price)).toString(), {decimals:2})} USDT`}
                 >
                   <div
-                    className="absolute right-0 top-0 bottom-0 bg-[var(--down,#f2475f)] opacity-10 pointer-events-none"
+                    className="absolute right-0 top-0 bottom-0 bg-[var(--down,#f2475f)] opacity-15 pointer-events-none transition-[width] duration-200 ease-out"
                     style={{ width: `${item.pct}%` }}
                   />
                   <span className={`${getPriceColor('sell')} relative z-10`}>
                     {formatDecimal(item.price, { decimals: activeSymbolInfo?.pricePrecision })}
                   </span>
-                  <span className="text-right text-[var(--text,#f4f4f5)] relative z-10">
+                  <span className={`text-right text-[var(--text,#f4f4f5)] relative z-10 transition-colors duration-250 rounded px-0.5 ${flashingKeys.has(item.price) ? 'text-amber-300 font-bold bg-amber-400/20' : ''}`}>
                     {formatDecimal(item.qty, { decimals: 4 })}
                   </span>
                 </div>
@@ -213,37 +275,53 @@ export const Orderbook: React.FC<OrderbookProps> = ({ symbol, marketType = 'spot
           )}
 
           {/* Center Mid-Bar */}
-          <div className="py-1 px-3 flex items-center justify-between shrink-0">
-            <div className="flex items-center gap-1.5 font-bold text-base">
-              <PriceText
-                price={activeTicker?.lastPrice}
-                tickSize={activeSymbolInfo?.tickSize}
-                colored
-              />
+          <div className="py-1 px-3 flex items-center justify-between shrink-0 border-y border-[var(--line,#1d1e21)]/60 bg-[var(--panel-2,#141416)]/40 my-0.5">
+            <div className="flex items-center gap-1.5 font-bold text-sm">
+              <span className={latestTrade ? (latestTrade.isBuyerMaker ? 'text-[var(--down,#f2475f)]' : 'text-[var(--up,#1fc27a)]') : ''}>
+                {latestTrade ? (
+                  formatDecimal(latestTrade.price, { decimals: activeSymbolInfo?.pricePrecision })
+                ) : (
+                  <PriceText
+                    price={activeTicker?.lastPrice}
+                    tickSize={activeSymbolInfo?.tickSize}
+                    colored
+                  />
+                )}
+              </span>
+              {latestTrade && (
+                <span className={`text-xs ${latestTrade.isBuyerMaker ? 'text-[var(--down,#f2475f)]' : 'text-[var(--up,#1fc27a)]'}`}>
+                  {latestTrade.isBuyerMaker ? '↓' : '↑'}
+                </span>
+              )}
             </div>
+            {spreadInfo && (
+              <div className="text-[10px] text-[var(--text-3,#63636b)] font-mono" title="Chênh lệch giá mua bán tốt nhất">
+                Spread {formatDecimal(spreadInfo.spread, { decimals: activeSymbolInfo?.pricePrecision })} ({spreadInfo.spreadPct.toFixed(2)}%)
+              </div>
+            )}
           </div>
 
           {viewMode !== 'sell' && (
             <div className={`flex flex-col gap-[1px] justify-start ${viewMode==='all' ? 'h-[45%]' : 'h-[90%]'} overflow-hidden`}>
-              {bidsWithBars.map((item, idx) => (
+              {bidsWithBars.map((item) => (
                 <div
-                  key={`bid-${idx}`}
+                  key={`bid-${item.price}`}
                   onClick={() => {
                     const tick = activeSymbolInfo?.tickSize;
                     const p = tick ? floorToStep(dec(item.price), dec(tick)).toString() : item.price;
                     onSelectPrice(p);
                   }}
-                  className="relative grid grid-cols-2 px-3 py-0.5 cursor-pointer hover:bg-[var(--panel-2,#141416)] text-[11.5px]"
+                  className="relative grid grid-cols-2 px-3 h-[19px] min-h-[19px] items-center cursor-pointer hover:bg-[var(--panel-2,#141416)] text-[11.5px]"
                   title={`Tổng ${formatDecimal(item.total.toString(), {decimals:4})} ${activeSymbolInfo?.baseAsset} | ~${formatDecimal((item.total * parseFloat(item.price)).toString(), {decimals:2})} USDT`}
                 >
                   <div
-                    className="absolute right-0 top-0 bottom-0 bg-[var(--up,#1fc27a)] opacity-10 pointer-events-none"
+                    className="absolute right-0 top-0 bottom-0 bg-[var(--up,#1fc27a)] opacity-15 pointer-events-none transition-[width] duration-200 ease-out"
                     style={{ width: `${item.pct}%` }}
                   />
                   <span className={`${getPriceColor('buy')} relative z-10`}>
                     {formatDecimal(item.price, { decimals: activeSymbolInfo?.pricePrecision })}
                   </span>
-                  <span className="text-right text-[var(--text,#f4f4f5)] relative z-10">
+                  <span className={`text-right text-[var(--text,#f4f4f5)] relative z-10 transition-colors duration-250 rounded px-0.5 ${flashingKeys.has(item.price) ? 'text-amber-300 font-bold bg-amber-400/20' : ''}`}>
                     {formatDecimal(item.qty, { decimals: 4 })}
                   </span>
                 </div>
