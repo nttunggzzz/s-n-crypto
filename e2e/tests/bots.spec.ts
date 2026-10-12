@@ -44,6 +44,10 @@ test('Bot lưới: xem trước → tạo → lệnh bot có badge, không có n
     const open = await apiGet<{ items: Order[] }>(page, '/api/v1/orders/open');
     return open.items.filter((o) => o.source === 'GRID');
   }).toEqual([]);
+  await expect.poll(async () => {
+    const balances = await apiGet<Balances>(page, '/api/v1/wallet/balances');
+    return Number(balances.items.find((b) => b.asset === 'BTC')?.available ?? 0);
+  }).toBeLessThan(0.0001);
   const balances = await apiGet<Balances>(page, '/api/v1/wallet/balances');
   expect(Number(balances.items.find((b) => b.asset === 'USDT')?.locked ?? 0)).toBe(0);
   expect(Number(balances.items.find((b) => b.asset === 'BTC')?.available ?? 0)).toBeLessThan(0.0001); // dust only
