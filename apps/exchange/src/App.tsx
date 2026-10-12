@@ -101,7 +101,7 @@ const AppContent: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-[var(--color-bg-base,#08090c)] text-[var(--color-text-primary,#f3f4f6)] font-sans">
+    <div className="flex flex-col min-h-screen bg-[var(--bg)] text-[var(--text)] font-sans">
       {/* Top Simulated Banner */}
       <SimulatedBanner tradingHalted={tradingHalted} />
 
@@ -112,7 +112,7 @@ const AppContent: React.FC = () => {
 
       {/* Page Content */}
       <main className="flex-1 w-full flex flex-col">
-        <ErrorBoundary>
+        <ErrorBoundary key={currentPath}>
           <Suspense
             fallback={
               <div className="flex-1 flex items-center justify-center p-12">

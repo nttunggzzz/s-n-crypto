@@ -11,8 +11,24 @@ describe('formatApiError', () => {
     expect(formatApiError(new ApiError(400, 'INVALID_INVITE', 'Refused', { reason: 'REVOKED' }))).toBe('Mã mời đã bị thu hồi');
   });
 
-  it('formats CONFLICT error code as email already registered', () => {
-    expect(formatApiError(new ApiError(409, 'CONFLICT', 'Conflict'))).toBe('Địa chỉ email này đã được đăng ký tài khoản.');
+  it('formats CONFLICT error code as generic state conflict by default', () => {
+    expect(formatApiError(new ApiError(409, 'CONFLICT', 'Conflict'))).toBe(
+      'Thao tác không thực hiện được vì trạng thái đã thay đổi. Vui lòng tải lại.'
+    );
+  });
+
+  it('supports context-specific overrides for login and registration', () => {
+    expect(
+      formatApiError(new ApiError(401, 'UNAUTHENTICATED', 'Bad password'), 'Fallback', {
+        UNAUTHENTICATED: 'Email hoặc mật khẩu không đúng.',
+      })
+    ).toBe('Email hoặc mật khẩu không đúng.');
+
+    expect(
+      formatApiError(new ApiError(409, 'CONFLICT', 'Conflict'), 'Fallback', {
+        CONFLICT: 'Địa chỉ email này đã được đăng ký tài khoản.',
+      })
+    ).toBe('Địa chỉ email này đã được đăng ký tài khoản.');
   });
 
   it('formats RATE_LIMITED error code with retryAfterSeconds', () => {

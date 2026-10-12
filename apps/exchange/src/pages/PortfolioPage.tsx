@@ -248,7 +248,7 @@ export const PortfolioPage: React.FC<PortfolioPageProps> = ({ onNavigate }) => {
           <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
             <div>
               <h3 className="text-sm font-bold text-[var(--text,#f4f4f5)]">Biến động giá trị tài sản</h3>
-              <p className="text-[11px] text-[var(--text-3,#63636b)]">Ghi nhận theo snapshot định kỳ máy chủ (điểm null vẽ đứt đoạn)</p>
+              <p className="text-[11px] text-[var(--text-3,#63636b)]">Ghi nhận theo snapshot định kỳ máy chủ (Khoảng trống: lúc đó chưa có giá)</p>
             </div>
 
             <div className="flex items-center gap-1 bg-[var(--panel-2,#141416)] p-1 rounded border border-[var(--line,#1d1e21)]">

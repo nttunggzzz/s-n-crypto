@@ -978,13 +978,33 @@ export const BotsPage: React.FC<BotsPageProps> = ({ onNavigate }) => {
                 <div className="space-y-4">
                   {runningDcaPlans.map((plan) => {
                     const currentTicker = tickers[plan.symbol];
-                    const price = currentTicker && currentTicker.lastPrice
-                      ? parseFloat(currentTicker.lastPrice)
-                      : 0;
-                    const boughtNum = parseFloat(plan.totalBought);
-                    const spentNum = parseFloat(plan.totalSpent);
-                    const estValue = boughtNum * price;
-                    const pnlVal = spentNum > 0 ? estValue - spentNum : 0;
+                    const isTickerLive = Boolean(currentTicker && currentTicker.status !== 'STALE' && currentTicker.lastPrice);
+                    let pnlText = '—';
+                    let pnlClass = 'text-[var(--text-3,#63636b)]';
+
+                    if (isTickerLive && currentTicker?.lastPrice) {
+                      try {
+                        const boughtDec = dec(plan.totalBought);
+                        const spentDec = dec(plan.totalSpent);
+                        const priceDec = dec(currentTicker.lastPrice);
+                        const estValue = boughtDec.mul(priceDec);
+                        const pnlDec = spentDec.gt(dec('0')) ? estValue.sub(spentDec) : dec('0');
+
+                        if (pnlDec.gt(dec('0'))) {
+                          pnlText = `+${formatDecimal(pnlDec.toFixed(2), { decimals: 2, locale: 'vi' })} USDT`;
+                          pnlClass = 'text-[var(--up,#1fc27a)] font-bold';
+                        } else if (pnlDec.lt(dec('0'))) {
+                          pnlText = `${formatDecimal(pnlDec.toFixed(2), { decimals: 2, locale: 'vi' })} USDT`;
+                          pnlClass = 'text-[var(--down,#f2475f)] font-bold';
+                        } else {
+                          pnlText = '0,00 USDT';
+                          pnlClass = 'text-white font-bold';
+                        }
+                      } catch {
+                        pnlText = '—';
+                        pnlClass = 'text-[var(--text-3,#63636b)]';
+                      }
+                    }
 
                     return (
                       <div
@@ -1050,24 +1070,16 @@ export const BotsPage: React.FC<BotsPageProps> = ({ onNavigate }) => {
                           </div>
                           <div>
                             <span className="text-[10px] text-[var(--text-3,#63636b)] block">Đã đầu tư:</span>
-                            <span>{formatDecimal(plan.totalSpent, { decimals: 2 })} USDT</span>
+                            <span>{formatDecimal(plan.totalSpent, { decimals: 2, locale: 'vi' })} USDT</span>
                           </div>
                           <div>
                             <span className="text-[10px] text-[var(--text-3,#63636b)] block">Đã mua được:</span>
-                            <span>{formatDecimal(plan.totalBought, { decimals: 4 })}</span>
+                            <span>{formatDecimal(plan.totalBought, { decimals: 4, locale: 'vi' })}</span>
                           </div>
                           <div>
                             <span className="text-[10px] text-[var(--text-3,#63636b)] block">Lãi/Lỗ tạm tính:</span>
-                            <span
-                              className={`font-bold ${
-                                pnlVal > 0
-                                  ? 'text-[var(--up,#1fc27a)]'
-                                  : pnlVal < 0
-                                  ? 'text-[var(--down,#f2475f)]'
-                                  : 'text-white'
-                              }`}
-                            >
-                              {pnlVal > 0 ? '+' : ''}{pnlVal.toFixed(2)} USDT
+                            <span className={pnlClass}>
+                              {pnlText}
                             </span>
                           </div>
                         </div>

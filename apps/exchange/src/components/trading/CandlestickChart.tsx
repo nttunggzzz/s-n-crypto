@@ -50,20 +50,17 @@ interface FormattedCandle {
   volume: number;
 }
 
+interface CustomPriceFormat {
+  type: 'custom';
+  minMove?: number;
+  formatter: (price: number) => string;
+}
+
 const setupMainSeries = (
   chart: IChartApi,
   type: ChartType,
-  tickSize: string
+  priceFormat: CustomPriceFormat
 ): ISeriesApi<'Candlestick'> | ISeriesApi<'Line'> | ISeriesApi<'Area'> => {
-  const precision = tickSize.includes('.') ? tickSize.split('.')[1]?.length ?? 2 : 2;
-  const minMove = parseFloat(tickSize) || 0.01;
-
-  const priceFormat = {
-    type: 'custom' as const,
-    minMove,
-    formatter: (price: number) => formatDecimal(price.toFixed(precision), { decimals: precision, locale: 'vi' }),
-  };
-
   if (type === 'candles') {
     return chart.addSeries(CandlestickSeries, {
       upColor: '#00c087',
@@ -95,7 +92,10 @@ const setupMainSeries = (
 
 const setupVolumeSeries = (chart: IChartApi): ISeriesApi<'Histogram'> => {
   const volSeries = chart.addSeries(HistogramSeries, {
-    priceFormat: { type: 'volume' },
+    priceFormat: {
+      type: 'custom',
+      formatter: (v: number) => formatDecimal(Math.round(v).toString(), { decimals: 0, locale: 'vi' }),
+    },
     priceScaleId: '', // Overlay scale ID
   });
   volSeries.priceScale().applyOptions({
@@ -104,45 +104,44 @@ const setupVolumeSeries = (chart: IChartApi): ISeriesApi<'Histogram'> => {
   return volSeries;
 };
 
-const setupMASeries = (chart: IChartApi) => {
-  const ma5 = chart.addSeries(LineSeries, {
-    color: '#f59e0b',
-    lineWidth: 1,
+const setupMASeries = (chart: IChartApi, priceFormat?: CustomPriceFormat) => {
+  const opts = {
+    lineWidth: 1 as const,
     priceLineVisible: false,
     lastValueVisible: false,
     crosshairMarkerVisible: false,
+    ...(priceFormat ? { priceFormat } : {}),
+  };
+  const ma5 = chart.addSeries(LineSeries, {
+    ...opts,
+    color: '#f59e0b',
   });
   const ma10 = chart.addSeries(LineSeries, {
+    ...opts,
     color: '#06b6d4',
-    lineWidth: 1,
-    priceLineVisible: false,
-    lastValueVisible: false,
-    crosshairMarkerVisible: false,
   });
   const ma20 = chart.addSeries(LineSeries, {
+    ...opts,
     color: '#a855f7',
-    lineWidth: 1,
-    priceLineVisible: false,
-    lastValueVisible: false,
-    crosshairMarkerVisible: false,
   });
   return { ma5, ma10, ma20 };
 };
 
-const setupEMASeries = (chart: IChartApi) => {
-  const ema7 = chart.addSeries(LineSeries, {
-    color: '#38bdf8',
-    lineWidth: 1,
+const setupEMASeries = (chart: IChartApi, priceFormat?: CustomPriceFormat) => {
+  const opts = {
+    lineWidth: 1 as const,
     priceLineVisible: false,
     lastValueVisible: false,
     crosshairMarkerVisible: false,
+    ...(priceFormat ? { priceFormat } : {}),
+  };
+  const ema7 = chart.addSeries(LineSeries, {
+    ...opts,
+    color: '#38bdf8',
   });
   const ema25 = chart.addSeries(LineSeries, {
+    ...opts,
     color: '#ec4899',
-    lineWidth: 1,
-    priceLineVisible: false,
-    lastValueVisible: false,
-    crosshairMarkerVisible: false,
   });
   return { ema7, ema25 };
 };
@@ -223,6 +222,8 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
   const lastLegendUpdateRef = useRef<number>(0);
   const currentParamsRef = useRef({ symbol, interval, marketType });
   const pendingRangeAdjustmentRef = useRef<{ from: number; to: number } | null>(null);
+  const userScrolledRef = useRef<boolean>(false);
+  const paginationAbortControllerRef = useRef<AbortController | null>(null);
 
   useEffect(() => {
     currentParamsRef.current = { symbol, interval, marketType };
@@ -235,6 +236,11 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
     needsFitContentRef.current = true;
     hasMoreHistoryRef.current = true;
     isLoadingMoreRef.current = false;
+    userScrolledRef.current = false;
+    if (paginationAbortControllerRef.current) {
+      paginationAbortControllerRef.current.abort();
+      paginationAbortControllerRef.current = null;
+    }
     pendingRangeAdjustmentRef.current = null;
     setLegendData(null);
     if (mainSeriesRef.current) {
@@ -278,6 +284,45 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
     if (!exchangeInfo || !activeSymbolInfo) return null;
     return exchangeInfo.assets?.find((a) => a.asset === activeSymbolInfo.baseAsset) || null;
   }, [exchangeInfo, activeSymbolInfo]);
+
+  const tick = activeSymbolInfo?.tickSize || '0.01';
+  const pricePrecision = useMemo(() => {
+    return tick.includes('.') ? (tick.split('.')[1]?.length ?? 2) : 2;
+  }, [tick]);
+  const minMove = useMemo(() => parseFloat(tick) || 0.01, [tick]);
+
+  const fmtPrice = useCallback(
+    (price: number) => {
+      if (typeof price !== 'number' || isNaN(price)) return '—';
+      return formatDecimal(price.toFixed(pricePrecision), {
+        decimals: pricePrecision,
+        locale: 'vi',
+      });
+    },
+    [pricePrecision]
+  );
+
+  // Keep price format updated across chart and series when precision / tickSize changes
+  useEffect(() => {
+    if (chartRef.current) {
+      chartRef.current.applyOptions({
+        localization: {
+          priceFormatter: fmtPrice,
+        },
+      });
+      const customPriceFormat: CustomPriceFormat = {
+        type: 'custom',
+        minMove,
+        formatter: fmtPrice,
+      };
+      mainSeriesRef.current?.applyOptions({ priceFormat: customPriceFormat });
+      ma5SeriesRef.current?.applyOptions({ priceFormat: customPriceFormat });
+      ma10SeriesRef.current?.applyOptions({ priceFormat: customPriceFormat });
+      ma20SeriesRef.current?.applyOptions({ priceFormat: customPriceFormat });
+      ema7SeriesRef.current?.applyOptions({ priceFormat: customPriceFormat });
+      ema25SeriesRef.current?.applyOptions({ priceFormat: customPriceFormat });
+    }
+  }, [fmtPrice, minMove]);
 
   // Fetch open orders and position avgCost for price lines
   useEffect(() => {
@@ -589,6 +634,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
       localization: {
         locale: 'vi-VN',
         dateFormat: 'yyyy-MM-dd',
+        priceFormatter: fmtPrice,
         timeFormatter: (timestamp: number) => {
           const d = new Date(timestamp * 1000);
           const timeZone = 'Asia/Ho_Chi_Minh';
@@ -601,9 +647,14 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
     });
     chartRef.current = chart;
 
+    const customPriceFormat: CustomPriceFormat = {
+      type: 'custom',
+      minMove,
+      formatter: fmtPrice,
+    };
+
     // Create Main Series
-    const tick = activeSymbolInfo?.tickSize || '0.01';
-    const mainSeries = setupMainSeries(chart, chartType, tick);
+    const mainSeries = setupMainSeries(chart, chartType, customPriceFormat);
     mainSeriesRef.current = mainSeries;
 
     // Create Volume Series
@@ -613,7 +664,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
 
     // Create MA Series
     if (showIndicators.ma) {
-      const mas = setupMASeries(chart);
+      const mas = setupMASeries(chart, customPriceFormat);
       ma5SeriesRef.current = mas.ma5;
       ma10SeriesRef.current = mas.ma10;
       ma20SeriesRef.current = mas.ma20;
@@ -621,7 +672,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
 
     // Create EMA Series (U2)
     if (showIndicators.ema) {
-      const emas = setupEMASeries(chart);
+      const emas = setupEMASeries(chart, customPriceFormat);
       ema7SeriesRef.current = emas.ema7;
       ema25SeriesRef.current = emas.ema25;
     }
@@ -665,13 +716,28 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
         rsiSeriesRef.current?.setData(calcRSI(currentCandles, 14));
       }
 
-      chart.timeScale().fitContent();
+      const n = currentCandles.length;
+      if (n > 0) {
+        chart.timeScale().setVisibleLogicalRange({
+          from: Math.max(0, n - 150),
+          to: n + 5,
+        });
+      }
     }
+
+    // User interaction listeners so we only page history after explicit user scrolling (R-07)
+    const onUserInteract = () => {
+      userScrolledRef.current = true;
+    };
+    container.addEventListener('pointerdown', onUserInteract, { passive: true });
+    container.addEventListener('touchstart', onUserInteract, { passive: true });
+    container.addEventListener('wheel', onUserInteract, { passive: true });
 
     // History paging subscription (B3): load older history when scrolling near left edge
     const timeScale = chart.timeScale();
     timeScale.subscribeVisibleLogicalRangeChange(async (logicalRange) => {
       if (!logicalRange) return;
+      if (!userScrolledRef.current) return;
       if (logicalRange.from < 50 && !isLoadingMoreRef.current && hasMoreHistoryRef.current) {
         const curList = candlesListRef.current;
         if (curList.length === 0) return;
@@ -680,6 +746,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
         const earliestOpenTimeMs = earliestTime * 1000;
 
         const { symbol: curSymbol, interval: curInterval, marketType: curMarketType } = currentParamsRef.current;
+        const requestKey = `${curSymbol}|${curInterval}|${curMarketType}`;
 
         isLoadingMoreRef.current = true;
         try {
@@ -693,12 +760,21 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
                 query: { interval: curInterval, limit: 500, endTime: earliestOpenTimeMs },
               });
 
+          // R-05: Check if current params changed while fetching
+          const currentKey = `${currentParamsRef.current.symbol}|${currentParamsRef.current.interval}|${currentParamsRef.current.marketType}`;
+          if (requestKey !== currentKey) {
+            return;
+          }
+
           if (!res.items || res.items.length === 0) {
             hasMoreHistoryRef.current = false;
             return;
           }
 
           setCandles((prev) => {
+            const activeKey = `${currentParamsRef.current.symbol}|${currentParamsRef.current.interval}|${currentParamsRef.current.marketType}`;
+            if (requestKey !== activeKey) return prev;
+
             const existingTimes = new Set(
               prev.map((c) => (typeof c.openTime === 'number' ? c.openTime : new Date(c.openTime).getTime()))
             );
@@ -783,6 +859,9 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
     });
 
     return () => {
+      container.removeEventListener('pointerdown', onUserInteract);
+      container.removeEventListener('touchstart', onUserInteract);
+      container.removeEventListener('wheel', onUserInteract);
       if (chartRef.current) {
         try {
           chartRef.current.remove();
@@ -814,8 +893,12 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
       orderPriceLinesRef.current = [];
     }
 
-    const tick = activeSymbolInfo?.tickSize || '0.01';
-    const newSeries = setupMainSeries(chart, chartType, tick);
+    const customPriceFormat: CustomPriceFormat = {
+      type: 'custom',
+      minMove,
+      formatter: fmtPrice,
+    };
+    const newSeries = setupMainSeries(chart, chartType, customPriceFormat);
     mainSeriesRef.current = newSeries;
 
     const curCandles = candlesListRef.current;
@@ -826,7 +909,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
         newSeries.setData(curCandles.map((d) => ({ time: d.time, value: d.close })));
       }
     }
-  }, [chartType, activeTab, activeSymbolInfo]);
+  }, [chartType, activeTab, fmtPrice, minMove]);
 
   // 3. Toggle Volume Series in place
   useEffect(() => {
@@ -865,7 +948,12 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
 
     if (showIndicators.ma) {
       if (!ma5SeriesRef.current) {
-        const mas = setupMASeries(chart);
+        const customPriceFormat: CustomPriceFormat = {
+          type: 'custom',
+          minMove,
+          formatter: fmtPrice,
+        };
+        const mas = setupMASeries(chart, customPriceFormat);
         ma5SeriesRef.current = mas.ma5;
         ma10SeriesRef.current = mas.ma10;
         ma20SeriesRef.current = mas.ma20;
@@ -888,7 +976,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
         ma20SeriesRef.current = null;
       }
     }
-  }, [showIndicators.ma, activeTab, calcMA]);
+  }, [showIndicators.ma, activeTab, calcMA, fmtPrice, minMove]);
 
   // 4b. Toggle EMA Series in place (U2)
   useEffect(() => {
@@ -897,7 +985,12 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
 
     if (showIndicators.ema) {
       if (!ema7SeriesRef.current) {
-        const emas = setupEMASeries(chart);
+        const customPriceFormat: CustomPriceFormat = {
+          type: 'custom',
+          minMove,
+          formatter: fmtPrice,
+        };
+        const emas = setupEMASeries(chart, customPriceFormat);
         ema7SeriesRef.current = emas.ema7;
         ema25SeriesRef.current = emas.ema25;
         const curCandles = candlesListRef.current;
@@ -916,7 +1009,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
         ema25SeriesRef.current = null;
       }
     }
-  }, [showIndicators.ema, activeTab, calcEMA]);
+  }, [showIndicators.ema, activeTab, calcEMA, fmtPrice, minMove]);
 
   // 4c. Toggle RSI Series in place (U2)
   useEffect(() => {
@@ -993,9 +1086,15 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
       });
     }
 
-    // Only fit content on initial data arrival, NOT on realtime ticks!
+    // Only set initial logical range on initial data arrival (R-07), NOT on realtime ticks!
     if (needsFitContentRef.current) {
-      chartRef.current?.timeScale().fitContent();
+      const n = formattedCandles.length;
+      if (n > 0) {
+        chartRef.current?.timeScale().setVisibleLogicalRange({
+          from: Math.max(0, n - 150),
+          to: n + 5,
+        });
+      }
       needsFitContentRef.current = false;
     } else if (pendingRangeAdjustmentRef.current) {
       try {
@@ -1270,6 +1369,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
           <div className="flex items-center bg-[var(--panel,#0a0a0b)] rounded-lg p-0.5 border border-[var(--line,#1d1e21)] shadow-inner">
             <button
               onClick={() => setActiveTab('chart')}
+              aria-label="Biểu đồ"
               className={`px-2 sm:px-3 py-1 rounded-md text-[11px] sm:text-xs font-semibold transition-all duration-200 flex items-center gap-1 cursor-pointer ${
                 activeTab === 'chart'
                   ? 'bg-[var(--accent,#818cf8)] text-white shadow-sm'
@@ -1277,10 +1377,11 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
               }`}
             >
               <BarChart2 size={13} />
-              <span className="hidden xs:inline">Biểu đồ</span>
+              <span className="hidden sm:inline">Biểu đồ</span>
             </button>
             <button
               onClick={() => setActiveTab('info')}
+              aria-label="Thông tin"
               className={`px-2 sm:px-3 py-1 rounded-md text-[11px] sm:text-xs font-semibold transition-all duration-200 flex items-center gap-1 cursor-pointer ${
                 activeTab === 'info'
                   ? 'bg-[var(--accent,#818cf8)] text-white shadow-sm'
@@ -1288,7 +1389,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
               }`}
             >
               <Info size={13} />
-              <span className="hidden xs:inline">Thông tin</span>
+              <span className="hidden sm:inline">Thông tin</span>
             </button>
           </div>
 
@@ -1440,7 +1541,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
                 }`}
               />
               <span className={`font-bold ${isPositiveChange ? 'text-[#00c087]' : 'text-[#f6465d]'}`}>
-                {formatDecimal((currentPrice ?? 0).toString())}
+                {currentPrice !== null ? fmtPrice(currentPrice) : '—'}
               </span>
             </div>
           )}
@@ -1477,15 +1578,17 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
                   {formatLegendTime(legendData.time)}
                 </span>
               )}
-              <span>O: <strong className="text-[var(--text,#f4f4f5)]">{formatDecimal(legendData.open.toString(), { decimals: 2 })}</strong></span>
-              <span>H: <strong className="text-[var(--text,#f4f4f5)]">{formatDecimal(legendData.high.toString(), { decimals: 2 })}</strong></span>
-              <span>L: <strong className="text-[var(--text,#f4f4f5)]">{formatDecimal(legendData.low.toString(), { decimals: 2 })}</strong></span>
-              <span>C: <strong className={legendData.change >= 0 ? 'text-[#00c087]' : 'text-[#f6465d]'}>{formatDecimal(legendData.close.toString(), { decimals: 2 })}</strong></span>
+              <span>O: <strong className="text-[var(--text,#f4f4f5)]">{fmtPrice(legendData.open)}</strong></span>
+              <span>H: <strong className="text-[var(--text,#f4f4f5)]">{fmtPrice(legendData.high)}</strong></span>
+              <span>L: <strong className="text-[var(--text,#f4f4f5)]">{fmtPrice(legendData.low)}</strong></span>
+              <span>C: <strong className={legendData.change >= 0 ? 'text-[#00c087]' : 'text-[#f6465d]'}>{fmtPrice(legendData.close)}</strong></span>
               <span className={`font-bold flex items-center gap-0.5 ${legendData.change >= 0 ? 'text-[#00c087]' : 'text-[#f6465d]'}`}>
                 {legendData.change >= 0 ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
-                {legendData.change >= 0 ? `+${legendData.change.toFixed(2)}%` : `${legendData.change.toFixed(2)}%`}
+                {legendData.change >= 0
+                  ? `+${formatDecimal(legendData.change.toFixed(2), { decimals: 2, locale: 'vi' })}%`
+                  : `${formatDecimal(legendData.change.toFixed(2), { decimals: 2, locale: 'vi' })}%`}
               </span>
-              <span className="hidden sm:inline">KL: <strong className="text-white">{formatDecimal(legendData.volume.toString(), { decimals: 2 })}</strong></span>
+              <span className="hidden sm:inline">KL: <strong className="text-white">{formatDecimal(legendData.volume.toString(), { decimals: 2, locale: 'vi' })}</strong></span>
               {showIndicators.ma && (
                 <div className="hidden lg:flex items-center gap-2 pl-2 border-l border-white/10 text-[10px]">
                   <span className="text-[#f59e0b]">MA5</span>

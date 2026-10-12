@@ -25,8 +25,10 @@ export const LoginPage: React.FC<AuthPageProps> = ({ onNavigate }) => {
   }, []);
 
   useEffect(() => {
-    if (isAuthenticated && nextParam) {
-      const dest = safeNext(nextParam, [import.meta.env.VITE_ADMIN_ORIGIN || ''].filter(Boolean)) ?? '/trade/BTCUSDT';
+    if (isAuthenticated) {
+      const dest = nextParam
+        ? (safeNext(nextParam, [import.meta.env.VITE_ADMIN_ORIGIN || ''].filter(Boolean)) ?? '/trade/BTCUSDT')
+        : '/trade/BTCUSDT';
       if (dest.startsWith('http')) {
         window.location.href = dest;
       } else {
@@ -132,7 +134,7 @@ export const LoginPage: React.FC<AuthPageProps> = ({ onNavigate }) => {
                 placeholder="123456"
                 required
               />
-              <Button type="submit" variant="primary" loading={loading} fullWidth className="py-2.5 mt-2">
+              <Button type="submit" variant="primary" loading={loading} aria-label="Xác nhận" fullWidth className="py-2.5 mt-2">
                 Xác nhận
               </Button>
               <div className="text-center mt-2">
@@ -181,7 +183,7 @@ export const LoginPage: React.FC<AuthPageProps> = ({ onNavigate }) => {
                 </button>
               </div>
 
-              <Button type="submit" variant="primary" loading={loading} fullWidth className="py-2.5">
+              <Button type="submit" variant="primary" loading={loading} aria-label="Đăng nhập" fullWidth className="py-2.5">
                 Đăng nhập
               </Button>
             </form>
@@ -205,8 +207,8 @@ export const LoginPage: React.FC<AuthPageProps> = ({ onNavigate }) => {
 };
 
 export const RegisterPage: React.FC<AuthPageProps> = ({ onNavigate }) => {
-  const { register } = useAuth();
-  const { publicConfig, isLoading: isConfigLoading } = useConfig();
+  const { register, isAuthenticated } = useAuth();
+  const { publicConfig, isLoading: isConfigLoading, refreshConfig } = useConfig();
   const [email, setEmail] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [password, setPassword] = useState('');
@@ -215,6 +217,13 @@ export const RegisterPage: React.FC<AuthPageProps> = ({ onNavigate }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const turnstileContainerRef = useRef<HTMLDivElement>(null);
+  const turnstileWidgetIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      onNavigate('/trade/BTCUSDT');
+    }
+  }, [isAuthenticated, onNavigate]);
 
   useEffect(() => {
     const inv = new URLSearchParams(window.location.search).get('invite');
@@ -231,10 +240,19 @@ export const RegisterPage: React.FC<AuthPageProps> = ({ onNavigate }) => {
 
     const renderWidget = () => {
       if (window.turnstile && container) {
-        window.turnstile.render(container, {
-          sitekey: siteKey,
-          callback: (token: string) => setCaptchaToken(token),
-        });
+        try {
+          if (turnstileWidgetIdRef.current && window.turnstile.remove) {
+            window.turnstile.remove(turnstileWidgetIdRef.current);
+            turnstileWidgetIdRef.current = null;
+          }
+          const id = window.turnstile.render(container, {
+            sitekey: siteKey,
+            callback: (token: string) => setCaptchaToken(token),
+            'expired-callback': () => setCaptchaToken(null),
+            'error-callback': () => setCaptchaToken(null),
+          });
+          turnstileWidgetIdRef.current = id;
+        } catch {}
       }
     };
 
@@ -248,6 +266,15 @@ export const RegisterPage: React.FC<AuthPageProps> = ({ onNavigate }) => {
       script.onload = renderWidget;
       document.head.appendChild(script);
     }
+
+    return () => {
+      if (window.turnstile?.remove && turnstileWidgetIdRef.current) {
+        try {
+          window.turnstile.remove(turnstileWidgetIdRef.current);
+        } catch {}
+        turnstileWidgetIdRef.current = null;
+      }
+    };
   }, [publicConfig?.captchaSiteKey]);
 
   const isInviteOnly = publicConfig?.registration === 'INVITE_ONLY';
@@ -306,11 +333,30 @@ export const RegisterPage: React.FC<AuthPageProps> = ({ onNavigate }) => {
         onNavigate('/trade/BTCUSDT');
       } else {
         setError(res.error || 'Đăng ký tài khoản không thành công.');
+        if (window.turnstile?.reset && turnstileWidgetIdRef.current) {
+          try {
+            window.turnstile.reset(turnstileWidgetIdRef.current);
+          } catch {}
+          setCaptchaToken(null);
+        }
       }
     } finally {
       setLoading(false);
     }
   };
+
+  if (isAuthenticated) {
+    return (
+      <div className="min-h-[calc(100vh-56px)] flex items-center justify-center p-6 bg-[var(--bg,#000000)]">
+        <div className="text-center space-y-4">
+          <p className="text-lg text-[var(--text,#f4f4f5)] font-medium">Bạn đã đăng nhập hệ thống.</p>
+          <Button variant="primary" onClick={() => onNavigate('/trade/BTCUSDT')}>
+            Vào sàn giao dịch
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-[calc(100vh-56px)] flex items-stretch">
@@ -321,7 +367,9 @@ export const RegisterPage: React.FC<AuthPageProps> = ({ onNavigate }) => {
             Tạo tài khoản giao dịch <br/><span className="text-[var(--accent,#818cf8)]">CEX Spot</span>
           </h1>
           <p className="text-[var(--text-3,#63636b)] text-lg mb-8 leading-relaxed">
-            Nhận ngay 10.000 USDT thử nghiệm sau khi xác minh email. Bắt đầu giao dịch không rủi ro.
+            {publicConfig?.emailVerificationRequired
+              ? 'Nhận ngay 10.000 USDT thử nghiệm sau khi xác minh email. Bắt đầu giao dịch không rủi ro.'
+              : 'Nhận ngay 10.000 USDT thử nghiệm ở trang Tài sản.'}
           </p>
         </div>
       </div>
@@ -402,12 +450,25 @@ export const RegisterPage: React.FC<AuthPageProps> = ({ onNavigate }) => {
               type="submit"
               variant="primary"
               loading={loading}
-              disabled={loading}
+              disabled={loading || isConfigLoading || publicConfig === null}
+              aria-label="Đăng ký tài khoản"
               fullWidth
               className="py-2.5 mt-2"
             >
-              Đăng ký tài khoản
+              {isConfigLoading || publicConfig === null ? 'Đang tải cấu hình…' : 'Đăng ký tài khoản'}
             </Button>
+            {publicConfig === null && !isConfigLoading && (
+              <div className="text-center text-xs text-[var(--down,#f2475f)] mt-2">
+                Không thể tải cấu hình hệ thống.{' '}
+                <button
+                  type="button"
+                  onClick={() => refreshConfig()}
+                  className="underline text-[var(--accent,#818cf8)] cursor-pointer"
+                >
+                  Thử lại
+                </button>
+              </div>
+            )}
           </form>
 
           <div className="mt-8 pt-6 border-t border-[var(--line,#1d1e21)] text-center text-sm text-[var(--text-3,#63636b)]">

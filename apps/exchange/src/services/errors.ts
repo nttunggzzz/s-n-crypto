@@ -3,26 +3,19 @@ import { ApiError, type ErrorCode } from '@cex/contracts';
 /**
  * Mapping error codes from @cex/contracts to friendly Vietnamese messages.
  */
-export const ERROR_MESSAGES: Record<ErrorCode | string, string> = {
+export const ERROR_MESSAGES: Record<ErrorCode, string> = {
   // Generic
   VALIDATION_ERROR: 'Dữ liệu nhập vào không hợp lệ hoặc thiếu thông tin.',
-  INVALID_INPUT: 'Dữ liệu nhập vào không hợp lệ hoặc thiếu thông tin.',
   UNAUTHENTICATED: 'Bạn chưa đăng nhập hoặc phiên làm việc đã hết hạn.',
   FORBIDDEN: 'Bạn không có quyền thực hiện thao tác này.',
-  UNAUTHORIZED: 'Bạn không có quyền thực hiện thao tác này.',
   NOT_FOUND: 'Không tìm thấy tài nguyên yêu cầu.',
   RATE_LIMITED: 'Bạn đang thao tác quá nhanh. Vui lòng thử lại sau giây lát.',
-  CONFLICT: 'Địa chỉ email này đã được đăng ký tài khoản.',
+  CONFLICT: 'Thao tác không thực hiện được vì trạng thái đã thay đổi. Vui lòng tải lại.',
   INTERNAL_ERROR: 'Lỗi máy chủ nội bộ. Vui lòng thử lại sau.',
 
   // Account & Auth
   EMAIL_NOT_VERIFIED: 'Vui lòng xác minh địa chỉ email trước khi thực hiện giao dịch này.',
-  EMAIL_ALREADY_EXISTS: 'Địa chỉ email này đã được đăng ký tài khoản.',
   ACCOUNT_LOCKED: 'Tài khoản của bạn đã bị khóa.',
-  INVALID_CREDENTIALS: 'Email hoặc mật khẩu không chính xác.',
-  INVALID_TOKEN: 'Mã xác thực không hợp lệ hoặc đã qua sử dụng.',
-  TOKEN_EXPIRED: 'Mã xác thực đã hết hạn. Vui lòng yêu cầu mã mới.',
-  CAPTCHA_FAILED: 'Xác thực bảo vệ captcha không thành công. Vui lòng thử lại.',
   INVALID_INVITE: 'Mã mời không đúng hoặc không hợp lệ.',
   TWO_FACTOR_REQUIRED: 'Yêu cầu xác thực hai yếu tố (2FA).',
   INVALID_TWO_FACTOR_CODE: 'Mã xác thực 2FA không chính xác hoặc đã hết hạn.',
@@ -57,8 +50,6 @@ export const ERROR_MESSAGES: Record<ErrorCode | string, string> = {
   // Execution
   INSUFFICIENT_BALANCE: 'Số dư khả dụng trong ví không đủ để thực hiện lệnh.',
   INSUFFICIENT_LIQUIDITY: 'Thanh khoản sổ lệnh hiện tại không đủ để khớp lệnh thị trường này.',
-  ORDER_NOT_FOUND: 'Không tìm thấy lệnh yêu cầu.',
-  ORDER_ALREADY_CLOSED: 'Lệnh này đã được khớp hoặc đã bị hủy trước đó.',
   ORDER_NOT_CANCELABLE: 'Lệnh này không thể hủy ở trạng thái hiện tại.',
   DUPLICATE_CLIENT_ORDER_ID: 'Yêu cầu đặt lệnh bị trùng lặp.',
 
@@ -68,17 +59,27 @@ export const ERROR_MESSAGES: Record<ErrorCode | string, string> = {
 };
 
 export function getErrorMessage(code: string, fallback = 'Đã có lỗi xảy ra. Vui lòng thử lại.'): string {
-  return ERROR_MESSAGES[code] || fallback;
+  return (ERROR_MESSAGES as Record<string, string>)[code] || fallback;
 }
 
 /**
  * Format structured ApiError with details into user-friendly Vietnamese messages.
  */
-export function formatApiError(err: unknown, fallback = 'Đã có lỗi xảy ra. Vui lòng thử lại.'): string {
+export function formatApiError(
+  err: unknown,
+  fallback = 'Đã có lỗi xảy ra. Vui lòng thử lại.',
+  overrides?: Partial<Record<ErrorCode, string>>
+): string {
   // Check for ApiError or duck-typed API error object
   const isApiErr = err instanceof ApiError || (typeof err === 'object' && err !== null && 'code' in err);
   if (isApiErr) {
     const apiErr = err as { code: string; details?: Record<string, unknown> };
+    const code = apiErr.code as ErrorCode;
+
+    if (overrides && code in overrides && overrides[code]) {
+      return overrides[code]!;
+    }
+
     if (apiErr.code === 'INVALID_INVITE') {
       const reason = (apiErr.details as { reason?: string } | undefined)?.reason;
       switch (reason) {
@@ -95,10 +96,6 @@ export function formatApiError(err: unknown, fallback = 'Đã có lỗi xảy ra
         default:
           return 'Mã mời không đúng hoặc không hợp lệ';
       }
-    }
-
-    if (apiErr.code === 'CONFLICT') {
-      return 'Địa chỉ email này đã được đăng ký tài khoản.';
     }
 
     if (apiErr.code === 'RATE_LIMITED' && apiErr.details && typeof apiErr.details.retryAfterSeconds === 'number') {

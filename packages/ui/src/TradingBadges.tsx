@@ -131,7 +131,7 @@ export const SimulatedBanner: React.FC<SimulatedBannerProps> = ({
       className={`w-full py-1.5 px-3 flex items-center justify-between text-xs font-medium select-none ${
         tradingHalted
           ? 'bg-[#dc2626] text-white'
-          : 'bg-[var(--color-bg-elevated,#1b1e27)]/80 text-[var(--color-text-secondary,#9ca3af)] border-b border-[var(--color-border-subtle,#1e212b)]'
+          : 'bg-[var(--panel-2)] text-[var(--text-2)] border-b border-[var(--line)]'
       } ${className}`}
     >
       <div className="flex items-center gap-2 mx-auto">

@@ -151,7 +151,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       return { success: false, error: 'Đăng nhập không thành công.' };
     } catch (err: unknown) {
-      return { success: false, error: formatApiError(err, 'Đăng nhập không thành công.') };
+      return {
+        success: false,
+        error: formatApiError(err, 'Đăng nhập không thành công.', {
+          UNAUTHENTICATED: 'Email hoặc mật khẩu không đúng.',
+        }),
+      };
     }
   };
 
@@ -173,7 +178,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       await reconnectRt();
       return { success: true };
     } catch (err: unknown) {
-      return { success: false, error: formatApiError(err, 'Đăng ký tài khoản không thành công.') };
+      return {
+        success: false,
+        error: formatApiError(err, 'Đăng ký tài khoản không thành công.', {
+          CONFLICT: 'Địa chỉ email này đã được đăng ký tài khoản.',
+        }),
+      };
     }
   };
 

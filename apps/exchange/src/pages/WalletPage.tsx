@@ -102,13 +102,7 @@ export const WalletPage: React.FC<WalletPageProps> = ({ onNavigate }) => {
         account?: FuturesAccount;
       };
 
-      const b = ev.balance || (ev.asset ? {
-        asset: ev.asset,
-        available: ev.available || '0',
-        locked: ev.locked || '0',
-        total: (parseFloat(ev.available || '0') + parseFloat(ev.locked || '0')).toString(),
-        valueUsdt: ev.asset === 'USDT' ? ev.available || '0' : null,
-      } : null);
+      const b = ev.balance;
 
       if (ev.kind === 'balance' && b) {
         // Update local item row immediately
@@ -342,7 +336,9 @@ export const WalletPage: React.FC<WalletPageProps> = ({ onNavigate }) => {
 
               <div className="mt-4 pt-4 border-t border-[var(--color-border-subtle,#1e212b)] flex items-center justify-between text-xs text-[var(--color-text-muted,#6b7280)]">
                 <span>Tài khoản: {user?.name || user?.email}</span>
-                <span>Trạng thái: {user?.emailVerified ? 'Đã xác minh' : 'Chưa xác minh'}</span>
+                {publicConfig?.emailVerificationRequired && (
+                  <span>Trạng thái: {user?.emailVerified ? 'Đã xác minh' : 'Chưa xác minh'}</span>
+                )}
               </div>
             </Card>
 
@@ -356,7 +352,7 @@ export const WalletPage: React.FC<WalletPageProps> = ({ onNavigate }) => {
                   <Badge variant="secondary" size="sm">Mô phỏng</Badge>
                 </div>
                 <p className="text-xs text-[var(--color-text-secondary,#9ca3af)] leading-relaxed mb-4">
-                  Nhận {faucetStatus ? formatDecimal(faucetStatus.amount) : '10.000'} USDT ảo để trải nghiệm giao dịch thực tế.
+                  Nhận {faucetStatus ? formatDecimal(faucetStatus.amount, { decimals: 2 }) : '10.000,00'} USDT ảo để trải nghiệm giao dịch thực tế.
                 </p>
 
                 {faucetStatus && (
@@ -364,7 +360,7 @@ export const WalletPage: React.FC<WalletPageProps> = ({ onNavigate }) => {
                     <div className="flex justify-between text-[var(--color-text-muted,#6b7280)]">
                       <span>Đã nạp:</span>
                       <span className="text-[var(--color-text-primary,#f3f4f6)]">
-                        {formatDecimal(faucetStatus.totalClaimed)} / {formatDecimal(faucetStatus.lifetimeCap)} USDT
+                        {formatDecimal(faucetStatus.totalClaimed, { decimals: 2 })} / {formatDecimal(faucetStatus.lifetimeCap, { decimals: 2 })} USDT
                       </span>
                     </div>
                     <div className="w-full bg-[var(--color-bg-base,#08090c)] h-1.5 rounded-full overflow-hidden">
@@ -429,27 +425,29 @@ export const WalletPage: React.FC<WalletPageProps> = ({ onNavigate }) => {
                       if (!items.some(i => i.asset === 'USDT')) {
                         items.unshift({ asset: 'USDT', available: '0', locked: '0', total: '0', valueUsdt: '0' });
                       }
-                      return items.map((b) => (
-                        <TableRow key={b.asset}>
-                          <TableCell className="font-bold flex items-center gap-2">
-                            <span className="w-6 h-6 rounded-full bg-[var(--color-bg-elevated,#1b1e27)] flex items-center justify-center text-xs font-black text-[var(--color-accent-secondary,#67e8f9)]">
-                              {b.asset.slice(0, 3)}
-                            </span>
-                            <span>{b.asset}</span>
-                          </TableCell>
-                          <TableCell data-testid={`spot-available-${b.asset}`} className="text-right font-mono tabular-nums text-[var(--color-buy,#22c55e)]">
-                            {formatAmount(b.available)}
-                          </TableCell>
-                        <TableCell className="text-right font-mono tabular-nums text-[var(--color-text-muted,#6b7280)]">
-                          {formatAmount(b.locked)}
-                        </TableCell>
-                        <TableCell className="text-right font-mono tabular-nums font-semibold">
-                          {formatAmount(b.total)}
-                        </TableCell>
-                        <TableCell className="text-right font-mono tabular-nums text-[var(--color-text-secondary,#9ca3af)]">
-                          {b.valueUsdt === null ? '—' : formatDecimal(b.valueUsdt, { decimals: 2 })}
-                        </TableCell>
-                        <TableCell className="text-center">
+                      return items.map((b) => {
+                        const decimals = b.asset === 'USDT' ? 2 : 8;
+                        return (
+                          <TableRow key={b.asset}>
+                            <TableCell className="font-bold flex items-center gap-2">
+                              <span className="min-w-6 h-6 px-1.5 rounded-full bg-[var(--color-bg-elevated,#1b1e27)] flex items-center justify-center text-[10px] font-black text-[var(--color-accent-secondary,#67e8f9)]">
+                                {b.asset}
+                              </span>
+                              <span>{b.asset}</span>
+                            </TableCell>
+                            <TableCell data-testid={`spot-available-${b.asset}`} className="text-right font-mono tabular-nums text-[var(--color-buy,#22c55e)]">
+                              {formatDecimal(b.available, { decimals, locale: 'vi' })}
+                            </TableCell>
+                            <TableCell className="text-right font-mono tabular-nums text-[var(--color-text-muted,#6b7280)]">
+                              {formatDecimal(b.locked, { decimals, locale: 'vi' })}
+                            </TableCell>
+                            <TableCell className="text-right font-mono tabular-nums font-semibold">
+                              {formatDecimal(b.total, { decimals, locale: 'vi' })}
+                            </TableCell>
+                            <TableCell className="text-right font-mono tabular-nums text-[var(--color-text-secondary,#9ca3af)]">
+                              {b.valueUsdt === null ? '—' : formatDecimal(b.valueUsdt, { decimals: 2 })}
+                            </TableCell>
+                            <TableCell className="text-center">
                           <div className="flex items-center justify-center gap-2">
                             {b.asset === 'USDT' && (
                               <Button
@@ -474,7 +472,8 @@ export const WalletPage: React.FC<WalletPageProps> = ({ onNavigate }) => {
                           </div>
                         </TableCell>
                       </TableRow>
-                      ));
+                        );
+                      });
                     })()}
                   </TableBody>
                 </Table>
