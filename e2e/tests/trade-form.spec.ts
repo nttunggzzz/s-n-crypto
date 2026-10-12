@@ -71,9 +71,11 @@ test('Bán Market bằng nút 50%: khối lượng điền theo số coin đang 
 
   await page.goto('/trade/BTCUSDT');
   await page.getByRole('button', { name: /^BÁN BTC$/ }).first().click();
-  await page.getByRole('button', { name: 'Thị trường', exact: true }).click();
-  await page.getByRole('button', { name: '50%', exact: true }).click();
   const form = orderForm(page);
+  // the order-type tab (the top menu also has a "Thị trường" link): the panel around the form, as in spot.spec
+  const panel = page.locator('div').filter({ has: form }).filter({ hasText: 'Khả dụng' }).last();
+  await panel.getByRole('button', { name: 'Thị trường', exact: true }).click();
+  await panel.getByRole('button', { name: '50%', exact: true }).click();
   await expect.poll(async () => Number(await decimalInputs(form).first().inputValue()), 'nút 50% phải điền khối lượng BTC (không đòi nhập số USDT)').toBeGreaterThan(0);
   await form.getByRole('button', { name: /^BÁN BTC$/ }).click();
   await expect(page.locator('body')).not.toContainText('Vui lòng nhập số tiền USDT');
@@ -92,8 +94,7 @@ test.describe('điện thoại', () => {
     await page.goto('/trade/BTCUSDT');
     await page.getByRole('button', { name: /^BÁN BTC$/ }).last().click();
     const submit = page.locator('form button[type="submit"]');
-    await expect(submit).toHaveText(/^BÁN BTC$/);
-    await expect(page.locator('form').getByRole('button', { name: /^MUA BTC$/ })).toHaveCount(1); // the side tab, not the submit button
-    await expect(submit).not.toHaveText(/^MUA BTC$/);
+    await expect(submit, 'nút gửi lệnh của form mở từ thanh dưới').toHaveText(/^BÁN BTC$/);
+    await expect(page.locator('[role="dialog"] button[type="submit"]').filter({ hasText: /^MUA BTC$/ })).toHaveCount(0);
   });
 });
