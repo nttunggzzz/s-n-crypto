@@ -11,6 +11,15 @@ Rà soát: **2026-10-11** (Claude Code). Cập nhật lần cuối: 2026-10-11 t
 >
 > **Rà soát lần 2 (UI `d5fa8fc`, sau khi gom thư mục): [docs/reports/2026-10-12-ra-soat-ui-lan-2.md](reports/2026-10-12-ra-soat-ui-lan-2.md)** — nguyên nhân "không xác minh email / không nạp thêm tiền", kiểm lại R-01…R-18, lỗi mới N-01…N-14.
 
+## Backend → UI (Claude Code cập nhật mỗi khi đổi backend/hợp đồng; Antigravity đọc đầu mỗi phiên, cùng `packages/contracts/CHANGELOG.md`)
+
+| Ngày | Thay đổi backend / hợp đồng | UI cần làm gì | Trạng thái |
+|---|---|---|---|
+| 2026-10-12 | **Sắp có:** `RealtimeClient.onClose` (R-16) — hợp đồng thêm cách biết kênh realtime bị đóng/từ chối | Khi có (contracts bản mới): dùng để hiện "mất kết nối realtime" thay vì im lặng. Chưa làm gì cho tới khi mục này đổi thành "Có rồi" | Chưa làm (Claude Code) |
+| 2026-10-12 | **Sắp có:** `npm run dev` mặc định tắt bắt xác minh email (N-01), in gợi ý link xác minh từ log | Không đổi code. Sau khi có, lỗi "bị khóa vì email khi chạy dev" biến mất; **sàn thật và e2e giữ nguyên** (luồng khóa/xác minh vẫn phải đúng — N-02, N-03 vẫn cần sửa) | Chưa làm (Claude Code) |
+| 2026-10-12 | **Sắp có:** CSP của server cho phép script captcha (R-04) | Không đổi code UI; sau khi có thì kiểm captcha hiện được trên bản build | Chưa làm (Claude Code) |
+| (không đổi) | Hợp đồng hiện tại: **0.11.0**. Không có endpoint nào bị xóa/đổi tên gần đây | — | — |
+
 ## 0. Bức tranh tổng thể
 
 | Bản | Commit | Kết quả kiểm tra |

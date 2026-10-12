@@ -5,6 +5,7 @@ Bạn phụ trách **giao diện** của dự án sàn giao dịch ảo + web t�
 ## Bắt đầu ở đây (mỗi phiên làm việc)
 - **Thư mục làm việc của bạn: `D:\Claude\crypto\ui`** (worktree nhánh `ui/gd2-exchange`). Mở đúng thư mục này; mọi đường dẫn trong tài liệu (`apps/…`, `docs/…`) tính từ đây. Không mở `D:\Claude\crypto` (đó là `main` của Claude Code) và không đụng `host/`, `host-data/` (sàn đang chạy cho người dùng thật).
 - **Việc đầu tiên:** `git merge main` trong thư mục này để lấy tài liệu và báo cáo mới nhất của Claude Code (nhánh của bạn không tự có chúng). Có xung đột thì giữ phần của bạn ở `apps/`, `packages/ui/`; còn lại lấy của `main`.
+- **Backend đang đổi gì:** đọc mục "Backend → UI" ở đầu `docs/LOI-HIEN-TAI.md` và `packages/contracts/CHANGELOG.md`. Mục nào ghi "UI cần làm gì" thì đưa vào kế hoạch; hợp đồng đổi mà bạn chưa cập nhật thì app có thể gọi sai API.
 - **Việc cần làm lúc này** nằm ở báo cáo rà soát mới nhất trong `docs/reports/` (tên `…-ra-soat-ui-lan-N.md`, lấy số N lớn nhất) — làm các mục ghi "Phụ trách: Antigravity" theo thứ tự trong mục "Thứ tự đề xuất". Sửa xong ghi `Trạng thái: Đã sửa (<commit>) — <lệnh đã chạy + kết quả>` ngay dưới mục đó.
 - **Chạy thử:** `npm run dev` (hoặc `npm run dev -- --sim` khi không có mạng); kiểm trước khi báo xong: `npm run ui-check -- --e2e`.
 - Không biết hỏi ai: ghi câu hỏi vào `docs/parts/contract-requests.md` (nếu cần API) hoặc cuối báo cáo đang làm, chủ dự án sẽ chuyển cho Claude Code.
