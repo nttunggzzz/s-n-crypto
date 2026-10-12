@@ -10,7 +10,6 @@ Rà soát: **2026-10-11** (Claude Code). Cập nhật lần cuối: 2026-10-11 t
 > **Rà soát mới 2026-10-12 (UI `eee01a3`): [docs/reports/2026-10-12-ra-soat-ui-antigravity.md](reports/2026-10-12-ra-soat-ui-antigravity.md)** — 18 mục R-01…R-18. B5 và U2 bên dưới **chưa xong** dù đã đánh "Đã sửa" (xem R-02, R-13).
 >
 > **Rà soát lần 2 (UI `d5fa8fc`, sau khi gom thư mục): [docs/reports/2026-10-12-ra-soat-ui-lan-2.md](reports/2026-10-12-ra-soat-ui-lan-2.md)** — nguyên nhân "không xác minh email / không nạp thêm tiền", kiểm lại R-01…R-18, lỗi mới N-01…N-14.
-
 >
 > **Rà soát lần 3 (UI `9ec5c74`): [docs/reports/2026-10-12-ra-soat-ui-lan-3.md](reports/2026-10-12-ra-soat-ui-lan-3.md)** — **chưa gộp được**: e2e 2 đỏ thật (K-02 màn đăng ký), K-01 tắt xác minh email bằng gán cứng (công tắc phải ở server). Lỗi mới K-01…K-10. Tính năng mới: [PROMPT-12 lệnh + điểm khớp B/S trên chart](antigravity/PROMPT-12-chart-lenh-va-diem-khop.md).
 
