@@ -179,16 +179,17 @@ Cả hai `waitForURL(/\/trade\//)` hết giờ: đăng ký xong app dừng ở m
 - **Cách sửa an toàn:** thêm điều kiện `publicConfig?.emailVerificationRequired === true`; khi lỗi không phải 401 thì giữ nguyên `user`.
 - **Nghiệm thu:** hệ host-mode: chuyển tab 5 lần → không có `GET /me` mới.
 
-### K-09 — Quy trình (P3, chủ dự án quyết một phần)
+### K-09 — Quy trình (P3)
 1. Bảng N trong báo cáo lần 2 ghi "✅ Đã sửa (Antigravity)" nhưng **không có commit và lệnh đã chạy** (quy tắc ở đầu báo cáo và `project-rules.md` mục 9). N-02 ghi xong rồi bị `9ec5c74` gỡ mà không cập nhật.
 2. Nhánh UI thêm `.agent/agents/*`, `.agent/skills/*` (~250 file: script Python, test, tài liệu bên thứ ba) và `AGENTS.md` ở gốc repo. Gộp vào `main` thì:
    - các agent khác cũng đọc `AGENTS.md`;
    - `eslint.config.js` đã được sửa để bỏ qua `.agent/**`.
 
-   **Chủ dự án quyết:**
-   - (a) giữ trong repo;
-   - (b) chỉ giữ `.agent/rules/` + `.agent/agents/`, còn skill đặt ngoài repo;
-   - (c) bỏ `AGENTS.md` ở gốc (nội dung chuyển vào `.agent/`).
+   **Chủ dự án đã quyết (2026-10-13): giữ lại** — đây là các skill của Claude mà Antigravity dùng. Việc đã làm:
+   - quét 246 file trong `.agent/` và `AGENTS.md`: không có file khóa/bí mật, không có chuỗi giống khóa API;
+   - `.agent` thêm vào `.dockerignore` để ảnh Docker (Railway) không chứa chúng;
+   - ESLint đã bỏ qua `.agent/**`; vitest chỉ chạy `packages/`, `server/`, `infra/` nên không chạy test trong skill;
+   - mục K-09.2 coi như **đã đóng**, không còn chặn việc gộp.
 3. `AGENTS.md` mô tả bước cuối "✅ Hoàn tất & Merge Code". Antigravity **không** tự gộp vào `main`; gộp là việc của chủ dự án sau khi `ui-check` xanh.
 
 ### K-10 — e2e đỏ giả khi máy bận (P3, Claude Code)
@@ -211,7 +212,7 @@ Cả hai `waitForURL(/\/trade\//)` hết giờ: đăng ký xong app dừng ở m
    - R-04 CSP, R-16 `onClose`, N-13 `emailDelivery`;
    - K-10;
    - test `chart-orders.spec.ts` khi PROMPT-12 xong.
-3. **Chủ dự án:** quyết K-09 mục 2.
+3. **Chủ dự án:** không còn việc chờ quyết (K-09.2 đã quyết: giữ `.agent/` và `AGENTS.md`).
 
 Sau mỗi đợt chạy `npm run ui-check -- --e2e`. Phải xanh. Khi chạy, tắt `npm run dev` để tránh đỏ giả (K-10).
 

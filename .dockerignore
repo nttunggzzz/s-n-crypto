@@ -10,6 +10,7 @@
 .email-outbox.jsonl
 legacy
 ui
+.agent
 host
 host-data
 coverage
