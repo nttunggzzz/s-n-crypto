@@ -46,6 +46,8 @@ e2e/                 Playwright: fixtures (chặn lỗi console / 5xx / VALIDATI
                      tests/*.spec.ts (luồng chính + test nghiệm thu REVIEW-xx cho giao diện),
                      tests/host-mode/*.spec.ts (dự án `host-mode` trên hệ :5191: đăng ký bằng link mời, không xác minh email)
 legacy/              code AI Studio cũ
+ui/                  (git bỏ qua) worktree nhánh giao diện — Antigravity mở thư mục này
+host/ host-data/     (git bỏ qua) bản sàn đang chạy cho người dùng thật + dữ liệu của nó (`npm run host`)
 ```
 
 ## Lệnh
@@ -67,8 +69,8 @@ npm run ui-check -- [nhánh] [--base <ref>] [--e2e] [--no-verify] [--keep]
                       # nhánh UI (mặc định ui/gd2-exchange) gộp <ref> (mặc định main) trong worktree tạm → verify (+ e2e);
                       #   --no-verify: bỏ verify (chỉ chạy e2e nếu có --e2e); e2e đỏ → báo cáo chép ra .e2e/ui-check/
 npm run host -- update | start | invite "<tên>" | set-role <email> owner | status
-                      # chạy sàn cho người dùng thật trên máy này (trước Railway): bản riêng ../crypto-host, dữ liệu
-                      #   ../crypto-host-data, :8090 + link https trycloudflare — docs/deploy/may-ca-nhan.md
+                      # chạy sàn cho người dùng thật trên máy này (trước Railway): bản riêng host/, dữ liệu
+                      #   host-data/ (trong thư mục dự án, git bỏ qua — cấm `git clean -x`), :8090 + link https trycloudflare — docs/deploy/may-ca-nhan.md
 npm run e2e           # test trình duyệt (Playwright, Edge cài sẵn): build apps/exchange, dựng 2 hệ riêng, mỗi hệ phục vụ
                       #   cả API, /ws và bản build app (giá giả lập): DB :5436 + server :5190 (email ra .e2e/outbox.jsonl) và
                       #   hệ host-mode DB :5437 + server :5191 (.e2e/host/; như sàn thật: REGISTRATION=invite,

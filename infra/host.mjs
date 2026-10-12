@@ -1,8 +1,8 @@
 // `npm run host -- <command>`: run the exchange for real users on THIS machine (before renting Railway).
 // The running copy lives in its own git worktree, so coding in this folder (or in the UI folder) never
 // changes what users see until you update it on purpose:
-//   ../crypto-host        code being served (main + the UI branch merged, built, tested)
-//   ../crypto-host-data   .env.host (settings + secrets, never in git), pgdata/ (database), backups/, logs/
+//   host/        code being served (main + the UI branch merged, built, tested) — git-ignored
+//   host-data/   .env.host (settings + secrets, never in git), pgdata/ (database), backups/, logs/ — git-ignored
 //
 //   npm run host -- update [ui-branch|--no-ui] [--skip-verify] [--skip-e2e]   refresh the served code (server must be stopped);
 //                                           verify + browser tests (incl. the host-mode project: invite sign-up, no email check)
@@ -13,7 +13,7 @@
 //   npm run host -- status
 //
 // The quick tunnel gives a NEW https://….trycloudflare.com address at every start (no domain needed); the
-// address is printed, saved to crypto-host-data/current-url.txt and sent to Telegram when it is set up.
+// address is printed, saved to host-data/current-url.txt and sent to Telegram when it is set up.
 import { execFileSync, spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { cpSync, createWriteStream, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -22,8 +22,8 @@ import path from 'node:path';
 import { parseEnv } from 'node:util';
 import { ROOT, run } from './workspaces.mjs';
 
-const WT = path.resolve(ROOT, '..', 'crypto-host');
-const DATA = path.resolve(process.env.HOST_DATA_DIR ?? path.join(ROOT, '..', 'crypto-host-data'));
+const WT = path.join(ROOT, 'host');
+const DATA = path.resolve(process.env.HOST_DATA_DIR ?? path.join(ROOT, 'host-data'));
 const ENV_FILE = path.join(DATA, '.env.host');
 const PORT = 8090;
 const PG_PORT = 5435;
@@ -51,7 +51,7 @@ DATA_ENCRYPTION_KEY=${key}
 
 # Only people with an invite code can sign up (npm run host -- invite "<who>").
 REGISTRATION=invite
-# No mail domain yet: emails are written to the server log (crypto-host-data/logs), not sent.
+# No mail domain yet: emails are written to the server log (host-data/logs), not sent.
 # Users are not asked to verify their email. With Resend: EMAIL_TRANSPORT=resend + RESEND_API_KEY + EMAIL_FROM.
 EMAIL_TRANSPORT=log
 REQUIRE_EMAIL_VERIFICATION=false
