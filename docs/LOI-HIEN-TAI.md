@@ -8,6 +8,8 @@
 Rà soát: **2026-10-11** (Claude Code). Cập nhật lần cuối: 2026-10-11 tối (C1, O1 xong).
 
 > **Rà soát mới 2026-10-12 (UI `eee01a3`): [docs/reports/2026-10-12-ra-soat-ui-antigravity.md](reports/2026-10-12-ra-soat-ui-antigravity.md)** — 18 mục R-01…R-18. B5 và U2 bên dưới **chưa xong** dù đã đánh "Đã sửa" (xem R-02, R-13).
+>
+> **Rà soát lần 2 (UI `d5fa8fc`, sau khi gom thư mục): [docs/reports/2026-10-12-ra-soat-ui-lan-2.md](reports/2026-10-12-ra-soat-ui-lan-2.md)** — nguyên nhân "không xác minh email / không nạp thêm tiền", kiểm lại R-01…R-18, lỗi mới N-01…N-14.
 
 ## 0. Bức tranh tổng thể
 
