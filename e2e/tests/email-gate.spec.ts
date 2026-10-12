@@ -14,6 +14,8 @@ async function signUpUnverified(page: Page) {
   expect(reg.status(), await reg.text()).toBe(201);
   return acc;
 }
+/** The button that (re)sends the verification email — not the greyed-out "verify first" placeholder of the locked action. */
+const resendButton = (page: Page) => page.getByRole('button', { name: /^gửi( lại)? (link|email)( xác minh)?/i }).and(page.locator(':enabled')).first();
 const usdt = async (page: Page) => Number((await apiGet<Balances>(page, '/api/v1/wallet/balances')).items.find((b) => b.asset === 'USDT')?.available ?? 0);
 
 test('server bắt xác minh email: người chưa xác minh thấy nút gửi email xác minh ở Tài sản và ở form lệnh', async ({ page }) => {
@@ -22,12 +24,11 @@ test('server bắt xác minh email: người chưa xác minh thấy nút gửi e
 
   await page.goto('/assets');
   // the faucet is locked, and the page says how to unlock it — not a button that looks usable and then fails with 403
-  const resend = page.getByRole('button', { name: /xác minh email/i });
-  await expect(resend.first(), 'Tài sản: phải có nút gửi email xác minh').toBeVisible();
+  await expect(resendButton(page), 'Tài sản: phải có nút gửi email xác minh').toBeVisible();
   await expect(page.getByRole('button', { name: /^Nạp ngay/ })).toHaveCount(0);
 
   await page.goto('/trade/BTCUSDT');
-  await expect(page.getByRole('button', { name: /xác minh email/i }).first(), 'form lệnh: phải có nút gửi email xác minh').toBeVisible();
+  await expect(resendButton(page), 'form lệnh: phải có nút gửi email xác minh').toBeVisible();
   await expect(page.locator('button[type="submit"]').filter({ hasText: /^MUA BTC$/ }), 'không còn nút MUA bấm được rồi báo lỗi').toHaveCount(0);
   await expectCleanText(page);
 });
@@ -37,7 +38,7 @@ test('bấm gửi email xác minh → có thư mới; mở link ở tab khác �
   await page.goto('/assets');
   const first = await emailLink(acc.email, 'verify-email'); // the sign-up email
   const sent = page.waitForResponse((r) => r.url().endsWith('/api/v1/auth/resend-verification') && r.request().method() === 'POST');
-  await page.getByRole('button', { name: /xác minh email/i }).first().click();
+  await resendButton(page).click();
   expect((await sent).ok()).toBe(true);
 
   // the link is opened in another tab (the user's mail app / another browser tab)
