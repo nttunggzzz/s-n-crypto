@@ -62,12 +62,15 @@ npm run admin:set-role -- <email> owner   # tạo owner đầu tiên (ghi audit 
 npm run admin:invite -- "<người nhận>" [lượt] [ngày]  # mã mời đăng ký (REGISTRATION=invite — mặc định ở production)
 npm run dev           # cả hệ thống: DB + server + mọi app trong apps/* (mock tắt)
 npm run dev -- --sim  # như trên nhưng giá GIẢ LẬP (không cần Binance: offline, test e2e, CI)
+                      # dev mặc định KHÔNG bắt xác minh email (dev không gửi email thật); `-- --verify-email` để thử luồng thật (link nằm ở log [server], dòng "EMAIL (log transport");
+                      #   quyết định trong shell hoặc .env (REQUIRE_EMAIL_VERIFICATION) luôn thắng
 npm run verify        # cổng gộp main: typecheck mọi workspace (cả UI) + lint + test + build app + báo cáo API app chưa dùng
 npm run lint          # ESLint: backend/contracts/core/infra/e2e lỗi là chặn; apps/*, packages/ui chỉ cảnh báo
 npm run ui-coverage   # endpoint nào backend có mà app chưa gọi (--strict: thiếu là lỗi)
-npm run ui-check -- [nhánh] [--base <ref>] [--e2e] [--no-verify] [--keep]
+npm run ui-check -- [nhánh] [--base <ref>] [--e2e] [--no-verify] [--keep] [--only <đối số Playwright>]
                       # nhánh UI (mặc định ui/gd2-exchange) gộp <ref> (mặc định main) trong worktree tạm → verify (+ e2e);
-                      #   --no-verify: bỏ verify (chỉ chạy e2e nếu có --e2e); e2e đỏ → báo cáo chép ra .e2e/ui-check/
+                      #   --no-verify: bỏ verify (chỉ chạy e2e nếu có --e2e); e2e đỏ → báo cáo chép ra .e2e/ui-check/;
+                      #   --only: phần còn lại của dòng lệnh đưa cho Playwright (ngầm hiểu --e2e), vd `-- --no-verify --only trade-form --project=desktop`
 npm run host -- update | start | invite "<tên>" | set-role <email> owner | status
                       # chạy sàn cho người dùng thật trên máy này (trước Railway): bản riêng host/, dữ liệu
                       #   host-data/ (trong thư mục dự án, git bỏ qua — cấm `git clean -x`), :8090 + link https trycloudflare — docs/deploy/may-ca-nhan.md

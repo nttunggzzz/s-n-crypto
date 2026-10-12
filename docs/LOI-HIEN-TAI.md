@@ -17,10 +17,12 @@ Rà soát: **2026-10-11** (Claude Code). Cập nhật lần cuối: 2026-10-11 t
 
 | Ngày | Thay đổi backend / hợp đồng | UI cần làm gì | Trạng thái |
 |---|---|---|---|
-| 2026-10-12 | **Sắp có:** `RealtimeClient.onClose` (R-16) — hợp đồng thêm cách biết kênh realtime bị đóng/từ chối | Khi có (contracts bản mới): dùng để hiện "mất kết nối realtime" thay vì im lặng. Chưa làm gì cho tới khi mục này đổi thành "Có rồi" | Chưa làm (Claude Code) |
-| 2026-10-12 | **Sắp có:** `npm run dev` mặc định tắt bắt xác minh email (N-01), in gợi ý link xác minh từ log | Không đổi code. Sau khi có, lỗi "bị khóa vì email khi chạy dev" biến mất; **sàn thật và e2e giữ nguyên** (luồng khóa/xác minh vẫn phải đúng — N-02, N-03 vẫn cần sửa) | Chưa làm (Claude Code) |
-| 2026-10-12 | **Sắp có:** CSP của server cho phép script captcha (R-04) | Không đổi code UI; sau khi có thì kiểm captcha hiện được trên bản build | Chưa làm (Claude Code) |
-| (không đổi) | Hợp đồng hiện tại: **0.11.0**. Không có endpoint nào bị xóa/đổi tên gần đây | — | — |
+| 2026-10-12 | **Có rồi (contracts 0.12.0, commit `3bc7edd`):** `RealtimeClient.onClose(cb)` + hằng số `WS_SESSION_ENDED` (4401) — R-16 | Dùng `onClose` thay đoạn dò `typeof … === 'function'` + ép kiểu ở `AuthContext.tsx`: `code === WS_SESSION_ENDED` → gọi `me`, 401 thì hiện đã đăng xuất. Đánh dấu R-16 xong ở `docs/parts/contract-requests.md` | **Có rồi** — chờ Antigravity dùng |
+| 2026-10-12 | **Có rồi (0.12.0):** `publicConfig.emailDelivery` (`'sent'` hoặc `'log'`) — N-13 | Toast "Đã gửi lại email xác minh" chỉ khi `'sent'`; khi `'log'` nói "Máy chủ này chưa gửi email thật". Đánh dấu N-13 xong ở `contract-requests.md` | **Có rồi** — chờ Antigravity dùng |
+| 2026-10-12 | **Có rồi:** `npm run dev` mặc định tắt bắt xác minh email (N-01). Quyết định trong shell / `.env` thắng; `npm run dev -- --verify-email` để thử luồng thật | **Không** gán cứng "đã xác minh" trong giao diện (K-01): giao diện đọc `publicConfig.emailVerificationRequired`. Sàn thật và e2e giữ nguyên | **Có rồi** |
+| 2026-10-12 | **Có rồi:** CSP của server cho phép script / iframe / kết nối của Cloudflare Turnstile khi có `TURNSTILE_SITE_KEY` — R-04 | Không đổi code UI; kiểm widget captcha hiện trên bản build khi bật captcha | **Có rồi** |
+| 2026-10-12 | **Test nghiệm thu mới** (`e2e/tests/trade-form.spec.ts`, `email-gate.spec.ts`) — N-04, K-03, N-05, N-06, K-01, N-03 | Cần `data-testid` cho form lệnh: `order-price`, `order-quantity`, `order-total` (test đang tìm theo thứ tự ô `inputmode="decimal"`). Ghi vào `docs/antigravity/TESTIDS.md` | Chờ Antigravity |
+| (không đổi) | Hợp đồng hiện tại: **0.12.0**. Không có endpoint nào bị xóa/đổi tên gần đây | — | — |
 
 ## 0. Bức tranh tổng thể
 

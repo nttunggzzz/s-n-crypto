@@ -45,7 +45,7 @@ Cả hai `waitForURL(/\/trade\//)` hết giờ: đăng ký xong app dừng ở m
 
 | Mã | Kết quả | Bằng chứng |
 |---|---|---|
-| N-01 | ❌ Chưa (Claude Code) | `infra/dev.mjs` chưa đổi. Chủ dự án đang dùng cách tạm `ui/.env` |
+| N-01 | ✅ Claude Code (`3bc7edd`) | `infra/dev.mjs` + `infra/devEmailEnv.mjs`: dev mặc định tắt bắt xác minh; shell / `.env` thắng; `--verify-email` để thử luồng thật. 4 test `infra/devEmailEnv.test.mjs` |
 | N-02 nút gửi email xác minh | ❌ **Đã làm rồi bị gỡ** | `37ebfbd` thêm nút ở Ví, form lệnh, Cài đặt; `9ec5c74` xóa hết (xem K-01). Báo cáo vẫn ghi "✅ Đã sửa" |
 | N-03 tab cũ tự mở khóa | ✅ (đọc mã) | `AuthContext.tsx:136-170` focus/visibility + `BroadcastChannel('cex-auth')`; `AuthPages.tsx:717-721` gửi `verified`. Xem K-08 |
 | N-04 giá Limit điền sẵn | ✅ chạy thật | mở `/trade/BTCUSDT`: ô giá = `83039.9` (giá hiện tại theo tick). Còn lỗi tổng giá trị → K-03 |
@@ -57,11 +57,11 @@ Cả hai `waitForURL(/\/trade\//)` hết giờ: đăng ký xong app dừng ở m
 | N-10 gợi ý nạp thêm | ✅ (đọc mã) | `WalletPage.tsx` dòng gợi ý khi đang chờ; admin có chú thích "Đặt 0 để nạp liên tục" |
 | N-11 định dạng bảng lệnh/Danh mục | ✅ (đọc mã) | `UserOrdersTabs.tsx`, `PortfolioPage.tsx` dùng `formatPrice`/`formatAmount` theo tick/bước. Còn chỗ khác → K-05, K-07 |
 | N-12 hộp xác nhận admin | ✅ (đọc mã) | `ConfirmDialog.tsx` `role="dialog"`, `aria-modal`, nút có tên |
-| N-13 toast "đã gửi email" | — | bị gỡ cùng K-01; yêu cầu `emailDelivery` đã ghi ở `contract-requests.md` (chờ Claude Code) |
+| N-13 toast "đã gửi email" | ◐ | giao diện bị gỡ cùng K-01. **Phần backend xong** (contracts 0.12.0 `publicConfig.emailDelivery`, `3bc7edd`); UI dùng khi khôi phục K-01 |
 | N-14 nến cặp sai | ✅ (đọc mã) | `TradePage.tsx` truyền `currentSymbol` thẳng vào chart |
 | R-13 nút không tên | ✅ (đọc mã) | `Tabs.tsx` `role="tab"` + `aria-selected`; sidebar admin, sổ lệnh, bảng lệnh có `aria-label` |
 | R-14 định dạng | ◐ | xem K-05, K-07 |
-| R-16 `onClose` | ❌ Chưa (Claude Code) | đã ghi ở `contract-requests.md` |
+| R-16 `onClose` | ✅ Claude Code (`3bc7edd`) | `RealtimeClient.onClose` + `WS_SESSION_ENDED` ở contracts 0.12.0; test `server/src/realtime/realtimeClient.test.ts`. UI cần dùng (xem "Backend → UI" trong `LOI-HIEN-TAI.md`) |
 | R-18 sửa `e2e/` | ✅ | lần này không đụng `e2e/` |
 
 ## 3. Lỗi mới
