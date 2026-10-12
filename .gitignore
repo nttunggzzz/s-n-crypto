@@ -1,5 +1,9 @@
 # Claude Code agent worktrees (temporary checkouts)
 .claude/worktrees/
+# folders kept inside the project but never committed: UI worktree (Antigravity), live exchange worktree + its data
+/ui/
+/host/
+/host-data/
 node_modules/
 build/
 dist/

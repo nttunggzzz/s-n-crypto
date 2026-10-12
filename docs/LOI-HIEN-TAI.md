@@ -8,6 +8,8 @@
 Rà soát: **2026-10-11** (Claude Code). Cập nhật lần cuối: 2026-10-11 tối (C1, O1 xong).
 
 > **Rà soát mới 2026-10-12 (UI `eee01a3`): [docs/reports/2026-10-12-ra-soat-ui-antigravity.md](reports/2026-10-12-ra-soat-ui-antigravity.md)** — 18 mục R-01…R-18. B5 và U2 bên dưới **chưa xong** dù đã đánh "Đã sửa" (xem R-02, R-13).
+>
+> **Rà soát lần 2 (UI `d5fa8fc`, sau khi gom thư mục): [docs/reports/2026-10-12-ra-soat-ui-lan-2.md](reports/2026-10-12-ra-soat-ui-lan-2.md)** — nguyên nhân "không xác minh email / không nạp thêm tiền", kiểm lại R-01…R-18, lỗi mới N-01…N-14.
 
 ## 0. Bức tranh tổng thể
 
@@ -175,7 +177,7 @@ Ba kết luận chính:
     - log ghi giờ crash, thời gian đã chạy và mã thoát dạng hex;
     - chờ 1,5s trước khi coi là crash, để Ctrl+C của chủ dự án không bị tính là crash;
     - nếu tiến trình không tạo được thì cũng khởi động lại.
-  - Node chạy với `--report-on-fatalerror --report-directory=<crypto-host-data>/logs`.
+  - Node chạy với `--report-on-fatalerror --report-directory=host-data/logs`.
   - Server ghi bộ nhớ vào log mỗi 10 phút (`src/ops/memoryLog.ts`).
   - Sàn chạy bằng **bản build** `server/dist/main.js` (`npm run build -w @cex/server`, esbuild, `scripts/build.ts`), không qua tsx. `update` build nó.
   - `MIGRATIONS_DIR` tìm được từ cả mã nguồn lẫn bản build.
@@ -294,7 +296,7 @@ Script đo nằm trong mục "Cách tự đo lại" ở cuối file.
   npm run ui-check -- --e2e
   ```
   Phải xanh.
-- **Bản nào đang phục vụ người dùng:** xem `D:\Claude\crypto-host-data\version.json`.
+- **Bản nào đang phục vụ người dùng:** xem `D:\Claude\crypto\host-data\version.json`.
 - **Đăng ký / xác minh trên sàn đang chạy:** `curl http://localhost:8090/api/v1/config`.
 - **So nến với Binance:** gọi `GET /api/v1/market/candles/<SYMBOL>?interval=<i>&limit=N` của sàn và `https://api.binance.com/api/v3/klines?symbol=<SYMBOL>&interval=<i>&limit=N`, so từng O/H/L/C/V.
 - **Đo biểu đồ trong trình duyệt** (DevTools console):

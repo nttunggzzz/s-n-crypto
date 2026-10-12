@@ -9,5 +9,8 @@
 .e2e
 .email-outbox.jsonl
 legacy
+ui
+host
+host-data
 coverage
 **/*.log
