@@ -1,4 +1,4 @@
-// `npm run ui-check [-- <branch>] [--base <ref>] [--e2e] [--no-verify] [--keep]`: is the UI branch ready to merge?
+// `npm run ui-check [-- <branch>] [--base <ref>] [--e2e] [--no-verify] [--keep] [--only <playwright args…>]`: is the UI branch ready to merge?
 // Checks the branch's latest commit merged with <ref> (default main), in a throw-away worktree (the UI
 // developer's own folder is never touched):
 //   1. git worktree at <branch> (default ui/gd2-exchange) + merge <ref> (package-lock conflict: keep the
@@ -6,6 +6,7 @@
 //   2. npm run verify (skipped with --no-verify)   3. with --e2e: npm run e2e (browser tests on the simulated
 //      feed, both stacks: default + host mode); a failed run's report is copied to .e2e/ui-check/ here
 // --base <ref>: merge another branch/commit instead of main (e.g. a backend branch not merged yet).
+// --only <args…>: everything after it goes to Playwright (implies --e2e), e.g. `--no-verify --only trade-form email-gate --project=desktop`.
 // Prints a summary; exit 1 if a step fails. The worktree is removed afterwards (--keep to look inside).
 // When the owner's live exchange answers on :8090, everything runs at below-normal priority.
 import { execFileSync } from 'node:child_process';
@@ -18,9 +19,14 @@ const args = process.argv.slice(2);
 const flags = new Set();
 let branch;
 let base = 'main';
+let playwrightArgs = [];
 for (let i = 0; i < args.length; i++) {
   const a = args[i];
-  if (a === '--base') base = args[++i];
+  if (a === '--only') {
+    playwrightArgs = args.slice(i + 1);
+    flags.add('--e2e');
+    break;
+  } else if (a === '--base') base = args[++i];
   else if (a.startsWith('--base=')) base = a.slice('--base='.length);
   else if (a.startsWith('--')) flags.add(a);
   else branch ??= a;
@@ -28,7 +34,7 @@ for (let i = 0; i < args.length; i++) {
 branch ??= 'ui/gd2-exchange';
 const unknown = [...flags].filter((f) => !['--e2e', '--no-verify', '--keep'].includes(f));
 if (!base || unknown.length) {
-  process.stderr.write(`usage: npm run ui-check -- [<branch>] [--base <ref>] [--e2e] [--no-verify] [--keep]${unknown.length ? ` (unknown: ${unknown.join(' ')})` : ''}\n`);
+  process.stderr.write(`usage: npm run ui-check -- [<branch>] [--base <ref>] [--e2e] [--no-verify] [--keep] [--only <playwright args…>]${unknown.length ? ` (unknown: ${unknown.join(' ')})` : ''}\n`);
   process.exit(1);
 }
 const withE2e = flags.has('--e2e');
@@ -78,7 +84,7 @@ try {
     else process.stdout.write('\n(--no-verify: npm run verify skipped)\n');
     if (verified && withE2e) {
       await stepOk('npm run e2e (browser tests, simulated prices)', async () => {
-        if ((await run('npm', ['run', 'e2e'], { cwd: dir })) === 0) return true;
+        if ((await run('npm', ['run', 'e2e', ...(playwrightArgs.length ? ['--', ...playwrightArgs] : [])], { cwd: dir })) === 0) return true;
         // the throw-away worktree goes away: keep the Playwright report + error contexts of the failed run
         const out = path.join(ROOT, '.e2e/ui-check');
         rmSync(out, { recursive: true, force: true });
