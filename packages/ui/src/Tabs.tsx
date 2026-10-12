@@ -32,13 +32,18 @@ export const Tabs: React.FC<TabsProps> = ({
   if (variant === 'segmented') {
     return (
       <div
+        role="tablist"
         className={`inline-flex p-1 bg-[var(--color-bg-base,#08090c)] border border-[var(--color-border-subtle,#1e212b)] rounded-[var(--radius-md,8px)] ${className}`}
       >
         {tabs.map((tab) => {
           const isActive = tab.id === activeId;
+          const tabLabel = typeof tab.label === 'string' ? tab.label : undefined;
           return (
             <button
               key={tab.id}
+              role="tab"
+              aria-selected={isActive}
+              aria-label={tabLabel}
               disabled={tab.disabled}
               onClick={() => onChange(tab.id)}
               className={`flex items-center gap-1.5 rounded-[var(--radius-sm,4px)] font-medium transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${sizeMap[size]} ${
@@ -58,12 +63,16 @@ export const Tabs: React.FC<TabsProps> = ({
 
   if (variant === 'pill') {
     return (
-      <div className={`flex items-center gap-1.5 overflow-x-auto ${className}`}>
+      <div role="tablist" className={`flex items-center gap-1.5 overflow-x-auto ${className}`}>
         {tabs.map((tab) => {
           const isActive = tab.id === activeId;
+          const tabLabel = typeof tab.label === 'string' ? tab.label : undefined;
           return (
             <button
               key={tab.id}
+              role="tab"
+              aria-selected={isActive}
+              aria-label={tabLabel}
               disabled={tab.disabled}
               onClick={() => onChange(tab.id)}
               className={`flex items-center gap-1.5 rounded-full font-medium transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed ${sizeMap[size]} ${
@@ -84,13 +93,18 @@ export const Tabs: React.FC<TabsProps> = ({
   // Underline (default)
   return (
     <div
+      role="tablist"
       className={`flex items-center border-b border-[var(--color-border-subtle,#1e212b)] overflow-x-auto ${className}`}
     >
       {tabs.map((tab) => {
         const isActive = tab.id === activeId;
+        const tabLabel = typeof tab.label === 'string' ? tab.label : undefined;
         return (
           <button
             key={tab.id}
+            role="tab"
+            aria-selected={isActive}
+            aria-label={tabLabel}
             disabled={tab.disabled}
             onClick={() => onChange(tab.id)}
             className={`relative flex items-center gap-1.5 font-medium transition-colors cursor-pointer select-none border-b-2 disabled:opacity-40 disabled:cursor-not-allowed ${sizeMap[size]} ${

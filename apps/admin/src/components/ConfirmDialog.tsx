@@ -38,9 +38,14 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
 
   return (
     <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-      <div className="bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)] rounded-lg w-full max-w-md p-6 flex flex-col gap-4 shadow-2xl">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="confirm-dialog-title"
+        className="bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)] rounded-lg w-full max-w-md p-6 flex flex-col gap-4 shadow-2xl"
+      >
         <div>
-          <h2 className="text-lg font-bold text-[var(--text,#f4f4f5)]">{title}</h2>
+          <h2 id="confirm-dialog-title" className="text-lg font-bold text-[var(--text,#f4f4f5)]">{title}</h2>
           <p className="text-[var(--text-2,#a1a1aa)] text-sm mt-1">{consequenceText}</p>
         </div>
 
@@ -91,7 +96,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
         )}
 
         <div className="flex justify-end gap-3 mt-2 pt-2 border-t border-[var(--line,#1d1e21)]">
-          <Button variant="secondary" onClick={onCancel} disabled={isSubmitting}>
+          <Button variant="secondary" onClick={onCancel} disabled={isSubmitting} aria-label="Hủy bỏ">
             Hủy
           </Button>
           <Button
@@ -99,6 +104,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
             variant="primary"
             onClick={() => onConfirm(reason)}
             disabled={!isValid || isSubmitting}
+            aria-label="Xác nhận thao tác"
           >
             {isSubmitting ? 'Đang xử lý...' : 'Xác nhận'}
           </Button>

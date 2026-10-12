@@ -31,7 +31,7 @@ export interface WalletPageProps {
 }
 
 export const WalletPage: React.FC<WalletPageProps> = ({ onNavigate }) => {
-  const { isAuthenticated, user } = useAuth();
+  const { isAuthenticated, user, resendVerification } = useAuth();
   const { publicConfig } = useConfig();
   const { realtimeClient } = useMarket();
   const { success, error: toastError } = useToast();
@@ -58,6 +58,35 @@ export const WalletPage: React.FC<WalletPageProps> = ({ onNavigate }) => {
   const [loading, setLoading] = useState(true);
   const [faucetClaiming, setFaucetClaiming] = useState(false);
   const [countdown, setCountdown] = useState<string | null>(null);
+
+  const [resendingVerification, setResendingVerification] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const timer = setInterval(() => {
+      setResendCooldown((prev) => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [resendCooldown]);
+
+  const handleResendVerification = async () => {
+    if (resendCooldown > 0) return;
+    setResendingVerification(true);
+    try {
+      const res = await resendVerification();
+      if (res.success) {
+        success('Đã gửi lại email xác minh!');
+        setResendCooldown(60);
+      } else {
+        toastError(res.error || 'Không thể gửi email xác minh.');
+      }
+    } catch {
+      toastError('Không thể gửi email xác minh.');
+    } finally {
+      setResendingVerification(false);
+    }
+  };
 
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -375,20 +404,40 @@ export const WalletPage: React.FC<WalletPageProps> = ({ onNavigate }) => {
                 )}
               </div>
 
-              <Button
-                variant="primary"
-                fullWidth
-                loading={faucetClaiming}
-                disabled={!faucetStatus?.canClaim || !!countdown || isEmailUnverified}
-                onClick={handleClaimFaucet}
-                className="py-2.5 font-bold"
-              >
-                {isEmailUnverified
-                  ? 'Xác minh email để nạp tiền'
-                  : countdown
-                  ? `Thời gian chờ: ${countdown}`
-                  : 'Nạp ngay 10.000 USDT'}
-              </Button>
+              {isEmailUnverified ? (
+                <Button
+                  variant="primary"
+                  fullWidth
+                  loading={resendingVerification}
+                  disabled={resendCooldown > 0}
+                  onClick={handleResendVerification}
+                  className="py-2.5 font-bold"
+                  aria-label="Gửi email xác minh"
+                >
+                  {resendCooldown > 0
+                    ? `Gửi lại sau ${resendCooldown}s`
+                    : `Gửi email xác minh tới ${user?.email}`}
+                </Button>
+              ) : (
+                <Button
+                  variant="primary"
+                  fullWidth
+                  loading={faucetClaiming}
+                  disabled={!faucetStatus?.canClaim || !!countdown}
+                  onClick={handleClaimFaucet}
+                  className="py-2.5 font-bold"
+                  aria-label="Nạp ngay 10.000 USDT"
+                >
+                  {countdown
+                    ? `Thời gian chờ: ${countdown}`
+                    : 'Nạp ngay 10.000 USDT'}
+                </Button>
+              )}
+              {countdown && (
+                <p className="text-[11px] text-[var(--color-text-muted,#6b7280)] text-center mt-2">
+                  Cần thêm tiền thử nghiệm? Nhờ quản trị viên điều chỉnh định mức faucet
+                </p>
+              )}
             </Card>
           </div>
 

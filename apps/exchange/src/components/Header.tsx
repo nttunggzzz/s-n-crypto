@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useConfig } from '../context/ConfigContext.tsx';
 import { useMarket } from '../context/MarketContext';
-import { Button, Badge, BrandLogo, useToast } from '@cex/ui';
+import { Button, Badge, BrandLogo, useToast, formatDecimal } from '@cex/ui';
 import { canOpenAdmin, appLinks } from '@cex/contracts';
+import { getApiClient } from '../services/api.ts';
 import { NotificationCenter } from './NotificationCenter.tsx';
 import { AvatarIcon } from './AvatarIcon.tsx';
 import { 
@@ -22,7 +23,41 @@ export const Header: React.FC<HeaderProps> = ({ currentPath, onNavigate }) => {
   const { publicConfig } = useConfig();
   const { connectionStatus, activeSymbol } = useMarket();
   const { success, error: toastError } = useToast();
-  const [hideBanner, setHideBanner] = useState(false);
+  const [hideBanner, setHideBanner] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return sessionStorage.getItem('cex:hide-email-banner') === 'true';
+    }
+    return false;
+  });
+  const [totalEstimatedUsdt, setTotalEstimatedUsdt] = useState<string | null>(null);
+  const api = getApiClient();
+
+  useEffect(() => {
+    if (user?.emailVerified) {
+      sessionStorage.removeItem('cex:hide-email-banner');
+    }
+  }, [user?.emailVerified]);
+
+  const fetchTotalAsset = useCallback(async () => {
+    if (!isAuthenticated) {
+      setTotalEstimatedUsdt(null);
+      return;
+    }
+    try {
+      const res = await api.portfolio();
+      setTotalEstimatedUsdt(res.totalValueUsdt);
+    } catch {
+      setTotalEstimatedUsdt(null);
+    }
+  }, [isAuthenticated, api]);
+
+  useEffect(() => {
+    fetchTotalAsset();
+    window.addEventListener('cex:balance-refresh', fetchTotalAsset);
+    return () => {
+      window.removeEventListener('cex:balance-refresh', fetchTotalAsset);
+    };
+  }, [fetchTotalAsset]);
 
   const handleResend = async () => {
     const res = await resendVerification();
@@ -191,7 +226,10 @@ export const Header: React.FC<HeaderProps> = ({ currentPath, onNavigate }) => {
                   <div className="absolute top-full right-0 mt-0 w-56 py-1 bg-[var(--panel)] border border-[var(--line)] rounded-[var(--radius-lg,10px)] shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
                     <div className="px-4 py-3 border-b border-[var(--line)]">
                       <div className="text-[11px] text-[var(--text-3,#63636b)] mb-1">Tổng tài sản ước tính</div>
-                      <div className="text-base font-bold text-[var(--text,#f4f4f5)] font-mono">10,000.00 <span className="text-[11px] font-sans text-[var(--text-2,#a1a1aa)] font-normal">USDT</span></div>
+                      <div className="text-base font-bold text-[var(--text,#f4f4f5)] font-mono">
+                        {totalEstimatedUsdt !== null ? `${formatDecimal(totalEstimatedUsdt, { decimals: 2 })} ` : '— '}
+                        <span className="text-[11px] font-sans text-[var(--text-2,#a1a1aa)] font-normal">USDT</span>
+                      </div>
                     </div>
                     <div onClick={() => onNavigate('/assets')} className="px-4 py-2.5 hover:bg-[var(--panel-2)] cursor-pointer text-[13px] text-[var(--text,#f4f4f5)] flex items-center gap-2">
                       <Wallet size={16} className="text-[var(--text-2,#a1a1aa)]" />

@@ -20,6 +20,8 @@ import {
   Badge,
   useToast,
   formatDecimal,
+  formatPrice,
+  formatAmount,
 } from '@cex/ui';
 import { Download, AlertCircle, CheckCircle2, Clock, XCircle, ArrowRight } from 'lucide-react';
 
@@ -33,9 +35,15 @@ export const UserOrdersTabs: React.FC<UserOrdersTabsProps> = ({
   refreshTrigger,
 }) => {
   const { isAuthenticated } = useAuth();
-  const { realtimeClient } = useMarket();
+  const { realtimeClient, symbols } = useMarket();
   const { success, error: toastError } = useToast();
   const api = getApiClient();
+
+  const symbolMap = useMemo(() => {
+    const map = new Map<string, { tickSize?: string; stepSize?: string }>();
+    symbols?.forEach((s) => map.set(s.symbol, { tickSize: s.tickSize, stepSize: s.stepSize }));
+    return map;
+  }, [symbols]);
 
   const [activeTab, setActiveTab] = useState<'open' | 'history' | 'trades'>('open');
   const [openOrders, setOpenOrders] = useState<Order[]>([]);
@@ -252,6 +260,7 @@ export const UserOrdersTabs: React.FC<UserOrdersTabsProps> = ({
               {(['all', '1d', '7d', '30d'] as const).map((r) => (
                 <button
                   key={r}
+                  aria-label={`Lọc ${r === 'all' ? 'tất cả thời gian' : r}`}
                   onClick={() => setDateFilter(r)}
                   className={`px-2 py-0.5 rounded text-[10px] font-semibold transition-colors ${
                     dateFilter === r ? 'bg-[var(--accent,#818cf8)] text-black' : 'text-[var(--text-3,#63636b)] hover:text-white'
@@ -303,6 +312,7 @@ export const UserOrdersTabs: React.FC<UserOrdersTabsProps> = ({
           {activeTab === 'open' && totalOpenCount > 0 && (
             <button
               onClick={() => setCancelModalOpen(true)}
+              aria-label={hasBotOrders ? 'Hủy tất cả (trừ lệnh bot)' : 'Hủy tất cả'}
               className="text-xs text-[var(--text-3,#63636b)] hover:text-[var(--text,#f4f4f5)] bg-[var(--panel-2,#141416)] border border-[var(--line,#1d1e21)] px-2 py-1 rounded cursor-pointer"
             >
               {hasBotOrders ? 'Hủy tất cả (trừ lệnh bot)' : 'Hủy tất cả'}
@@ -349,6 +359,7 @@ export const UserOrdersTabs: React.FC<UserOrdersTabsProps> = ({
               <TableBody>
                 {/* 1. RENDER GROUPED OCO ORDERS */}
                 {openOrderLists.map((list) => {
+                  const symInfo = symbolMap.get(list.symbol);
                   const limitLeg = list.orders.find((o) => o.type === 'LIMIT');
                   const stopLeg = list.orders.find((o) => o.type === 'STOP_LIMIT' || o.type === 'STOP_MARKET');
                   return (
@@ -366,16 +377,16 @@ export const UserOrdersTabs: React.FC<UserOrdersTabsProps> = ({
                         </div>
                       </TableCell>
                       <TableCell className="text-right font-mono">
-                        <div>TP: <span className="text-[var(--color-buy,#22c55e)] font-bold">{limitLeg?.price || '—'}</span></div>
+                        <div>TP: <span className="text-[var(--color-buy,#22c55e)] font-bold">{limitLeg?.price ? formatPrice(limitLeg.price, symInfo?.tickSize) : '—'}</span></div>
                         <div className="text-[10px] text-[var(--color-text-muted,#6b7280)]">
-                          SL: Stop {stopLeg?.stopPrice || '—'} {stopLeg?.price ? `-> Limit ${stopLeg.price}` : ''}
+                          SL: Stop {stopLeg?.stopPrice ? formatPrice(stopLeg.stopPrice, symInfo?.tickSize) : '—'} {stopLeg?.price ? `-> Limit ${formatPrice(stopLeg.price, symInfo?.tickSize)}` : ''}
                         </div>
                       </TableCell>
                       <TableCell className="text-right font-mono">
-                        {formatDecimal(limitLeg?.quantity || stopLeg?.quantity || '—')}
+                        {formatAmount(limitLeg?.quantity || stopLeg?.quantity, symInfo?.stepSize)}
                       </TableCell>
                       <TableCell className="text-right font-mono text-[var(--color-text-secondary,#9ca3af)]">
-                        {formatDecimal(limitLeg?.executedQty || '0')}
+                        {formatAmount(limitLeg?.executedQty || '0', symInfo?.stepSize)}
                       </TableCell>
                       <TableCell className="text-center">
                         <Badge variant="secondary" size="sm">Cặp OCO</Badge>
@@ -388,6 +399,7 @@ export const UserOrdersTabs: React.FC<UserOrdersTabsProps> = ({
                           data-testid="order-cancel"
                           variant="ghost"
                           size="sm"
+                          aria-label={`Hủy lệnh OCO ${list.symbol}`}
                           loading={cancelingListId === list.id}
                           onClick={() => handleCancelOrderList(list.id)}
                           className="text-[var(--color-sell,#f87171)] hover:bg-[var(--color-sell-bg,rgba(248,113,113,0.12))] text-xs px-2 py-1"
@@ -401,6 +413,7 @@ export const UserOrdersTabs: React.FC<UserOrdersTabsProps> = ({
 
                 {/* 2. RENDER STANDALONE ORDERS */}
                 {standaloneOpenOrders.map((ord) => {
+                  const symInfo = symbolMap.get(ord.symbol);
                   const isTrailing = ord.type === 'TRAILING_STOP_MARKET';
                   return (
                     <TableRow key={ord.id} data-testid="open-order-row">
@@ -433,28 +446,28 @@ export const UserOrdersTabs: React.FC<UserOrdersTabsProps> = ({
                         </div>
                         {ord.tpsl && (
                           <div className="text-[10px] text-[var(--color-accent-primary,#818cf8)] mt-0.5">
-                            TP: {ord.tpsl.takeProfitPrice || '—'} / SL: {ord.tpsl.stopLossPrice || '—'}
+                            TP: {ord.tpsl.takeProfitPrice ? formatPrice(ord.tpsl.takeProfitPrice, symInfo?.tickSize) : '—'} / SL: {ord.tpsl.stopLossPrice ? formatPrice(ord.tpsl.stopLossPrice, symInfo?.tickSize) : '—'}
                           </div>
                         )}
                       </TableCell>
                       <TableCell className="text-right font-mono">
-                        {ord.price ? formatDecimal(ord.price) : 'Thị trường'}
+                        {ord.price ? formatPrice(ord.price, symInfo?.tickSize) : 'Thị trường'}
                         {ord.stopPrice && (
                           <div className="text-[10px] text-[var(--color-accent-primary,#818cf8)]">
-                            Stop: {ord.stopPrice}
+                            Stop: {formatPrice(ord.stopPrice, symInfo?.tickSize)}
                           </div>
                         )}
                         {isTrailing && (
                           <div className="text-[10px] text-[var(--text-3,#63636b)]">
-                            Ref: {ord.trailingReferencePrice || '—'} (Δ {((ord.trailingDeltaBips || 0) / 100).toFixed(1)}%)
+                            Ref: {ord.trailingReferencePrice ? formatPrice(ord.trailingReferencePrice, symInfo?.tickSize) : '—'} (Δ {((ord.trailingDeltaBips || 0) / 100).toFixed(1)}%)
                           </div>
                         )}
                       </TableCell>
                       <TableCell className="text-right font-mono">
-                        {ord.quantity ? formatDecimal(ord.quantity) : `${formatDecimal(ord.quoteOrderQty)} USDT`}
+                        {ord.quantity ? formatAmount(ord.quantity, symInfo?.stepSize) : `${formatDecimal(ord.quoteOrderQty, { decimals: 2 })} USDT`}
                       </TableCell>
                       <TableCell className="text-right font-mono text-[var(--color-text-secondary,#9ca3af)]">
-                        {formatDecimal(ord.executedQty)}
+                        {formatAmount(ord.executedQty, symInfo?.stepSize)}
                       </TableCell>
                       <TableCell className="text-center">
                         {ord.triggerState === 'WAITING' ? (
@@ -481,6 +494,7 @@ export const UserOrdersTabs: React.FC<UserOrdersTabsProps> = ({
                             data-testid="order-cancel"
                             variant="ghost"
                             size="sm"
+                            aria-label={`Hủy lệnh ${ord.side} ${ord.symbol}`}
                             loading={cancelingId === ord.id}
                             onClick={() => handleCancelOrder(ord.id)}
                             className="text-[var(--color-sell,#f87171)] hover:bg-[var(--color-sell-bg,rgba(248,113,113,0.12))] text-xs px-2 py-1"
@@ -518,53 +532,56 @@ export const UserOrdersTabs: React.FC<UserOrdersTabsProps> = ({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {orderHistory.map((ord) => (
-                  <TableRow key={ord.id}>
-                    <TableCell className="text-xs text-[var(--color-text-muted,#6b7280)] font-mono">
-                      {new Date(ord.createdAt).toLocaleString('vi-VN', { hour12: false })}
-                    </TableCell>
-                    <TableCell className="font-bold">{ord.symbol}</TableCell>
-                    <TableCell>
-                      <div className="flex items-center gap-1.5 flex-wrap">
-                        <SideTag side={ord.side} />
-                        <span className="text-xs text-[var(--color-text-secondary,#9ca3af)]">{ord.type}</span>
-                        {ord.source === 'GRID' && (
-                          <Badge variant="info" size="sm" className="bg-[var(--accent,#818cf8)]/15 text-[var(--accent,#818cf8)]">
-                            Bot lưới
-                          </Badge>
-                        )}
-                        {ord.source === 'DCA' && (
-                          <Badge variant="warning" size="sm">
-                            Mua định kỳ
-                          </Badge>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell className="text-right font-mono">
-                      {ord.price ? formatDecimal(ord.price) : 'Thị trường'}
-                      {ord.stopPrice && (
-                        <div className="text-[10px] text-[var(--color-text-muted,#6b7280)]">
-                          Stop: {ord.stopPrice}
+                {orderHistory.map((ord) => {
+                  const symInfo = symbolMap.get(ord.symbol);
+                  return (
+                    <TableRow key={ord.id}>
+                      <TableCell className="text-xs text-[var(--color-text-muted,#6b7280)] font-mono">
+                        {new Date(ord.createdAt).toLocaleString('vi-VN', { hour12: false })}
+                      </TableCell>
+                      <TableCell className="font-bold">{ord.symbol}</TableCell>
+                      <TableCell>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <SideTag side={ord.side} />
+                          <span className="text-xs text-[var(--color-text-secondary,#9ca3af)]">{ord.type}</span>
+                          {ord.source === 'GRID' && (
+                            <Badge variant="info" size="sm" className="bg-[var(--accent,#818cf8)]/15 text-[var(--accent,#818cf8)]">
+                              Bot lưới
+                            </Badge>
+                          )}
+                          {ord.source === 'DCA' && (
+                            <Badge variant="warning" size="sm">
+                              Mua định kỳ
+                            </Badge>
+                          )}
                         </div>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right font-mono text-[var(--color-text-primary,#f3f4f6)]">
-                      {ord.avgPrice ? formatDecimal(ord.avgPrice) : '—'}
-                    </TableCell>
-                    <TableCell className="text-right font-mono">
-                      {ord.quantity ? formatDecimal(ord.quantity) : `${formatDecimal(ord.quoteOrderQty)} USDT`}
-                    </TableCell>
-                    <TableCell className="text-right font-mono text-[var(--color-text-secondary,#9ca3af)]">
-                      {formatDecimal(ord.executedQty)}
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <OrderStatusBadge status={ord.status} />
-                    </TableCell>
-                    <TableCell className="text-right text-xs text-[var(--text-3,#63636b)]">
-                      {formatCloseReason(ord.closeReason)}
-                    </TableCell>
-                  </TableRow>
-                ))}
+                      </TableCell>
+                      <TableCell className="text-right font-mono">
+                        {ord.price ? formatPrice(ord.price, symInfo?.tickSize) : 'Thị trường'}
+                        {ord.stopPrice && (
+                          <div className="text-[10px] text-[var(--color-text-muted,#6b7280)]">
+                            Stop: {formatPrice(ord.stopPrice, symInfo?.tickSize)}
+                          </div>
+                        )}
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-[var(--color-text-primary,#f3f4f6)]">
+                        {ord.avgPrice ? formatPrice(ord.avgPrice, symInfo?.tickSize) : '—'}
+                      </TableCell>
+                      <TableCell className="text-right font-mono">
+                        {ord.quantity ? formatAmount(ord.quantity, symInfo?.stepSize) : `${formatDecimal(ord.quoteOrderQty, { decimals: 2 })} USDT`}
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-[var(--color-text-secondary,#9ca3af)]">
+                        {formatAmount(ord.executedQty, symInfo?.stepSize)}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <OrderStatusBadge status={ord.status} />
+                      </TableCell>
+                      <TableCell className="text-right text-xs text-[var(--text-3,#63636b)]">
+                        {formatCloseReason(ord.closeReason)}
+                      </TableCell>
+                    </TableRow>
+                  );
+                })}
               </TableBody>
             </Table>
           )
@@ -591,6 +608,7 @@ export const UserOrdersTabs: React.FC<UserOrdersTabsProps> = ({
               </TableHeader>
               <TableBody>
                 {myTrades.map((tr) => {
+                  const symInfo = symbolMap.get(tr.symbol);
                   const pnl = tr.realizedPnl;
                   const isPositive = pnl && parseFloat(pnl) > 0;
                   const isNegative = pnl && parseFloat(pnl) < 0;
@@ -605,13 +623,13 @@ export const UserOrdersTabs: React.FC<UserOrdersTabsProps> = ({
                         <SideTag side={tr.side} />
                       </TableCell>
                       <TableCell className="text-right font-mono font-medium">
-                        {formatDecimal(tr.price)}
+                        {formatPrice(tr.price, symInfo?.tickSize)}
                       </TableCell>
                       <TableCell className="text-right font-mono">
-                        {formatDecimal(tr.quantity)}
+                        {formatAmount(tr.quantity, symInfo?.stepSize)}
                       </TableCell>
                       <TableCell className="text-right font-mono text-xs text-[var(--color-text-secondary,#9ca3af)]">
-                        {formatDecimal(tr.quoteQty)} USDT
+                        {formatDecimal(tr.quoteQty, { decimals: 2 })} USDT
                       </TableCell>
                       <TableCell className="text-right font-mono text-xs text-[var(--color-text-secondary,#9ca3af)]">
                         {formatDecimal(tr.fee)} {tr.feeAsset}

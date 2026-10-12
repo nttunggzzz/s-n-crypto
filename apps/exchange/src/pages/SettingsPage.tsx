@@ -23,14 +23,15 @@ import {
   EmptyState,
 } from '@cex/ui';
 
-import { User, Shield, Settings, Copy, Check, ShieldCheck, Lock, Key, AlertTriangle, ShieldAlert } from 'lucide-react';
+import { User, Shield, Settings, Copy, Check, ShieldCheck, Lock, Key, AlertTriangle, ShieldAlert, Download } from 'lucide-react';
+import QRCode from 'qrcode';
 
 export interface SettingsPageProps {
   onNavigate: (path: string) => void;
 }
 
 export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate }) => {
-  const { user, isAuthenticated, logout, refreshUser } = useAuth();
+  const { user, isAuthenticated, logout, refreshUser, resendVerification } = useAuth();
   const { success, error: toastError } = useToast();
   const api = getApiClient();
 
@@ -42,6 +43,34 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate }) => {
     : 'profile';
 
   const [activeTab, setActiveTab] = useState<'profile' | 'security' | 'preferences'>(initialTab);
+
+  // Email resend states (N-02)
+  const [resendCooldown, setResendCooldown] = useState(0);
+  const [resendingEmail, setResendingEmail] = useState(false);
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const timer = setInterval(() => {
+      setResendCooldown((prev) => prev - 1);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [resendCooldown]);
+
+  const handleResendEmail = async () => {
+    if (resendCooldown > 0 || resendingEmail) return;
+    setResendingEmail(true);
+    try {
+      const res = await resendVerification();
+      if (res.success) {
+        success('Đã gửi lại email xác minh.');
+        setResendCooldown(60);
+      } else {
+        toastError(res.error || 'Không thể gửi lại email xác minh.');
+      }
+    } finally {
+      setResendingEmail(false);
+    }
+  };
 
   // Profile states
   const [nameInput, setNameInput] = useState(user?.name || '');
@@ -76,6 +105,26 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate }) => {
   const [twoFactorCodeInput, setTwoFactorCodeInput] = useState('');
   const [twoFactorPasswordInput, setTwoFactorPasswordInput] = useState('');
   const [processingTwoFactor, setProcessingTwoFactor] = useState(false);
+  const [copiedSecret, setCopiedSecret] = useState(false);
+  const [copiedRecoveryCodes, setCopiedRecoveryCodes] = useState(false);
+  const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string>('');
+
+  useEffect(() => {
+    if (twoFactorSetupData?.otpauthUrl) {
+      QRCode.toDataURL(twoFactorSetupData.otpauthUrl, {
+        width: 180,
+        margin: 1,
+        color: {
+          dark: '#000000',
+          light: '#ffffff',
+        },
+      })
+        .then((url) => setQrCodeDataUrl(url))
+        .catch(() => setQrCodeDataUrl(''));
+    } else {
+      setQrCodeDataUrl('');
+    }
+  }, [twoFactorSetupData?.otpauthUrl]);
 
   // Regenerate Recovery Codes states (B5)
   const [regenerateModalOpen, setRegenerateModalOpen] = useState(false);
@@ -379,10 +428,23 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate }) => {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 bg-[var(--panel,#0a0a0b)] p-5 rounded-[var(--radius-lg,12px)] border border-[var(--line,#1d1e21)]">
               <div>
                 <label className="block text-xs font-semibold text-[var(--text-2,#a1a1aa)] mb-1">Email đăng nhập</label>
-                <div className="text-sm font-medium text-[var(--text,#f4f4f5)] flex items-center gap-2">
+                <div className="text-sm font-medium text-[var(--text,#f4f4f5)] flex items-center gap-2 flex-wrap">
                   <span>{user?.email}</span>
-                  {user?.emailVerified && (
+                  {user?.emailVerified ? (
                     <Badge variant="success" size="sm">Đã xác minh</Badge>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <Badge variant="warning" size="sm">Chưa xác minh</Badge>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={resendCooldown > 0 || resendingEmail}
+                        onClick={handleResendEmail}
+                        className="text-xs h-6 px-2 py-0"
+                      >
+                        {resendCooldown > 0 ? `Gửi lại (${resendCooldown}s)` : 'Gửi lại email'}
+                      </Button>
+                    </div>
                   )}
                 </div>
               </div>
@@ -518,8 +580,21 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate }) => {
                 />
               </div>
 
-              <div className="flex items-center justify-between text-[11px] text-[var(--text-3,#63636b)] pt-1">
-                <span>Email: {user?.emailVerified ? '✓ Đã xác minh' : '✗ Chưa'}</span>
+              <div className="flex items-center justify-between text-[11px] text-[var(--text-3,#63636b)] pt-1 flex-wrap gap-2">
+                <span className="flex items-center gap-1.5">
+                  Email: {user?.emailVerified ? '✓ Đã xác minh' : '✗ Chưa'}
+                  {!user?.emailVerified && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={resendCooldown > 0 || resendingEmail}
+                      onClick={handleResendEmail}
+                      className="text-[10px] h-5 px-1.5 py-0 leading-none"
+                    >
+                      {resendCooldown > 0 ? `Gửi lại (${resendCooldown}s)` : 'Gửi lại link'}
+                    </Button>
+                  )}
+                </span>
                 <span>2FA: {secOverview?.twoFactorEnabled ? '✓ Đã bật' : '✗ Chưa'}</span>
                 <span>Anti-phishing: {secOverview?.antiPhishingCode ? '✓ Đã đặt' : '✗ Chưa'}</span>
               </div>
@@ -890,12 +965,42 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate }) => {
               </p>
               <div className="grid grid-cols-2 gap-2 p-3 rounded-lg bg-[var(--panel-2,#141416)] border border-[var(--line,#1d1e21)] font-mono text-center">
                 {twoFactorRecoveryCodes.map((code, idx) => (
-                  <div key={idx} className="p-1 rounded bg-[var(--panel,#0a0a0b)] text-white">
+                  <div key={idx} className="p-1.5 rounded bg-[var(--panel,#0a0a0b)] text-white text-xs select-all">
                     {code}
                   </div>
                 ))}
               </div>
-              <div className="flex justify-end pt-2">
+              <div className="flex items-center justify-between pt-2 flex-wrap gap-2">
+                <div className="flex gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      navigator.clipboard.writeText(twoFactorRecoveryCodes.join('\n'));
+                      setCopiedRecoveryCodes(true);
+                      setTimeout(() => setCopiedRecoveryCodes(false), 2000);
+                    }}
+                  >
+                    {copiedRecoveryCodes ? <Check size={14} className="mr-1 text-[var(--up,#1fc27a)]" /> : <Copy size={14} className="mr-1" />}
+                    {copiedRecoveryCodes ? 'Đã chép' : 'Sao chép tất cả'}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      const blob = new Blob([twoFactorRecoveryCodes.join('\n')], { type: 'text/plain;charset=utf-8' });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = `recovery-codes-${Date.now()}.txt`;
+                      a.click();
+                      URL.revokeObjectURL(url);
+                    }}
+                  >
+                    <Download size={14} className="mr-1" />
+                    Tải về (.txt)
+                  </Button>
+                </div>
                 <Button variant="primary" onClick={() => setTwoFactorModalOpen(false)}>
                   Tôi đã lưu các mã này
                 </Button>
@@ -967,10 +1072,36 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate }) => {
               className="space-y-4 text-xs"
             >
               <p className="text-[var(--text-2,#a1a1aa)]">
-                Nhập khóa bí mật này vào ứng dụng Authenticator (Google Authenticator / Authy):
+                Quét mã QR bằng ứng dụng Authenticator (Google Authenticator, Authy, v.v.) hoặc nhập khóa bí mật thủ công:
               </p>
-              <div className="p-3 rounded-lg bg-[var(--panel-2,#141416)] border border-[var(--line,#1d1e21)] font-mono text-center font-bold text-sm text-[var(--accent,#818cf8)] select-all">
-                {twoFactorSetupData.secret}
+              {qrCodeDataUrl ? (
+                <div className="flex justify-center p-3 bg-white rounded-lg shadow-inner my-2">
+                  <img src={qrCodeDataUrl} alt="2FA QR Code" className="w-40 h-40 object-contain" />
+                </div>
+              ) : (
+                <div className="w-40 h-40 mx-auto flex items-center justify-center bg-[var(--panel-2,#141416)] rounded-lg text-xs text-[var(--text-3,#63636b)]">
+                  Đang tạo mã QR...
+                </div>
+              )}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-[11px] text-[var(--text-3,#63636b)]">
+                  <span>Khóa bí mật:</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(twoFactorSetupData.secret);
+                      setCopiedSecret(true);
+                      setTimeout(() => setCopiedSecret(false), 2000);
+                    }}
+                    className="text-[var(--accent,#818cf8)] hover:underline flex items-center gap-1 cursor-pointer"
+                  >
+                    {copiedSecret ? <Check size={12} className="text-[var(--up,#1fc27a)]" /> : <Copy size={12} />}
+                    {copiedSecret ? 'Đã chép khóa' : 'Sao chép khóa'}
+                  </button>
+                </div>
+                <div className="p-2.5 rounded-lg bg-[var(--panel-2,#141416)] border border-[var(--line,#1d1e21)] font-mono text-center font-bold text-xs text-[var(--accent,#818cf8)] select-all break-all">
+                  {twoFactorSetupData.secret}
+                </div>
               </div>
               <Input
                 label="Mã xác thực 6 số từ ứng dụng"

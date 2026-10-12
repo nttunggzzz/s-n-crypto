@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import type { Portfolio, PortfolioHistory, PortfolioRange } from '@cex/contracts';
 import { getApiClient } from '../services/api.ts';
 import { useAuth } from '../context/AuthContext.tsx';
+import { useMarket } from '../context/MarketContext.tsx';
 import {
   Card,
   Table,
@@ -15,6 +16,7 @@ import {
   Skeleton,
   EmptyState,
   formatDecimal,
+  formatPrice,
 } from '@cex/ui';
 import { PieChart, TrendingUp, TrendingDown, DollarSign, AlertCircle, RefreshCw } from 'lucide-react';
 
@@ -24,7 +26,14 @@ export interface PortfolioPageProps {
 
 export const PortfolioPage: React.FC<PortfolioPageProps> = ({ onNavigate }) => {
   const { isAuthenticated } = useAuth();
+  const { symbols } = useMarket();
   const api = getApiClient();
+
+  const symbolMap = useMemo(() => {
+    const map = new Map<string, { tickSize?: string }>();
+    symbols?.forEach((s) => map.set(s.symbol, { tickSize: s.tickSize }));
+    return map;
+  }, [symbols]);
 
   const [portfolio, setPortfolio] = useState<Portfolio | null>(null);
   const [history, setHistory] = useState<PortfolioHistory | null>(null);
@@ -348,7 +357,7 @@ export const PortfolioPage: React.FC<PortfolioPageProps> = ({ onNavigate }) => {
                             <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: color }} />
                             <span className="font-bold text-white">{pos.asset}</span>
                           </div>
-                          <span className="font-mono font-semibold text-white">{pct.toFixed(1)}%</span>
+                          <span className="font-mono font-semibold text-white">{formatDecimal(pos.allocationPercent || '0', { decimals: 1 })}%</span>
                         </div>
                         <div className="w-full h-1.5 bg-[var(--panel-2,#141416)] rounded-full overflow-hidden">
                           <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: color }} />
@@ -434,11 +443,11 @@ export const PortfolioPage: React.FC<PortfolioPageProps> = ({ onNavigate }) => {
                     </TableCell>
 
                     <TableCell className="text-right font-mono text-[var(--text-2,#a1a1aa)]">
-                      {pos.avgCost ? formatDecimal(pos.avgCost) : '—'}
+                      {pos.avgCost ? formatPrice(pos.avgCost, symbolMap.get(`${pos.asset}USDT`)?.tickSize) : '—'}
                     </TableCell>
 
                     <TableCell className="text-right font-mono text-[var(--text-2,#a1a1aa)]">
-                      {pos.marketPrice ? formatDecimal(pos.marketPrice) : '—'}
+                      {pos.marketPrice ? formatPrice(pos.marketPrice, symbolMap.get(`${pos.asset}USDT`)?.tickSize) : '—'}
                     </TableCell>
 
                     <TableCell className="text-right font-mono font-semibold text-white">
@@ -461,7 +470,7 @@ export const PortfolioPage: React.FC<PortfolioPageProps> = ({ onNavigate }) => {
                     </TableCell>
 
                     <TableCell className="text-right font-mono font-bold text-[var(--accent,#818cf8)]">
-                      {pos.allocationPercent ? `${parseFloat(pos.allocationPercent).toFixed(1)}%` : '—'}
+                      {pos.allocationPercent ? `${formatDecimal(pos.allocationPercent, { decimals: 1 })}%` : '—'}
                     </TableCell>
 
                     <TableCell className="text-center">

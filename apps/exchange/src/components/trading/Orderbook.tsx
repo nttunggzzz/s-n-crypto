@@ -214,21 +214,37 @@ export const Orderbook: React.FC<OrderbookProps> = ({ symbol, marketType = 'spot
       {/* Header controls */}
       <div className="px-3 py-1.5 border-b border-[var(--line,#1d1e21)] flex items-center justify-between">
         <div className="flex items-center gap-1 bg-[var(--panel-2,#141416)] rounded border border-[var(--line,#1d1e21)] p-0.5">
-           <button onClick={() => setViewMode('all')} className={`w-5 h-5 flex flex-col items-center justify-center gap-[1px] rounded ${viewMode==='all' ? 'bg-[var(--line,#1d1e21)]' : ''}`}>
+           <button
+             onClick={() => setViewMode('all')}
+             aria-label="Hiện cả lệnh mua và bán"
+             className={`w-5 h-5 flex flex-col items-center justify-center gap-[1px] rounded ${viewMode==='all' ? 'bg-[var(--line,#1d1e21)]' : ''}`}
+           >
              <div className="w-3 h-1 bg-[var(--down,#f2475f)] opacity-70"></div>
              <div className="w-3 h-1 bg-[var(--up,#1fc27a)] opacity-70"></div>
            </button>
-           <button onClick={() => setViewMode('buy')} className={`w-5 h-5 flex flex-col items-center justify-center gap-[1px] rounded ${viewMode==='buy' ? 'bg-[var(--line,#1d1e21)]' : ''}`}>
+           <button
+             onClick={() => setViewMode('buy')}
+             aria-label="Chỉ hiện lệnh mua"
+             className={`w-5 h-5 flex flex-col items-center justify-center gap-[1px] rounded ${viewMode==='buy' ? 'bg-[var(--line,#1d1e21)]' : ''}`}
+           >
              <div className="w-3 h-1 bg-[var(--up,#1fc27a)] opacity-70"></div>
              <div className="w-3 h-1 bg-[var(--up,#1fc27a)] opacity-70"></div>
            </button>
-           <button onClick={() => setViewMode('sell')} className={`w-5 h-5 flex flex-col items-center justify-center gap-[1px] rounded ${viewMode==='sell' ? 'bg-[var(--line,#1d1e21)]' : ''}`}>
+           <button
+             onClick={() => setViewMode('sell')}
+             aria-label="Chỉ hiện lệnh bán"
+             className={`w-5 h-5 flex flex-col items-center justify-center gap-[1px] rounded ${viewMode==='sell' ? 'bg-[var(--line,#1d1e21)]' : ''}`}
+           >
              <div className="w-3 h-1 bg-[var(--down,#f2475f)] opacity-70"></div>
              <div className="w-3 h-1 bg-[var(--down,#f2475f)] opacity-70"></div>
            </button>
         </div>
         
-        <button onClick={toggleGroupMode} className="text-[10px] bg-[var(--panel-2,#141416)] px-1.5 py-0.5 rounded border border-[var(--line,#1d1e21)] text-[var(--text-2,#a1a1aa)] hover:text-[var(--text,#f4f4f5)] transition-colors">
+        <button
+          onClick={toggleGroupMode}
+          aria-label="Đổi độ làm tròn bước giá"
+          className="text-[10px] bg-[var(--panel-2,#141416)] px-1.5 py-0.5 rounded border border-[var(--line,#1d1e21)] text-[var(--text-2,#a1a1aa)] hover:text-[var(--text,#f4f4f5)] transition-colors"
+        >
           {activeSymbolInfo?.tickSize && dec(activeSymbolInfo.tickSize).mul(groupMode).toString()}
         </button>
       </div>

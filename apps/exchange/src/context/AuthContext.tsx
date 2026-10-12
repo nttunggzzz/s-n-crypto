@@ -133,6 +133,42 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, []);
 
+  // N-03: Multi-tab auto-sync when email is verified in another tab or window gains focus
+  useEffect(() => {
+    if (!user || user.emailVerified) return;
+
+    const handleFocusOrVisible = () => {
+      if (document.visibilityState === 'visible') {
+        refreshUser();
+      }
+    };
+
+    window.addEventListener('focus', handleFocusOrVisible);
+    document.addEventListener('visibilitychange', handleFocusOrVisible);
+
+    return () => {
+      window.removeEventListener('focus', handleFocusOrVisible);
+      document.removeEventListener('visibilitychange', handleFocusOrVisible);
+    };
+  }, [user?.emailVerified, !!user]);
+
+  useEffect(() => {
+    if (typeof BroadcastChannel === 'undefined') return;
+    let channel: BroadcastChannel | null = null;
+    try {
+      channel = new BroadcastChannel('cex-auth');
+      channel.onmessage = (event) => {
+        if (event.data === 'verified' || event.data === 'refresh') {
+          refreshUser();
+        }
+      };
+    } catch {}
+
+    return () => {
+      channel?.close();
+    };
+  }, []);
+
   const login = async (data: LoginInput): Promise<LoginResult> => {
     try {
       const res = await api.login({ body: data });

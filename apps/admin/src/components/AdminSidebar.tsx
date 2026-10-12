@@ -53,6 +53,7 @@ export const AdminSidebar: React.FC<{ currentPath: string; onNavigate: (p: strin
           <button
             key={item.path}
             onClick={() => onNavigate(item.path)}
+            aria-label={item.label}
             className={`text-left px-3.5 py-2 mx-2 rounded-lg flex items-center gap-3 transition-colors text-sm ${
               isActive
                 ? 'bg-[var(--accent,#818cf8)]/10 text-[var(--accent,#818cf8)] font-semibold border border-[var(--accent,#818cf8)]/20'

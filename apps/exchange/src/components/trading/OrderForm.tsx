@@ -35,6 +35,7 @@ export interface OrderTpSlPayload {
 export interface OrderFormProps {
   symbol: string;
   selectedPrice?: string;
+  initialSide?: OrderSide;
   onOrderPlaced?: () => void;
   onNavigateToLogin?: () => void;
 }
@@ -42,16 +43,17 @@ export interface OrderFormProps {
 export const OrderForm: React.FC<OrderFormProps> = ({
   symbol,
   selectedPrice,
+  initialSide,
   onOrderPlaced,
   onNavigateToLogin,
 }) => {
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, resendVerification } = useAuth();
   const { publicConfig } = useConfig();
   const { activeSymbolInfo, activeTicker, exchangeInfo, tradingHalted, disabledSymbols, realtimeClient } = useMarket();
   const { success, error: toastError } = useToast();
   const api = getApiClient();
 
-  const [side, setSide] = useState<OrderSide>('BUY');
+  const [side, setSide] = useState<OrderSide>(initialSide || 'BUY');
   const [orderType, setOrderType] = useState<OrderTab>('LIMIT');
   const [timeInForce, setTimeInForce] = useState<TimeInForce>('GTC');
 
@@ -59,7 +61,47 @@ export const OrderForm: React.FC<OrderFormProps> = ({
   const [price, setPrice] = useState<string>('');
   const [quantity, setQuantity] = useState<string>('');
   const [quoteOrderQty, setQuoteOrderQty] = useState<string>('');
-  const [marketInputMode, setMarketInputMode] = useState<'qty' | 'quote'>('quote');
+  const [marketInputMode, setMarketInputMode] = useState<'qty' | 'quote'>(initialSide === 'SELL' ? 'qty' : 'quote');
+
+  const userChangedPriceRef = React.useRef(false);
+  const [resendingEmail, setResendingEmail] = useState(false);
+  const [emailCooldown, setEmailCooldown] = useState(0);
+
+  useEffect(() => {
+    if (emailCooldown <= 0) return;
+    const timer = setInterval(() => {
+      setEmailCooldown((prev) => (prev > 0 ? prev - 1 : 0));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [emailCooldown]);
+
+  const handleResendEmail = async () => {
+    if (emailCooldown > 0) return;
+    setResendingEmail(true);
+    try {
+      const res = await resendVerification();
+      if (res.success) {
+        success('Đã gửi lại email xác minh!');
+        setEmailCooldown(60);
+      } else {
+        toastError(res.error || 'Không thể gửi email xác minh.');
+      }
+    } catch {
+      toastError('Không thể gửi email xác minh.');
+    } finally {
+      setResendingEmail(false);
+    }
+  };
+
+  // Sync side from prop
+  useEffect(() => {
+    if (initialSide) {
+      setSide(initialSide);
+      if (initialSide === 'SELL') {
+        setMarketInputMode('qty');
+      }
+    }
+  }, [initialSide]);
 
   // Advanced inputs
   const [stopPrice, setStopPrice] = useState<string>('');
@@ -101,6 +143,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({
   // Sync selected price from Orderbook clicks
   useEffect(() => {
     if (selectedPrice && (orderType === 'LIMIT' || orderType === 'STOP_LIMIT' || orderType === 'OCO')) {
+      userChangedPriceRef.current = true;
       if (activeSymbolInfo?.tickSize) {
         try {
           const snapped = floorToStep(dec(selectedPrice), dec(activeSymbolInfo.tickSize)).toString();
@@ -113,6 +156,28 @@ export const OrderForm: React.FC<OrderFormProps> = ({
       }
     }
   }, [selectedPrice, orderType, activeSymbolInfo]);
+
+  // N-04: Auto-fill Limit price with current market price if empty and user hasn't typed
+  useEffect(() => {
+    if (
+      !userChangedPriceRef.current &&
+      price === '' &&
+      activeTicker?.lastPrice &&
+      activeTicker.status !== 'UNAVAILABLE' &&
+      (orderType === 'LIMIT' || orderType === 'STOP_LIMIT' || orderType === 'OCO')
+    ) {
+      if (activeSymbolInfo?.tickSize) {
+        try {
+          const snapped = floorToStep(dec(activeTicker.lastPrice), dec(activeSymbolInfo.tickSize)).toString();
+          setPrice(snapped);
+        } catch {
+          setPrice(activeTicker.lastPrice);
+        }
+      } else {
+        setPrice(activeTicker.lastPrice);
+      }
+    }
+  }, [activeTicker?.lastPrice, activeTicker?.status, activeSymbolInfo?.tickSize, orderType, price]);
 
   // Load preferences
   useEffect(() => {
@@ -136,6 +201,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({
 
   useEffect(() => {
     fetchBalances();
+    userChangedPriceRef.current = false;
     setPrice('');
     setQuantity('');
     setQuoteOrderQty('');
@@ -221,7 +287,8 @@ export const OrderForm: React.FC<OrderFormProps> = ({
           setQuantity(calculatedQty.toString());
         }
       } else {
-        // SELL
+        // SELL (N-05: switch to base coin input mode)
+        setMarketInputMode('qty');
         const availableCoin = dec(freeCoin);
         if (availableCoin.lte(0)) return;
         const calculatedQty = floorToStep(availableCoin.mul(pct), step);
@@ -608,7 +675,10 @@ export const OrderForm: React.FC<OrderFormProps> = ({
       <div className="grid grid-cols-2 gap-2 p-1 bg-[var(--color-bg-base,#08090c)] rounded-[var(--radius-md,8px)] mb-3">
         <button
           type="button"
-          onClick={() => setSide('BUY')}
+          onClick={() => {
+            setSide('BUY');
+            setMarketInputMode('quote');
+          }}
           className={`py-2 rounded-[var(--radius-sm,4px)] font-bold text-xs transition-all cursor-pointer ${
             side === 'BUY'
               ? 'bg-[var(--color-buy,#22c55e)] text-white shadow-[0_2px_8px_rgba(34,197,94,0.3)]'
@@ -619,7 +689,10 @@ export const OrderForm: React.FC<OrderFormProps> = ({
         </button>
         <button
           type="button"
-          onClick={() => setSide('SELL')}
+          onClick={() => {
+            setSide('SELL');
+            setMarketInputMode('qty');
+          }}
           className={`py-2 rounded-[var(--radius-sm,4px)] font-bold text-xs transition-all cursor-pointer ${
             side === 'SELL'
               ? 'bg-[var(--color-sell,#f87171)] text-white shadow-[0_2px_8px_rgba(248,113,113,0.3)]'
@@ -646,6 +719,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({
             <button
               key={tab}
               type="button"
+              aria-label={tabLabelMap[tab]}
               onClick={() => {
                 setOrderType(tab);
                 setValidationError(null);
@@ -671,7 +745,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({
               side === 'BUY' ? (
                 `${formatDecimal(freeQuote, { decimals: 2 })} ${quoteAsset}`
               ) : (
-                `${formatDecimal(freeCoin, { decimals: 4 })} ${baseAsset}`
+                `${formatDecimal(freeCoin, { decimals: activeSymbolInfo?.quantityPrecision ?? 8 })} ${baseAsset}`
               )
             ) : (
               <span className="text-[var(--color-accent-primary,#818cf8)] cursor-pointer" onClick={onNavigateToLogin}>
@@ -1044,20 +1118,39 @@ export const OrderForm: React.FC<OrderFormProps> = ({
             Đăng nhập để giao dịch
           </Button>
         ) : cannotTradeReason ? (
-          <Button
-            type="button"
-            disabled
-            fullWidth
-            className="mt-2 bg-neutral-800 text-neutral-400 border border-neutral-700"
-          >
-            {cannotTradeReason}
-          </Button>
+          <div className="flex flex-col gap-2 mt-2">
+            <Button
+              type="button"
+              disabled
+              fullWidth
+              className="bg-neutral-800 text-neutral-400 border border-neutral-700"
+            >
+              {cannotTradeReason}
+            </Button>
+            {isEmailUnverified && (
+              <Button
+                type="button"
+                variant="secondary"
+                fullWidth
+                loading={resendingEmail}
+                disabled={emailCooldown > 0}
+                onClick={handleResendEmail}
+                className="text-xs"
+                aria-label="Gửi email xác minh"
+              >
+                {emailCooldown > 0
+                  ? `Gửi lại sau ${emailCooldown}s`
+                  : `Gửi email xác minh tới ${user?.email}`}
+              </Button>
+            )}
+          </div>
         ) : (
           <Button
             type="submit"
             variant={side === 'BUY' ? 'buy' : 'sell'}
             loading={submitting}
             fullWidth
+            aria-label={side === 'BUY' ? `MUA ${baseAsset}` : `BÁN ${baseAsset}`}
             className="mt-2 font-bold text-sm tracking-wide"
           >
             {side === 'BUY' ? `MUA ${baseAsset}` : `BÁN ${baseAsset}`}

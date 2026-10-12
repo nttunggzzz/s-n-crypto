@@ -232,6 +232,9 @@ export const SettingsPage: React.FC = () => {
                 onChange={(e) => setFaucetCooldownHours(e.target.value)}
                 className="w-full bg-[var(--bg,#000000)] border border-[var(--line,#1d1e21)] rounded-lg px-3 py-2 text-sm text-[var(--text,#f4f4f5)] outline-none focus:border-[var(--accent,#818cf8)] font-mono disabled:opacity-50"
               />
+              <span className="text-[11px] text-[var(--text-3,#63636b)] mt-1 block">
+                Đặt 0 để nạp liên tục khi thử nghiệm
+              </span>
             </div>
             <div>
               <label className="text-xs font-semibold text-[var(--text-2,#a1a1aa)] uppercase block mb-1.5">

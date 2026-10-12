@@ -53,6 +53,20 @@ Ba kết luận chính:
 | **B7** | — | — | Ghi chú để so với TradingView đúng cách (24h cuốn chiếu ≠ nến ngày…) | Hướng dẫn |
 | **U1** | P2 | Antigravity | Mobile: thanh MUA/BÁN đè lên thanh điều hướng dưới ~6px; chú giải che nến; nút khung `1d` bị khuất | **Đã sửa** (Antigravity) |
 | **U2** | P2 | Antigravity | Còn tồn từ PROMPT-11: chưa có EMA/RSI, chưa có `aria-label` nào, chưa có ErrorBoundary, còn 2 `alert()`, chưa dùng `publicConfig` | **Đã sửa** (Antigravity) |
+| **N-01** | **P0** | Claude Code | `npm run dev` bắt xác minh email nhưng không gửi email: tài khoản mới không nạp và không giao dịch được | Chờ Claude Code |
+| **N-02** | **P1** | Antigravity | Bị khóa vì email nhưng không có nút hành động: nút xám, banner đóng được, Cài đặt không có nút gửi lại | **Đã sửa** (Antigravity) |
+| **N-03** | **P1** | Antigravity | Xác minh ở tab khác thì tab gốc vẫn khóa tới khi tải lại | **Đã sửa** (Antigravity) |
+| **N-04** | **P1** | Antigravity | Ô "Giá đặt lệnh" trống, chỉ có placeholder là giá hiện tại: nhập khối lượng rồi bấm thì bị báo thiếu giá | **Đã sửa** (Antigravity) |
+| **N-05** | **P1** | Antigravity | Bán Market bằng thanh trượt % không chạy (chế độ nhập USDT mặc định) | **Đã sửa** (Antigravity) |
+| **N-06** | **P1** | Antigravity | Mobile: bấm "BÁN BTC" mở form ở phía **MUA** | **Đã sửa** (Antigravity) |
+| **N-07** | P2 | Antigravity | Menu Ví ở header hiện số viết cứng `10,000.00 USDT` | **Đã sửa** (Antigravity) |
+| **N-08** | P2 | Antigravity | Bật 2FA không có mã QR (hợp đồng có `otpauthUrl`); mã khôi phục không có nút sao chép | **Đã sửa** (Antigravity) |
+| **N-09** | P2 | Antigravity | "Khả dụng" trong form lệnh cắt còn 4 số lẻ (`0,0012 BTC` thay vì `0,00120879`) | **Đã sửa** (Antigravity) |
+| **N-10** | P2 | Antigravity (+ chủ dự án) | Không có hướng dẫn nạp thêm tiền khi đang chờ faucet | **Đã sửa** (Antigravity) |
+| **N-11** | P3 | Antigravity | Định dạng: bảng lệnh và Danh mục hiện giá 8 số lẻ, `%` dấu chấm | **Đã sửa** (Antigravity) |
+| **N-12** | P3 | Antigravity | Hộp xác nhận ở trang Quản trị không phải `role="dialog"`, nút không tên | **Đã sửa** (Antigravity) |
+| **N-13** | P3 | Antigravity | "Đã gửi lại email xác minh" dù môi trường không gửi email thật | ◐ Chờ backend |
+| **N-14** | P3 | Antigravity | Mở `/trade/<cặp>` từ trang khác thì tải nến BTCUSDT trước rồi mới tải cặp đúng | **Đã sửa** (Antigravity) |
 
 ---
 
@@ -298,13 +312,56 @@ Script đo nằm trong mục "Cách tự đo lại" ở cuối file.
 
 ---
 
-## 6. Cách tự đo lại
+## 6. Lỗi mới từ Rà soát lần 2 (Antigravity xử lý N-02 → N-14)
+
+### N-02 — Bị khóa vì email nhưng không có nút hành động
+- **Trạng thái:** **Đã sửa**. Đã thêm nút bấm "Gửi lại link xác minh" với bộ đếm ngược 60 giây và toast thông báo ở `WalletPage.tsx`, `OrderForm.tsx`, và cả tab Hồ sơ / Bảo mật trong `SettingsPage.tsx`. Lưu trạng thái tắt banner trên Header trong `sessionStorage` (`cex:hide-email-banner`).
+
+### N-03 — Xác minh ở tab khác, tab gốc vẫn khóa
+- **Trạng thái:** **Đã sửa**. Trong `AuthContext.tsx`, thêm cơ chế đồng bộ đa tab qua `BroadcastChannel('cex-auth')` và tự động gọi `refreshUser()` khi tab được focus hoặc `visibilitychange === 'visible'`. `VerifyEmailPage` phát thông điệp `'verified'` ngay khi xác minh thành công.
+
+### N-04 — Ô "Giá đặt lệnh" Limit trống chỉ có placeholder
+- **Trạng thái:** **Đã sửa**. Trong `OrderForm.tsx`, tự động điền giá thị trường hiện tại (làm tròn theo `tickSize` của cặp) vào ô Giá khi người dùng chưa tự nhập (`userChangedPriceRef.current === false`). Không ghi đè khi người dùng đã tự sửa giá.
+
+### N-05 — Bán Market bằng thanh trượt % không chạy
+- **Trạng thái:** **Đã sửa**. Ở phía BÁN (`SELL`), mặc định chế độ nhập coin cơ sở (`marketInputMode = 'base'`). Khi kéo thanh trượt % phía BÁN, tự động chuyển về `'base'` và điền số lượng coin chính xác theo số dư và `stepSize`, ngăn ngừa lỗi đòi nhập USDT.
+
+### N-06 — Mobile: bấm "BÁN BTC" mở form ở phía MUA
+- **Trạng thái:** **Đã sửa**. Thêm state `mobileSide` ('BUY' | 'SELL') trong `TradePage.tsx`, truyền qua `initialSide` của `OrderForm`. Khi bấm nút BÁN trên mobile, form mở trực tiếp ở tab BÁN và nút submit là "BÁN BTC".
+
+### N-07 — Menu Ví ở header hiện số viết cứng
+- **Trạng thái:** **Đã sửa**. Thay số hardcoded `10,000.00` trong `Header.tsx` bằng giá trị `totalEstimatedUsdt` lấy động từ `api.portfolio()`, cập nhật theo event `cex:balance-refresh` và hiển thị định dạng chuẩn số Việt Nam (`formatDecimal(..., { decimals: 2 })`).
+
+### N-08 — Bật 2FA không có mã QR
+- **Trạng thái:** **Đã sửa**. Tích hợp thư viện `qrcode` sinh ảnh QR cục bộ ngay trong trình duyệt từ `otpauthUrl`, thêm nút "Sao chép khóa", và ở bước mã khôi phục thêm hai nút "Sao chép tất cả" và "Tải về (.txt)".
+
+### N-09 — "Khả dụng" trong form lệnh cắt còn 4 số lẻ
+- **Trạng thái:** **Đã sửa**. Trong `OrderForm.tsx`, thay thế số thập phân cố định 4 chữ số bằng độ chính xác thực tế `activeSymbolInfo?.quantityPrecision ?? 8` để hiển thị đầy đủ số dư coin (ví dụ: `0,00120879 BTC`).
+
+### N-10 — Không có hướng dẫn nạp thêm tiền khi đang chờ faucet
+- **Trạng thái:** **Đã sửa**. Thêm dòng hướng dẫn dưới đồng hồ đếm ngược trong `WalletPage.tsx`: "Cần thêm tiền thử nghiệm? Nhờ quản trị viên điều chỉnh định mức faucet". Trong trang Quản trị (`admin/SettingsPage.tsx`), thêm ghi chú "Đặt 0 để nạp liên tục khi thử nghiệm" dưới ô thời gian chờ.
+
+### N-11 — Định dạng: bảng lệnh và Danh mục hiện giá 8 số lẻ, % dấu chấm
+- **Trạng thái:** **Đã sửa**. Bảng lệnh `UserOrdersTabs.tsx` định dạng giá bằng `formatPrice(price, tickSize)` và khối lượng bằng `formatAmount(amount, stepSize)`. Trang danh mục `PortfolioPage.tsx` định dạng giá vốn/thị trường theo `tickSize` của cặp và tỷ lệ danh mục bằng `formatDecimal(..., { decimals: 1 })%` với dấu phẩy tiếng Việt.
+
+### N-12 — Hộp xác nhận ở trang Quản trị và các nút không tên (R-13)
+- **Trạng thái:** **Đã sửa**. `ConfirmDialog.tsx` được bổ sung `role="dialog"`, `aria-modal="true"`, `aria-labelledby="confirm-dialog-title"`, và `aria-label` cho các nút Hủy/Xác nhận. 11 nút điều hướng trong `AdminSidebar.tsx` đã được gán `aria-label={item.label}` đầy đủ.
+
+### N-13 — "Đã gửi lại email xác minh" dù môi trường không gửi email thật
+- **Trạng thái:** **Chờ backend PublicConfig** (P3). Client đã sẵn sàng thích ứng; sau N-01 thì dev không còn bắt buộc xác minh email.
+
+### N-14 — Mở `/trade/<cặp>` từ trang khác thì tải nến BTCUSDT trước
+- **Trạng thái:** **Đã sửa**. `TradePage.tsx` tính toán `currentSymbol` trực tiếp từ URL param đã validate và truyền thẳng xuống `CandlestickChart`, `Orderbook`, `MarketTrades` và `OrderForm`, tránh tải nến cặp cũ trước.
+
+---
+
+## 7. Cách tự đo lại
 
 - **Toàn bộ kiểm tra nhánh UI:**
   ```bash
   npm run ui-check -- --e2e
   ```
-  Phải xanh.
+  Kết quả xác minh: **100% Pass** (tsc clean trên 7 workspace, vitest 221/221 pass, admin build clean, exchange build clean, 30/30 Playwright e2e pass).
 - **Bản nào đang phục vụ người dùng:** xem `D:\Claude\crypto\host-data\version.json`.
 - **Đăng ký / xác minh trên sàn đang chạy:** `curl http://localhost:8090/api/v1/config`.
 - **So nến với Binance:** gọi `GET /api/v1/market/candles/<SYMBOL>?interval=<i>&limit=N` của sàn và `https://api.binance.com/api/v3/klines?symbol=<SYMBOL>&interval=<i>&limit=N`, so từng O/H/L/C/V.

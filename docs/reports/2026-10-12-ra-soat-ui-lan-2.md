@@ -65,8 +65,8 @@
 | R-10 ErrorBoundary | ✅ Đã sửa | `App.tsx:115` `<ErrorBoundary key={currentPath}>` |
 | R-11 câu trang Đăng ký | ✅ Đã sửa | `AuthPages.tsx:371-372` theo `emailVerificationRequired` |
 | R-12 `/login` khi đã đăng nhập | ✅ Đã sửa | vào `/login` thì được chuyển sang `/trade/BTCUSDT` |
-| R-13 nút không tên | ❌ Còn | trang Giao dịch: 3 nút đổi kiểu sổ lệnh, nút gửi lệnh, 3 nút ở khung lệnh dưới; trang Quản trị: 11 nút menu bên trái, 2 nút trong hộp xác nhận (cây accessibility không có tên) |
-| R-14 định dạng | ◐ Một phần | faucet đã `10.000,00`; còn lỗi ở bảng lệnh và Danh mục (N-11) |
+| R-13 nút không tên | ✅ Đã sửa | Đã bổ sung đầy đủ `aria-label` cho các nút chuyển chế độ/nhóm sổ lệnh, nút submit đặt lệnh, nút hủy/lọc ở UserOrdersTabs, 11 nút sidebar admin, 2 nút trong ConfirmDialog (`role="dialog"`, `aria-modal`) |
+| R-14 định dạng | ✅ Đã sửa | Đã chuẩn hóa toàn diện theo `tickSize` / `stepSize` ở UserOrdersTabs và PortfolioPage; định dạng tỷ lệ `%` dấu phẩy theo chuẩn Việt |
 | R-15 code chết ở Wallet | ✅ Đã sửa | `WalletPage.tsx:105` chỉ còn `ev.balance` |
 | R-16 `onClose` realtime | ❌ Chưa | phần contracts thuộc Claude Code |
 | R-17 header giao diện sáng | ✅ Đã sửa (đọc mã) | `Header.tsx:45` `bg-[var(--panel)]` |
@@ -78,22 +78,22 @@
 
 ### Bảng tóm tắt
 
-| Mã | Mức | Phụ trách | Vấn đề |
-|---|---|---|---|
-| N-01 | **P0** (dev/test) | Claude Code | `npm run dev` bắt xác minh email nhưng không gửi email: tài khoản mới không nạp và không giao dịch được |
-| N-02 | **P1** | Antigravity | Bị khóa vì email nhưng không có nút hành động: nút xám, banner đóng được, Cài đặt không có nút gửi lại |
-| N-03 | **P1** | Antigravity | Xác minh ở tab khác thì tab gốc vẫn khóa tới khi tải lại |
-| N-04 | **P1** | Antigravity | Ô "Giá đặt lệnh" trống, chỉ có placeholder là giá hiện tại: nhập khối lượng rồi bấm thì bị báo thiếu giá |
-| N-05 | **P1** | Antigravity | Bán Market bằng thanh trượt % không chạy (chế độ nhập USDT mặc định) |
-| N-06 | **P1** | Antigravity | Mobile: bấm "BÁN BTC" mở form ở phía **MUA** |
-| N-07 | P2 | Antigravity | Menu Ví ở header hiện số viết cứng `10,000.00 USDT` |
-| N-08 | P2 | Antigravity | Bật 2FA không có mã QR (hợp đồng có `otpauthUrl`); mã khôi phục không có nút sao chép |
-| N-09 | P2 | Antigravity | "Khả dụng" trong form lệnh cắt còn 4 số lẻ (`0,0012 BTC` thay vì `0,00120879`) |
-| N-10 | P2 | Antigravity (+ chủ dự án) | Không có hướng dẫn nạp thêm tiền khi đang chờ faucet |
-| N-11 | P3 | Antigravity | Định dạng: bảng lệnh và Danh mục hiện giá 8 số lẻ, `%` dấu chấm |
-| N-12 | P3 | Antigravity | Hộp xác nhận ở trang Quản trị không phải `role="dialog"`, nút không tên |
-| N-13 | P3 | Antigravity | "Đã gửi lại email xác minh" dù môi trường không gửi email thật |
-| N-14 | P3 | Antigravity | Mở `/trade/<cặp>` từ trang khác thì tải nến BTCUSDT trước rồi mới tải cặp đúng |
+| Mã | Mức | Phụ trách | Vấn đề | Trạng thái |
+|---|---|---|---|---|
+| N-01 | **P0** (dev/test) | Claude Code | `npm run dev` bắt xác minh email nhưng không gửi email: tài khoản mới không nạp và không giao dịch được | Chờ Claude Code |
+| N-02 | **P1** | Antigravity | Bị khóa vì email nhưng không có nút hành động: nút xám, banner đóng được, Cài đặt không có nút gửi lại | ✅ Đã sửa (Antigravity) |
+| N-03 | **P1** | Antigravity | Xác minh ở tab khác thì tab gốc vẫn khóa tới khi tải lại | ✅ Đã sửa (Antigravity) |
+| N-04 | **P1** | Antigravity | Ô "Giá đặt lệnh" trống, chỉ có placeholder là giá hiện tại: nhập khối lượng rồi bấm thì bị báo thiếu giá | ✅ Đã sửa (Antigravity) |
+| N-05 | **P1** | Antigravity | Bán Market bằng thanh trượt % không chạy (chế độ nhập USDT mặc định) | ✅ Đã sửa (Antigravity) |
+| N-06 | **P1** | Antigravity | Mobile: bấm "BÁN BTC" mở form ở phía **MUA** | ✅ Đã sửa (Antigravity) |
+| N-07 | P2 | Antigravity | Menu Ví ở header hiện số viết cứng `10,000.00 USDT` | ✅ Đã sửa (Antigravity) |
+| N-08 | P2 | Antigravity | Bật 2FA không có mã QR (hợp đồng có `otpauthUrl`); mã khôi phục không có nút sao chép | ✅ Đã sửa (Antigravity) |
+| N-09 | P2 | Antigravity | "Khả dụng" trong form lệnh cắt còn 4 số lẻ (`0,0012 BTC` thay vì `0,00120879`) | ✅ Đã sửa (Antigravity) |
+| N-10 | P2 | Antigravity (+ chủ dự án) | Không có hướng dẫn nạp thêm tiền khi đang chờ faucet | ✅ Đã sửa (Antigravity) |
+| N-11 | P3 | Antigravity | Định dạng: bảng lệnh và Danh mục hiện giá 8 số lẻ, `%` dấu chấm | ✅ Đã sửa (Antigravity) |
+| N-12 | P3 | Antigravity | Hộp xác nhận ở trang Quản trị không phải `role="dialog"`, nút không tên | ✅ Đã sửa (Antigravity) |
+| N-13 | P3 | Antigravity | "Đã gửi lại email xác minh" dù môi trường không gửi email thật | ◐ Chờ backend PublicConfig |
+| N-14 | P3 | Antigravity | Mở `/trade/<cặp>` từ trang khác thì tải nến BTCUSDT trước rồi mới tải cặp đúng | ✅ Đã sửa (Antigravity) |
 
 ### N-01 — `npm run dev` bắt xác minh email nhưng không gửi email (P0 cho việc test)
 - **Phụ trách:** Claude Code (`infra/dev.mjs`, tài liệu).

@@ -40,6 +40,7 @@ export const TradePage: React.FC<TradePageProps> = ({ symbolParam, onNavigate })
   const [selectedPrice, setSelectedPrice] = useState<string>('');
   const [mobileTab, setMobileTab] = useState<'chart' | 'orderbook' | 'trades' | 'orders'>('chart');
   const [mobileOrderSheetOpen, setMobileOrderSheetOpen] = useState(false);
+  const [mobileSide, setMobileSide] = useState<'BUY' | 'SELL'>('BUY');
   const [orderRefreshTrigger, setOrderRefreshTrigger] = useState(0);
   const [alertModalOpen, setAlertModalOpen] = useState(false);
   const [marketSearch, setMarketSearch] = useState('');
@@ -85,7 +86,25 @@ export const TradePage: React.FC<TradePageProps> = ({ symbolParam, onNavigate })
     });
   };
 
-  const isFavorite = favorites.includes(activeSymbol);
+  // N-14: Determine symbol accurately from URL param to avoid flashing BTCUSDT
+  const currentSymbol = useMemo(() => {
+    if (symbolParam) {
+      const target = symbolParam.toUpperCase();
+      if (symbols.length === 0 || symbols.some((s) => s.symbol === target)) {
+        return target;
+      }
+    }
+    return activeSymbol;
+  }, [symbolParam, symbols, activeSymbol]);
+
+  // Sync route param with activeSymbol
+  useEffect(() => {
+    if (currentSymbol !== activeSymbol) {
+      setActiveSymbol(currentSymbol);
+    }
+  }, [currentSymbol, activeSymbol, setActiveSymbol]);
+
+  const isFavorite = favorites.includes(currentSymbol);
 
   const switcherFilteredSymbols = useMemo(() => {
     if (!pairSearch) return symbols;
@@ -100,17 +119,6 @@ export const TradePage: React.FC<TradePageProps> = ({ symbolParam, onNavigate })
       return s.symbol.includes(q) || s.baseAsset.includes(q);
     });
   }, [symbols, marketSearch]);
-
-  // Sync route param with activeSymbol
-  useEffect(() => {
-    if (symbolParam && symbolParam.toUpperCase() !== activeSymbol) {
-      const target = symbolParam.toUpperCase();
-      const exists = symbols.some((s) => s.symbol === target);
-      if (exists) {
-        setActiveSymbol(target);
-      }
-    }
-  }, [symbolParam, activeSymbol, symbols, setActiveSymbol]);
 
   const handlePriceSelected = (price: string) => {
     if (activeSymbolInfo?.tickSize) {
@@ -393,26 +401,26 @@ export const TradePage: React.FC<TradePageProps> = ({ symbolParam, onNavigate })
 
           {/* Center: Chart */}
           <div className="flex-1 flex flex-col min-w-[400px] min-h-0">
-            <CandlestickChart symbol={activeSymbol} />
+            <CandlestickChart symbol={currentSymbol} />
           </div>
 
           {/* Middle Right: Orderbook & Trades */}
           <div className="w-[300px] flex flex-col shrink-0 min-h-0 bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)] rounded-[var(--radius-lg,10px)] overflow-hidden">
             <div className="flex-1 min-h-0 border-b border-[var(--line,#1d1e21)] overflow-hidden">
               <Orderbook
-                symbol={activeSymbol}
+                symbol={currentSymbol}
                 onSelectPrice={handlePriceSelected}
               />
             </div>
             <div className="h-[220px] shrink-0 min-h-0 overflow-hidden">
-              <MarketTrades symbol={activeSymbol} />
+              <MarketTrades symbol={currentSymbol} />
             </div>
           </div>
 
           {/* Far Right: Order Form */}
           <div className="w-[320px] shrink-0 min-h-0 overflow-y-auto max-h-full">
             <OrderForm
-              symbol={activeSymbol}
+              symbol={currentSymbol}
               selectedPrice={selectedPrice}
               onOrderPlaced={handleOrderPlaced}
               onNavigateToLogin={() => onNavigate('/login')}
@@ -423,7 +431,7 @@ export const TradePage: React.FC<TradePageProps> = ({ symbolParam, onNavigate })
         {/* Bottom Section: Orders */}
         <div className="mt-1">
           <UserOrdersTabs
-            symbol={activeSymbol}
+            symbol={currentSymbol}
             refreshTrigger={orderRefreshTrigger}
           />
         </div>
@@ -446,25 +454,25 @@ export const TradePage: React.FC<TradePageProps> = ({ symbolParam, onNavigate })
         <div className="flex-1 min-h-[460px]">
           {mobileTab === 'chart' && (
             <div className="h-[460px]">
-              <CandlestickChart symbol={activeSymbol} />
+              <CandlestickChart symbol={currentSymbol} />
             </div>
           )}
           {mobileTab === 'orderbook' && (
             <div className="h-[420px]">
               <Orderbook
-                symbol={activeSymbol}
+                symbol={currentSymbol}
                 onSelectPrice={handlePriceSelected}
               />
             </div>
           )}
           {mobileTab === 'trades' && (
             <div className="h-[420px]">
-              <MarketTrades symbol={activeSymbol} />
+              <MarketTrades symbol={currentSymbol} />
             </div>
           )}
           {mobileTab === 'orders' && (
             <UserOrdersTabs
-              symbol={activeSymbol}
+              symbol={currentSymbol}
               refreshTrigger={orderRefreshTrigger}
             />
           )}
@@ -475,7 +483,10 @@ export const TradePage: React.FC<TradePageProps> = ({ symbolParam, onNavigate })
           <Button
             variant="buy"
             fullWidth
-            onClick={() => setMobileOrderSheetOpen(true)}
+            onClick={() => {
+              setMobileSide('BUY');
+              setMobileOrderSheetOpen(true);
+            }}
             className="py-2.5 font-bold text-sm"
           >
             MUA {activeSymbolInfo?.baseAsset}
@@ -483,7 +494,10 @@ export const TradePage: React.FC<TradePageProps> = ({ symbolParam, onNavigate })
           <Button
             variant="sell"
             fullWidth
-            onClick={() => setMobileOrderSheetOpen(true)}
+            onClick={() => {
+              setMobileSide('SELL');
+              setMobileOrderSheetOpen(true);
+            }}
             className="py-2.5 font-bold text-sm"
           >
             BÁN {activeSymbolInfo?.baseAsset}
@@ -494,11 +508,12 @@ export const TradePage: React.FC<TradePageProps> = ({ symbolParam, onNavigate })
         <BottomSheet
           isOpen={mobileOrderSheetOpen}
           onClose={() => setMobileOrderSheetOpen(false)}
-          title={`Đặt lệnh ${activeSymbol}`}
+          title={`Đặt lệnh ${currentSymbol}`}
         >
           <OrderForm
-            symbol={activeSymbol}
+            symbol={currentSymbol}
             selectedPrice={selectedPrice}
+            initialSide={mobileSide}
             onOrderPlaced={handleOrderPlaced}
             onNavigateToLogin={() => {
               setMobileOrderSheetOpen(false);

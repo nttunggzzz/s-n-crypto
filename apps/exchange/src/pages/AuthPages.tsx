@@ -679,6 +679,13 @@ export const VerifyEmailPage: React.FC<AuthPageProps> = ({ onNavigate }) => {
       try {
         await api.verifyEmail({ body: { token: token! } });
         setStatus('success');
+        if (typeof BroadcastChannel !== 'undefined') {
+          try {
+            const channel = new BroadcastChannel('cex-auth');
+            channel.postMessage('verified');
+            channel.close();
+          } catch {}
+        }
         await refreshUser();
       } catch {
         setStatus('error');
