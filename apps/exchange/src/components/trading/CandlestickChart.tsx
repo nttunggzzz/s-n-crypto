@@ -7,17 +7,22 @@ import {
   HistogramSeries,
   LineSeries,
   AreaSeries,
+  createSeriesMarkers,
   type IChartApi,
   type ISeriesApi,
   type UTCTimestamp,
+  type Time,
   type IPriceLine,
+  type ISeriesMarkersPluginApi,
+  type SeriesMarkerPrice,
 } from 'lightweight-charts';
-import type { Candle, CandleInterval, Order, FuturesPosition } from '@cex/contracts';
+import type { Candle, CandleInterval, Order, FuturesPosition, Trade } from '@cex/contracts';
 import { ASSET_TAG_LABELS } from '@cex/contracts';
+import { dec, floorToStep, Dec } from '@cex/core';
 import { getApiClient } from '../../services/api.ts';
 import { useMarket } from '../../context/MarketContext.tsx';
 import { useAuth } from '../../context/AuthContext.tsx';
-import { formatDecimal } from '@cex/ui';
+import { formatDecimal, formatPrice, formatAmount } from '@cex/ui';
 import {
   Maximize2,
   Minimize2,
@@ -171,6 +176,38 @@ const formatLegendTime = (timestamp?: number): string | null => {
   return `${dateStr} ${timeStr} VN`;
 };
 
+export function floorToInterval(timeSec: number, interval: CandleInterval): number {
+  switch (interval) {
+    case '1m':
+      return Math.floor(timeSec / 60) * 60;
+    case '5m':
+      return Math.floor(timeSec / 300) * 300;
+    case '15m':
+      return Math.floor(timeSec / 900) * 900;
+    case '1h':
+      return Math.floor(timeSec / 3600) * 3600;
+    case '4h':
+      return Math.floor(timeSec / 14400) * 14400;
+    case '1d':
+      return Math.floor(timeSec / 86400) * 86400;
+    default:
+      return Math.floor(timeSec / 900) * 900;
+  }
+}
+
+export interface GroupedMarkerItem {
+  time: UTCTimestamp;
+  side: 'BUY' | 'SELL';
+  count: number;
+  totalQty: Dec;
+  totalQuoteQty: Dec;
+  totalFee: Dec;
+  feeAsset: string;
+  avgPrice: string;
+  avgPriceNum: number;
+  latestTime: number;
+}
+
 export const CandlestickChart: React.FC<CandlestickChartProps> = ({
   symbol,
   marketType = 'spot',
@@ -216,6 +253,8 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
   const hasMoreHistoryRef = useRef<boolean>(true);
   const isLoadingMoreRef = useRef<boolean>(false);
   const orderPriceLinesRef = useRef<IPriceLine[]>([]);
+  const markersPluginRef = useRef<ISeriesMarkersPluginApi<Time> | null>(null);
+  const groupedFillsByTimeRef = useRef<Map<number, GroupedMarkerItem[]>>(new Map());
   const lastCandleRef = useRef<FormattedCandle | null>(null);
   const candlesListRef = useRef<FormattedCandle[]>([]);
   const needsFitContentRef = useRef<boolean>(true);
@@ -266,7 +305,27 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
   const { activeSymbolInfo, activeTicker, exchangeInfo, realtimeClient, connectionStatus } = useMarket();
   const { isAuthenticated } = useAuth();
   const [openOrders, setOpenOrders] = useState<Order[]>([]);
+  const [openOrdersError, setOpenOrdersError] = useState(false);
+  const [myTrades, setMyTrades] = useState<Trade[]>([]);
+  const [myTradesError, setMyTradesError] = useState(false);
   const [avgCost, setAvgCost] = useState<string | null>(null);
+  const [hoveredTradeMarkerInfo, setHoveredTradeMarkerInfo] = useState<string | null>(null);
+  const [visiblePriceRange, setVisiblePriceRange] = useState<{ min: number; max: number } | null>(null);
+
+  const [showMyOrders, setShowMyOrders] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('cex_chart_show_my_orders');
+      return saved !== null ? saved === 'true' : true;
+    } catch {
+      return true;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('cex_chart_show_my_orders', String(showMyOrders));
+    } catch {}
+  }, [showMyOrders]);
 
   // Load default interval from user preferences
   useEffect(() => {
@@ -324,59 +383,344 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
     }
   }, [fmtPrice, minMove]);
 
-  // Fetch open orders and position avgCost for price lines
+  // Fetch open orders for chart lines (Section A)
+  const fetchOrders = useCallback(async () => {
+    if (!isAuthenticated) {
+      setOpenOrders([]);
+      return;
+    }
+    setOpenOrdersError(false);
+    try {
+      if (marketType === 'futures') {
+        const res = await api.futuresOpenOrders({ query: { symbol } });
+        setOpenOrders(
+          res.items.map((fo) => ({
+            id: fo.id,
+            symbol: fo.symbol,
+            side: fo.side,
+            type: fo.type,
+            price: fo.price || null,
+            quantity: fo.quantity,
+            executedQty: fo.executedQty,
+            createdAt: fo.createdAt,
+            updatedAt: fo.updatedAt,
+            status: fo.status,
+            source: 'USER',
+            icebergQty: null,
+            timeInForce: 'GTC',
+            avgPrice: null,
+            quoteSpent: '0',
+            baseReceived: '0',
+            cumFee: '0',
+            clientOrderId: null,
+            stopPrice: null,
+            closeReason: null,
+          } as unknown as Order))
+        );
+      } else {
+        const res = await api.openOrders({ query: { symbol } });
+        setOpenOrders(res.items);
+      }
+    } catch {
+      setOpenOrdersError(true);
+    }
+  }, [api, isAuthenticated, marketType, symbol]);
+
+  // Fetch user trades history (Section B)
+  const fetchTrades = useCallback(async () => {
+    if (!isAuthenticated || marketType === 'futures') {
+      setMyTrades([]);
+      return;
+    }
+    setMyTradesError(false);
+    try {
+      let allTrades: Trade[] = [];
+      let cursor: string | undefined = undefined;
+      for (let page = 0; page < 5; page++) {
+        const res = await api.myTrades({ query: { symbol, limit: 200, cursor } });
+        allTrades = allTrades.concat(res.items);
+        if (!res.nextCursor || res.items.length < 200) break;
+        cursor = res.nextCursor;
+      }
+      setMyTrades(allTrades);
+    } catch {
+      setMyTradesError(true);
+    }
+  }, [api, isAuthenticated, marketType, symbol]);
+
   useEffect(() => {
     if (!isAuthenticated) {
       setOpenOrders([]);
+      setMyTrades([]);
       setAvgCost(null);
       return;
     }
 
-    if (marketType === 'futures') {
-      setAvgCost(null);
-      api.futuresOpenOrders({ query: { symbol } })
-        .then((res) => {
-          setOpenOrders(
-            res.items.map((fo) => ({
-              id: fo.id,
-              symbol: fo.symbol,
-              side: fo.side,
-              type: fo.type,
-              price: fo.price || '0',
-              quantity: fo.quantity,
-              executedQty: fo.executedQty,
-              createdAt: fo.createdAt,
-              updatedAt: fo.updatedAt,
-              status: fo.status,
-              source: 'USER',
-              icebergQty: null,
-              timeInForce: 'GTC',
-              avgPrice: null,
-              quoteSpent: '0',
-              baseReceived: '0',
-              cumFee: '0',
-              clientOrderId: null,
-              stopPrice: null,
-              closeReason: null,
-            } as unknown as Order))
-          );
+    fetchOrders();
+    fetchTrades();
+
+    if (marketType !== 'futures') {
+      api.portfolio()
+        .then((port) => {
+          const base = activeSymbolInfo?.baseAsset;
+          const pos = port.positions.find((p) => p.asset === base);
+          setAvgCost(pos?.avgCost || null);
         })
-        .catch(() => setOpenOrders([]));
+        .catch(() => setAvgCost(null));
+    }
+  }, [api, symbol, isAuthenticated, activeSymbolInfo, marketType, fetchOrders, fetchTrades]);
+
+  // Realtime subscription for orders & trades on 'user' channel (Section A1, B1)
+  useEffect(() => {
+    if (!realtimeClient || !isAuthenticated) return;
+
+    const unsub = realtimeClient.subscribe('user', (event: unknown) => {
+      const ev = event as { kind?: string; order?: Order; trade?: Trade } | null | undefined;
+      if (!ev || !ev.kind) return;
+
+      if (ev.kind === 'order' && ev.order && ev.order.symbol === symbol) {
+        const ord = ev.order;
+        setOpenOrders((prev) => {
+          if (ord.status === 'NEW' || ord.status === 'PARTIALLY_FILLED') {
+            const idx = prev.findIndex((o) => o.id === ord.id);
+            if (idx >= 0) {
+              const next = [...prev];
+              next[idx] = ord;
+              return next;
+            }
+            return [ord, ...prev];
+          } else {
+            return prev.filter((o) => o.id !== ord.id);
+          }
+        });
+      } else if (ev.kind === 'trade' && ev.trade && ev.trade.symbol === symbol) {
+        const tr = ev.trade;
+        setMyTrades((prev) => {
+          if (prev.some((t) => t.id === tr.id)) return prev;
+          return [tr, ...prev];
+        });
+      }
+    });
+
+    return () => unsub();
+  }, [realtimeClient, isAuthenticated, symbol]);
+
+  // Sync open orders on realtime reconnect or tab focus (Section A1)
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    if (connectionStatus === 'open') {
+      fetchOrders();
+    }
+  }, [connectionStatus, fetchOrders, isAuthenticated]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const handleFocus = () => {
+      if (document.visibilityState === 'visible') {
+        fetchOrders();
+      }
+    };
+    window.addEventListener('focus', handleFocus);
+    document.addEventListener('visibilitychange', handleFocus);
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+      document.removeEventListener('visibilitychange', handleFocus);
+    };
+  }, [fetchOrders, isAuthenticated]);
+
+  // Open orders to draw specification (Section A)
+  const openOrdersToDraw = useMemo(() => {
+    if (!showMyOrders || !isAuthenticated) return [];
+    const list: {
+      order: Order;
+      targetPrice: string;
+      isStop: boolean;
+      remainingQty: string;
+      label: string;
+      color: string;
+      lineStyle: number;
+      rawPriceNum: number;
+    }[] = [];
+
+    const baseAsset = activeSymbolInfo?.baseAsset || '';
+    const currentLp = activeTicker?.lastPrice ? parseFloat(activeTicker.lastPrice) : null;
+
+    for (const ord of openOrders) {
+      if (ord.type === 'MARKET') continue;
+
+      let targetPrice: string | null = null;
+      let isStop = false;
+
+      if (ord.type === 'LIMIT') {
+        targetPrice = ord.price;
+      } else if (ord.type === 'STOP_LIMIT') {
+        if (ord.triggerState === 'TRIGGERED') {
+          targetPrice = ord.price;
+        } else {
+          targetPrice = ord.stopPrice;
+          isStop = true;
+        }
+      } else if (ord.type === 'STOP_MARKET' || ord.type === 'TRAILING_STOP_MARKET') {
+        targetPrice = ord.stopPrice;
+        isStop = true;
+      }
+
+      if (!targetPrice) continue;
+      const priceNum = parseFloat(targetPrice);
+      if (isNaN(priceNum) || priceNum <= 0) continue;
+
+      let remQtyStr = ord.quantity || '0';
+      try {
+        const q = dec(ord.quantity || '0');
+        const eq = dec(ord.executedQty || '0');
+        const rem = q.sub(eq);
+        if (rem.gt(0)) {
+          remQtyStr = rem.toString();
+        }
+      } catch {}
+
+      const sideText = ord.side === 'BUY' ? 'Mua' : 'Bán';
+      let typeText = 'giới hạn';
+      if (isStop) {
+        typeText = 'Stop';
+      } else if (ord.type === 'LIMIT') {
+        typeText = 'giới hạn';
+      }
+
+      const fmtQty = formatAmount(remQtyStr, activeSymbolInfo?.stepSize);
+      const isBot = ord.source === 'GRID' || ord.source === 'DCA';
+      const botSuffix = isBot ? ' (Bot)' : '';
+      const label = `${sideText} ${typeText} ${fmtQty} ${baseAsset}${botSuffix}`;
+
+      const baseColor = ord.side === 'BUY' ? '#1fc27a' : '#f2475f';
+      const color = isBot
+        ? (ord.side === 'BUY' ? 'rgba(31, 194, 122, 0.65)' : 'rgba(242, 71, 95, 0.65)')
+        : baseColor;
+
+      list.push({
+        order: ord,
+        targetPrice,
+        isStop,
+        remainingQty: remQtyStr,
+        label,
+        color,
+        lineStyle: isStop ? 2 : 0,
+        rawPriceNum: priceNum,
+      });
+    }
+
+    if (list.length > 20 && currentLp !== null) {
+      list.sort((a, b) => Math.abs(a.rawPriceNum - currentLp) - Math.abs(b.rawPriceNum - currentLp));
+      return list.slice(0, 20);
+    }
+
+    return list;
+  }, [showMyOrders, isAuthenticated, openOrders, activeSymbolInfo, activeTicker]);
+
+  // Group trades by candle interval bucket & side (Section B)
+  const { fillMarkersList, groupedByTimeMap } = useMemo(() => {
+    const groupedMap = new Map<string, GroupedMarkerItem>();
+    const byTime = new Map<number, GroupedMarkerItem[]>();
+
+    if (!myTrades || myTrades.length === 0) {
+      return { fillMarkersList: [], groupedByTimeMap: byTime };
+    }
+
+    const tickSize = activeSymbolInfo?.tickSize;
+
+    for (const tr of myTrades) {
+      if (!tr.createdAt || !tr.price || !tr.quantity) continue;
+      const tradeTimeMs = new Date(tr.createdAt).getTime();
+      if (isNaN(tradeTimeMs)) continue;
+      const tradeTimeSec = Math.floor(tradeTimeMs / 1000);
+      const candleBucket = floorToInterval(tradeTimeSec, interval) as UTCTimestamp;
+      const side = tr.side === 'BUY' ? 'BUY' : 'SELL';
+      const key = `${candleBucket}_${side}`;
+
+      const existing = groupedMap.get(key);
+      const qtyDec = dec(tr.quantity);
+      const quoteDec = tr.quoteQty ? dec(tr.quoteQty) : qtyDec.mul(dec(tr.price));
+      const feeDec = tr.fee ? dec(tr.fee) : dec('0');
+
+      if (existing) {
+        existing.count += 1;
+        existing.totalQty = existing.totalQty.add(qtyDec);
+        existing.totalQuoteQty = existing.totalQuoteQty.add(quoteDec);
+        existing.totalFee = existing.totalFee.add(feeDec);
+        if (tradeTimeSec > existing.latestTime) {
+          existing.latestTime = tradeTimeSec;
+        }
+      } else {
+        groupedMap.set(key, {
+          time: candleBucket,
+          side,
+          count: 1,
+          totalQty: qtyDec,
+          totalQuoteQty: quoteDec,
+          totalFee: feeDec,
+          feeAsset: tr.feeAsset || '',
+          avgPrice: tr.price,
+          avgPriceNum: parseFloat(tr.price),
+          latestTime: tradeTimeSec,
+        });
+      }
+    }
+
+    const list: GroupedMarkerItem[] = [];
+    for (const item of groupedMap.values()) {
+      if (item.totalQty.gt(0)) {
+        const rawAvg = item.totalQuoteQty.div(item.totalQty);
+        item.avgPrice = tickSize ? floorToStep(rawAvg, dec(tickSize)).toString() : rawAvg.toString();
+        item.avgPriceNum = parseFloat(item.avgPrice);
+      }
+      list.push(item);
+
+      const timeKey = Number(item.time);
+      const arr = byTime.get(timeKey) || [];
+      arr.push(item);
+      byTime.set(timeKey, arr);
+    }
+
+    list.sort((a, b) => (a.time as number) - (b.time as number));
+
+    return { fillMarkersList: list, groupedByTimeMap: byTime };
+  }, [myTrades, interval, activeSymbolInfo]);
+
+  useEffect(() => {
+    groupedFillsByTimeRef.current = groupedByTimeMap;
+  }, [groupedByTimeMap]);
+
+  // Update Series Markers whenever markers or toggle change
+  useEffect(() => {
+    if (!markersPluginRef.current) return;
+
+    if (!showMyOrders || !isAuthenticated || fillMarkersList.length === 0) {
+      try {
+        markersPluginRef.current.setMarkers([]);
+      } catch {}
       return;
     }
 
-    api.openOrders({ query: { symbol } })
-      .then((res) => setOpenOrders(res.items))
-      .catch(() => setOpenOrders([]));
+    const markers: SeriesMarkerPrice<UTCTimestamp>[] = fillMarkersList.map((item) => {
+      const isBuy = item.side === 'BUY';
+      const text = item.count > 1 ? `${isBuy ? 'B' : 'S'}×${item.count}` : (isBuy ? 'B' : 'S');
+      return {
+        time: item.time,
+        position: isBuy ? 'atPriceBottom' : 'atPriceTop',
+        price: item.avgPriceNum,
+        shape: isBuy ? 'arrowUp' : 'arrowDown',
+        color: isBuy ? '#1fc27a' : '#f2475f',
+        text,
+        id: `fill_${item.time}_${item.side}`,
+      };
+    });
 
-    api.portfolio()
-      .then((port) => {
-        const base = activeSymbolInfo?.baseAsset;
-        const pos = port.positions.find((p) => p.asset === base);
-        setAvgCost(pos?.avgCost || null);
-      })
-      .catch(() => setAvgCost(null));
-  }, [api, symbol, isAuthenticated, activeSymbolInfo, marketType]);
+    try {
+      markersPluginRef.current.setMarkers(markers);
+    } catch (err) {
+      console.error('Error setting chart markers', err);
+    }
+  }, [fillMarkersList, showMyOrders, isAuthenticated, chartType]);
 
   // Fetch historical candles from server (B3: initial limit 500)
   useEffect(() => {
@@ -656,6 +1000,11 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
     // Create Main Series
     const mainSeries = setupMainSeries(chart, chartType, customPriceFormat);
     mainSeriesRef.current = mainSeries;
+    try {
+      markersPluginRef.current = createSeriesMarkers(mainSeries, [], { autoScale: false });
+    } catch (e) {
+      console.error('Failed to create markers plugin', e);
+    }
 
     // Create Volume Series
     if (showIndicators.vol) {
@@ -737,6 +1086,26 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
     const timeScale = chart.timeScale();
     timeScale.subscribeVisibleLogicalRangeChange(async (logicalRange) => {
       if (!logicalRange) return;
+
+      // Update visible price range for out-of-view badges (Section A6)
+      const curCandles = candlesListRef.current;
+      if (curCandles.length > 0) {
+        const startIdx = Math.max(0, Math.floor(logicalRange.from));
+        const endIdx = Math.min(curCandles.length - 1, Math.ceil(logicalRange.to));
+        let minP = Infinity;
+        let maxP = -Infinity;
+        for (let i = startIdx; i <= endIdx; i++) {
+          const c = curCandles[i];
+          if (c) {
+            if (c.low < minP) minP = c.low;
+            if (c.high > maxP) maxP = c.high;
+          }
+        }
+        if (minP < Infinity && maxP > -Infinity) {
+          setVisiblePriceRange({ min: minP, max: maxP });
+        }
+      }
+
       if (!userScrolledRef.current) return;
       if (logicalRange.from < 50 && !isLoadingMoreRef.current && hasMoreHistoryRef.current) {
         const curList = candlesListRef.current;
@@ -813,6 +1182,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
     // Crosshair move listener for Pro HUD Legend
     chart.subscribeCrosshairMove((param) => {
       if (!param.time || !param.point || !param.seriesData || !mainSeriesRef.current) {
+        setHoveredTradeMarkerInfo(null);
         // Crosshair left chart area: revert legend to the latest candle
         const last = lastCandleRef.current;
         if (last) {
@@ -831,6 +1201,33 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
         }
         return;
       }
+
+      // Check if current crosshair time has any fill marker (Section B4)
+      const timeVal = param.time as number | undefined;
+      if (timeVal && groupedFillsByTimeRef.current) {
+        const fillsAtTime = groupedFillsByTimeRef.current.get(timeVal);
+        if (fillsAtTime && fillsAtTime.length > 0) {
+          const stepSize = activeSymbolInfo?.stepSize;
+          const tickSize = activeSymbolInfo?.tickSize;
+          const baseAsset = activeSymbolInfo?.baseAsset || '';
+          const summaries = fillsAtTime.map((f) => {
+            const sideText = f.side === 'BUY' ? 'Mua' : 'Bán';
+            const qtyText = formatAmount(f.totalQty.toString(), stepSize);
+            const priceText = formatPrice(f.avgPrice, tickSize);
+            const countText = `${f.count} lần khớp`;
+            const feeText = f.totalFee.gt(0) ? ` · phí ${formatAmount(f.totalFee.toString(), stepSize)} ${f.feeAsset}` : '';
+            const d = new Date(f.latestTime * 1000);
+            const timeStr = d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false });
+            return `${sideText} ${qtyText} ${baseAsset} @ ${priceText} · ${countText}${feeText} · ${timeStr}`;
+          });
+          setHoveredTradeMarkerInfo(summaries.join(' | '));
+        } else {
+          setHoveredTradeMarkerInfo(null);
+        }
+      } else {
+        setHoveredTradeMarkerInfo(null);
+      }
+
       const data = param.seriesData.get(mainSeriesRef.current) as {
         open?: number;
         high?: number;
@@ -868,6 +1265,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
         } catch {}
         chartRef.current = null;
         mainSeriesRef.current = null;
+        markersPluginRef.current = null;
         volumeSeriesRef.current = null;
         ma5SeriesRef.current = null;
         ma10SeriesRef.current = null;
@@ -890,6 +1288,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
         chart.removeSeries(mainSeriesRef.current);
       } catch {}
       mainSeriesRef.current = null;
+      markersPluginRef.current = null;
       orderPriceLinesRef.current = [];
     }
 
@@ -900,6 +1299,11 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
     };
     const newSeries = setupMainSeries(chart, chartType, customPriceFormat);
     mainSeriesRef.current = newSeries;
+    try {
+      markersPluginRef.current = createSeriesMarkers(newSeries, [], { autoScale: false });
+    } catch (e) {
+      console.error('Failed to create markers plugin', e);
+    }
 
     const curCandles = candlesListRef.current;
     if (curCandles.length > 0) {
@@ -1180,23 +1584,21 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
       }
     }
 
-    // Open User Orders lines
-    if (openOrders.length > 0) {
-      openOrders.forEach((ord) => {
-        if (ord.price) {
-          const line = series.createPriceLine({
-            price: parseFloat(ord.price),
-            color: ord.side === 'BUY' ? '#00c087' : '#f6465d',
-            lineWidth: 1,
-            lineStyle: 2,
-            axisLabelVisible: true,
-            title: `${ord.side === 'BUY' ? 'Mua' : 'Bán'} ${ord.quantity || ''}`,
-          });
-          orderPriceLinesRef.current.push(line);
-        }
+    // Open User Orders lines (PROMPT-12 Section A)
+    if (showMyOrders && openOrdersToDraw.length > 0) {
+      openOrdersToDraw.forEach((item) => {
+        const line = series.createPriceLine({
+          price: item.rawPriceNum,
+          color: item.color,
+          lineWidth: 1,
+          lineStyle: item.lineStyle,
+          axisLabelVisible: true,
+          title: item.label,
+        });
+        orderPriceLinesRef.current.push(line);
       });
     }
-  }, [openOrders, avgCost, futuresPosition, marketType, activeSymbolInfo]);
+  }, [openOrdersToDraw, showMyOrders, avgCost, futuresPosition, marketType, activeSymbolInfo]);
 
   // 7. Realtime WebSocket Candle Updates Listener
   useEffect(() => {
@@ -1353,6 +1755,15 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
     return () => clearTimeout(timer);
   }, [isFullscreen]);
 
+  const outOfViewOrders = useMemo(() => {
+    if (!showMyOrders || !visiblePriceRange || openOrdersToDraw.length === 0) {
+      return { above: [], below: [] };
+    }
+    const above = openOrdersToDraw.filter((o) => o.rawPriceNum > visiblePriceRange.max);
+    const below = openOrdersToDraw.filter((o) => o.rawPriceNum < visiblePriceRange.min);
+    return { above, below };
+  }, [showMyOrders, visiblePriceRange, openOrdersToDraw]);
+
   const currentPrice = legendData?.close ?? (activeTicker && activeTicker.lastPrice ? parseFloat(activeTicker.lastPrice) : null);
   const isPositiveChange = (legendData?.change ?? 0) >= 0;
 
@@ -1500,6 +1911,23 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
 
         {/* Right side toolbar items */}
         <div className="flex items-center gap-2 shrink-0">
+          {/* "Lệnh của tôi" Toggle Button (PROMPT-12) */}
+          {isAuthenticated && (
+            <button
+              data-testid="chart-my-orders-toggle"
+              aria-pressed={showMyOrders}
+              onClick={() => setShowMyOrders((p) => !p)}
+              className={`px-2 py-0.5 rounded cursor-pointer transition-all flex items-center gap-1 text-[11px] border ${
+                showMyOrders
+                  ? 'bg-[var(--accent,#818cf8)]/15 text-[var(--accent,#818cf8)] border-[var(--accent,#818cf8)]/30 font-semibold shadow-sm'
+                  : 'text-[var(--text-3,#63636b)] border-[var(--line,#1d1e21)] hover:text-[var(--text-2,#a1a1aa)]'
+              }`}
+              title="Bật/tắt đường lệnh đang mở và điểm khớp (B/S) trên biểu đồ"
+            >
+              Lệnh của tôi
+            </button>
+          )}
+
           {/* Connection / Feed Status & Simulation Badge */}
           <div className="hidden sm:flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)] text-[11px] font-mono">
             <span
@@ -1602,11 +2030,75 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
                   <span className="text-[#ec4899]">EMA25</span>
                 </div>
               )}
+
+              {/* Trade Fill Crosshair Info (Section B4) */}
+              {hoveredTradeMarkerInfo && (
+                <span className="text-[10px] text-amber-300 font-bold bg-amber-500/20 px-2 py-0.5 rounded border border-amber-500/30">
+                  {hoveredTradeMarkerInfo}
+                </span>
+              )}
+
+              {/* Order/Trade Error with Retry button (Section C) */}
+              {(openOrdersError || myTradesError) && (
+                <span className="text-[10px] text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/30 flex items-center gap-1 pointer-events-auto">
+                  <span>Không tải được lệnh của bạn</span>
+                  <button
+                    onClick={() => {
+                      fetchOrders();
+                      fetchTrades();
+                    }}
+                    className="underline hover:text-white cursor-pointer ml-1 font-semibold"
+                  >
+                    Thử lại
+                  </button>
+                </span>
+              )}
             </div>
           )}
 
           {/* Canvas container: ALWAYS MOUNTED IN THE DOM! */}
           <div ref={chartContainerRef} className="absolute inset-0" />
+
+          {/* Out-of-view order badges (Section A6) */}
+          {outOfViewOrders.above.length > 0 && (
+            <div className="absolute top-12 right-14 z-10 flex flex-col gap-1 items-end pointer-events-auto">
+              {outOfViewOrders.above.slice(0, 2).map((item) => (
+                <button
+                  key={`above_${item.order.id}`}
+                  onClick={() => chartRef.current?.timeScale().fitContent()}
+                  className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-[#f2475f]/15 text-[#f2475f] border border-[#f2475f]/30 backdrop-blur-sm hover:bg-[#f2475f]/25 transition-colors cursor-pointer shadow-sm"
+                  title="Bấm để đưa nến và lệnh vào tầm nhìn"
+                >
+                  ↑ {item.order.side === 'BUY' ? 'Mua' : 'Bán'} {formatPrice(item.targetPrice, activeSymbolInfo?.tickSize)}
+                </button>
+              ))}
+              {outOfViewOrders.above.length > 2 && (
+                <span className="text-[9px] text-[var(--text-3,#63636b)] font-mono">
+                  +{outOfViewOrders.above.length - 2} lệnh khác
+                </span>
+              )}
+            </div>
+          )}
+
+          {outOfViewOrders.below.length > 0 && (
+            <div className="absolute bottom-8 right-14 z-10 flex flex-col gap-1 items-end pointer-events-auto">
+              {outOfViewOrders.below.slice(0, 2).map((item) => (
+                <button
+                  key={`below_${item.order.id}`}
+                  onClick={() => chartRef.current?.timeScale().fitContent()}
+                  className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-[#1fc27a]/15 text-[#1fc27a] border border-[#1fc27a]/30 backdrop-blur-sm hover:bg-[#1fc27a]/25 transition-colors cursor-pointer shadow-sm"
+                  title="Bấm để đưa nến và lệnh vào tầm nhìn"
+                >
+                  ↓ {item.order.side === 'BUY' ? 'Mua' : 'Bán'} {formatPrice(item.targetPrice, activeSymbolInfo?.tickSize)}
+                </button>
+              ))}
+              {outOfViewOrders.below.length > 2 && (
+                <span className="text-[9px] text-[var(--text-3,#63636b)] font-mono">
+                  +{outOfViewOrders.below.length - 2} lệnh khác
+                </span>
+              )}
+            </div>
+          )}
 
           {/* Loading Overlay with subtle fade and 40% backdrop */}
           <div
@@ -1718,6 +2210,44 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
           </div>
         </div>
       )}
+
+      {/* Hidden DOM Accessible & E2E Test Target Lists (PROMPT-12 Section D) */}
+      <div className="sr-only" aria-hidden="false">
+        <ul data-testid="chart-order-lines" aria-label="Lệnh đang mở trên biểu đồ">
+          {showMyOrders && isAuthenticated && openOrdersToDraw.map((item) => (
+            <li
+              key={item.order.id}
+              data-testid="chart-order-line"
+              data-order-id={item.order.id}
+              data-side={item.order.side}
+              data-price={item.targetPrice}
+            >
+              {item.label} @ {formatPrice(item.targetPrice, activeSymbolInfo?.tickSize)}
+            </li>
+          ))}
+        </ul>
+        <ul data-testid="chart-fill-markers" aria-label="Điểm khớp lệnh trên biểu đồ">
+          {showMyOrders && isAuthenticated && fillMarkersList.map((item) => {
+            const sideText = item.side === 'BUY' ? 'Mua' : 'Bán';
+            const qtyText = formatAmount(item.totalQty.toString(), activeSymbolInfo?.stepSize);
+            const priceText = formatPrice(item.avgPrice, activeSymbolInfo?.tickSize);
+            const d = new Date(item.latestTime * 1000);
+            const timeStr = d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false });
+            return (
+              <li
+                key={`marker_${item.time}_${item.side}`}
+                data-testid="chart-fill-marker"
+                data-side={item.side}
+                data-price={item.avgPrice}
+                data-time={String(item.time)}
+                data-count={String(item.count)}
+              >
+                {`${sideText} ${qtyText} ${activeSymbolInfo?.baseAsset || ''} @ ${priceText} lúc ${timeStr}`}
+              </li>
+            );
+          })}
+        </ul>
+      </div>
     </div>
   );
 };

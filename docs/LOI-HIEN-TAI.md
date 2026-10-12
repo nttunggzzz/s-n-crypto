@@ -69,6 +69,14 @@ Ba kết luận chính:
 | **N-12** | P3 | Antigravity | Hộp xác nhận ở trang Quản trị không phải `role="dialog"`, nút không tên | **Đã sửa** (Antigravity) |
 | **N-13** | P3 | Antigravity | "Đã gửi lại email xác minh" dù môi trường không gửi email thật | ◐ Chờ backend |
 | **N-14** | P3 | Antigravity | Mở `/trade/<cặp>` từ trang khác thì tải nến BTCUSDT trước rồi mới tải cặp đúng | **Đã sửa** (Antigravity) |
+| **K-01** | **P1** | Antigravity | Tắt/bật xác minh email an toàn theo cấu hình server `emailVerificationRequired` | **Đã sửa** (Antigravity) |
+| **K-02** | **P1** | Antigravity | Màn "Đăng ký thành công" chặn vào sàn làm đỏ 2 test e2e | **Đã sửa** (Antigravity) |
+| **K-03** | P2 | Antigravity | Đổi giá Limit không tính lại tổng giá trị; xóa ô giá bị tự điền | **Đã sửa** (Antigravity) |
+| **K-04** | P2 | Antigravity | Đang tải phiên (`isLoading`) hiện "Yêu cầu đăng nhập" nhấp nháy | **Đã sửa** (Antigravity) |
+| **K-05** | P2 | Antigravity | Sổ lệnh và Giao dịch gần đây cắt khối lượng còn 4 số lẻ (`0,0000`) | **Đã sửa** (Antigravity) |
+| **K-06** / **PROMPT-12** | P2 | Antigravity | Đường lệnh đang mở & điểm khớp lệnh B/S trên biểu đồ nến | **Đã sửa** (Antigravity) |
+| **K-07** | P3 | Antigravity | Số thô và dấu thập phân trong thông báo / toast | **Đã sửa** (Antigravity) |
+| **K-08** | P3 | Antigravity | Gọi `/me` mỗi lần focus tab với mọi tài khoản chưa xác minh | **Đã sửa** (Antigravity) |
 
 ---
 
@@ -354,6 +362,61 @@ Script đo nằm trong mục "Cách tự đo lại" ở cuối file.
 
 ### N-14 — Mở `/trade/<cặp>` từ trang khác thì tải nến BTCUSDT trước
 - **Trạng thái:** **Đã sửa**. `TradePage.tsx` tính toán `currentSymbol` trực tiếp từ URL param đã validate và truyền thẳng xuống `CandlestickChart`, `Orderbook`, `MarketTrades` và `OrderForm`, tránh tải nến cặp cũ trước.
+
+---
+
+## 6. Lỗi rà soát lần 3 (K-01…K-08) và Tính năng biểu đồ PROMPT-12
+
+### K-01 — Khôi phục luồng xác minh email chuẩn theo cấu hình server
+- **Phụ trách:** Antigravity · **File:** `apps/exchange/src/components/Header.tsx`, `pages/SettingsPage.tsx`, `pages/WalletPage.tsx`, `components/trading/OrderForm.tsx`
+- **Nguyên nhân:** Khóa/cảnh báo email bị gán cứng hoặc xóa giao diện dẫn tới 403 khi server yêu cầu xác minh.
+- **Cách sửa:** Gắn điều kiện hiển thị banner, badge cảnh báo và nút gửi lại link xác minh phụ thuộc chặt chẽ vào `publicConfig?.emailVerificationRequired === true`. Khi server trả `false` (mặc định dev/host), giao diện hoàn toàn không có cảnh báo hay chặn hành động nào, đáp ứng đúng yêu cầu của người dùng mà không phá vỡ tính năng khi bật lại.
+- **Trạng thái:** **Đã sửa** (`0a8f95b`, Antigravity). Typecheck và vitest 230/230 pass.
+
+### K-02 — Bỏ màn "Đăng ký thành công" trung gian làm kẹt luồng và đỏ e2e
+- **Phụ trách:** Antigravity · **File:** `apps/exchange/src/pages/AuthPages.tsx`
+- **Nguyên nhân:** Màn thành công mới giữ người dùng lại `/register` và yêu cầu bấm thêm nút, làm hỏng chờ URL `/trade/` của test e2e (`spot.spec.ts`, `host-mode/invite-signup.spec.ts`).
+- **Cách sửa:** Bỏ màn hình trung gian, sau khi gọi `register` thành công thì hiển thị thông báo toast và điều hướng thẳng tới `/trade/BTCUSDT`.
+- **Trạng thái:** **Đã sửa** (`0a8f95b`, Antigravity). Typecheck và vitest 230/230 pass.
+
+### K-03 — Tính lại tổng giá trị khi đổi giá Limit và bảo toàn khi xóa trắng ô giá
+- **Phụ trách:** Antigravity · **File:** `apps/exchange/src/components/trading/OrderForm.tsx`
+- **Nguyên nhân:** `handleQuantityChange` đọc giá cũ trong closure khi đổi giá; ô giá xóa trắng bị autofill N-04 điền lại ngay.
+- **Cách sửa:** Bổ sung hàm `recalcTotal(nextPrice, quantity)` dùng `dec(q).mul(dec(p))` làm tròn 2 số lẻ; đánh dấu `userChangedPriceRef.current = true` khi người dùng nhập hoặc xóa ô giá để không bị autofill ghi đè.
+- **Trạng thái:** **Đã sửa** (`0a8f95b`, Antigravity). Typecheck và vitest 230/230 pass.
+
+### K-04 — Hiển thị Skeleton khi đang tải phiên (`isLoading`) thay vì "Yêu cầu đăng nhập"
+- **Phụ trách:** Antigravity · **File:** `WalletPage.tsx`, `SettingsPage.tsx`, `BotsPage.tsx`, `PortfolioPage.tsx`, `PnlAnalysisPage.tsx`
+- **Nguyên nhân:** Khi `/me` đang xử lý, `user === null` khiến trang lập tức render fallback "Yêu cầu đăng nhập" gây nhấp nháy giao diện.
+- **Cách sửa:** Đọc `isLoading` từ `useAuth()`; khi `isLoading === true` render skeleton placeholder bóng mờ của trang thay vì thông báo từ chối.
+- **Trạng thái:** **Đã sửa** (`0a8f95b`, Antigravity). Typecheck và vitest 230/230 pass.
+
+### K-05 — Sổ lệnh và Giao dịch gần đây dùng `formatAmount` / `formatPrice`
+- **Phụ trách:** Antigravity · **File:** `apps/exchange/src/components/trading/Orderbook.tsx`, `MarketTrades.tsx`
+- **Nguyên nhân:** Cắt cứng 4 chữ số thập phân (`decimals: 4`) làm lượng nhỏ của BTC (5 số lẻ) bị hiển thị thành `0,0000`.
+- **Cách sửa:** Sử dụng trợ hàm `formatAmount(qty, stepSize)` và `formatPrice(price, tickSize)` từ `@cex/ui`.
+- **Trạng thái:** **Đã sửa** (`0a8f95b`, Antigravity). Typecheck và vitest 230/230 pass.
+
+### K-06 / PROMPT-12 — Biểu đồ nến: Đường lệnh đang mở & Điểm khớp lệnh (B/S)
+- **Phụ trách:** Antigravity · **File:** `apps/exchange/src/components/trading/CandlestickChart.tsx`, `docs/antigravity/TESTIDS.md`
+- **Nội dung:**
+  - Đường lệnh đang mở: Cập nhật realtime từ kênh `user` (`kind: 'order'`), tự động đồng bộ lại khi reconnect hoặc focus tab. Vẽ đúng giá cho `LIMIT`, `STOP_LIMIT`, `STOP_MARKET`. Nhãn chuẩn định dạng kèm khối lượng còn lại (`Dec`), phân biệt màu cho Bot (lưới/DCA), giới hạn 20 đường gần nhất kèm huy hiệu chỉ hướng ra ngoài khung giá nhìn.
+  - Điểm khớp lệnh (B/S): Tải lịch sử `myTrades` và lắng nghe realtime `trade`, gộp các khớp trong cùng cây nến và cùng chiều theo giá trung bình gia quyền (`Σ quoteQty / Σ quantity`). Sử dụng `createSeriesMarkers` của `lightweight-charts` v5.2.1, sắp xếp theo thời gian tăng dần, hiển thị HUD legend chi tiết khi di chuột qua nến có điểm khớp.
+  - Nút bật/tắt "Lệnh của tôi" (`data-testid="chart-my-orders-toggle"`) lưu lựa chọn vào `localStorage`.
+  - Danh sách hỗ trợ kiểm thử DOM ẩn (`sr-only`): `data-testid="chart-order-lines"` (`chart-order-line`) và `data-testid="chart-fill-markers"` (`chart-fill-marker`).
+- **Trạng thái:** **Đã sửa** (`0a8f95b`, Antigravity). Typecheck và vitest 230/230 pass.
+
+### K-07 — Định dạng số thô và dấu thập phân trong thông báo / toast
+- **Phụ trách:** Antigravity · **File:** `UserOrdersTabs.tsx`, `NotificationCenter.tsx`, `OrderForm.tsx`
+- **Nguyên nhân:** In trực tiếp số thô từ API hoặc dấu chấm thập phân kiểu Mỹ trong chuỗi tiếng Việt.
+- **Cách sửa:** Áp dụng `formatAmount` và `formatPrice` theo quy tắc bước giá/bước khối lượng của cặp, phí ước tính trống hiển thị `—`.
+- **Trạng thái:** **Đã sửa** (`0a8f95b`, Antigravity). Typecheck và vitest 230/230 pass.
+
+### K-08 — Giới hạn polling `/me` khi focus tab và bảo toàn phiên khi lỗi mạng
+- **Phụ trách:** Antigravity · **File:** `apps/exchange/src/context/AuthContext.tsx`
+- **Nguyên nhân:** Luôn gọi lại `/me` khi focus tab với tài khoản chưa xác minh kể cả khi server không yêu cầu; xoá phiên khi lỗi mạng.
+- **Cách sửa:** Thêm điều kiện `publicConfig?.emailVerificationRequired === true` cho focus polling; chỉ xoá user khi lỗi thực sự là 401 Unauthorized, các lỗi mạng khác giữ nguyên phiên đăng nhập hiện tại.
+- **Trạng thái:** **Đã sửa** (`0a8f95b`, Antigravity). Typecheck và vitest 230/230 pass.
 
 ---
 

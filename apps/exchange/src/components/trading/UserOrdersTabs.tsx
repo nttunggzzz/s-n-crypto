@@ -148,12 +148,18 @@ export const UserOrdersTabs: React.FC<UserOrdersTabsProps> = ({
         }
       } else if (ev.kind === 'trade' && ev.trade) {
         setMyTrades((prev) => [ev.trade!, ...prev]);
-        success(`Lệnh đã khớp: ${ev.trade.quantity} @ ${ev.trade.price}`);
+        const tr = ev.trade;
+        const sym = symbols?.find((s) => s.symbol === tr.symbol);
+        const formattedQty = sym ? formatAmount(tr.quantity, sym.stepSize) : tr.quantity;
+        const formattedPrice = sym ? formatPrice(tr.price, sym.tickSize) : tr.price;
+        const sideText = tr.side === 'BUY' ? 'Mua' : 'Bán';
+        const base = sym?.baseAsset ? ` ${sym.baseAsset}` : '';
+        success(`Khớp lệnh ${sideText}: ${formattedQty}${base} @ ${formattedPrice}`);
       }
     });
 
     return () => unsub();
-  }, [realtimeClient, isAuthenticated, success]);
+  }, [realtimeClient, isAuthenticated, success, symbols]);
 
   // Cancel single order
   const handleCancelOrder = async (orderId: string) => {

@@ -25,7 +25,7 @@ export interface PortfolioPageProps {
 }
 
 export const PortfolioPage: React.FC<PortfolioPageProps> = ({ onNavigate }) => {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading } = useAuth();
   const { symbols } = useMarket();
   const api = getApiClient();
 
@@ -128,6 +128,15 @@ export const PortfolioPage: React.FC<PortfolioPageProps> = ({ onNavigate }) => {
 
     return { segments, minVal, maxVal, width, height };
   }, [history]);
+
+  if (isLoading) {
+    return (
+      <div className="max-w-6xl mx-auto px-4 py-8 space-y-6 animate-pulse">
+        <div className="h-44 bg-[var(--panel,#0a0a0b)] rounded-[var(--radius-lg,12px)] border border-[var(--line,#1d1e21)]" />
+        <div className="h-72 bg-[var(--panel,#0a0a0b)] rounded-[var(--radius-lg,12px)] border border-[var(--line,#1d1e21)]" />
+      </div>
+    );
+  }
 
   if (!isAuthenticated) {
     return (

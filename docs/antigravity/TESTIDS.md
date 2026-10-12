@@ -82,5 +82,13 @@ Test mở **hai trình duyệt cùng lúc**: admin thao tác ở `/admin/…`, n
 | `admin-lock-open` / `admin-unlock-open` | Nút Khóa / Mở khóa | Chỉ render khi có quyền `users.lock` |
 | `confirm-reason` | Ô **lý do** trong hộp xác nhận dùng chung của mọi thao tác thay đổi dữ liệu | ≥ 5 ký tự |
 | `confirm-phrase` | Ô gõ chữ xác nhận (`HALT`, `RESUME`, `RESET`) | Chỉ có ở thao tác nguy hiểm |
-| `confirm-submit` | Nút xác nhận | Khóa khi chưa đủ lý do / gõ sai chữ |
 | `audit-row` | Mỗi dòng ở `/admin/audit-logs` | Dòng chứa cả **lý do** |
+
+## Biểu đồ nến & Lệnh / Điểm khớp (PROMPT-12) — `chart-orders.spec.ts`
+| id | Phần tử | Ghi chú |
+|---|---|---|
+| `chart-my-orders-toggle` | Nút "Lệnh của tôi" trên thanh công cụ chart | Thuộc tính `aria-pressed="true"` / `"false"`. Mặc định bật khi đăng nhập |
+| `chart-order-lines` | Danh sách `<ul>` chứa các đường lệnh đang mở trên biểu đồ | Nằm trong DOM `sr-only` để test và screen reader đọc được |
+| `chart-order-line` | Mỗi dòng `<li>` lệnh đang mở | Thuộc tính `data-order-id`, `data-side="BUY"` / `"SELL"`, `data-price` (giá chuỗi gốc từ API) |
+| `chart-fill-markers` | Danh sách `<ul>` chứa các điểm khớp lệnh (B/S) trên biểu đồ | Nằm trong DOM `sr-only` |
+| `chart-fill-marker` | Mỗi dòng `<li>` điểm khớp | Thuộc tính `data-side="BUY"` / `"SELL"`, `data-price` (giá trung bình khớp), `data-time` (giây UTC), `data-count` (số lần khớp) |

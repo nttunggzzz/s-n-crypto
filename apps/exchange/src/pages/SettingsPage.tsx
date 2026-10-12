@@ -6,6 +6,7 @@ type UpdatePreferencesInput = Partial<Preferences>;
 import { getApiClient } from '../services/api.ts';
 import { getErrorMessage } from '../services/errors.ts';
 import { useAuth } from '../context/AuthContext.tsx';
+import { useConfig } from '../context/ConfigContext.tsx';
 import { AvatarIcon, AVATAR_LIST } from '../components/AvatarIcon.tsx';
 import {
   Card,
@@ -31,9 +32,35 @@ export interface SettingsPageProps {
 }
 
 export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate }) => {
-  const { user, isAuthenticated, logout, refreshUser } = useAuth();
+  const { user, isAuthenticated, isLoading, logout, refreshUser, resendVerification } = useAuth();
+  const { publicConfig } = useConfig();
   const { success, error: toastError } = useToast();
   const api = getApiClient();
+
+  const [resendingEmail, setResendingEmail] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(0);
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return;
+    const timer = setInterval(() => setResendCooldown((c) => c - 1), 1000);
+    return () => clearInterval(timer);
+  }, [resendCooldown]);
+
+  const handleResendEmail = async () => {
+    if (resendCooldown > 0) return;
+    setResendingEmail(true);
+    try {
+      const res = await resendVerification();
+      if (res.success) {
+        success('Đã gửi lại email xác minh.');
+        setResendCooldown(60);
+      } else {
+        toastError(res.error || 'Không thể gửi lại email xác minh.');
+      }
+    } finally {
+      setResendingEmail(false);
+    }
+  };
 
   const searchParams = useMemo(() => new URLSearchParams(window.location.search), []);
   const initialTab = searchParams.get('tab') === 'security'
@@ -272,6 +299,15 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate }) => {
     }
   };
 
+  if (isLoading) {
+    return (
+      <div className="max-w-6xl mx-auto px-4 py-8 pb-20 w-full flex flex-col md:flex-row gap-8 animate-pulse">
+        <div className="w-full md:w-64 h-64 bg-[var(--panel,#0a0a0b)] rounded-[var(--radius-lg,12px)] border border-[var(--line,#1d1e21)]" />
+        <div className="flex-1 h-96 bg-[var(--panel,#0a0a0b)] rounded-[var(--radius-lg,12px)] border border-[var(--line,#1d1e21)]" />
+      </div>
+    );
+  }
+
   if (!isAuthenticated) {
     return (
       <div className="max-w-4xl mx-auto px-4 py-16 text-center">
@@ -402,6 +438,25 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate }) => {
                 <label className="block text-xs font-semibold text-[var(--text-2,#a1a1aa)] mb-1">Email đăng nhập</label>
                 <div className="text-sm font-medium text-[var(--text,#f4f4f5)] flex items-center gap-2">
                   <span>{user?.email}</span>
+                  {publicConfig?.emailVerificationRequired && (
+                    user?.emailVerified ? (
+                      <Badge variant="success" size="sm">Đã xác minh</Badge>
+                    ) : (
+                      <div className="flex items-center gap-2">
+                        <Badge variant="warning" size="sm">Chưa xác minh</Badge>
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          disabled={resendCooldown > 0}
+                          loading={resendingEmail}
+                          onClick={handleResendEmail}
+                          className="h-6 px-2 text-[11px]"
+                        >
+                          {resendCooldown > 0 ? `${resendCooldown}s` : 'Gửi lại email'}
+                        </Button>
+                      </div>
+                    )
+                  )}
                 </div>
               </div>
               <div>

@@ -3,7 +3,7 @@ import type { Depth } from '@cex/contracts';
 import { dec, floorToStep, ceilToStep, ZERO, Dec } from '@cex/core';
 import { getApiClient } from '../../services/api.ts';
 import { useMarket } from '../../context/MarketContext.tsx';
-import { PriceText, Skeleton, formatDecimal } from '@cex/ui';
+import { PriceText, Skeleton, formatDecimal, formatPrice, formatAmount } from '@cex/ui';
 
 export interface OrderbookProps {
   symbol: string;
@@ -273,17 +273,17 @@ export const Orderbook: React.FC<OrderbookProps> = ({ symbol, marketType = 'spot
                     onSelectPrice(p);
                   }}
                   className="relative grid grid-cols-2 px-3 h-[19px] min-h-[19px] items-center cursor-pointer hover:bg-[var(--panel-2,#141416)] text-[11.5px]"
-                  title={`Tổng ${formatDecimal(item.total.toString(), {decimals:4})} ${activeSymbolInfo?.baseAsset} | ~${formatDecimal((item.total * parseFloat(item.price)).toString(), {decimals:2})} USDT`}
+                  title={`Tổng ${formatAmount(item.total.toString(), activeSymbolInfo?.stepSize)} ${activeSymbolInfo?.baseAsset} | ~${formatDecimal((item.total * parseFloat(item.price)).toString(), {decimals:2})} USDT`}
                 >
                   <div
                     className="absolute right-0 top-0 bottom-0 bg-[var(--down,#f2475f)] opacity-15 pointer-events-none transition-[width] duration-200 ease-out"
                     style={{ width: `${item.pct}%` }}
                   />
                   <span className={`${getPriceColor('sell')} relative z-10`}>
-                    {formatDecimal(item.price, { decimals: activeSymbolInfo?.pricePrecision })}
+                    {formatPrice(item.price, activeSymbolInfo?.tickSize)}
                   </span>
                   <span className={`text-right text-[var(--text,#f4f4f5)] relative z-10 transition-colors duration-250 rounded px-0.5 ${flashingKeys.has(item.price) ? 'text-amber-300 font-bold bg-amber-400/20' : ''}`}>
-                    {formatDecimal(item.qty, { decimals: 4 })}
+                    {formatAmount(item.qty, activeSymbolInfo?.stepSize)}
                   </span>
                 </div>
               ))}
@@ -295,7 +295,7 @@ export const Orderbook: React.FC<OrderbookProps> = ({ symbol, marketType = 'spot
             <div className="flex items-center gap-1.5 font-bold text-sm">
               <span className={latestTrade ? (latestTrade.isBuyerMaker ? 'text-[var(--down,#f2475f)]' : 'text-[var(--up,#1fc27a)]') : ''}>
                 {latestTrade ? (
-                  formatDecimal(latestTrade.price, { decimals: activeSymbolInfo?.pricePrecision })
+                  formatPrice(latestTrade.price, activeSymbolInfo?.tickSize)
                 ) : (
                   <PriceText
                     price={activeTicker?.lastPrice}
@@ -312,7 +312,7 @@ export const Orderbook: React.FC<OrderbookProps> = ({ symbol, marketType = 'spot
             </div>
             {spreadInfo && (
               <div className="text-[10px] text-[var(--text-3,#63636b)] font-mono" title="Chênh lệch giá mua bán tốt nhất">
-                Spread {formatDecimal(spreadInfo.spread, { decimals: activeSymbolInfo?.pricePrecision })} ({spreadInfo.spreadPct.toFixed(2)}%)
+                Spread {formatPrice(spreadInfo.spread, activeSymbolInfo?.tickSize)} ({spreadInfo.spreadPct.toFixed(2)}%)
               </div>
             )}
           </div>
@@ -328,17 +328,17 @@ export const Orderbook: React.FC<OrderbookProps> = ({ symbol, marketType = 'spot
                     onSelectPrice(p);
                   }}
                   className="relative grid grid-cols-2 px-3 h-[19px] min-h-[19px] items-center cursor-pointer hover:bg-[var(--panel-2,#141416)] text-[11.5px]"
-                  title={`Tổng ${formatDecimal(item.total.toString(), {decimals:4})} ${activeSymbolInfo?.baseAsset} | ~${formatDecimal((item.total * parseFloat(item.price)).toString(), {decimals:2})} USDT`}
+                  title={`Tổng ${formatAmount(item.total.toString(), activeSymbolInfo?.stepSize)} ${activeSymbolInfo?.baseAsset} | ~${formatDecimal((item.total * parseFloat(item.price)).toString(), {decimals:2})} USDT`}
                 >
                   <div
                     className="absolute right-0 top-0 bottom-0 bg-[var(--up,#1fc27a)] opacity-15 pointer-events-none transition-[width] duration-200 ease-out"
                     style={{ width: `${item.pct}%` }}
                   />
                   <span className={`${getPriceColor('buy')} relative z-10`}>
-                    {formatDecimal(item.price, { decimals: activeSymbolInfo?.pricePrecision })}
+                    {formatPrice(item.price, activeSymbolInfo?.tickSize)}
                   </span>
                   <span className={`text-right text-[var(--text,#f4f4f5)] relative z-10 transition-colors duration-250 rounded px-0.5 ${flashingKeys.has(item.price) ? 'text-amber-300 font-bold bg-amber-400/20' : ''}`}>
-                    {formatDecimal(item.qty, { decimals: 4 })}
+                    {formatAmount(item.qty, activeSymbolInfo?.stepSize)}
                   </span>
                 </div>
               ))}

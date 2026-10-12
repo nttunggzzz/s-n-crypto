@@ -3,7 +3,7 @@ import type { Notification } from '@cex/contracts';
 import { getApiClient } from '../services/api.ts';
 import { useAuth } from '../context/AuthContext.tsx';
 import { useMarket } from '../context/MarketContext.tsx';
-import { Button, Badge, Skeleton, useToast } from '@cex/ui';
+import { Button, Badge, Skeleton, useToast, formatPrice, formatAmount, formatDecimal } from '@cex/ui';
 import { Bell, CheckCheck, CheckCircle, AlertTriangle, AlertCircle, Clock, ExternalLink } from 'lucide-react';
 
 export interface NotificationCenterProps {
@@ -12,7 +12,7 @@ export interface NotificationCenterProps {
 
 export const NotificationCenter: React.FC<NotificationCenterProps> = ({ onNavigate }) => {
   const { isAuthenticated } = useAuth();
-  const { realtimeClient } = useMarket();
+  const { realtimeClient, symbols } = useMarket();
   const { success, info: toastInfo } = useToast();
   const api = getApiClient();
 
@@ -60,33 +60,34 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({ onNaviga
 
   // Format message text and icon according to notification type
   const renderNotificationContent = (notif: Notification) => {
+    const sym = 'symbol' in notif ? symbols?.find((s) => s.symbol === (notif as { symbol: string }).symbol) : undefined;
     switch (notif.type) {
       case 'ORDER_FILLED':
         return {
           icon: <CheckCircle size={16} className="text-[var(--up,#1fc27a)]" />,
           title: `Khớp lệnh ${notif.symbol}`,
-          desc: `Lệnh ${notif.side === 'BUY' ? 'Mua' : 'Bán'} ${notif.orderType} đã khớp ${notif.executedQty} với giá TB ${notif.avgPrice} USDT.`,
+          desc: `Lệnh ${notif.side === 'BUY' ? 'Mua' : 'Bán'} ${notif.orderType} đã khớp ${formatAmount(notif.executedQty, sym?.stepSize)} với giá TB ${formatPrice(notif.avgPrice, sym?.tickSize)} USDT.`,
           link: `/trade/${notif.symbol}`,
         };
       case 'ORDER_EXPIRED':
         return {
           icon: <Clock size={16} className="text-[var(--warn,#f5b544)]" />,
           title: `Lệnh ${notif.symbol} hết hạn`,
-          desc: `Phần còn lại của lệnh đã hết hạn (${notif.reason}). Đã khớp: ${notif.executedQty}.`,
+          desc: `Phần còn lại của lệnh đã hết hạn (${notif.reason}). Đã khớp: ${formatAmount(notif.executedQty, sym?.stepSize)}.`,
           link: `/trade/${notif.symbol}`,
         };
       case 'STOP_TRIGGERED':
         return {
           icon: <AlertTriangle size={16} className="text-[var(--accent,#818cf8)]" />,
           title: `Kích hoạt Stop ${notif.symbol}`,
-          desc: `Giá thị trường đạt ${notif.lastPrice} USDT, kích hoạt mức stop ${notif.stopPrice}.`,
+          desc: `Giá thị trường đạt ${formatPrice(notif.lastPrice, sym?.tickSize)} USDT, kích hoạt mức stop ${formatPrice(notif.stopPrice, sym?.tickSize)}.`,
           link: `/trade/${notif.symbol}`,
         };
       case 'TPSL_PLACED':
         return {
           icon: <CheckCheck size={16} className="text-[var(--up,#1fc27a)]" />,
           title: `Đã đặt TP/SL ${notif.symbol}`,
-          desc: `Đã tự động đặt lệnh chốt lời/cắt lỗ cho khối lượng ${notif.quantity} ${notif.symbol}.`,
+          desc: `Đã tự động đặt lệnh chốt lời/cắt lỗ cho khối lượng ${formatAmount(notif.quantity, sym?.stepSize)} ${notif.symbol}.`,
           link: `/trade/${notif.symbol}`,
         };
       case 'TPSL_SKIPPED':
@@ -100,28 +101,28 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({ onNaviga
         return {
           icon: <Bell size={16} className="text-[var(--accent,#818cf8)]" />,
           title: `Cảnh báo giá ${notif.symbol}`,
-          desc: `Giá hiện tại ${notif.lastPrice} USDT đã ${notif.condition === 'ABOVE' ? 'vượt trên' : 'xuống dưới'} mức mục tiêu ${notif.targetPrice} USDT.`,
+          desc: `Giá hiện tại ${formatPrice(notif.lastPrice, sym?.tickSize)} USDT đã ${notif.condition === 'ABOVE' ? 'vượt trên' : 'xuống dưới'} mức mục tiêu ${formatPrice(notif.targetPrice, sym?.tickSize)} USDT.`,
           link: `/trade/${notif.symbol}`,
         };
       case 'FUTURES_ORDER_FILLED':
         return {
           icon: <CheckCircle size={16} className="text-[var(--up,#1fc27a)]" />,
           title: `Khớp lệnh Futures ${notif.symbol}`,
-          desc: `Lệnh ${notif.side === 'BUY' ? 'Mua' : 'Bán'} đã khớp ${notif.executedQty} với giá TB ${notif.avgPrice} USDT.`,
+          desc: `Lệnh ${notif.side === 'BUY' ? 'Mua' : 'Bán'} đã khớp ${formatAmount(notif.executedQty, sym?.stepSize)} với giá TB ${formatPrice(notif.avgPrice, sym?.tickSize)} USDT.`,
           link: `/futures/${notif.symbol}`,
         };
       case 'POSITION_TPSL':
         return {
           icon: <CheckCheck size={16} className="text-[var(--up,#1fc27a)]" />,
           title: `TP/SL vị thế ${notif.symbol}`,
-          desc: `${notif.reason === 'TAKE_PROFIT' ? 'Chốt lời' : 'Cắt lỗ'} đã khớp ở ${notif.price}, lãi lỗ ${Number(notif.realizedPnl) >= 0 ? '+' : ''}${notif.realizedPnl} USDT.`,
+          desc: `${notif.reason === 'TAKE_PROFIT' ? 'Chốt lời' : 'Cắt lỗ'} đã khớp ở ${formatPrice(notif.price, sym?.tickSize)}, lãi lỗ ${Number(notif.realizedPnl) >= 0 ? '+' : ''}${formatDecimal(notif.realizedPnl, { decimals: 2 })} USDT.`,
           link: `/futures/${notif.symbol}`,
         };
       case 'POSITION_LIQUIDATED':
         return {
           icon: <AlertCircle size={16} className="text-[var(--down,#f2475f)]" />,
           title: `Thanh lý vị thế ${notif.symbol}`,
-          desc: `Vị thế ${notif.side} ${notif.quantity} ${notif.symbol} đã bị thanh lý ở ${notif.markPrice} — mất ${notif.lostMargin} USDT ký quỹ.`,
+          desc: `Vị thế ${notif.side} ${formatAmount(notif.quantity, sym?.stepSize)} ${notif.symbol} đã bị thanh lý ở ${formatPrice(notif.markPrice, sym?.tickSize)} — mất ${formatDecimal(notif.lostMargin, { decimals: 2 })} USDT ký quỹ.`,
           link: `/futures/${notif.symbol}`,
         };
       case 'NEW_DEVICE_LOGIN':

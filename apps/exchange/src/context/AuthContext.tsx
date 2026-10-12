@@ -3,6 +3,7 @@ import type { Me } from '@cex/contracts';
 import { ApiError } from '@cex/contracts';
 import { getApiClient, getRealtimeClient } from '../services/api.ts';
 import { formatApiError } from '../services/errors.ts';
+import { useConfig } from './ConfigContext.tsx';
 
 export interface LoginInput {
   email: string;
@@ -39,6 +40,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | null>(null);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { publicConfig } = useConfig();
   const [user, setUser] = useState<Me | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [sessionEnded, setSessionEnded] = useState(false);
@@ -82,9 +84,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const me = await api.me();
       setUser(me);
       await syncPreferences(true);
-    } catch {
-      setUser(null);
-      syncPreferences(false);
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 401) {
+        setUser(null);
+        syncPreferences(false);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -133,9 +137,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, []);
 
-  // N-03: Multi-tab auto-sync when email is verified in another tab or window gains focus
+  // N-03 / K-08: Multi-tab auto-sync when email is verified in another tab or window gains focus
+  // ONLY poll on focus if email verification is actually required by the server AND user is unverified
   useEffect(() => {
-    if (!user || user.emailVerified) return;
+    if (!user || user.emailVerified || !publicConfig?.emailVerificationRequired) return;
 
     const handleFocusOrVisible = () => {
       if (document.visibilityState === 'visible') {
@@ -150,7 +155,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       window.removeEventListener('focus', handleFocusOrVisible);
       document.removeEventListener('visibilitychange', handleFocusOrVisible);
     };
-  }, [user?.emailVerified, !!user]);
+  }, [user?.emailVerified, !!user, publicConfig?.emailVerificationRequired]);
 
   useEffect(() => {
     if (typeof BroadcastChannel === 'undefined') return;

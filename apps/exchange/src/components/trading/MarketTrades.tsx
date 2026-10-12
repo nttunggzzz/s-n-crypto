@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import type { MarketTrade } from '@cex/contracts';
 import { getApiClient } from '../../services/api.ts';
 import { useMarket } from '../../context/MarketContext.tsx';
-import { Skeleton, formatDecimal } from '@cex/ui';
+import { Skeleton, formatDecimal, formatPrice, formatAmount } from '@cex/ui';
 
 export interface MarketTradesProps {
   symbol: string;
@@ -100,10 +100,10 @@ export const MarketTrades: React.FC<MarketTradesProps> = ({ symbol, marketType =
                 className="grid grid-cols-3 px-3 py-0.5 text-[11px] hover:bg-[var(--color-bg-elevated,#1b1e27)]/50 transition-all duration-150 animate-[fadeIn_150ms_ease-out]"
               >
                 <span className={colorClass}>
-                  {formatDecimal(tr.price, { decimals: activeSymbolInfo?.pricePrecision })}
+                  {formatPrice(tr.price, activeSymbolInfo?.tickSize)}
                 </span>
                 <span className="text-right text-[var(--color-text-secondary,#9ca3af)]">
-                  {formatDecimal(tr.qty, { decimals: 4 })}
+                  {formatAmount(tr.qty, activeSymbolInfo?.stepSize)}
                 </span>
                 <span className="text-right text-[var(--color-text-muted,#6b7280)] text-[10px]">
                   {timeStr}

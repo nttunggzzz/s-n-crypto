@@ -60,7 +60,7 @@ export interface BotsPageProps {
 }
 
 export const BotsPage: React.FC<BotsPageProps> = ({ onNavigate }) => {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoading } = useAuth();
   const { symbols, tickers, realtimeClient } = useMarket();
   const { success, error: toastError } = useToast();
   const api = getApiClient();
@@ -482,6 +482,15 @@ export const BotsPage: React.FC<BotsPageProps> = ({ onNavigate }) => {
     };
     return map[reason] || reason;
   };
+
+  if (isLoading) {
+    return (
+      <div className="max-w-6xl mx-auto px-4 py-8 space-y-6 animate-pulse">
+        <div className="h-40 bg-[var(--panel,#0a0a0b)] rounded-[var(--radius-lg,12px)] border border-[var(--line,#1d1e21)]" />
+        <div className="h-80 bg-[var(--panel,#0a0a0b)] rounded-[var(--radius-lg,12px)] border border-[var(--line,#1d1e21)]" />
+      </div>
+    );
+  }
 
   if (!isAuthenticated) {
     return (

@@ -15,8 +15,9 @@ import {
 import { getApiClient } from '../../services/api.ts';
 import { getErrorMessage } from '../../services/errors.ts';
 import { useAuth } from '../../context/AuthContext.tsx';
+import { useConfig } from '../../context/ConfigContext.tsx';
 import { useMarket } from '../../context/MarketContext.tsx';
-import { Button, DecimalInput, useToast, formatDecimal, Modal } from '@cex/ui';
+import { Button, DecimalInput, useToast, formatDecimal, formatPrice, Modal } from '@cex/ui';
 import { Calculator, ArrowUpRight, ArrowDownRight, Info } from 'lucide-react';
 
 export type OrderTab = 'LIMIT' | 'MARKET' | 'STOP_LIMIT' | 'STOP_MARKET' | 'TRAILING' | 'OCO';
@@ -46,10 +47,36 @@ export const OrderForm: React.FC<OrderFormProps> = ({
   onOrderPlaced,
   onNavigateToLogin,
 }) => {
-  const { isAuthenticated } = useAuth();
+  const { user, isAuthenticated, resendVerification } = useAuth();
+  const { publicConfig } = useConfig();
   const { activeSymbolInfo, activeTicker, exchangeInfo, tradingHalted, disabledSymbols, realtimeClient } = useMarket();
   const { success, error: toastError } = useToast();
   const api = getApiClient();
+
+  const [resendingEmail, setResendingEmail] = useState(false);
+  const [emailCooldown, setEmailCooldown] = useState(0);
+
+  useEffect(() => {
+    if (emailCooldown <= 0) return;
+    const timer = setInterval(() => setEmailCooldown((c) => c - 1), 1000);
+    return () => clearInterval(timer);
+  }, [emailCooldown]);
+
+  const handleResendEmail = async () => {
+    if (emailCooldown > 0) return;
+    setResendingEmail(true);
+    try {
+      const res = await resendVerification();
+      if (res.success) {
+        success('Đã gửi lại email xác minh.');
+        setEmailCooldown(60);
+      } else {
+        toastError(res.error || 'Không thể gửi lại email xác minh.');
+      }
+    } finally {
+      setResendingEmail(false);
+    }
+  };
 
   const [side, setSide] = useState<OrderSide>(initialSide || 'BUY');
   const [orderType, setOrderType] = useState<OrderTab>('LIMIT');
@@ -101,7 +128,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({
   const [sliderValue, setSliderValue] = useState<number>(0);
 
   const formattedLastPrice = useMemo(() => {
-    if (!activeTicker?.lastPrice) return '0.00';
+    if (!activeTicker?.lastPrice) return '—';
     if (!activeSymbolInfo?.tickSize) return activeTicker.lastPrice;
     try {
       return floorToStep(dec(activeTicker.lastPrice), dec(activeSymbolInfo.tickSize)).toString();
@@ -255,6 +282,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({
           }
           const calculatedQty = floorToStep(availableUsdt.mul(pct).div(currentPrice), step);
           setQuantity(calculatedQty.toString());
+          recalcTotal(price || currentPrice.toString(), calculatedQty.toString());
         }
       } else {
         // SELL (N-05: switch to base coin input mode)
@@ -263,26 +291,33 @@ export const OrderForm: React.FC<OrderFormProps> = ({
         if (availableCoin.lte(0)) return;
         const calculatedQty = floorToStep(availableCoin.mul(pct), step);
         setQuantity(calculatedQty.toString());
+        recalcTotal(price, calculatedQty.toString());
       }
     } catch (err) {
       console.error('Percent calculation error', err);
     }
   };
 
+  const recalcTotal = (pVal: string, qVal: string) => {
+    if ((orderType === 'LIMIT' || orderType === 'STOP_LIMIT' || orderType === 'OCO') && pVal && qVal && activeSymbolInfo) {
+      try {
+        const q = dec(qVal);
+        const p = dec(pVal);
+        if (p.gt(0) && q.gt(0)) {
+          setQuoteOrderQty(roundDown(q.mul(p), 2).toString());
+          return;
+        }
+      } catch {}
+    }
+    if (!qVal || !pVal) {
+      setQuoteOrderQty('');
+    }
+  };
+
   const handleQuantityChange = (val: string) => {
     setQuantity(val);
     setSliderValue(0);
-    if ((orderType === 'LIMIT' || orderType === 'STOP_LIMIT' || orderType === 'OCO') && price && val && activeSymbolInfo) {
-      try {
-        const q = dec(val);
-        const p = dec(price);
-        if (p.gt(0)) {
-          setQuoteOrderQty(roundDown(q.mul(p), 2).toString());
-        }
-      } catch {}
-    } else if (!val && (orderType === 'LIMIT' || orderType === 'STOP_LIMIT')) {
-      setQuoteOrderQty('');
-    }
+    recalcTotal(price, val);
   };
 
   const handleTotalChange = (val: string) => {
@@ -343,7 +378,8 @@ export const OrderForm: React.FC<OrderFormProps> = ({
 
   // Estimated fee
   const estimatedFee = useMemo(() => {
-    if (!exchangeInfo?.feeRate) return '0.00';
+    if (!exchangeInfo?.feeRate) return '—';
+    if (!quantity && !quoteOrderQty) return '—';
     try {
       const rate = dec(exchangeInfo.feeRate);
       if (side === 'BUY') {
@@ -365,7 +401,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({
         }
       }
     } catch {}
-    return '0.00';
+    return '—';
   }, [exchangeInfo, side, orderType, quoteOrderQty, quantity, price, activeTicker]);
 
   // Real order dispatching
@@ -377,8 +413,8 @@ export const OrderForm: React.FC<OrderFormProps> = ({
         success(`Đặt lệnh OCO ${side === 'BUY' ? 'Mua' : 'Bán'} thành công! Danh sách: ${res.id}`);
       } else {
         const res = await api.placeOrder({ body: orderPayload.body });
-        const avgPrice = res.order.avgPrice ? ` ở giá TB ${formatDecimal(res.order.avgPrice)}` : '';
-        success(`Đặt lệnh ${orderType} ${side === 'BUY' ? 'Mua' : 'Bán'} thành công! ${avgPrice}`);
+        const avgPrice = res.order.avgPrice ? `, giá TB ${formatPrice(res.order.avgPrice, activeSymbolInfo?.tickSize)}` : '';
+        success(`Đặt lệnh ${orderType} ${side === 'BUY' ? 'Mua' : 'Bán'} thành công!${avgPrice}`);
       }
       setQuantity('');
       setQuoteOrderQty('');
@@ -626,7 +662,12 @@ export const OrderForm: React.FC<OrderFormProps> = ({
 
   const isPriceInvalid = activeTicker?.status === 'UNAVAILABLE' || activeTicker?.status === 'STALE';
   const isSymbolDisabled = !activeSymbolInfo?.enabled || (disabledSymbols && disabledSymbols.includes(symbol));
-  const isEmailUnverified = false;
+  const isEmailUnverified = Boolean(
+    isAuthenticated &&
+    publicConfig?.emailVerificationRequired === true &&
+    user &&
+    !user.emailVerified
+  );
 
   const cannotTradeReason = tradingHalted
     ? 'Sàn đang tạm dừng giao dịch'
@@ -870,7 +911,11 @@ export const OrderForm: React.FC<OrderFormProps> = ({
           <DecimalInput
             label={orderType === 'OCO' ? 'Giá chốt lời (Limit)' : 'Giá đặt lệnh (Price)'}
             value={price}
-            onValueChange={(v) => { setPrice(v); handleQuantityChange(quantity); }}
+            onValueChange={(v) => {
+              userChangedPriceRef.current = true;
+              setPrice(v);
+              recalcTotal(v, quantity);
+            }}
             maxDecimals={activeSymbolInfo?.pricePrecision}
             unit={quoteAsset}
             placeholder={formattedLastPrice}
@@ -1099,14 +1144,30 @@ export const OrderForm: React.FC<OrderFormProps> = ({
             Đăng nhập để giao dịch
           </Button>
         ) : cannotTradeReason ? (
-          <Button
-            type="button"
-            disabled
-            fullWidth
-            className="mt-2 bg-neutral-800 text-neutral-400 border border-neutral-700"
-          >
-            {cannotTradeReason}
-          </Button>
+          <div className="flex flex-col gap-2 mt-2">
+            <Button
+              type="button"
+              disabled
+              fullWidth
+              className="bg-neutral-800 text-neutral-400 border border-neutral-700"
+            >
+              {cannotTradeReason}
+            </Button>
+            {isEmailUnverified && (
+              <Button
+                type="button"
+                variant="secondary"
+                size="sm"
+                fullWidth
+                loading={resendingEmail}
+                disabled={emailCooldown > 0}
+                onClick={handleResendEmail}
+                className="text-[11px]"
+              >
+                {emailCooldown > 0 ? `Gửi lại sau ${emailCooldown}s` : 'Gửi lại email xác minh'}
+              </Button>
+            )}
+          </div>
         ) : (
           <Button
             type="submit"
