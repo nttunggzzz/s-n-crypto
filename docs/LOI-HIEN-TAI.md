@@ -14,7 +14,7 @@ Rà soát: **2026-10-11** (Claude Code). Cập nhật lần cuối: 2026-10-11 t
 | Bản | Commit | Kết quả kiểm tra |
 |---|---|---|
 | `main` | `77e7708` | — |
-| Nhánh UI `ui/gd2-exchange` (mới nhất) | `7f929b6` | `npm run ui-check -- --e2e`: verify **đạt** (215/215 test), e2e **27/27 đạt** |
+| Nhánh UI `ui/gd2-exchange` (mới nhất) | `aaea477` | `npm run ui-check -- --e2e`: verify **đạt** (typecheck, lint, 221/221 test, build), e2e **30/30 đạt** |
 | **Sàn đang chạy cho người dùng** (`npm run host`, link trycloudflare) | `main 77e7708` + UI **`d8391db`** | UI **cũ**: chưa có các bản sửa biểu đồ của Antigravity (`33e873c` → `7f929b6`) |
 
 Ba kết luận chính:
@@ -247,7 +247,7 @@ Script đo nằm trong mục "Cách tự đo lại" ở cuối file.
 
 ### B5 — Nhãn trục giá kiểu Mỹ
 - Mobile hiện `83094.00`, `82800.00`; app hiện `83.094,60`. Dùng `priceFormat: { type: 'custom', formatter }` với `formatDecimal` của `@cex/ui`, số chữ số theo `tickSize`.
-- **Trạng thái:** **Đã sửa** (Antigravity). Cấu hình `priceFormat: { type: 'custom', minMove, formatter: (p) => formatDecimal(p.toFixed(precision), { decimals: precision, locale: 'vi' }) }` trong `setupMainSeries` và `applyOptions` phản ứng theo symbol tickSize, bảo vệ an toàn cho các coin có giá trị nhỏ (tránh lỗi ký hiệu số mũ khoa học).
+- **Trạng thái:** **Đã sửa hoàn toàn** (`aaea477` / R-02). Đã cấu hình `localization.priceFormatter` ở cấp biểu đồ và gán `priceFormat` custom đồng nhất cho mọi series (main, MA, EMA, Volume) theo `tickSize` và locale `vi`, bảo vệ an toàn cho coin giá nhỏ và thang giá hiển thị đúng chuẩn số Việt Nam.
 
 ### B6 — Phần trăm ở danh sách cặp bên trái không thống nhất
 - Trang Giao dịch, bản `7f929b6`: header `+0,29%`, danh sách bên trái `0.292%`, `-0.400%` (chuỗi thô từ API: dấu chấm, 3 số lẻ, không có dấu `+`).
@@ -283,7 +283,7 @@ Script đo nằm trong mục "Cách tự đo lại" ở cuối file.
 | Code-splitting (`React.lazy`) | đã có |
 | Ngôi sao yêu thích ở trang Giao dịch | đã có |
 
-- **Trạng thái:** **Đã sửa** (Antigravity). Đã bổ sung EMA(7, 25) và RSI(14); thêm đầy đủ `aria-label` cho toàn bộ nút icon-only; tạo `ErrorBoundary` bọc các route; thay `alert()` bằng toast; tích hợp `publicConfig` qua `ConfigContext`; chuẩn hóa kiểu dữ liệu nghiêm ngặt loại bỏ toàn bộ 13 vị trí `: any`, 7 vị trí `as any` và 3 vị trí `@ts-ignore` (0 còn sót lại).
+- **Trạng thái:** **Đã sửa hoàn toàn** (`aaea477` / R-13). Đã bổ sung EMA(7, 25) và RSI(14); thêm đầy đủ `aria-label` cho toàn bộ nút icon-only trên Header, các trang và nút submit form khi loading; tạo `ErrorBoundary` bọc các route reset theo `key={currentPath}`; thay `alert()` bằng toast; tích hợp `publicConfig` qua `ConfigContext`; chuẩn hóa kiểu dữ liệu nghiêm ngặt loại bỏ toàn bộ 13 vị trí `: any`, 7 vị trí `as any` và 3 vị trí `@ts-ignore` (0 còn sót lại).
 
 ---
 

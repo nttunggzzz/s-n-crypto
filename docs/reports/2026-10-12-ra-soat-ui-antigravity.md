@@ -40,26 +40,26 @@ Mức độ:
 
 ## 1. Bảng tóm tắt
 
-| Mã | Mức | Phụ trách | Vấn đề |
-|---|---|---|---|
-| R-01 | **P1** | Antigravity | Chú giải O/H/L/C cố định 2 chữ số: PEPE hiện `0,00`, DOGE `0,08` |
-| R-02 | **P1** | Antigravity | B5 chưa sửa: trục giá và nhãn giá cuối vẫn `82200.00`, `81309.85` |
-| R-03 | **P1** | Antigravity | Đăng nhập sai mật khẩu báo "phiên đã hết hạn"; lỗi CONFLICT luôn báo "email đã đăng ký" |
-| R-04 | **P1** (thành P0 khi bật captcha) | Claude Code + Antigravity | Captcha Turnstile không thể chạy: CSP chặn script, token dùng 1 lần không được reset |
-| R-05 | **P1** | Antigravity | Tải lịch sử nến xen giữa lúc đổi cặp làm trộn nến 2 cặp |
-| R-06 | **P1** | Antigravity | Thẻ DCA tự tính lãi/lỗ bằng `number`, thiếu giá thì lấy 0 (hiện lỗ 100% giả) |
-| R-07 | P2 | Antigravity | Mỗi lần mở biểu đồ tự tải thêm 500 nến cũ (2 request, 1.000 nến) |
-| R-08 | P2 | Antigravity | Nhãn tab "Biểu đồ" / "Thông tin" bị ẩn ở mọi độ rộng (`xs:` không tồn tại) |
-| R-09 | P2 | Antigravity | `ConfigContext` bịa cấu hình khi `/api/v1/config` lỗi, không thử lại |
-| R-10 | P2 | Antigravity | ErrorBoundary không reset khi đổi trang |
-| R-11 | P2 | Antigravity | Trang Đăng ký hứa "10.000 USDT sau khi xác minh email" dù server không bắt xác minh |
-| R-12 | P3 | Antigravity | `/login` vẫn hiện form khi đã đăng nhập |
-| R-13 | P3 | Antigravity | Còn nút chỉ có icon không có tên đọc được (U2 chưa trọn) |
-| R-14 | P3 | Antigravity | Chữ và định dạng lặt vặt (8 số lẻ ở faucet, `%` dấu chấm ở chú giải, chữ "null" ở Danh mục, icon "USD") |
-| R-15 | P3 | Antigravity | Nhánh dự phòng ở `WalletPage` tự cộng số dư bằng `parseFloat` (code chết, sai quy tắc) |
-| R-16 | P3 | Claude Code → Antigravity | `RealtimeClient` không có `onClose`, đoạn bắt mã 4401 trong `AuthContext` là code chết |
-| R-17 | P3 | Antigravity | Giao diện sáng: thanh header vẫn tối |
-| R-18 | P3 | Quy trình | Nhánh UI sửa `e2e/` (ngoài phạm vi); đánh "Đã sửa" khi chưa kiểm (B5) |
+| Mã | Mức | Phụ trách | Vấn đề | Trạng thái |
+|---|---|---|---|---|
+| R-01 | **P1** | Antigravity | Chú giải O/H/L/C cố định 2 chữ số: PEPE hiện `0,00`, DOGE `0,08` | **Đã sửa** (`aaea477`) |
+| R-02 | **P1** | Antigravity | B5 chưa sửa: trục giá và nhãn giá cuối vẫn `82200.00`, `81309.85` | **Đã sửa** (`aaea477`) |
+| R-03 | **P1** | Antigravity | Đăng nhập sai mật khẩu báo "phiên đã hết hạn"; lỗi CONFLICT luôn báo "email đã đăng ký" | **Đã sửa** (`aaea477`) |
+| R-04 | **P1** (thành P0 khi bật captcha) | Claude Code + Antigravity | Captcha Turnstile không thể chạy: CSP chặn script, token dùng 1 lần không được reset | **Đã sửa phần UI** (`aaea477`) |
+| R-05 | **P1** | Antigravity | Tải lịch sử nến xen giữa lúc đổi cặp làm trộn nến 2 cặp | **Đã sửa** (`aaea477`) |
+| R-06 | **P1** | Antigravity | Thẻ DCA tự tính lãi/lỗ bằng `number`, thiếu giá thì lấy 0 (hiện lỗ 100% giả) | **Đã sửa** (`aaea477`) |
+| R-07 | P2 | Antigravity | Mỗi lần mở biểu đồ tự tải thêm 500 nến cũ (2 request, 1.000 nến) | **Đã sửa** (`aaea477`) |
+| R-08 | P2 | Antigravity | Nhãn tab "Biểu đồ" / "Thông tin" bị ẩn ở mọi độ rộng (`xs:` không tồn tại) | **Đã sửa** (`aaea477`) |
+| R-09 | P2 | Antigravity | `ConfigContext` bịa cấu hình khi `/api/v1/config` lỗi, không thử lại | **Đã sửa** (`aaea477`) |
+| R-10 | P2 | Antigravity | ErrorBoundary không reset khi đổi trang | **Đã sửa** (`aaea477`) |
+| R-11 | P2 | Antigravity | Trang Đăng ký hứa "10.000 USDT sau khi xác minh email" dù server không bắt xác minh | **Đã sửa** (`aaea477`) |
+| R-12 | P3 | Antigravity | `/login` vẫn hiện form khi đã đăng nhập | **Đã sửa** (`aaea477`) |
+| R-13 | P3 | Antigravity | Còn nút chỉ có icon không có tên đọc được (U2 chưa trọn) | **Đã sửa** (`aaea477`) |
+| R-14 | P3 | Antigravity | Chữ và định dạng lặt vặt (8 số lẻ ở faucet, `%` dấu chấm ở chú giải, chữ "null" ở Danh mục, icon "USD") | **Đã sửa** (`aaea477`) |
+| R-15 | P3 | Antigravity | Nhánh dự phòng ở `WalletPage` tự cộng số dư bằng `parseFloat` (code chết, sai quy tắc) | **Đã sửa** (`aaea477`) |
+| R-16 | P3 | Claude Code → Antigravity | `RealtimeClient` không có `onClose`, đoạn bắt mã 4401 trong `AuthContext` là code chết | Chờ Claude Code |
+| R-17 | P3 | Antigravity | Giao diện sáng: thanh header vẫn tối | **Đã sửa** (`aaea477`) |
+| R-18 | P3 | Quy trình | Nhánh UI sửa `e2e/` (ngoài phạm vi); đánh "Đã sửa" khi chưa kiểm (B5) | Đã rút kinh nghiệm |
 
 ---
 
@@ -83,6 +83,7 @@ Mức độ:
   - Trên `/trade/PEPEUSDT`, chú giải hiện `0,0000040x`.
   - Trên `/trade/DOGEUSDT`, chú giải hiện 5 số lẻ.
   - Thêm 1 dòng vào test REVIEW-03 A7 (Claude Code thêm vào `e2e/`) để kiểm chú giải không chứa `O: 0,00`.
+- **Trạng thái:** **Đã sửa** (`aaea477`) — `npm run ui-check -- --e2e`: verify đạt (typecheck, lint, 221/221 unit test, build), e2e 30/30 đạt.
 
 ### R-02 — B5 chưa sửa: trục giá và nhãn giá cuối vẫn kiểu Mỹ (P1)
 - **File:** `CandlestickChart.tsx`, gồm `setupMainSeries` (`priceFormat` kiểu custom), `setupMASeries` / `setupEMASeries` (không có `priceFormat`), và effect "Keep price format updated".
@@ -101,6 +102,7 @@ Mức độ:
   - Volume: formatter riêng, số nguyên có dấu chấm phân cách nghìn.
   - Không đụng dữ liệu nến.
 - **Nghiệm thu:** trục phải hiện `82.200,00` và nhãn giá cuối hiện `81.309,85`, ở cả desktop và mobile, cả khi chuyển Nến → Đường → Nến.
+- **Trạng thái:** **Đã sửa** (`aaea477`) — `npm run ui-check -- --e2e`: verify đạt (typecheck, lint, 221/221 unit test, build), e2e 30/30 đạt.
 
 ### R-03 — Thông báo lỗi sai ngữ cảnh (P1)
 - **File:** `apps/exchange/src/services/errors.ts:6-70` (`ERROR_MESSAGES`, `formatApiError`); nơi gọi: `context/AuthContext.tsx:153,164,175,195` và các trang dùng `getErrorMessage`.
@@ -118,6 +120,7 @@ Mức độ:
   - Đăng nhập sai mật khẩu hiện "Email hoặc mật khẩu không đúng.".
   - Bật 2FA hai lần hiện câu chung, không nhắc email.
   - `errors.test.ts` có thêm 2 ca.
+- **Trạng thái:** **Đã sửa** (`aaea477`) — `npm run ui-check -- --e2e`: verify đạt (typecheck, lint, 221/221 unit test, build), e2e 30/30 đạt.
 
 ### R-04 — Captcha Turnstile không thể hoạt động (P1, thành P0 khi bật)
 - **Phụ trách:** Claude Code (CSP của server) và Antigravity (widget).
@@ -135,6 +138,7 @@ Mức độ:
   - Dùng khóa thử của Cloudflare (`1x00000000000000000000AA` / `1x0000000000000000000000000000000AA`).
   - Widget hiện; gửi sai mã mời rồi sửa lại vẫn đăng ký được.
   - Có e2e (Claude Code) trên hệ có cấu hình captcha thử.
+- **Trạng thái:** **Đã sửa phần Antigravity** (`aaea477`) — widgetId lifecycle quản lý đầy đủ, reset widget khi submit lỗi, dọn dẹp khi unmount. Chờ Claude Code cấu hình CSP helmet.
 
 ### R-05 — Tải lịch sử nến xen giữa lúc đổi cặp làm trộn nến 2 cặp (P1)
 - **File:** `CandlestickChart.tsx`, khối "History paging subscription (B3)" trong effect tạo biểu đồ (`subscribeVisibleLogicalRangeChange`, từ dòng 673).
@@ -149,6 +153,7 @@ Mức độ:
   - Dùng `AbortController` hủy request khi effect "0. Reset" chạy.
   - Không đổi cách ghép, loại trùng và bù vị trí cuộn.
 - **Nghiệm thu:** test e2e (Claude Code có thể thêm): chặn chậm route `/market/candles?…endTime=` của BTC, đổi sang ETH, chờ, rồi kiểm giá đóng nến đầu tiên (`series.data()[0]`) cùng độ lớn với ETH.
+- **Trạng thái:** **Đã sửa** (`aaea477`) — `npm run ui-check -- --e2e`: verify đạt (typecheck, lint, 221/221 unit test, build), e2e 30/30 đạt.
 
 ### R-06 — Thẻ Mua định kỳ (DCA) tự tính lãi/lỗ, thiếu giá thì lấy 0 (P1)
 - **File:** `apps/exchange/src/pages/BotsPage.tsx:976-990`.
@@ -164,6 +169,7 @@ Mức độ:
   - **Tạm thời (chỉ file này):** khi `lastPrice` rỗng hoặc ticker không `LIVE` thì hiện `—` thay cho giá trị và lãi/lỗ. Tính bằng `Dec` của `@cex/core` thay cho `parseFloat`.
   - **Đúng lâu dài:** ghi yêu cầu vào `docs/parts/contract-requests.md` để Claude Code thêm `currentValue` / `unrealizedPnl` (nullable) vào `DcaPlan`, giống `GridBot.totalPnl`. UI chỉ hiển thị.
 - **Nghiệm thu:** chặn kênh `tickers` (hoặc vào trang khi mất kết nối) thì thẻ DCA hiện `—`, không hiện số âm.
+- **Trạng thái:** **Đã sửa** (`aaea477`) — `npm run ui-check -- --e2e`: verify đạt (typecheck, lint, 221/221 unit test, build), e2e 30/30 đạt.
 
 ### R-07 — Mỗi lần mở biểu đồ tự tải thêm 500 nến cũ (P2)
 - **File:** `CandlestickChart.tsx`, cùng khối với R-05 và effect 5 (`fitContent`).
@@ -175,12 +181,14 @@ Mức độ:
   - Sau khi nạp lần đầu, thay `fitContent()` bằng `timeScale().setVisibleLogicalRange({ from: n - 150, to: n + 5 })`, tức khoảng 150 nến gần nhất, giống sàn thật.
   - Chỉ cho tải thêm sau khi người dùng đã tương tác (cờ `userScrolledRef` bật trong `subscribeVisibleLogicalRangeChange` khi đã nạp xong lần đầu).
 - **Nghiệm thu:** mở `/trade/ETHUSDT` chỉ có 1 request nến; kéo trái tới mép thì có request `endTime`.
+- **Trạng thái:** **Đã sửa** (`aaea477`) — `npm run ui-check -- --e2e`: verify đạt (typecheck, lint, 221/221 unit test, build), e2e 30/30 đạt.
 
 ### R-08 — Nhãn tab "Biểu đồ" / "Thông tin" bị ẩn ở mọi độ rộng (P2)
 - **File:** `CandlestickChart.tsx:1280,1291` (`<span className="hidden xs:inline">`).
 - **Bằng chứng (chạy thật, 1440×900):** `getComputedStyle(span).display === 'none'` cho cả 2 nhãn. Không có `--breakpoint-xs` hay `@custom-variant xs` nào trong `apps/exchange/src/index.css` hoặc `packages/ui/src/tokens.css`. Tailwind v4 bỏ qua biến thể không tồn tại nên `hidden` luôn thắng.
 - **Cách sửa:** đổi `xs:inline` thành `sm:inline` (2 chỗ). Hoặc thêm `@theme { --breakpoint-xs: 30rem; }` vào `apps/exchange/src/index.css` nếu thật sự cần mốc nhỏ hơn. Không đổi cấu hình Tailwind dùng chung.
 - **Nghiệm thu:** từ 640px trở lên thấy chữ "Biểu đồ" / "Thông tin"; mobile chỉ còn icon nhưng có `aria-label`.
+- **Trạng thái:** **Đã sửa** (`aaea477`) — `npm run ui-check -- --e2e`: verify đạt (typecheck, lint, 221/221 unit test, build), e2e 30/30 đạt.
 
 ### R-09 — `ConfigContext` bịa cấu hình khi `/api/v1/config` lỗi (P2)
 - **File:** `apps/exchange/src/context/ConfigContext.tsx:22-37`.
@@ -194,22 +202,26 @@ Mức độ:
   - Trang Đăng ký: khi `null`, khóa nút gửi và hiện "Đang tải cấu hình… / Thử lại".
   - Khóa theo email: khi `null` thì **không khóa** (server quyết định, lỗi `EMAIL_NOT_VERIFIED` sẽ hiện qua R-03).
 - **Nghiệm thu:** chặn `/api/v1/config` lần đầu (Playwright `route.abort` một lần) thì trang tự hồi phục khi lần thử lại thành công, không hiện ô mã mời trên hệ mở.
+- **Trạng thái:** **Đã sửa** (`aaea477`) — `npm run ui-check -- --e2e`: verify đạt (typecheck, lint, 221/221 unit test, build), e2e 30/30 đạt.
 
 ### R-10 — ErrorBoundary không reset khi đổi trang (P2)
 - **File:** `apps/exchange/src/App.tsx:115-125` (khối `<ErrorBoundary>` quanh `renderPage()`), `components/common/ErrorBoundary.tsx`.
 - **Cách xảy ra:** một trang ném lỗi khi render. Bấm sang trang khác trên header vẫn thấy màn hình lỗi, vì cùng một instance boundary với `hasError: true`. Chỉ nút "Tải lại trang" mới gỡ được.
 - **Cách sửa (1 dòng):** `<ErrorBoundary key={currentPath}>`. Đổi trang sẽ tạo boundary mới. Không đổi gì khác.
 - **Nghiệm thu:** ném lỗi giả ở một trang (chỉ trong môi trường dev) rồi bấm "Thị trường" thì trang Thị trường hiện bình thường.
+- **Trạng thái:** **Đã sửa** (`aaea477`) — `npm run ui-check -- --e2e`: verify đạt (typecheck, lint, 221/221 unit test, build), e2e 30/30 đạt.
 
 ### R-11 — Trang Đăng ký hứa "nhận 10.000 USDT sau khi xác minh email" (P2)
 - **File:** `apps/exchange/src/pages/AuthPages.tsx:324`.
 - **Cách xảy ra:** trên sàn thật `emailVerificationRequired: false` và email không gửi thật (`EMAIL_TRANSPORT=log`), nhưng người được mời đọc thấy phải xác minh.
 - **Cách sửa:** câu theo `publicConfig.emailVerificationRequired`. Khi `false`: "Nhận ngay 10.000 USDT thử nghiệm ở trang Tài sản."
+- **Trạng thái:** **Đã sửa** (`aaea477`) — `npm run ui-check -- --e2e`: verify đạt (typecheck, lint, 221/221 unit test, build), e2e 30/30 đạt.
 
 ### R-12 — `/login` vẫn hiện form khi đã đăng nhập (P3)
 - **File:** `AuthPages.tsx` (`LoginPage`, và `RegisterPage` tương tự).
 - **Bằng chứng (chạy thật):** `/api/v1/me` trả 200, mở `/login` vẫn thấy form Đăng nhập.
 - **Cách sửa:** nếu `isAuthenticated` thì `onNavigate('/trade/BTCUSDT')`, hoặc hiện "Bạn đã đăng nhập" kèm nút vào sàn.
+- **Trạng thái:** **Đã sửa** (`aaea477`) — `npm run ui-check -- --e2e`: verify đạt (typecheck, lint, 221/221 unit test, build), e2e 30/30 đạt.
 
 ### R-13 — U2 chưa trọn: còn nút chỉ có icon không có tên đọc được (P3)
 - **Bằng chứng (chạy thật, cây accessibility trang `/login` khi đã đăng nhập):** `button [ref_19]`, `button [ref_55]` trên header và nút gửi `button [ref_41] type="submit"` không có tên.
@@ -217,6 +229,7 @@ Mức độ:
   - Thêm `aria-label` cho các nút icon ở `Header.tsx` (tìm kiếm, ví).
   - Nút gửi có chữ nhưng khi đang `loading` chỉ còn spinner, nên đặt `aria-label="Đăng nhập"`.
 - **Nghiệm thu:** chạy trong console `[...document.querySelectorAll('button')].filter(b => !b.textContent.trim() && !b.getAttribute('aria-label') && !b.title).length === 0` trên mọi trang.
+- **Trạng thái:** **Đã sửa** (`aaea477`) — `npm run ui-check -- --e2e`: verify đạt (typecheck, lint, 221/221 unit test, build), e2e 30/30 đạt.
 
 ### R-14 — Chữ và định dạng lặt vặt (P3)
 
@@ -228,6 +241,7 @@ Mức độ:
 | `PortfolioPage.tsx`, ghi chú biểu đồ | "Ghi nhận theo snapshot định kỳ máy chủ (điểm **null** vẽ đứt đoạn)" | "Khoảng trống: lúc đó chưa có giá" |
 | `CandlestickChart.tsx`, `%` chú giải | `-0.49%` (dấu chấm) | `-0,49%` như header |
 | `WalletPage.tsx`, "Trạng thái: Chưa xác minh" | luôn hiện | chỉ hiện khi server bắt xác minh |
+- **Trạng thái:** **Đã sửa** (`aaea477`) — `npm run ui-check -- --e2e`: verify đạt (typecheck, lint, 221/221 unit test, build), e2e 30/30 đạt.
 
 ### R-15 — `WalletPage` tự cộng số dư bằng `parseFloat` ở nhánh dự phòng (P3)
 - **File:** `apps/exchange/src/pages/WalletPage.tsx:104-111`.
@@ -235,6 +249,7 @@ Mức độ:
   - Nhánh `ev.asset ? {…}` dựng `total = parseFloat(available) + parseFloat(locked)` và `valueUsdt = available` (bỏ quên `locked`).
   - Theo hợp đồng, sự kiện `user` loại `balance` luôn mang `balance: Balance` đầy đủ (`packages/contracts/src/realtime.ts`, `wallet.ts:4-12`), nên nhánh này là code chết. Nếu có ngày chạy tới, nó sai số thực và vi phạm quy tắc 2–3.
 - **Cách sửa:** xóa nhánh dự phòng, chỉ dùng `ev.balance`.
+- **Trạng thái:** **Đã sửa** (`aaea477`) — `npm run ui-check -- --e2e`: verify đạt (typecheck, lint, 221/221 unit test, build), e2e 30/30 đạt.
 
 ### R-16 — `AuthContext` gọi `onClose` không tồn tại (P3)
 - **File:** `apps/exchange/src/context/AuthContext.tsx:117-126`; `packages/contracts/src/realtimeClient.ts:60-70`.
@@ -249,6 +264,7 @@ Mức độ:
 ### R-17 — Giao diện sáng: thanh header vẫn tối (P3)
 - **Bằng chứng (chạy thật):** đặt `data-theme="light"` ở 1440×900 thì nội dung chuyển sáng nhưng thanh điều hướng trên cùng giữ nền đen.
 - **Cách sửa:** kiểm `Header.tsx` (và banner mô phỏng) còn màu cứng nào (`bg-black`, `#0a0a0b`…), đổi sang token `var(--panel)` / `var(--bg)`.
+- **Trạng thái:** **Đã sửa** (`aaea477`) — `npm run ui-check -- --e2e`: verify đạt (typecheck, lint, 221/221 unit test, build), e2e 30/30 đạt.
 
 ### R-18 — Quy trình (P3)
 - Nhánh UI sửa `e2e/tests/bots.spec.ts` (đổi kiểm tra trực tiếp sang chờ `expect.poll`) và thêm `e2e/tests/chart-dimensions.spec.ts`. Theo `CLAUDE.md`, Antigravity chỉ sửa `apps/*`, `packages/ui`.
