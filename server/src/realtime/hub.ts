@@ -1,6 +1,6 @@
 import type { IncomingMessage, Server } from 'node:http';
 import { WebSocketServer, type WebSocket } from 'ws';
-import { ClientMessage, CandleInterval, REALTIME_MAX_CHANNELS, type ServerMessage } from '@cex/contracts';
+import { ClientMessage, CandleInterval, REALTIME_MAX_CHANNELS, WS_SESSION_ENDED, type ServerMessage } from '@cex/contracts';
 import { logger } from '../logger.ts';
 import { parseCookieHeader, readSessionToken } from '../lib/http.ts';
 import type { AuthService } from '../modules/auth/authService.ts';
@@ -28,8 +28,7 @@ const DEPTH_THROTTLE_MS = 500;
 const TICKER_THROTTLE_MS = 1000;
 /** `tickers` / `futures:tickers`: one batch of the pairs that changed, at most this often. */
 const TICKER_BATCH_MS = 1000;
-/** Close code when the session behind a connection was signed out / revoked / expired. */
-export const WS_SESSION_ENDED = 4401;
+export { WS_SESSION_ENDED };
 
 /**
  * WebSocket fan-out at /ws. Users never connect to Binance directly.

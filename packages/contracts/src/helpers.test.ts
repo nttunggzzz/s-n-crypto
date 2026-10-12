@@ -21,6 +21,7 @@ function fakeRealtime() {
       return () => subs.delete(channel);
     },
     onStatus: () => () => {},
+    onClose: () => () => {},
     onError: () => () => {},
     reconnect: () => {},
     close: () => {},

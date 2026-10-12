@@ -36,6 +36,7 @@ rt.subscribe('candles:BTCUSDT:1m', upsertCandle);  // closed=false là nến đa
 rt.subscribe('market:status', setMarketStatus);
 rt.subscribe('user', (e) => { /* e.kind: 'order' | 'trade' | 'balance' */ });   // cần đăng nhập
 rt.onStatus((s) => setConnection(s));              // 'connecting' | 'open' | 'closed' → banner mất kết nối
+rt.onClose(({ code }) => { if (code === WS_SESSION_ENDED) checkSession(); }); // 4401 = phiên đã hết → gọi me, 401 thì hiện đã đăng xuất
 rt.onError((e) => console.error('realtime', e));   // vd. RATE_LIMITED khi vượt REALTIME_MAX_CHANNELS (100) kênh
 rt.reconnect();                                    // BẮT BUỘC ngay sau đăng nhập / 2FA / đăng xuất (server đọc cookie lúc mở kết nối)
 ```

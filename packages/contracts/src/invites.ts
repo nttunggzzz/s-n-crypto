@@ -16,6 +16,13 @@ export const PublicConfig = z.object({
   /** Cloudflare Turnstile site key for the sign-up form; null = no captcha on this server. */
   captchaSiteKey: z.string().nullable(),
   emailVerificationRequired: z.boolean(),
+  /**
+   * What the server does with the emails it "sends" (verification, password reset, new-device alerts):
+   * "sent" = delivered to the user's inbox; "log" = only written to the server log / a test outbox (dev, e2e,
+   * or a closed server before a mail domain exists). With "log", do not tell users "email sent" —
+   * say the email is not delivered on this server.
+   */
+  emailDelivery: z.enum(['sent', 'log']),
   /** "sim" = synthetic prices (dev / test servers only) — show a clear banner. */
   marketFeed: z.enum(['binance', 'sim', 'off']),
 });

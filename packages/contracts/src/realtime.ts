@@ -35,6 +35,8 @@ import { DcaPlan, GridBot } from './bots.ts';
  */
 /** Subscriptions allowed per WebSocket connection (server and mock enforce it). */
 export const REALTIME_MAX_CHANNELS = 100;
+/** WebSocket close code the server uses when the session behind a connection was signed out / revoked / expired. */
+export const WS_SESSION_ENDED = 4401;
 
 /** `tickers`: every pair on subscribe, then only the pairs that changed since the last batch. */
 export const TickerBatch = z.object({ items: z.array(Ticker) });
