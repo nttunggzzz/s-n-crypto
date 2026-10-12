@@ -47,6 +47,22 @@ export function allowedOrigins(config: Config): Set<string> {
   return new Set([config.APP_URL, ...config.CORS_ORIGINS.split(',').map((s) => s.trim())].filter(Boolean));
 }
 
+const TURNSTILE_ORIGIN = 'https://challenges.cloudflare.com';
+
+/**
+ * Helmet's default Content-Security-Policy (scripts only from this origin) plus, when the sign-up captcha is on,
+ * what the Cloudflare Turnstile widget needs: its script, its iframe and its check request. Nothing else is opened.
+ */
+export function cspDirectives(captcha: boolean) {
+  const directives = { ...helmet.contentSecurityPolicy.getDefaultDirectives() };
+  if (captcha) {
+    directives['script-src'] = ["'self'", TURNSTILE_ORIGIN];
+    directives['frame-src'] = [TURNSTILE_ORIGIN];
+    directives['connect-src'] = ["'self'", TURNSTILE_ORIGIN];
+  }
+  return directives;
+}
+
 export function createApp(deps: AppDeps) {
   const { config } = deps;
   const app = express();
@@ -55,7 +71,7 @@ export function createApp(deps: AppDeps) {
 
   app.disable('x-powered-by');
   app.set('trust proxy', 1); // Railway / Cloudflare in front
-  app.use(helmet());
+  app.use(helmet({ contentSecurityPolicy: { directives: cspDirectives(config.TURNSTILE_SITE_KEY !== '') } }));
   app.use(express.json({ limit: '32kb' }));
   app.use(cookieParser());
 
@@ -114,6 +130,7 @@ export function createApp(deps: AppDeps) {
     registration: config.REGISTRATION === 'invite' ? ('INVITE_ONLY' as const) : ('OPEN' as const),
     captchaSiteKey: config.TURNSTILE_SITE_KEY || null,
     emailVerificationRequired: config.REQUIRE_EMAIL_VERIFICATION,
+    emailDelivery: config.EMAIL_TRANSPORT === 'resend' ? ('sent' as const) : ('log' as const),
     marketFeed: config.MARKET_FEED,
   }));
   registerAuthRoutes(router, opts, deps.auth, config);

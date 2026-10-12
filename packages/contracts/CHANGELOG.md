@@ -1,5 +1,20 @@
 # Changelog — @cex/contracts
 
+## 0.12.0 — 2026-10-12 (Realtime `onClose`, `publicConfig.emailDelivery`)
+Chỉ thêm, không đổi endpoint (vẫn 128). Hai việc UI đã xin ở `docs/parts/contract-requests.md` (R-16, N-13).
+- **`RealtimeClient.onClose(cb)`** → hàm hủy đăng ký. `cb({ code, reason })` được gọi mỗi lần kết nối đóng (mạng rớt, server khởi động lại,
+  server chủ động đóng). Client vẫn tự nối lại như trước.
+  - `code === WS_SESSION_ENDED` (**4401**, hằng số mới export từ contracts) = phiên đăng nhập của kết nối đã hết (đăng xuất ở nơi khác,
+    bị thu hồi, hết hạn, tài khoản bị khóa). Kết nối mới sẽ không còn phiên → app gọi `me`, nếu 401 thì hiện trạng thái đã đăng xuất.
+  - **Không** gọi cho kết nối bị `reconnect()` thay thế, và không gọi sau `close()`.
+  - Kiểu mới `RealtimeCloseInfo`. Mock `createMockRealtimeClient` gọi `onClose({ code: 1006 })` khi mô phỏng rớt mạng (`dropEveryMs`).
+- **`publicConfig.emailDelivery`: `'sent' | 'log'`.** `'sent'` = server gửi email thật (`EMAIL_TRANSPORT=resend`); `'log'` = email chỉ ghi vào log
+  hoặc hộp thư thử (dev, e2e, sàn kín chưa có tên miền gửi mail). Khi `'log'`, **đừng** báo "đã gửi email" — nói "máy chủ này chưa gửi email thật".
+  Trường bắt buộc trong response (mọi server đã trả nó); mock trả `'log'`.
+- **Thay đổi nhỏ có thể ảnh hưởng UI:** code tự cài đặt interface `RealtimeClient` (ngoài `createRealtimeClient` / mock) phải thêm `onClose`.
+  `AuthContext` của app sàn đã dò `onClose` bằng `typeof === 'function'` nên chạy được ngay; có thể bỏ ép kiểu.
+- Server (không đổi hợp đồng): Content-Security-Policy cho phép script / iframe / kết nối của Cloudflare Turnstile **chỉ khi** có `TURNSTILE_SITE_KEY` (R-04).
+
 ## 0.11.0 — 2026-10-10 (Web admin nối với web sàn)
 Chỉ thêm, không đổi endpoint (vẫn 128). Hai web là **một sản phẩm trên một địa chỉ**: server phục vụ app sàn ở `/` và app admin ở `/admin/`
 (cùng cookie đăng nhập, cùng `/ws`). Hướng dẫn đầy đủ: `docs/antigravity/PROMPT-08-web-admin-noi-web-san.md`.

@@ -3,8 +3,12 @@
 //   npm run dev                 → db + server + all apps
 //   npm run dev -- --no-apps    → db + server only
 //   npm run dev -- --sim        → synthetic prices on real pair rules (offline; no Binance needed)
+//   npm run dev -- --verify-email → require email verification like production (dev only logs emails — see below)
+import { existsSync, readFileSync } from 'node:fs';
 import net from 'node:net';
-import { run, workspaces } from './workspaces.mjs';
+import path from 'node:path';
+import { devEmailEnv } from './devEmailEnv.mjs';
+import { ROOT, run, workspaces } from './workspaces.mjs';
 
 // In dev each app has its own Vite server, so links between the exchange and the admin app need the
 // other app's origin (`appLinks` in @cex/contracts). Deployed, both are on one origin and these stay unset.
@@ -41,10 +45,20 @@ const waitForPort = (port, timeoutMs = 60_000) =>
     tryOnce();
   });
 
+const envFile = path.join(ROOT, '.env');
+const { env: devEnv, required } = devEmailEnv({
+  argv: process.argv,
+  env: process.env,
+  envFileText: existsSync(envFile) ? readFileSync(envFile, 'utf8') : undefined,
+});
+const emailNote = required
+  ? 'email verification REQUIRED (emails are only logged: look for "EMAIL (log transport" in the [server] lines for the link)'
+  : 'email verification off';
+
 void run('npm', ['run', 'db:start'], { prefix: '[db]     ', onSpawn: track });
 await waitForPort(5433);
 const sim = process.argv.includes('--sim');
-void run('npm', ['run', 'dev:server'], { prefix: '[server] ', onSpawn: track, env: sim ? { MARKET_FEED: 'sim' } : {} });
+void run('npm', ['run', 'dev:server'], { prefix: '[server] ', onSpawn: track, env: { ...devEnv, ...(sim ? { MARKET_FEED: 'sim' } : {}) } });
 await waitForPort(8080);
 
 if (!process.argv.includes('--no-apps')) {
@@ -54,4 +68,4 @@ if (!process.argv.includes('--no-apps')) {
     void run('npm', ['run', 'dev', '-w', pkg.name], { prefix: `[${dir.split('/')[1]}] `.padEnd(9), env: { VITE_USE_MOCKS: 'false', ...DEV_ORIGINS }, onSpawn: track });
   }
 }
-process.stdout.write(`[dev]    API http://localhost:8080 · WebSocket ws://localhost:8080/ws · prices: ${sim ? 'SYNTHETIC (--sim)' : 'Binance'} · Ctrl+C to stop\n`);
+process.stdout.write(`[dev]    API http://localhost:8080 · WebSocket ws://localhost:8080/ws · prices: ${sim ? 'SYNTHETIC (--sim)' : 'Binance'} · ${emailNote} · Ctrl+C to stop\n`);

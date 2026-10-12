@@ -5,7 +5,7 @@
  * `user` events produced by the mock handlers/engine.
  */
 import { REALTIME_MAX_CHANNELS, type ChannelData } from '../realtime.ts';
-import type { RealtimeClient, RealtimeStatus } from '../realtimeClient.ts';
+import type { RealtimeClient, RealtimeCloseInfo, RealtimeStatus } from '../realtimeClient.ts';
 import type { CandleInterval } from '../common.ts';
 import { fixtureCandles, fixtureDepth, fixtureMarketStatus, fixtureTicker, fmtPrice, MOCK_PAIRS } from '../fixtures/index.ts';
 import { mockStore } from './store.ts';
@@ -36,6 +36,7 @@ export function createMockRealtimeClient(opts: MockRealtimeOptions = {}): Realti
   const subs = new Map<string, Set<(d: unknown) => void>>();
   const statusCbs = new Set<(s: RealtimeStatus) => void>();
   const errorCbs = new Set<(e: { code: string; message: string; channel?: string }) => void>();
+  const closeCbs = new Set<(i: RealtimeCloseInfo) => void>();
   let tradeId = 5000;
   let status: RealtimeStatus = 'open';
   let lastExchangeStatus = '';
@@ -102,6 +103,7 @@ export function createMockRealtimeClient(opts: MockRealtimeOptions = {}): Realti
   const dropTimer = opts.dropEveryMs
     ? setInterval(() => {
         setStatus('closed');
+        closeCbs.forEach((cb) => cb({ code: 1006, reason: 'mock connection drop' }));
         setTimeout(() => setStatus('connecting'), 1000);
         setTimeout(() => setStatus('open'), 2500);
       }, opts.dropEveryMs)
@@ -135,6 +137,10 @@ export function createMockRealtimeClient(opts: MockRealtimeOptions = {}): Realti
       statusCbs.add(cb);
       queueMicrotask(() => cb(status));
       return () => statusCbs.delete(cb);
+    },
+    onClose(cb) {
+      closeCbs.add(cb);
+      return () => closeCbs.delete(cb);
     },
     onError(cb) {
       errorCbs.add(cb);

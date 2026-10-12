@@ -2,9 +2,23 @@ import type { ChannelData, ClientMessage, ServerMessage } from './realtime.ts';
 
 export type RealtimeStatus = 'connecting' | 'open' | 'closed';
 
+/** Why a connection closed (what the browser's CloseEvent carries). */
+export interface RealtimeCloseInfo {
+  /** WebSocket close code. `WS_SESSION_ENDED` (4401) = the session behind the connection ended (signed out elsewhere, revoked, expired, account locked). */
+  code: number;
+  reason: string;
+}
+
 export interface RealtimeClient {
   subscribe<C extends string>(channel: C, onData: (data: ChannelData<C>) => void): () => void;
   onStatus(cb: (status: RealtimeStatus) => void): () => void;
+  /**
+   * Called each time the connection closes (network drop, server restart, or the server ending it).
+   * Not called for the connection `reconnect()` replaces, nor after `close()`. The client reconnects by itself
+   * (except after `close()`); with `code === WS_SESSION_ENDED` the new connection has no session, so the app
+   * should check `me` and, on 401, show the signed-out state.
+   */
+  onClose(cb: (info: RealtimeCloseInfo) => void): () => void;
   /** Server-side errors, e.g. subscribing to `user` while signed out. */
   onError(cb: (err: { code: string; message: string; channel?: string }) => void): () => void;
   /**
@@ -31,6 +45,7 @@ export function createRealtimeClient(options: RealtimeClientOptions = {}): Realt
   const listeners = new Map<string, Set<(d: unknown) => void>>();
   const statusCbs = new Set<(s: RealtimeStatus) => void>();
   const errorCbs = new Set<(e: { code: string; message: string; channel?: string }) => void>();
+  const closeCbs = new Set<(i: RealtimeCloseInfo) => void>();
   let ws: WebSocket | null = null;
   let attempt = 0;
   let closedByUser = false;
@@ -61,9 +76,10 @@ export function createRealtimeClient(options: RealtimeClientOptions = {}): Realt
       if (msg.type === 'event') listeners.get(msg.channel)?.forEach((cb) => cb(msg.data));
       else if (msg.type === 'error') errorCbs.forEach((cb) => cb(msg));
     };
-    ws.onclose = () => {
+    ws.onclose = (ev) => {
       clearInterval(pingTimer);
       setStatus('closed');
+      if (!closedByUser) closeCbs.forEach((cb) => cb({ code: ev.code, reason: ev.reason }));
       if (closedByUser) return;
       const delay = Math.min(maxBackoff, 500 * 2 ** attempt++);
       retryTimer = setTimeout(connect, delay);
@@ -91,6 +107,10 @@ export function createRealtimeClient(options: RealtimeClientOptions = {}): Realt
     onStatus(cb) {
       statusCbs.add(cb);
       return () => statusCbs.delete(cb);
+    },
+    onClose(cb) {
+      closeCbs.add(cb);
+      return () => closeCbs.delete(cb);
     },
     onError(cb) {
       errorCbs.add(cb);

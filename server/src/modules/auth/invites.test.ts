@@ -21,7 +21,7 @@ const signUp = (inviteCode?: string, email = `inv${++n}-${Date.now()}@test.local
 
 describe('closed registration (invite codes)', () => {
   it('publicConfig tells the apps; no code / an unknown code is refused', async () => {
-    expect(await h.browser().publicConfig()).toEqual({ registration: 'INVITE_ONLY', captchaSiteKey: null, emailVerificationRequired: true, marketFeed: 'off' });
+    expect(await h.browser().publicConfig()).toEqual({ registration: 'INVITE_ONLY', captchaSiteKey: null, emailVerificationRequired: true, emailDelivery: 'log', marketFeed: 'off' });
     await expect(signUp()).rejects.toSatisfy(refused('MISSING'));
     await expect(signUp('ZZZZ-ZZZZ-ZZZZ')).rejects.toSatisfy(refused('UNKNOWN'));
   });
