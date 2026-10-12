@@ -216,14 +216,15 @@ export const RegisterPage: React.FC<AuthPageProps> = ({ onNavigate }) => {
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [registeredSuccess, setRegisteredSuccess] = useState(false);
   const turnstileContainerRef = useRef<HTMLDivElement>(null);
   const turnstileWidgetIdRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (isAuthenticated) {
+    if (isAuthenticated && !registeredSuccess) {
       onNavigate('/trade/BTCUSDT');
     }
-  }, [isAuthenticated, onNavigate]);
+  }, [isAuthenticated, registeredSuccess, onNavigate]);
 
   useEffect(() => {
     const inv = new URLSearchParams(window.location.search).get('invite');
@@ -330,7 +331,7 @@ export const RegisterPage: React.FC<AuthPageProps> = ({ onNavigate }) => {
       });
 
       if (res.success) {
-        onNavigate('/trade/BTCUSDT');
+        setRegisteredSuccess(true);
       } else {
         setError(res.error || 'Đăng ký tài khoản không thành công.');
         if (window.turnstile?.reset && turnstileWidgetIdRef.current) {
@@ -344,6 +345,42 @@ export const RegisterPage: React.FC<AuthPageProps> = ({ onNavigate }) => {
       setLoading(false);
     }
   };
+
+  if (registeredSuccess) {
+    return (
+      <div className="min-h-[calc(100vh-56px)] flex items-center justify-center p-6 bg-[var(--bg,#000000)]">
+        <div className="w-full max-w-md p-8 rounded-[var(--radius-lg,16px)] bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)] text-center shadow-2xl">
+          <div className="w-16 h-16 rounded-full bg-[var(--up,#1fc27a)]/10 text-[var(--up,#1fc27a)] mx-auto flex items-center justify-center mb-5 border border-[var(--up,#1fc27a)]/20 shadow-inner">
+            <CheckIcon size={32} />
+          </div>
+          <h2 className="text-2xl font-bold text-[var(--text,#f4f4f5)] mb-3 tracking-tight">
+            Đăng ký thành công!
+          </h2>
+          <p className="text-sm text-[var(--text-2,#a1a1aa)] mb-8 leading-relaxed">
+            Đăng ký thành công! Bạn có thể đăng nhập ngay để giao dịch
+          </p>
+          <div className="flex flex-col gap-3">
+            <Button
+              variant="primary"
+              fullWidth
+              onClick={() => onNavigate('/trade/BTCUSDT')}
+              className="py-2.5 font-bold shadow-lg"
+            >
+              Vào sàn giao dịch ngay
+            </Button>
+            <Button
+              variant="secondary"
+              fullWidth
+              onClick={() => onNavigate('/login')}
+              className="py-2.5 font-semibold"
+            >
+              Đăng nhập tài khoản
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (isAuthenticated) {
     return (
@@ -367,9 +404,7 @@ export const RegisterPage: React.FC<AuthPageProps> = ({ onNavigate }) => {
             Tạo tài khoản giao dịch <br/><span className="text-[var(--accent,#818cf8)]">CEX Spot</span>
           </h1>
           <p className="text-[var(--text-3,#63636b)] text-lg mb-8 leading-relaxed">
-            {publicConfig?.emailVerificationRequired
-              ? 'Nhận ngay 10.000 USDT thử nghiệm sau khi xác minh email. Bắt đầu giao dịch không rủi ro.'
-              : 'Nhận ngay 10.000 USDT thử nghiệm ở trang Tài sản.'}
+            Nhận ngay 10.000 USDT thử nghiệm ở trang Tài sản. Bắt đầu giao dịch không rủi ro.
           </p>
         </div>
       </div>

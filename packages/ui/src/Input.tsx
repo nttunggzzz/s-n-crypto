@@ -23,9 +23,9 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
           </label>
         )}
         <div
-          className={`flex items-center w-full bg-[var(--color-bg-surface,#111319)] border rounded-[var(--radius-md,8px)] transition-colors focus-within:ring-2 focus-within:ring-[var(--color-border-focus,#818cf8)] focus-within:border-transparent ${
+          className={`flex items-center w-full bg-[var(--color-bg-surface,#111319)] border rounded-[var(--radius-md,8px)] transition-all duration-150 focus-within:ring-1 focus-within:ring-[var(--accent,#818cf8)]/50 focus-within:border-[var(--accent,#818cf8)]/60 ${
             error
-              ? 'border-[#ef4444] focus-within:ring-[#ef4444]'
+              ? 'border-[#ef4444] focus-within:ring-[#ef4444]/50 focus-within:border-[#ef4444]'
               : 'border-[var(--color-border-default,#272a33)] hover:border-[#383d4a]'
           }`}
         >

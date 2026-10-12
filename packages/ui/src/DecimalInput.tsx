@@ -77,9 +77,9 @@ export const DecimalInput = React.forwardRef<HTMLInputElement, DecimalInputProps
           </label>
         )}
         <div
-          className={`flex items-center w-full bg-[var(--color-bg-surface,#111319)] border rounded-[var(--radius-md,8px)] transition-colors focus-within:ring-2 focus-within:ring-[var(--color-border-focus,#818cf8)] focus-within:border-transparent ${
+          className={`flex items-center w-full bg-[var(--color-bg-surface,#111319)] border rounded-[var(--radius-md,8px)] transition-all duration-150 focus-within:ring-1 focus-within:ring-[var(--accent,#818cf8)]/50 focus-within:border-[var(--accent,#818cf8)]/60 ${
             error
-              ? 'border-[#ef4444] focus-within:ring-[#ef4444]'
+              ? 'border-[#ef4444] focus-within:ring-[#ef4444]/50 focus-within:border-[#ef4444]'
               : 'border-[var(--color-border-default,#272a33)] hover:border-[#383d4a]'
           }`}
         >
@@ -92,11 +92,11 @@ export const DecimalInput = React.forwardRef<HTMLInputElement, DecimalInputProps
             value={value}
             onChange={handleChange}
             placeholder={placeholder}
-            className={`w-full bg-transparent px-3 py-2 text-sm tabular-nums text-[var(--color-text-primary,#f3f4f6)] placeholder-[var(--color-text-muted,#6b7280)] focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed ${className}`}
+            className={`w-full bg-transparent px-3 py-2 text-sm font-mono tabular-nums font-semibold tracking-tight text-[var(--color-text-primary,#f3f4f6)] placeholder-[var(--color-text-muted,#6b7280)] focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed ${className}`}
             {...props}
           />
           {unit && (
-            <div className="pr-3 pl-2 text-xs text-[var(--color-text-secondary,#9ca3af)] font-medium select-none shrink-0">
+            <div className="pr-3 pl-2 text-xs font-mono text-[var(--color-text-secondary,#9ca3af)] font-medium select-none shrink-0">
               {unit}
             </div>
           )}

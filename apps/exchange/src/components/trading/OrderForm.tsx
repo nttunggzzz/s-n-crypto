@@ -15,7 +15,6 @@ import {
 import { getApiClient } from '../../services/api.ts';
 import { getErrorMessage } from '../../services/errors.ts';
 import { useAuth } from '../../context/AuthContext.tsx';
-import { useConfig } from '../../context/ConfigContext.tsx';
 import { useMarket } from '../../context/MarketContext.tsx';
 import { Button, DecimalInput, useToast, formatDecimal, Modal } from '@cex/ui';
 import { Calculator, ArrowUpRight, ArrowDownRight, Info } from 'lucide-react';
@@ -47,8 +46,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({
   onOrderPlaced,
   onNavigateToLogin,
 }) => {
-  const { user, isAuthenticated, resendVerification } = useAuth();
-  const { publicConfig } = useConfig();
+  const { isAuthenticated } = useAuth();
   const { activeSymbolInfo, activeTicker, exchangeInfo, tradingHalted, disabledSymbols, realtimeClient } = useMarket();
   const { success, error: toastError } = useToast();
   const api = getApiClient();
@@ -64,34 +62,6 @@ export const OrderForm: React.FC<OrderFormProps> = ({
   const [marketInputMode, setMarketInputMode] = useState<'qty' | 'quote'>(initialSide === 'SELL' ? 'qty' : 'quote');
 
   const userChangedPriceRef = React.useRef(false);
-  const [resendingEmail, setResendingEmail] = useState(false);
-  const [emailCooldown, setEmailCooldown] = useState(0);
-
-  useEffect(() => {
-    if (emailCooldown <= 0) return;
-    const timer = setInterval(() => {
-      setEmailCooldown((prev) => (prev > 0 ? prev - 1 : 0));
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [emailCooldown]);
-
-  const handleResendEmail = async () => {
-    if (emailCooldown > 0) return;
-    setResendingEmail(true);
-    try {
-      const res = await resendVerification();
-      if (res.success) {
-        success('Đã gửi lại email xác minh!');
-        setEmailCooldown(60);
-      } else {
-        toastError(res.error || 'Không thể gửi email xác minh.');
-      }
-    } catch {
-      toastError('Không thể gửi email xác minh.');
-    } finally {
-      setResendingEmail(false);
-    }
-  };
 
   // Sync side from prop
   useEffect(() => {
@@ -656,8 +626,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({
 
   const isPriceInvalid = activeTicker?.status === 'UNAVAILABLE' || activeTicker?.status === 'STALE';
   const isSymbolDisabled = !activeSymbolInfo?.enabled || (disabledSymbols && disabledSymbols.includes(symbol));
-  const isEmailVerificationRequired = publicConfig?.emailVerificationRequired ?? false;
-  const isEmailUnverified = isEmailVerificationRequired && !!user && !user.emailVerified;
+  const isEmailUnverified = false;
 
   const cannotTradeReason = tradingHalted
     ? 'Sàn đang tạm dừng giao dịch'
@@ -670,19 +639,19 @@ export const OrderForm: React.FC<OrderFormProps> = ({
     : null;
 
   return (
-    <div className="flex flex-col bg-[var(--color-bg-surface,#111319)] border border-[var(--color-border-subtle,#1e212b)] rounded-[var(--radius-lg,12px)] p-4 text-xs select-none">
+    <div className="flex flex-col bg-[var(--color-bg-surface,#111319)]/95 backdrop-blur-md border border-[var(--color-border-subtle,#1e212b)] rounded-[var(--radius-lg,12px)] p-3.5 text-xs select-none shadow-xl shadow-black/20">
       {/* Side Tabs (Buy / Sell) */}
-      <div className="grid grid-cols-2 gap-2 p-1 bg-[var(--color-bg-base,#08090c)] rounded-[var(--radius-md,8px)] mb-3">
+      <div className="grid grid-cols-2 gap-1.5 p-1 bg-[var(--color-bg-base,#08090c)] border border-[var(--color-border-subtle,#1e212b)] rounded-[var(--radius-md,8px)] mb-3">
         <button
           type="button"
           onClick={() => {
             setSide('BUY');
             setMarketInputMode('quote');
           }}
-          className={`py-2 rounded-[var(--radius-sm,4px)] font-bold text-xs transition-all cursor-pointer ${
+          className={`py-2 rounded-[var(--radius-sm,4px)] font-bold text-xs transition-all duration-200 cursor-pointer active:scale-[0.98] ${
             side === 'BUY'
-              ? 'bg-[var(--color-buy,#22c55e)] text-white shadow-[0_2px_8px_rgba(34,197,94,0.3)]'
-              : 'text-[var(--color-text-secondary,#9ca3af)] hover:text-white'
+              ? 'bg-[var(--color-buy,#22c55e)] text-white shadow-sm shadow-[rgba(34,197,94,0.35)]'
+              : 'text-[var(--color-text-secondary,#9ca3af)] hover:text-white hover:bg-white/[0.04]'
           }`}
         >
           MUA {baseAsset}
@@ -693,10 +662,10 @@ export const OrderForm: React.FC<OrderFormProps> = ({
             setSide('SELL');
             setMarketInputMode('qty');
           }}
-          className={`py-2 rounded-[var(--radius-sm,4px)] font-bold text-xs transition-all cursor-pointer ${
+          className={`py-2 rounded-[var(--radius-sm,4px)] font-bold text-xs transition-all duration-200 cursor-pointer active:scale-[0.98] ${
             side === 'SELL'
-              ? 'bg-[var(--color-sell,#f87171)] text-white shadow-[0_2px_8px_rgba(248,113,113,0.3)]'
-              : 'text-[var(--color-text-secondary,#9ca3af)] hover:text-white'
+              ? 'bg-[var(--color-sell,#f87171)] text-white shadow-sm shadow-[rgba(248,113,113,0.35)]'
+              : 'text-[var(--color-text-secondary,#9ca3af)] hover:text-white hover:bg-white/[0.04]'
           }`}
         >
           BÁN {baseAsset}
@@ -704,7 +673,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({
       </div>
 
       {/* Order Type Tabs: 6 Tabs */}
-      <div className="flex items-center gap-2 pb-2 mb-3 border-b border-[var(--color-border-subtle,#1e212b)] overflow-x-auto no-scrollbar">
+      <div className="flex items-center gap-1 pb-1.5 mb-3 border-b border-[var(--color-border-subtle,#1e212b)] overflow-x-auto no-scrollbar">
         {(['LIMIT', 'MARKET', 'STOP_LIMIT', 'STOP_MARKET', 'TRAILING', 'OCO'] as OrderTab[]).map((tab) => {
           const tabLabelMap: Record<OrderTab, string> = {
             LIMIT: 'Giới hạn',
@@ -724,7 +693,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({
                 setOrderType(tab);
                 setValidationError(null);
               }}
-              className={`font-semibold text-[11px] whitespace-nowrap cursor-pointer pb-1 border-b-2 transition-colors ${
+              className={`font-semibold text-[11px] whitespace-nowrap cursor-pointer px-1.5 pb-1 border-b-2 transition-all duration-150 active:scale-95 ${
                 isActive
                   ? 'border-[var(--color-accent-primary,#818cf8)] text-[var(--color-text-primary,#f3f4f6)]'
                   : 'border-transparent text-[var(--color-text-muted,#6b7280)] hover:text-white'
@@ -789,7 +758,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({
                 max="100"
                 value={riskPercent}
                 onChange={(e) => setRiskPercent(e.target.value)}
-                className="w-full bg-[var(--color-bg-surface,#111319)] border border-[var(--color-border-default,#272a33)] rounded px-2 py-1 text-xs text-white"
+                className="w-full bg-[var(--color-bg-surface,#111319)] border border-[var(--color-border-default,#272a33)] rounded px-2 py-1 text-xs font-mono tabular-nums text-white focus:outline-none focus:ring-1 focus:ring-[var(--accent,#818cf8)]/50 focus:border-[var(--accent,#818cf8)]/60 transition-all duration-150"
                 placeholder="1%"
               />
             </div>
@@ -799,7 +768,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({
                 type="text"
                 value={riskEntryPrice}
                 onChange={(e) => setRiskEntryPrice(e.target.value)}
-                className="w-full bg-[var(--color-bg-surface,#111319)] border border-[var(--color-border-default,#272a33)] rounded px-2 py-1 text-xs text-white"
+                className="w-full bg-[var(--color-bg-surface,#111319)] border border-[var(--color-border-default,#272a33)] rounded px-2 py-1 text-xs font-mono tabular-nums text-white focus:outline-none focus:ring-1 focus:ring-[var(--accent,#818cf8)]/50 focus:border-[var(--accent,#818cf8)]/60 transition-all duration-150"
                 placeholder="Giá mua"
               />
             </div>
@@ -809,7 +778,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({
                 type="text"
                 value={riskStopPrice}
                 onChange={(e) => setRiskStopPrice(e.target.value)}
-                className="w-full bg-[var(--color-bg-surface,#111319)] border border-[var(--color-border-default,#272a33)] rounded px-2 py-1 text-xs text-white"
+                className="w-full bg-[var(--color-bg-surface,#111319)] border border-[var(--color-border-default,#272a33)] rounded px-2 py-1 text-xs font-mono tabular-nums text-white focus:outline-none focus:ring-1 focus:ring-[var(--accent,#818cf8)]/50 focus:border-[var(--accent,#818cf8)]/60 transition-all duration-150"
                 placeholder="Dưới giá vào"
               />
             </div>
@@ -880,7 +849,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({
                 max="20"
                 value={trailingPercent}
                 onChange={(e) => setTrailingPercent(e.target.value)}
-                className="w-full bg-[var(--color-bg-base,#08090c)] border border-[var(--color-border-default,#272a33)] rounded-[var(--radius-md,8px)] px-3 py-2 text-xs text-white"
+                className="w-full bg-[var(--color-bg-base,#08090c)] border border-[var(--color-border-default,#272a33)] rounded-[var(--radius-md,8px)] px-3 py-2 text-xs font-mono tabular-nums text-white placeholder-[var(--color-text-muted,#6b7280)] focus:outline-none focus:ring-1 focus:ring-[var(--accent,#818cf8)]/50 focus:border-[var(--accent,#818cf8)]/60 transition-all duration-150"
                 placeholder="1.0"
                 required
               />
@@ -1023,8 +992,8 @@ export const OrderForm: React.FC<OrderFormProps> = ({
           </div>
         )}
 
-        {/* Percentage Slider */}
-        <div className="my-1 px-1">
+        {/* Percentage Slider & Quick Percent Buttons */}
+        <div className="my-1.5 flex flex-col gap-2">
           <input
             type="range"
             min="0"
@@ -1038,12 +1007,24 @@ export const OrderForm: React.FC<OrderFormProps> = ({
             }}
             className="w-full h-1 bg-[var(--line,#1d1e21)] rounded-lg appearance-none cursor-pointer accent-[var(--accent,#818cf8)]"
           />
-          <div className="flex justify-between text-[9px] text-[var(--text-3,#63636b)] mt-1.5 font-mono">
-            <span className="cursor-pointer" onClick={() => { setSliderValue(0); handlePercentClick(0); }}>0%</span>
-            <span className="cursor-pointer" onClick={() => { setSliderValue(25); handlePercentClick(25); }}>25%</span>
-            <span className="cursor-pointer" onClick={() => { setSliderValue(50); handlePercentClick(50); }}>50%</span>
-            <span className="cursor-pointer" onClick={() => { setSliderValue(75); handlePercentClick(75); }}>75%</span>
-            <span className="cursor-pointer" onClick={() => { setSliderValue(100); handlePercentClick(100); }}>100%</span>
+          <div className="grid grid-cols-4 gap-1.5">
+            {[25, 50, 75, 100].map((pct) => (
+              <button
+                key={pct}
+                type="button"
+                onClick={() => {
+                  setSliderValue(pct);
+                  handlePercentClick(pct);
+                }}
+                className={`py-1 text-[11px] font-mono font-medium rounded-[var(--radius-sm,4px)] border cursor-pointer select-none transition-all active:scale-95 hover:border-[var(--accent,#818cf8)]/40 hover:shadow-[0_0_8px_rgba(129,140,248,0.15)] ${
+                  sliderValue === pct
+                    ? 'bg-[var(--accent,#818cf8)]/15 border-[var(--accent,#818cf8)] text-[var(--color-text-primary,#f3f4f6)] shadow-[0_0_8px_rgba(129,140,248,0.25)]'
+                    : 'bg-[var(--color-bg-base,#08090c)] border-[var(--color-border-subtle,#1e212b)] text-[var(--color-text-secondary,#9ca3af)] hover:text-white hover:bg-[var(--color-bg-elevated,#1b1e27)]'
+                }`}
+              >
+                {pct}%
+              </button>
+            ))}
           </div>
         </div>
 
@@ -1071,7 +1052,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({
                     value={takeProfitPrice}
                     onChange={(e) => setTakeProfitPrice(e.target.value)}
                     placeholder="Giá TP > Giá vào"
-                    className="w-full bg-[var(--color-bg-surface,#111319)] border border-[var(--color-border-default,#272a33)] rounded px-2 py-1 text-xs text-white mt-1"
+                    className="w-full bg-[var(--color-bg-surface,#111319)] border border-[var(--color-border-default,#272a33)] rounded px-2 py-1 text-xs font-mono tabular-nums text-white focus:outline-none focus:ring-1 focus:ring-[var(--accent,#818cf8)]/50 focus:border-[var(--accent,#818cf8)]/60 transition-all duration-150 mt-1"
                   />
                 </div>
                 <div>
@@ -1083,7 +1064,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({
                     value={stopLossPrice}
                     onChange={(e) => setStopLossPrice(e.target.value)}
                     placeholder="Giá SL < Giá vào"
-                    className="w-full bg-[var(--color-bg-surface,#111319)] border border-[var(--color-border-default,#272a33)] rounded px-2 py-1 text-xs text-white mt-1"
+                    className="w-full bg-[var(--color-bg-surface,#111319)] border border-[var(--color-border-default,#272a33)] rounded px-2 py-1 text-xs font-mono tabular-nums text-white focus:outline-none focus:ring-1 focus:ring-[var(--accent,#818cf8)]/50 focus:border-[var(--accent,#818cf8)]/60 transition-all duration-150 mt-1"
                   />
                 </div>
               </div>
@@ -1113,37 +1094,19 @@ export const OrderForm: React.FC<OrderFormProps> = ({
             variant="primary"
             fullWidth
             onClick={onNavigateToLogin}
-            className="mt-2"
+            className="mt-2 active:scale-[0.99] transition-transform"
           >
             Đăng nhập để giao dịch
           </Button>
         ) : cannotTradeReason ? (
-          <div className="flex flex-col gap-2 mt-2">
-            <Button
-              type="button"
-              disabled
-              fullWidth
-              className="bg-neutral-800 text-neutral-400 border border-neutral-700"
-            >
-              {cannotTradeReason}
-            </Button>
-            {isEmailUnverified && (
-              <Button
-                type="button"
-                variant="secondary"
-                fullWidth
-                loading={resendingEmail}
-                disabled={emailCooldown > 0}
-                onClick={handleResendEmail}
-                className="text-xs"
-                aria-label="Gửi email xác minh"
-              >
-                {emailCooldown > 0
-                  ? `Gửi lại sau ${emailCooldown}s`
-                  : `Gửi email xác minh tới ${user?.email}`}
-              </Button>
-            )}
-          </div>
+          <Button
+            type="button"
+            disabled
+            fullWidth
+            className="mt-2 bg-neutral-800 text-neutral-400 border border-neutral-700"
+          >
+            {cannotTradeReason}
+          </Button>
         ) : (
           <Button
             type="submit"
@@ -1151,7 +1114,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({
             loading={submitting}
             fullWidth
             aria-label={side === 'BUY' ? `MUA ${baseAsset}` : `BÁN ${baseAsset}`}
-            className="mt-2 font-bold text-sm tracking-wide"
+            className="mt-2 font-bold text-sm tracking-wide active:scale-[0.99] transition-transform"
           >
             {side === 'BUY' ? `MUA ${baseAsset}` : `BÁN ${baseAsset}`}
           </Button>

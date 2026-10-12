@@ -1,15 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { useConfig } from '../context/ConfigContext.tsx';
 import { useMarket } from '../context/MarketContext';
-import { Button, Badge, BrandLogo, useToast, formatDecimal } from '@cex/ui';
+import { BrandLogo, formatDecimal } from '@cex/ui';
 import { canOpenAdmin, appLinks } from '@cex/contracts';
 import { getApiClient } from '../services/api.ts';
 import { NotificationCenter } from './NotificationCenter.tsx';
 import { AvatarIcon } from './AvatarIcon.tsx';
 import { 
-  Search, Bell, Moon, Globe, ChevronDown, 
-  Wallet, History, CreditCard, Settings, Shield, LogOut, Copy, X, LayoutPanelLeft, User,
+  Search, Moon, Globe, ChevronDown, 
+  Wallet, History, CreditCard, Settings, Shield, LogOut, Copy, LayoutPanelLeft, User,
   Bot, BarChart2, LayoutDashboard
 } from 'lucide-react';
 
@@ -19,24 +18,10 @@ export interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({ currentPath, onNavigate }) => {
-  const { user, isAuthenticated, logout, resendVerification } = useAuth();
-  const { publicConfig } = useConfig();
+  const { user, isAuthenticated, logout } = useAuth();
   const { connectionStatus, activeSymbol } = useMarket();
-  const { success, error: toastError } = useToast();
-  const [hideBanner, setHideBanner] = useState(() => {
-    if (typeof window !== 'undefined') {
-      return sessionStorage.getItem('cex:hide-email-banner') === 'true';
-    }
-    return false;
-  });
   const [totalEstimatedUsdt, setTotalEstimatedUsdt] = useState<string | null>(null);
   const api = getApiClient();
-
-  useEffect(() => {
-    if (user?.emailVerified) {
-      sessionStorage.removeItem('cex:hide-email-banner');
-    }
-  }, [user?.emailVerified]);
 
   const fetchTotalAsset = useCallback(async () => {
     if (!isAuthenticated) {
@@ -58,15 +43,6 @@ export const Header: React.FC<HeaderProps> = ({ currentPath, onNavigate }) => {
       window.removeEventListener('cex:balance-refresh', fetchTotalAsset);
     };
   }, [fetchTotalAsset]);
-
-  const handleResend = async () => {
-    const res = await resendVerification();
-    if (res.success) {
-      success('Đã gửi lại email xác minh.');
-    } else {
-      toastError(res.error || 'Không thể gửi lại email xác minh.');
-    }
-  };
 
   const copyUid = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -265,11 +241,6 @@ export const Header: React.FC<HeaderProps> = ({ currentPath, onNavigate }) => {
                           <Copy size={12} />
                         </button>
                       </div>
-                      {publicConfig?.emailVerificationRequired && !user?.emailVerified && (
-                        <div className="mt-1">
-                          <Badge variant="warning" size="sm">Chưa xác minh</Badge>
-                        </div>
-                      )}
                     </div>
                     
                     <div className="py-1 border-b border-[var(--line)]">
@@ -348,25 +319,11 @@ export const Header: React.FC<HeaderProps> = ({ currentPath, onNavigate }) => {
         </div>
       </header>
 
-      {/* Banner Area (32px tall) */}
-      {!hideBanner && (
-        <>
-          {connectionStatus === 'closed' && (
-            <div className="h-8 bg-[var(--down,#f2475f)]/10 border-b border-[var(--down,#f2475f)]/20 px-4 text-[11px] text-[var(--down,#f2475f)] flex items-center justify-center font-medium">
-              Mất kết nối với máy chủ realtime. Hệ thống đang tự động kết nối lại...
-            </div>
-          )}
-          
-          {publicConfig?.emailVerificationRequired && user && !user.emailVerified && (
-            <div className="h-8 bg-[var(--warn,#f5b544)]/10 border-b border-[var(--warn,#f5b544)]/20 px-4 text-[11px] text-[var(--warn,#f5b544)] flex items-center justify-between font-medium">
-              <span>Tài khoản chưa xác minh email. Một số tính năng sẽ bị giới hạn.</span>
-              <div className="flex items-center gap-3">
-                <button onClick={handleResend} className="underline hover:brightness-125">Gửi lại link</button>
-                <button onClick={() => setHideBanner(true)} aria-label="Đóng thông báo"><X size={14} className="opacity-70 hover:opacity-100" /></button>
-              </div>
-            </div>
-          )}
-        </>
+      {/* Disconnection Warning */}
+      {connectionStatus === 'closed' && (
+        <div className="h-8 bg-[var(--down,#f2475f)]/10 border-b border-[var(--down,#f2475f)]/20 px-4 text-[11px] text-[var(--down,#f2475f)] flex items-center justify-center font-medium">
+          Mất kết nối với máy chủ realtime. Hệ thống đang tự động kết nối lại...
+        </div>
       )}
     </>
   );

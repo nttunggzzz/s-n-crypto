@@ -31,7 +31,7 @@ export interface SettingsPageProps {
 }
 
 export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate }) => {
-  const { user, isAuthenticated, logout, refreshUser, resendVerification } = useAuth();
+  const { user, isAuthenticated, logout, refreshUser } = useAuth();
   const { success, error: toastError } = useToast();
   const api = getApiClient();
 
@@ -43,34 +43,6 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate }) => {
     : 'profile';
 
   const [activeTab, setActiveTab] = useState<'profile' | 'security' | 'preferences'>(initialTab);
-
-  // Email resend states (N-02)
-  const [resendCooldown, setResendCooldown] = useState(0);
-  const [resendingEmail, setResendingEmail] = useState(false);
-
-  useEffect(() => {
-    if (resendCooldown <= 0) return;
-    const timer = setInterval(() => {
-      setResendCooldown((prev) => prev - 1);
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [resendCooldown]);
-
-  const handleResendEmail = async () => {
-    if (resendCooldown > 0 || resendingEmail) return;
-    setResendingEmail(true);
-    try {
-      const res = await resendVerification();
-      if (res.success) {
-        success('Đã gửi lại email xác minh.');
-        setResendCooldown(60);
-      } else {
-        toastError(res.error || 'Không thể gửi lại email xác minh.');
-      }
-    } finally {
-      setResendingEmail(false);
-    }
-  };
 
   // Profile states
   const [nameInput, setNameInput] = useState(user?.name || '');
@@ -428,24 +400,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate }) => {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 bg-[var(--panel,#0a0a0b)] p-5 rounded-[var(--radius-lg,12px)] border border-[var(--line,#1d1e21)]">
               <div>
                 <label className="block text-xs font-semibold text-[var(--text-2,#a1a1aa)] mb-1">Email đăng nhập</label>
-                <div className="text-sm font-medium text-[var(--text,#f4f4f5)] flex items-center gap-2 flex-wrap">
+                <div className="text-sm font-medium text-[var(--text,#f4f4f5)] flex items-center gap-2">
                   <span>{user?.email}</span>
-                  {user?.emailVerified ? (
-                    <Badge variant="success" size="sm">Đã xác minh</Badge>
-                  ) : (
-                    <div className="flex items-center gap-2">
-                      <Badge variant="warning" size="sm">Chưa xác minh</Badge>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={resendCooldown > 0 || resendingEmail}
-                        onClick={handleResendEmail}
-                        className="text-xs h-6 px-2 py-0"
-                      >
-                        {resendCooldown > 0 ? `Gửi lại (${resendCooldown}s)` : 'Gửi lại email'}
-                      </Button>
-                    </div>
-                  )}
                 </div>
               </div>
               <div>
@@ -534,71 +490,63 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate }) => {
             </h2>
 
             {/* Security Level Progress Bar */}
-            <div className="p-5 rounded-[var(--radius-lg,12px)] border border-[var(--line,#1d1e21)] bg-[var(--panel,#0a0a0b)] space-y-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <ShieldCheck size={20} className={secOverview?.twoFactorEnabled ? 'text-[var(--up,#1fc27a)]' : 'text-[var(--warn,#f5b544)]'} />
-                  <span className="font-bold text-sm text-[var(--text,#f4f4f5)]">Mức độ bảo mật</span>
+            {(() => {
+              const secScore = (secOverview?.twoFactorEnabled ? 1 : 0) + (secOverview?.antiPhishingCode ? 1 : 0);
+              const secLevelLabel = secScore === 2 ? 'Cao' : secScore === 1 ? 'Trung bình' : 'Cơ bản';
+              const secLevelVariant: 'success' | 'warning' | 'default' = secScore === 2 ? 'success' : secScore === 1 ? 'warning' : 'default';
+
+              return (
+                <div className="p-5 rounded-[var(--radius-lg,12px)] border border-[var(--line,#1d1e21)] bg-[var(--panel,#0a0a0b)] space-y-3.5 shadow-sm">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <ShieldCheck
+                        size={20}
+                        className={secScore === 2 ? 'text-[var(--up,#1fc27a)]' : secScore === 1 ? 'text-[var(--warn,#f5b544)]' : 'text-[var(--text-3,#63636b)]'}
+                      />
+                      <span className="font-bold text-sm text-[var(--text,#f4f4f5)]">Mức độ bảo mật</span>
+                    </div>
+                    <Badge variant={secLevelVariant} size="sm">
+                      {secLevelLabel}
+                    </Badge>
+                  </div>
+
+                  {/* Progress Bar 2 segments (2FA & Anti-Phishing) */}
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <div
+                      className={`h-2 rounded-full transition-all duration-300 ${
+                        secOverview?.twoFactorEnabled ? 'bg-[var(--up,#1fc27a)]' : 'bg-[var(--line,#1d1e21)]'
+                      }`}
+                      title="Xác thực hai yếu tố (2FA)"
+                    />
+                    <div
+                      className={`h-2 rounded-full transition-all duration-300 ${
+                        secOverview?.antiPhishingCode ? 'bg-[var(--up,#1fc27a)]' : 'bg-[var(--line,#1d1e21)]'
+                      }`}
+                      title="Mã chống lừa đảo (Anti-phishing)"
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between text-[11px] text-[var(--text-3,#63636b)] pt-1 flex-wrap gap-2">
+                    <span className="flex items-center gap-1.5">
+                      2FA:{' '}
+                      {secOverview?.twoFactorEnabled ? (
+                        <span className="text-[var(--up,#1fc27a)] font-medium">✓ Đã bật</span>
+                      ) : (
+                        <span className="text-[var(--text-3,#63636b)]">Chưa bật</span>
+                      )}
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      Mã chống lừa đảo:{' '}
+                      {secOverview?.antiPhishingCode ? (
+                        <span className="text-[var(--up,#1fc27a)] font-medium">✓ Đã đặt</span>
+                      ) : (
+                        <span className="text-[var(--text-3,#63636b)]">Chưa đặt</span>
+                      )}
+                    </span>
+                  </div>
                 </div>
-                <Badge
-                  variant={
-                    (user?.emailVerified ? 1 : 0) + (secOverview?.twoFactorEnabled ? 1 : 0) + (secOverview?.antiPhishingCode ? 1 : 0) >= 3
-                      ? 'success'
-                      : (user?.emailVerified ? 1 : 0) + (secOverview?.twoFactorEnabled ? 1 : 0) + (secOverview?.antiPhishingCode ? 1 : 0) >= 2
-                      ? 'warning'
-                      : 'error'
-                  }
-                  size="sm"
-                >
-                  {(user?.emailVerified ? 1 : 0) + (secOverview?.twoFactorEnabled ? 1 : 0) + (secOverview?.antiPhishingCode ? 1 : 0) >= 3
-                    ? 'Cao'
-                    : (user?.emailVerified ? 1 : 0) + (secOverview?.twoFactorEnabled ? 1 : 0) + (secOverview?.antiPhishingCode ? 1 : 0) >= 2
-                    ? 'Trung bình'
-                    : 'Thấp'}
-                </Badge>
-              </div>
-
-              {/* Progress Bar 3 segments */}
-              <div className="grid grid-cols-3 gap-2">
-                <div
-                  className={`h-2 rounded-full transition-all ${
-                    user?.emailVerified ? 'bg-[var(--up,#1fc27a)]' : 'bg-[var(--line,#1d1e21)]'
-                  }`}
-                  title="Email đã xác minh"
-                />
-                <div
-                  className={`h-2 rounded-full transition-all ${
-                    secOverview?.twoFactorEnabled ? 'bg-[var(--up,#1fc27a)]' : 'bg-[var(--line,#1d1e21)]'
-                  }`}
-                  title="Xác thực 2FA"
-                />
-                <div
-                  className={`h-2 rounded-full transition-all ${
-                    secOverview?.antiPhishingCode ? 'bg-[var(--up,#1fc27a)]' : 'bg-[var(--line,#1d1e21)]'
-                  }`}
-                  title="Mã chống lừa đảo"
-                />
-              </div>
-
-              <div className="flex items-center justify-between text-[11px] text-[var(--text-3,#63636b)] pt-1 flex-wrap gap-2">
-                <span className="flex items-center gap-1.5">
-                  Email: {user?.emailVerified ? '✓ Đã xác minh' : '✗ Chưa'}
-                  {!user?.emailVerified && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={resendCooldown > 0 || resendingEmail}
-                      onClick={handleResendEmail}
-                      className="text-[10px] h-5 px-1.5 py-0 leading-none"
-                    >
-                      {resendCooldown > 0 ? `Gửi lại (${resendCooldown}s)` : 'Gửi lại link'}
-                    </Button>
-                  )}
-                </span>
-                <span>2FA: {secOverview?.twoFactorEnabled ? '✓ Đã bật' : '✗ Chưa'}</span>
-                <span>Anti-phishing: {secOverview?.antiPhishingCode ? '✓ Đã đặt' : '✗ Chưa'}</span>
-              </div>
-            </div>
+              );
+            })()}
 
             {/* 2FA Card */}
             <div>
