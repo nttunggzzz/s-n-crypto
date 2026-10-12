@@ -7,6 +7,8 @@
 
 Rà soát: **2026-10-11** (Claude Code). Cập nhật lần cuối: 2026-10-11 tối (C1, O1 xong).
 
+> **Rà soát mới 2026-10-12 (UI `eee01a3`): [docs/reports/2026-10-12-ra-soat-ui-antigravity.md](reports/2026-10-12-ra-soat-ui-antigravity.md)** — 18 mục R-01…R-18. B5 và U2 bên dưới **chưa xong** dù đã đánh "Đã sửa" (xem R-02, R-13).
+
 ## 0. Bức tranh tổng thể
 
 | Bản | Commit | Kết quả kiểm tra |
