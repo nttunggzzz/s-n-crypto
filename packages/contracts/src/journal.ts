@@ -10,9 +10,13 @@ import { RSummary, StatsBasis, TradeOutcome } from './stats.ts';
  *    entry's open quantity (the rest is `unattributedQty`: coins bought before, from the faucet or by a bot); when what
  *    is left is below stepSize, or left × that fill's price < minNotional, the entry closes (the rest is `dustQty`).
  *  - FUTURES: one entry = one position. A fill has up to two legs: CLOSE (into the entry of the position it reduced)
- *    and OPEN (into the entry of the position it opened) — a flip appears in both entries, one leg each.
- *  - Auto-journal (on by default) only records fills made while it is on (`journalSettings`); it never back-fills.
- *    Fills outside its windows stay free: the user can journal them by hand (`journalCreate`, origin MANUAL).
+ *    and OPEN (into the entry of the position it opened) — a flip appears in both entries, one leg each. An AUTO entry
+ *    opens only with the position's first OPEN leg; a position opened while auto-journal was off gets no AUTO entry later
+ *    (its later legs are unattributed). A MANUAL futures entry receives every later leg of its own position.
+ *  - Auto-journal (on by default, `journalSettings`) OPENS entries only from fills made while it is on, and never
+ *    back-fills. Turning it off stops new entries only: an AUTO entry already open keeps taking the fills of its pair
+ *    (spot) / position (futures) until it closes. Fills that open nothing while it is off stay free, and unattributed fills
+ *    can be taken too: the user journals them by hand (`journalCreate`, origin MANUAL).
  *  - Bot orders (GRID / DCA / later SIGNAL) and the bot account never enter the journal.
  *  - AUTO entries cannot be deleted (only annotated). MANUAL entries can; their fills become free again.
  *  - Results (PnL, R, outcome) are computed by the server with @cex/core — the UI shows them, never recomputes them.
@@ -97,14 +101,15 @@ export type JournalImageType = z.infer<typeof JournalImageType>;
  *  - journalCreate with orderIds, for each id in the order sent: unknown or not yours → 404 NOT_FOUND · BOT_ORDER ·
  *    ORDER_NOT_FILLED · SYMBOL_MISMATCH · FILL_ALREADY_JOURNALED; then over all their fills in id order:
  *    NO_OPENING_FILL · MULTIPLE_ROUND_TRIPS.
- *  - journalCreate with futuresPositionId: unknown or not yours → 404 · FILL_ALREADY_JOURNALED (an entry or a journal row
- *    already has a leg of it) · LEGACY_FUTURES_FILL.
+ *  - journalCreate with futuresPositionId: unknown or not yours → 404 · FILL_ALREADY_JOURNALED (an entry already has the
+ *    position or a leg of it) · LEGACY_FUTURES_FILL.
+ *  Unattributed fills (journal row without entry and without skip reason) are not "already journaled": MANUAL takes them.
  *  - journalUpdate: entry not yours → 404 · addOrderIds (MARKET_MISMATCH · ENTRY_NOT_EXTENDABLE · the per-order checks
  *    above · NO_OPENING_FILL · MULTIPLE_ROUND_TRIPS) · STOP_LOCKED · STOP_WRONG_SIDE (both judged on the entry as it
  *    would be after addOrderIds). Nothing is changed when any check fails.
  */
 export const JournalConflictReason = z.enum([
-  /** a fill of the order (or a leg of the position) already belongs to an entry or was skipped as a bot fill */
+  /** a fill of the order (or a leg of the position) already belongs to another entry or was skipped as a bot fill */
   'FILL_ALREADY_JOURNALED',
   /** orders of different symbols, or not the entry's symbol */
   'SYMBOL_MISMATCH',
@@ -267,7 +272,8 @@ export const JournalEntry = z.object({
   plan: JournalPlan,
   /**
    * Initial stop-loss — the denominator of R. Taken from the SL attached to the entry's first BUY order (spot) or to the
-   * order that opened the position (futures); otherwise the first one the user enters. null = no stop (R null).
+   * order that opened the position (futures — not the position's current SL), only when it is on the right side of the
+   * entry (LONG: below, SHORT: above); otherwise the first one the user enters. null = no stop (R null).
    */
   initialStop: DecimalString.nullable(),
   /** true after the first reducing fill: `initialStop` can no longer change (409 STOP_LOCKED). */
@@ -303,8 +309,8 @@ export type JournalEntryDetail = z.infer<typeof JournalEntryDetail>;
 // ───────────────────────────── requests
 
 /**
- * MANUAL entry from fills that belong to no entry (made while auto-journal was off, or freed by deleting a MANUAL entry).
- * Exactly one of:
+ * MANUAL entry from fills that belong to no entry: free fills (made while auto-journal was off, or freed by deleting a
+ * MANUAL entry) and unattributed ones (e.g. a sell recorded with no open entry). Exactly one of:
  *  - `orderIds`: ≥ 1 filled spot orders of the same symbol — every fill of them is allocated in fill id order;
  *  - `futuresPositionId`: one futures position — every recorded leg of it.
  * Unknown keys → 400 (strict).
@@ -329,8 +335,9 @@ export const JournalPlanInput = z
  * Annotate an entry (any status, AUTO or MANUAL). null clears a field. Server-computed fields cannot be written:
  * unknown keys → 400 (strict). `initialStop` after `initialStopLocked` → 409 STOP_LOCKED (omit it when locked);
  * on the wrong side of the average entry → 409 STOP_WRONG_SIDE. Changing it recomputes riskUsdt / rMultiple.
- * `addOrderIds`: only for an OPEN MANUAL SPOT entry (409 ENTRY_NOT_EXTENDABLE / MARKET_MISMATCH otherwise); the entry
- * is rebuilt from all its fills in id order. Order of the checks: see JournalConflictReason.
+ * `addOrderIds`: only for an OPEN MANUAL SPOT entry (409 ENTRY_NOT_EXTENDABLE / MARKET_MISMATCH otherwise); fills of the
+ * order already in this entry are skipped (an order that filled again adds only its new fills, no 409); the entry is
+ * rebuilt from all its fills in id order. Order of the checks: see JournalConflictReason.
  */
 export const JournalUpdateRequest = z
   .strictObject({

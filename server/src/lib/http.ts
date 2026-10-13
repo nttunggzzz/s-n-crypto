@@ -115,7 +115,8 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
   }
   // body-parser: JSON body above the limit of its path (32 KB; larger only where a route mounts its own parser)
   if (err && typeof err === 'object' && (err as { type?: string }).type === 'entity.too.large') {
-    const limit = (err as { limit?: unknown }).limit;
+    const { limit, length } = err as { limit?: unknown; length?: unknown };
+    logger.warn({ method: req.method, path: req.path, ip: clientIp(req), limit, length }, 'request body too large');
     res.status(413).json({
       error: { code: 'PAYLOAD_TOO_LARGE', message: 'Request body too large', details: { reason: 'BODY_TOO_LARGE', ...(typeof limit === 'number' ? { limitBytes: limit } : {}) } },
     });

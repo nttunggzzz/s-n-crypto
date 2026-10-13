@@ -236,13 +236,20 @@ Kế hoạch đầy đủ: `docs/plans/module-A-nhat-ky-giao-dich.md`. 12 endpoi
 - Server **tự dựng** mục từ các lần khớp thật; người dùng không nhập giá, khối lượng, phí.
   - Spot: tối đa một mục `AUTO` đang mở mỗi cặp. Mua thì mở hoặc cộng thêm; bán thì trừ dần; còn lẻ dưới bước khối lượng thì mục đóng.
   - Futures: một mục = một vị thế. Lệnh đảo chiều xuất hiện ở **hai** mục: chân `CLOSE` ở mục cũ, chân `OPEN` ở mục mới (`fills[].leg`).
+    Mục AUTO chỉ mở bởi lần khớp **mở vị thế**; vị thế mở lúc đang tắt tự ghi thì về sau không tự có mục (người dùng tạo mục MANUAL từ vị thế).
+- **Tắt tự ghi** chỉ dừng việc **mở mục mới**: mục AUTO đang mở vẫn nhận lần mua thêm / bán / đóng vị thế cho tới khi đóng.
+  Bật lại không ghi bù những gì xảy ra lúc tắt. Ở màn Cài đặt ghi rõ: "Tắt: không tạo mục mới; mục đang mở vẫn được cập nhật".
+- Mục MANUAL Futures tự nhận các lần khớp về sau của **chính vị thế đó**. Mục MANUAL Spot thì thêm lệnh bằng "Thêm lệnh" (`addOrderIds`);
+  chọn lại một lệnh đã có trong mục (lệnh khớp tiếp) chỉ thêm phần mới khớp.
 - `origin: 'AUTO'` (tự ghi) **không có nút xóa**, chỉ sửa ghi chú/kế hoạch. `origin: 'MANUAL'` có nút xóa (hộp xác nhận) và nút "Thêm lệnh" khi đang mở.
 - Bán phần coin có từ trước (faucet, mua trước khi bật nhật ký, bot mua) thì phần đó nằm ở `fills[].unattributedQty`, không thuộc mục nào.
   Ghi chú trên giao diện: "Bán coin do bot DCA/Grid mua cũng được tính vào mục của bạn".
 
 **Hiển thị kết quả — chỉ số server trả, không tự tính**
 - `result.netPnl`, `rMultiple`, `outcome`, `holdingMs` là `null` khi mục còn mở; phần đã chốt là `result.realizedPnl`. `null` → "—".
-- `result.riskUsdt` / `rMultiple` = `null` khi không có dừng lỗ ban đầu (`initialStop`).
+- `result.riskUsdt` / `rMultiple` = `null` khi không có dừng lỗ ban đầu (`initialStop`). Dừng lỗ ban đầu tự lấy từ SL của lệnh mở
+  (Spot: lệnh mua đầu tiên; Futures: lệnh mở vị thế, không phải SL hiện tại của vị thế), chỉ khi SL nằm đúng phía so với giá vào.
+- `result.realizedPnl` khi mục còn mở: Spot = lãi/lỗ của phần đã bán; Futures = lãi/lỗ đã chốt − mọi phí đã trả + funding tới giờ.
 - `initialStopLocked` → không cho sửa ô dừng lỗ ban đầu (chỉ sửa `plan.stop`, R không đổi; gợi ý lỗi `MOVED_STOP`).
 - Ghi chú A-D7: lãi lỗ tính theo giá vốn của **chính mục**, có thể khác trang "Phân tích lãi lỗ" khi đang giữ coin mua từ trước.
 - Huy hiệu theo đối soát: `adjustedAt` → "Đã điều chỉnh do đối soát" (lý do `adjustmentReason`); `status: 'VOID'` → "Không tính vào thống kê"; `needsReview` → "Cần kiểm tra — số coin trong ví ít hơn nhật ký".
@@ -268,7 +275,7 @@ await api.journalUpdateSettings({ body: { autoJournal: false } });     // chỉ 
 **Lỗi riêng của nhật ký** (`CONFLICT` → đọc `details.reason`, kiểu `JournalConflictReason`)
 | Lý do | Khi nào |
 |---|---|
-| `FILL_ALREADY_JOURNALED` | lần khớp của lệnh/vị thế đã thuộc mục khác |
+| `FILL_ALREADY_JOURNALED` | lần khớp của lệnh/vị thế đã thuộc mục khác (phần bán "không thuộc mục nào" thì vẫn lấy được) |
 | `BOT_ORDER` | lệnh do bot đặt (Grid/DCA) |
 | `ORDER_NOT_FILLED` | lệnh chưa khớp |
 | `SYMBOL_MISMATCH` / `MARKET_MISMATCH` | khác cặp / thêm lệnh vào mục Futures |
@@ -285,6 +292,7 @@ Mã mới: `PAYLOAD_TOO_LARGE` (413; `details.reason`: `ATTACHMENT_TOO_LARGE` > 
 `UNSUPPORTED_MEDIA_TYPE` (415: không phải PNG/JPEG/WebP thật, kể cả SVG/GIF hay file đổi đuôi).
 
 **Mock:** có sẵn 11 mục mẫu (thắng, thua, hòa, đang mở, không có dừng lỗ, Futures bị thanh lý, đảo chiều, bán có phần dư, `VOID`, `needsReview`), số liệu do
-`@cex/core` tính như server. Tự ghi bật sẵn: đặt lệnh trong mock là có mục `AUTO`; tắt tự ghi rồi đặt lệnh để thử tạo mục `MANUAL`.
-Thử hạn mức 50 MB: `mockStore.journal.otherImageBytes = 52_428_700`.
+`@cex/core` tính như server. Tự ghi bật sẵn: đặt lệnh trong mock là có mục `AUTO`; tắt tự ghi rồi đặt lệnh ở một cặp chưa có mục AUTO mở
+để thử tạo mục `MANUAL` (cặp đang có mục AUTO mở thì lần khớp vẫn vào mục đó). Lệnh của bot lưới không bao giờ vào nhật ký.
+Thử hạn mức 50 MB: `mockStore.journal.otherImageBytes = 52_428_700`. Ảnh tải lên được cả khi trang mở qua http không an toàn (mock tự băm sha256 bằng JS).
 

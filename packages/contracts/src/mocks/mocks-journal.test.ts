@@ -1,8 +1,11 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setupServer } from 'msw/node';
 import { ApiError, createApiClient, JOURNAL_LIMITS, journalAttachmentUrl } from '../index.ts';
 import { FIXTURE_PNG_BASE64, FIXTURE_WEBP_BASE64, fixtureJournalStats, J, JA } from '../fixtures/journal.ts';
-import { createMockHandlers, mockStore, resetMockStore, setMockRole, setMockScenario } from './index.ts';
+import { createMockHandlers, mockStore, resetMockStore, setMockPrice, setMockRole, setMockScenario } from './index.ts';
+import { nextId } from './store.ts';
+import { sha256Hex, sha256HexSync } from './sha256.ts';
+import { createHash, randomBytes } from 'node:crypto';
 
 const BASE = 'http://mock.local';
 const server = setupServer(...createMockHandlers({ baseUrl: BASE, latencyMs: 0 }));
@@ -16,6 +19,11 @@ const unsupported = (e: unknown) => e instanceof ApiError && e.status === 415 &&
 const marketBuy = async (symbol: string, quantity: string) => (await api.placeOrder({ body: { symbol, side: 'BUY', type: 'MARKET', quantity } })).order.id;
 const marketSell = async (symbol: string, quantity: string) => (await api.placeOrder({ body: { symbol, side: 'SELL', type: 'MARKET', quantity } })).order.id;
 const autoOff = () => api.journalUpdateSettings({ body: { autoJournal: false } });
+// windows are [start, end): wait a few ms so a fill made just before "on" is not in the same millisecond as the new window start
+const autoOn = async () => {
+  await new Promise((r) => setTimeout(r, 5));
+  return api.journalUpdateSettings({ body: { autoJournal: true } });
+};
 const toBase64 = (b: Uint8Array) => Buffer.from(b).toString('base64');
 
 beforeAll(() => server.listen({ onUnhandledRequest: 'error' }));
@@ -129,7 +137,7 @@ describe('journal mock: auto-journal window and MANUAL entries', () => {
     await expect(api.journalUpdateSettings({ body: { autoJournal: true, autoSince: '2026-01-01T00:00:00.000Z' } as never })).rejects.toSatisfy(code('VALIDATION_ERROR'));
     const buy = await marketBuy('SOLUSDT', '2');
     expect((await api.journalList()).items).toHaveLength(before);
-    const on = await api.journalUpdateSettings({ body: { autoJournal: true } });
+    const on = await autoOn();
     expect(on.autoJournal).toBe(true);
     expect(Date.parse(on.autoSince!)).toBeGreaterThan(Date.parse(mockStore.journal.featureStartedAt));
     expect((await api.journalList()).items).toHaveLength(before); // the fill made while off is not back-filled
@@ -152,7 +160,8 @@ describe('journal mock: auto-journal window and MANUAL entries', () => {
     const eth = await marketBuy('ETHUSDT', '0.01');
     const sol = await marketBuy('SOLUSDT', '1');
     await expect(api.journalCreate({ body: { orderIds: [eth, sol] } })).rejects.toSatisfy(reason('SYMBOL_MISMATCH'));
-    const sellOnly = await marketSell('BTCUSDT', '0.001'); // coins held before: nothing opens an entry
+    // coins held before, sold while off (ETH has no open AUTO entry: the fill stays free) — nothing opens an entry
+    const sellOnly = await marketSell('ETHUSDT', '0.01');
     await expect(api.journalCreate({ body: { orderIds: [sellOnly] } })).rejects.toSatisfy(reason('NO_OPENING_FILL'));
     const sellAll = await marketSell('ETHUSDT', '0.00999');
     const buyAgain = await marketBuy('ETHUSDT', '0.01');
@@ -170,7 +179,7 @@ describe('journal mock: auto-journal window and MANUAL entries', () => {
     await expect(api.journalUpdate({ params: { entryId: J(4) }, body: { addOrderIds: [buy] } })).rejects.toSatisfy(reason('ENTRY_NOT_EXTENDABLE'));
     await expect(api.journalUpdate({ params: { entryId: J(5) }, body: { addOrderIds: [buy] } })).rejects.toSatisfy(reason('ENTRY_NOT_EXTENDABLE'));
     await expect(api.journalUpdate({ params: { entryId: J(8) }, body: { addOrderIds: [buy] } })).rejects.toSatisfy(reason('MARKET_MISMATCH'));
-    await expect(api.journalUpdate({ params: { entryId: e.id }, body: { addOrderIds: [buy] } })).rejects.toSatisfy(reason('FILL_ALREADY_JOURNALED'));
+    expect((await api.journalUpdate({ params: { entryId: e.id }, body: { addOrderIds: [buy] } })).fillCount).toBe(1); // its fills are already here: no-op, no 409
     const other = await marketBuy('ETHUSDT', '0.01');
     await expect(api.journalUpdate({ params: { entryId: e.id }, body: { addOrderIds: [other], notes: 'x' } })).rejects.toSatisfy(reason('SYMBOL_MISMATCH'));
     expect((await api.journalGet({ params: { entryId: e.id } })).notes).toBe(''); // nothing changed
@@ -213,6 +222,108 @@ describe('journal mock: auto-journal window and MANUAL entries', () => {
   });
 });
 
+describe('journal mock: decisions after the A1 review (module A §2.1, §2.2, §2.4)', () => {
+  const futuresEntries = async (symbol: string) => (await api.journalList({ query: { market: 'FUTURES', symbol } })).items;
+
+  it('auto-journal off only stops NEW entries: the open AUTO entry still takes a buy (ADD) and the sell that closes it', async () => {
+    await marketBuy('ETHUSDT', '0.1');
+    const [open] = (await api.journalList({ query: { symbol: 'ETHUSDT', status: 'OPEN' } })).items;
+    await autoOff();
+    await marketBuy('ETHUSDT', '0.1');
+    const added = await api.journalGet({ params: { entryId: open!.id } });
+    expect(added).toMatchObject({ status: 'OPEN', fillCount: 2, openQty: '0.19980000', result: { entryQty: '0.20000000' } });
+    await marketSell('ETHUSDT', '0.1998');
+    expect(await api.journalGet({ params: { entryId: open!.id } })).toMatchObject({ status: 'CLOSED', fillCount: 3 });
+    await marketBuy('ETHUSDT', '0.1'); // off and no open entry: stays free
+    expect((await api.journalList({ query: { symbol: 'ETHUSDT', status: 'OPEN' } })).items).toHaveLength(0);
+  });
+
+  it('futures: off does not stop the open AUTO entry from closing', async () => {
+    await api.futuresPlaceOrder({ body: { symbol: 'ETHUSDT', side: 'BUY', type: 'MARKET', quantity: '0.100' } });
+    const [e] = (await futuresEntries('ETHUSDT')).filter((x) => x.status === 'OPEN');
+    await autoOff();
+    await api.futuresClosePosition({ params: { symbol: 'ETHUSDT' }, body: {} });
+    expect(await api.journalGet({ params: { entryId: e!.id } })).toMatchObject({ status: 'CLOSED', fillCount: 2, result: { legsConsistent: true } });
+  });
+
+  it('a futures MANUAL entry receives the later legs of its own position; closing locks the stop', async () => {
+    await autoOff();
+    await api.futuresPlaceOrder({ body: { symbol: 'BNBUSDT', side: 'BUY', type: 'MARKET', quantity: '1.00', tpsl: { stopLossPrice: '700' } } });
+    const pos = (await api.futuresPositions()).items.find((p) => p.symbol === 'BNBUSDT')!;
+    const e = await api.journalCreate({ body: { futuresPositionId: pos.id } });
+    expect(e).toMatchObject({ origin: 'MANUAL', initialStop: '700', initialStopLocked: false });
+    await api.futuresClosePosition({ params: { symbol: 'BNBUSDT' }, body: {} });
+    const closed = await api.journalGet({ params: { entryId: e.id } });
+    expect(closed).toMatchObject({ status: 'CLOSED', fillCount: 2, initialStopLocked: true, result: { legsConsistent: true } });
+    expect(closed.result.rMultiple).not.toBeNull();
+    await expect(api.journalUpdate({ params: { entryId: e.id }, body: { initialStop: '690' } })).rejects.toSatisfy(reason('STOP_LOCKED'));
+  });
+
+  it('a futures AUTO entry opens only with the position’s first OPEN leg: a position opened while off gets no entry mid-way', async () => {
+    await autoOff();
+    await api.futuresPlaceOrder({ body: { symbol: 'BNBUSDT', side: 'BUY', type: 'MARKET', quantity: '1.00' } });
+    await autoOn();
+    await api.futuresPlaceOrder({ body: { symbol: 'BNBUSDT', side: 'BUY', type: 'MARKET', quantity: '0.10' } });
+    expect(await futuresEntries('BNBUSDT')).toHaveLength(0);
+    const later = mockStore.futures.trades[0]!; // newest first
+    expect(mockStore.journal.claimed[`F:${later.id}:OPEN`]).toEqual({ entryId: null, skipReason: null }); // UNATTRIBUTED
+    // MANUAL takes the free opening leg and the UNATTRIBUTED one
+    const pos = (await api.futuresPositions()).items.find((p) => p.symbol === 'BNBUSDT')!;
+    expect(await api.journalCreate({ body: { futuresPositionId: pos.id } })).toMatchObject({ fillCount: 2, result: { entryQty: '1.10000000', legsConsistent: true } });
+  });
+
+  it('MANUAL takes UNATTRIBUTED rows: buy while off, sell while on (no entry) → one CLOSED entry', async () => {
+    await autoOff();
+    const a = await marketBuy('SOLUSDT', '2');
+    await autoOn();
+    const b = await marketSell('SOLUSDT', '1.998');
+    expect((await api.journalList({ query: { market: 'SPOT', symbol: 'SOLUSDT', status: 'OPEN' } })).items).toHaveLength(0);
+    const sellTrade = mockStore.trades.find((t) => t.orderId === b)!;
+    expect(mockStore.journal.claimed[`S:${sellTrade.id}`]).toEqual({ entryId: null, skipReason: null });
+    const e = await api.journalCreate({ body: { orderIds: [a, b] } });
+    expect(e).toMatchObject({ origin: 'MANUAL', status: 'CLOSED', fillCount: 2 });
+    expect(mockStore.journal.claimed[`S:${sellTrade.id}`]).toEqual({ entryId: e.id, skipReason: null });
+  });
+
+  it('addOrderIds with an order that filled again: only its new fill is added, no 409', async () => {
+    await autoOff();
+    const order = await marketBuy('BNBUSDT', '1');
+    const e = await api.journalCreate({ body: { orderIds: [order] } });
+    expect(e.fillCount).toBe(1);
+    // the same order fills a second time (the mock engine fills orders at once: add the fill by hand)
+    mockStore.trades.unshift({ id: nextId(), orderId: order, symbol: 'BNBUSDT', side: 'BUY', price: '740.00000000', quantity: '0.50000000', quoteQty: '370.00000000', fee: '0.00050000', feeAsset: 'BNB', liquidity: 'MAKER', realizedPnl: null, createdAt: new Date().toISOString() });
+    const more = await api.journalUpdate({ params: { entryId: e.id }, body: { addOrderIds: [order] } });
+    expect(more).toMatchObject({ fillCount: 2, result: { entryQty: '1.50000000' } });
+    expect((await api.journalUpdate({ params: { entryId: e.id }, body: { addOrderIds: [order] } })).fillCount).toBe(2); // nothing new: no-op
+  });
+
+  it('a stop-loss taken from the order is kept only on the right side of the entry', async () => {
+    const good = await api.placeOrder({ body: { symbol: 'ETHUSDT', side: 'BUY', type: 'MARKET', quantity: '0.01', tpsl: { stopLossPrice: '2400' } } });
+    expect((await api.journalList({ query: { symbol: 'ETHUSDT', status: 'OPEN' } })).items[0]!.initialStop).toBe(good.order.tpsl!.stopLossPrice);
+    const bad = await api.placeOrder({ body: { symbol: 'SOLUSDT', side: 'BUY', type: 'MARKET', quantity: '1', tpsl: { stopLossPrice: '100' } } });
+    mockStore.history.find((o) => o.id === bad.order.id)!.tpsl!.stopLossPrice = '120.00000000'; // an SL above the fill (110)
+    const [sol] = (await api.journalList({ query: { symbol: 'SOLUSDT', status: 'OPEN' } })).items;
+    expect(sol).toMatchObject({ initialStop: null, result: { riskUsdt: null } });
+  });
+
+  it('futures initial stop = the SL of the order that opened the position, not the position’s current SL', async () => {
+    await api.futuresPlaceOrder({ body: { symbol: 'ETHUSDT', side: 'BUY', type: 'MARKET', quantity: '0.100', tpsl: { stopLossPrice: '2400' } } });
+    await api.futuresSetTpSl({ params: { symbol: 'ETHUSDT' }, body: { takeProfitPrice: null, stopLossPrice: '2300' } });
+    const [e] = await futuresEntries('ETHUSDT');
+    expect(e).toMatchObject({ origin: 'AUTO', initialStop: '2400' });
+  });
+
+  it('auto-journal on: fills of grid-bot orders never make an entry (skipped for good)', async () => {
+    const bot = await api.createGridBot({ body: { symbol: 'ETHUSDT', lowerPrice: '2300', upperPrice: '2700', gridCount: 4, investment: '500' } });
+    const botOrderIds = new Set((await api.gridBotOrders({ params: { botId: bot.id } })).items.map((o) => o.id));
+    setMockPrice('ETHUSDT', 2390); // the bot's BUY at 2400 fills
+    const botTrades = mockStore.trades.filter((t) => botOrderIds.has(t.orderId));
+    expect(botTrades.length).toBeGreaterThan(0);
+    expect((await api.journalList({ query: { symbol: 'ETHUSDT', status: 'OPEN' } })).items).toHaveLength(0);
+    for (const t of botTrades) expect(mockStore.journal.claimed[`S:${t.id}`]).toEqual({ entryId: null, skipReason: 'NOT_USER_SOURCE' });
+  });
+});
+
 describe('journal mock: images', () => {
   it('upload PNG/WebP/JPEG (201), read the bytes by URL, delete; anyone else’s → 404', async () => {
     const a = await api.journalUploadAttachment({ params: { entryId: J(4) }, body: { contentType: 'image/png', dataBase64: FIXTURE_PNG_BASE64 } });
@@ -232,6 +343,20 @@ describe('journal mock: images', () => {
     expect((await fetch(BASE + journalAttachmentUrl(JA(1)))).status).toBe(200);
     await expect(api.journalDeleteAttachment({ params: { attachmentId: JA(99) } })).rejects.toSatisfy(code('NOT_FOUND'));
     await expect(api.journalUploadAttachment({ params: { entryId: J(99) }, body: { contentType: 'image/png', dataBase64: FIXTURE_PNG_BASE64 } })).rejects.toSatisfy(code('NOT_FOUND'));
+  });
+
+  it('sha256 without crypto.subtle (non-secure origin): the pure-JS fallback gives the same digest', async () => {
+    const png = Buffer.from(FIXTURE_PNG_BASE64, 'base64');
+    const big = randomBytes(JOURNAL_LIMITS.attachmentBytes + 7);
+    for (const b of [new Uint8Array(0), new Uint8Array(png), new Uint8Array(big), new Uint8Array(55), new Uint8Array(64)]) {
+      expect(sha256HexSync(b)).toBe(createHash('sha256').update(b).digest('hex'));
+    }
+    vi.stubGlobal('crypto', {});
+    try {
+      expect(await sha256Hex(new Uint8Array(png))).toBe('497790947d4666760ce38f3c00e852c71fdb66cae849bae8e9ede352719e1581');
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('415 for a renamed file or SVG/GIF, 413 above 1 MB or over the 50 MB quota, 409 for the 5th image', async () => {

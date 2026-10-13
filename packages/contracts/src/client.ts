@@ -54,7 +54,7 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
       throw new ApiError(res.status, 'INTERNAL_ERROR', `HTTP ${res.status}`);
     }
     // fetch's text() drops the UTF-8 BOM; keep it so a saved file opens correctly in Excel.
-    if (def.format === 'csv') return (text.startsWith('﻿') ? text : '﻿' + text) as EndpointOutput<N>;
+    if (def.format === 'csv') return (text.startsWith('\uFEFF') ? text : '\uFEFF' + text) as EndpointOutput<N>;
     if (options.validateResponses) return def.response.parse(json) as EndpointOutput<N>;
     return json as EndpointOutput<N>;
   }

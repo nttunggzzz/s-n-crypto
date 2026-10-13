@@ -1,5 +1,5 @@
 /** ⚠️ MOCK trading-journal state (0.13.0) — UI development only. Own file so the store imports it without a cycle. */
-import type { JournalEntryDetail } from '../index.ts';
+import type { JournalEntryDetail, JournalFillSkipReason } from '../index.ts';
 import { MOCK_PAIRS } from '../fixtures/index.ts';
 import { FIXTURE_PNG_BASE64, fixtureJournalEntries, fixtureJournalImages, J, JA } from '../fixtures/journal.ts';
 import { replayManualSpot, spotFillOfJournalFill, type SpotEntryState, type SpotFillInput } from './journalEngine.ts';
@@ -28,10 +28,14 @@ export interface MockJournalState {
   windows: { startedAt: string; endedAt: string | null }[];
   entries: MockJournalEntry[];
   /**
-   * Fills that have a journal_fills row — 'S:<spot trade id>' or 'F:<futures trade id>:<OPEN|CLOSE>' → entry id,
-   * or null (bot fill skipped for good / sell with no open entry / closing leg of a position opened outside a window).
+   * Fills that have a journal_fills row, by 'S:<spot trade id>' or 'F:<futures trade id>:<OPEN|CLOSE>':
+   *  - entryId set: allocated to that entry;
+   *  - entryId null + skipReason: never journaled (bot fill);
+   *  - entryId null + skipReason null: UNATTRIBUTED (a sell with no open entry, a later leg of a position without entry) —
+   *    a MANUAL entry may still take it (module A §2.4).
+   * A fill without a row is free (outside every auto-journal window, or freed by deleting a MANUAL entry).
    */
-  claimed: Record<string, string | null>;
+  claimed: Record<string, { entryId: string | null; skipReason: JournalFillSkipReason | null }>;
   /** Image bytes by attachment id. */
   images: Record<string, Uint8Array>;
   /** Bytes of the user's images that are not in this store — set it to try the 50 MB quota without uploading 50 MB. */
@@ -76,7 +80,7 @@ export function initialJournalState(empty = false): MockJournalState {
   if (empty) return state;
   for (const d of clone(fixtureJournalEntries)) {
     state.entries.push(fromFixture(d, 'me'));
-    for (const f of d.fills) state.claimed[f.leg === 'SPOT' ? `S:${f.tradeId}` : `F:${f.tradeId}:${f.leg}`] = d.id;
+    for (const f of d.fills) state.claimed[f.leg === 'SPOT' ? `S:${f.tradeId}` : `F:${f.tradeId}:${f.leg}`] = { entryId: d.id, skipReason: null };
   }
   for (const [id, b64] of Object.entries(fixtureJournalImages)) state.images[id] = fromBase64(b64);
   // someone else's entry (with an image): only its owner sees it → 404 for the mock user

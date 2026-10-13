@@ -145,8 +145,9 @@ function fill(o: FuturesOrder, qty: number, price: number, liquidity: 'MAKER' | 
   let realized = 0;
   let fee = 0;
   const t = now();
-  // legs of this fill (journal): the position it reduced, the position it opened/increased
+  // legs of this fill (journal): the position it reduced, the position it opened/increased, whether it opened that position
   const closedPositionId = closeQty > 0 && pos ? pos.id : null;
+  let openedPosition = false;
 
   if (closeQty > 0 && pos) {
     const released = closeQty >= pos.qty ? pos.margin : (pos.margin * closeQty) / pos.qty;
@@ -194,6 +195,7 @@ function fill(o: FuturesOrder, qty: number, price: number, liquidity: 'MAKER' | 
     if (!pos) {
       pos = { id: nextId(), symbol: sym, side, status: 'OPEN', qty: 0, maxQty: 0, entry: price, margin: 0, leverage, realized: 0, fees: 0, funding: 0, closedQty: 0, closedNotional: 0, tp: null, sl: null, closeReason: null, openedAt: t, closedAt: null, updatedAt: t };
       s.positions.push(pos);
+      openedPosition = true;
     }
     pos.entry = (pos.entry * pos.qty + price * openQty) / (pos.qty + openQty);
     pos.qty += openQty;
@@ -215,7 +217,7 @@ function fill(o: FuturesOrder, qty: number, price: number, liquidity: 'MAKER' | 
   o.realizedPnl = f8(Number(o.realizedPnl) + realized);
   o.updatedAt = t;
   const trade: FuturesTrade = { id: nextId(), orderId: o.id, symbol: sym, side: o.side, price: fmtFuturesPrice(sym, price), quantity: fmtFuturesQty(sym, qty), quoteQty: f8(price * qty), fee: f8(fee), feeAsset: 'USDT', liquidity, realizedPnl: f8(realized), createdAt: t };
-  s.legs[trade.id] = { positionId: openQty > 0 && pos ? pos.id : null, closedPositionId, closeQty: closedPositionId ? closeQty : 0, openQty: openQty > 0 ? openQty : 0 };
+  s.legs[trade.id] = { positionId: openQty > 0 && pos ? pos.id : null, closedPositionId, closeQty: closedPositionId ? closeQty : 0, openQty: openQty > 0 ? openQty : 0, openedPosition };
   fs().trades.unshift(trade);
   emitUser({ kind: 'futuresTrade', trade });
 }
@@ -470,6 +472,7 @@ export const futuresResolvers: { [N in FuturesEndpoint]: Resolver<N> } = {
     if (tpsl && !reduceOnly) checkTpSl(side === 'BUY' ? 'LONG' : 'SHORT', priceOf(sym), tpsl.takeProfitPrice == null ? tpsl.takeProfitPrice : Number(tpsl.takeProfitPrice), tpsl.stopLossPrice == null ? tpsl.stopLossPrice : Number(tpsl.stopLossPrice));
     const o = newOrder(sym, side, type, qty, { price: type === 'LIMIT' ? price : undefined, tif: body.timeInForce as 'GTC' | 'IOC' | undefined, reduceOnly, clientOrderId: body.clientOrderId as string | undefined });
     if (tpsl && !reduceOnly) s.pendingTpSl[o.id] = tpsl;
+    s.orderStopLoss[o.id] = tpsl && !reduceOnly && tpsl.stopLossPrice ? tpsl.stopLossPrice : null;
     const market = priceOf(sym);
     const marketable = type === 'MARKET' || (side === 'BUY' ? price >= market : price <= market);
     if (marketable) {

@@ -19,12 +19,19 @@ Chỉ thêm. 12 endpoint mới, tổng 140. Server chưa có route cho chúng (A
 - Mã lỗi `PAYLOAD_TOO_LARGE` (413, `details.reason`: `PayloadTooLargeReason`) và `UNSUPPORTED_MEDIA_TYPE` (415).
   `CONFLICT` của nhật ký có `details.reason` (`JournalConflictReason`), thứ tự kiểm ghi trong `journal.ts`.
 - Khung hợp đồng: `format: 'binary'` + `BinaryFile`; kiểu `BinaryEndpointName`, `ClientEndpointName`; client có `journalAttachmentUrl(id)`.
-- Server (`lib/http.ts`): endpoint `format: 'binary'` gửi bytes kèm `Content-Type` (không kiểm schema phản hồi);
-  body JSON vượt giới hạn → 413 `PAYLOAD_TOO_LARGE` (`BODY_TOO_LARGE`) thay cho 500.
-- Mock: 11 mục mẫu tính tay (test so khớp từng số với `@cex/core`), tự ghi theo cửa sổ (đặt lệnh trong mock → mục AUTO, kể cả Futures và lệnh đảo chiều),
-  mục MANUAL chỉ từ lần khớp trống, ảnh thật (kiểm chữ ký file, 1 MB, 4 ảnh/mục, hạn mức 50 MB). Mọi phân bổ, kết quả, thống kê gọi
-  `allocateSpotFill`, `replayAllocations`, `allocateFuturesLegs`, `computeEntryResult`, `futuresEntryResult`, `computeJournalStats` của `@cex/core`
-  (`@cex/contracts` thêm phụ thuộc `@cex/core`).
+- Server (`lib/http.ts`): endpoint `format: 'binary'` gửi bytes kèm `Content-Type` (không kiểm schema phản hồi; vẫn kiểm đăng nhập và tham số);
+  body JSON vượt giới hạn → 413 `PAYLOAD_TOO_LARGE` (`BODY_TOO_LARGE`, `limitBytes`) thay cho 500, có ghi log cảnh báo (đường dẫn, IP).
+  Test `server/src/lib/http.binary.test.ts` (route giả, không cần DB).
+- Mock: 11 mục mẫu tính tay (test so khớp từng số với `@cex/core`); mọi phân bổ, kết quả, thống kê gọi `allocateSpotFill`, `replayAllocations`,
+  `allocateFuturesLegs`, `computeEntryResult`, `futuresEntryResult`, `computeJournalStats` của `@cex/core` (`@cex/contracts` thêm phụ thuộc `@cex/core`).
+  Luật tự ghi giống server (module A §2.1, §2.2, §2.4):
+  - lần khớp được ghi khi nằm trong cửa sổ tự ghi **hoặc** cặp/vị thế đang có mục AUTO mở — tắt tự ghi chỉ dừng việc mở mục mới;
+  - mục AUTO Futures chỉ mở bởi lần khớp mở vị thế (trong cửa sổ); vị thế mở lúc tắt thì các chân về sau ghi "không thuộc mục nào";
+  - mục MANUAL lấy được lần khớp trống và lần khớp "không thuộc mục nào"; mục MANUAL Futures nhận các chân về sau của chính vị thế;
+    `addOrderIds` với lệnh đã có trong mục chỉ thêm phần mới khớp;
+  - dừng lỗ ban đầu tự lấy từ SL của lệnh mở (Futures: lệnh mở vị thế, không phải SL hiện tại), bỏ qua nếu SL sai phía;
+  - lệnh bot lưới/DCA không bao giờ vào nhật ký;
+  - ảnh thật (kiểm chữ ký file, 1 MB, 4 ảnh/mục, hạn mức 50 MB); sha256 có bản JS dự phòng khi trang không có `crypto.subtle` (http không an toàn).
 
 **Thay đổi nhỏ có thể ảnh hưởng UI**
 - `format: 'binary'`: `ApiClient` **không** có hàm cho endpoint nhị phân (`api.journalAttachment` không tồn tại; dùng `journalAttachmentUrl`).
