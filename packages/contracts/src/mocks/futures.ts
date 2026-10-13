@@ -145,6 +145,8 @@ function fill(o: FuturesOrder, qty: number, price: number, liquidity: 'MAKER' | 
   let realized = 0;
   let fee = 0;
   const t = now();
+  // legs of this fill (journal): the position it reduced, the position it opened/increased
+  const closedPositionId = closeQty > 0 && pos ? pos.id : null;
 
   if (closeQty > 0 && pos) {
     const released = closeQty >= pos.qty ? pos.margin : (pos.margin * closeQty) / pos.qty;
@@ -213,6 +215,7 @@ function fill(o: FuturesOrder, qty: number, price: number, liquidity: 'MAKER' | 
   o.realizedPnl = f8(Number(o.realizedPnl) + realized);
   o.updatedAt = t;
   const trade: FuturesTrade = { id: nextId(), orderId: o.id, symbol: sym, side: o.side, price: fmtFuturesPrice(sym, price), quantity: fmtFuturesQty(sym, qty), quoteQty: f8(price * qty), fee: f8(fee), feeAsset: 'USDT', liquidity, realizedPnl: f8(realized), createdAt: t };
+  s.legs[trade.id] = { positionId: openQty > 0 && pos ? pos.id : null, closedPositionId, closeQty: closedPositionId ? closeQty : 0, openQty: openQty > 0 ? openQty : 0 };
   fs().trades.unshift(trade);
   emitUser({ kind: 'futuresTrade', trade });
 }

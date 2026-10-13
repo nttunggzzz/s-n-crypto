@@ -730,3 +730,6 @@ export const fixtureAdminOverview: AdminOverview = {
   lastReconciliation: fixtureReconciliationRuns[0]!,
   serverTime: T0,
 };
+
+// ───────────────────────────── trading journal (0.13.0)
+export * from './journal.ts';
