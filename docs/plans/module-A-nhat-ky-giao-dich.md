@@ -91,7 +91,11 @@ Lần khớp **nằm ngoài cửa sổ tự ghi** (trước ngày phát hành, h
   - Người dùng chưa có dòng nào thì được coi là **bật** từ `journal_feature.started_at`. Bộ xử lý tạo dòng này khi gặp người đó lần đầu.
   - Tắt tự ghi: đặt `ended_at = now()`. Bật lại: thêm dòng mới `started_at = now()`.
   - Vì vậy **không bao giờ ghi bù** lịch sử: bật lại không kéo theo lần khớp lúc đang tắt.
-- Một lần khớp **đủ điều kiện tự ghi** khi `created_at` nằm trong một cửa sổ của người đó.
+- Một lần khớp **đủ điều kiện tự ghi** khi một trong hai điều sau đúng:
+  - `created_at` nằm trong một cửa sổ của người đó;
+  - lần khớp thuộc cặp (Spot) hay vị thế (Futures) đang có **mục `AUTO` còn mở**.
+
+  Tắt tự ghi chỉ có nghĩa là **không mở mục mới**. Mục `AUTO` đang mở vẫn nhận lần mua thêm / bán / chân `CLOSE` cho tới khi đóng, nên không kẹt ở `OPEN` (chốt sau A1).
 - Bật/tắt qua endpoint riêng của nhật ký (`journalSettings`, mục 2.7), **không** qua preferences.
   Lý do: `UpdatePreferencesRequest = Preferences.partial()` (`account.ts:42`) sẽ cho người dùng tự sửa mốc, và preferences tự quay về mặc định khi dữ liệu lỗi (`preferencesService.ts:16`).
 
@@ -160,7 +164,9 @@ Lần khớp **nằm ngoài cửa sổ tự ghi** (trước ngày phát hành, h
   - Spot: chọn ≥ 1 lệnh đã khớp cùng cặp (`orderIds`). Server lấy **mọi** lần khớp của các lệnh đó và chạy **cùng bộ phân bổ** theo `id`.
   - Futures: chọn một vị thế (`futuresPositionId`); lấy mọi chân của vị thế đó.
 - **Vòng đời:** trạng thái tính như mục `AUTO`. Mục còn mở thì người dùng **thêm** lệnh được (`addOrderIds` trong `journalUpdate`, chỉ thêm, không gỡ); bộ phân bổ dựng lại toàn bộ mục theo `id`.
-  Bộ tự ghi **không bao giờ** gắn lần khớp vào mục `MANUAL`.
+  Bộ tự ghi **không** gắn lần khớp Spot vào mục `MANUAL`; người dùng thêm bằng `addOrderIds`.
+  Riêng Futures, mục `MANUAL` gắn 1-1 với một vị thế (`unique(futures_position_id)`), nên các chân về sau **của chính vị thế đó** được bộ tự ghi gắn vào mục, bất kể cửa sổ. Như vậy mục không kẹt ở `OPEN` (chốt sau A1).
+  Lệnh được chọn mà lần khớp sớm nhất là lệnh bán (không có lần mở) → 409 `NO_OPENING_FILL`.
 - **Xóa** (chỉ `MANUAL`): xóa mục và **xóa các dòng `journal_fills` của nó**, để các lần khớp trở lại trạng thái trống. Ghi chú, ảnh xóa theo mục (người dùng tự chọn xóa).
 - Lệnh của người khác → 404. Khác cặp → 409 `SYMBOL_MISMATCH`. Khác thị trường → 409 `MARKET_MISMATCH`. Lệnh chưa khớp → 409 `ORDER_NOT_FILLED`.
 
@@ -227,7 +233,7 @@ Mã lỗi:
   - `FILL_ALREADY_JOURNALED`, `SYMBOL_MISMATCH`, `MARKET_MISMATCH`;
   - `BOT_ORDER`, `ORDER_NOT_FILLED`, `STOP_LOCKED`;
   - `AUTO_ENTRY_NOT_DELETABLE`, `ENTRY_NOT_EXTENDABLE`, `TOO_MANY_ATTACHMENTS`;
-  - `LEGACY_FUTURES_FILL` (mục MANUAL từ vị thế có lần khớp trước khi có cột chân lệnh), `MULTIPLE_ROUND_TRIPS` (lệnh được chọn tạo ra hơn một vòng giao dịch), `STOP_WRONG_SIDE` (LONG: dừng lỗ ≥ giá vào trung bình; SHORT: ≤).
+  - `LEGACY_FUTURES_FILL` (mục MANUAL từ vị thế có lần khớp trước khi có cột chân lệnh), `MULTIPLE_ROUND_TRIPS` (lệnh được chọn tạo ra hơn một vòng giao dịch), `STOP_WRONG_SIDE` (LONG: dừng lỗ ≥ giá vào trung bình; SHORT: ≤), `NO_OPENING_FILL` (lần khớp sớm nhất của các lệnh được chọn là lệnh bán).
 - **Mới — `PAYLOAD_TOO_LARGE` (413):** ảnh > 1 MB hoặc vượt hạn mức.
 - **Mới — `UNSUPPORTED_MEDIA_TYPE` (415):** không phải PNG/JPEG/WebP thật.
 
@@ -316,6 +322,13 @@ Mã lỗi:
 5. Lệnh chọn cho một mục MANUAL tạo ra hơn một vòng giao dịch → 409 `MULTIPLE_ROUND_TRIPS`.
 6. `outOfOrder` → bộ tự ghi dựng lại ngay (mục 2.2). Đối soát loại (e) vẫn là lưới an toàn.
 7. Phí theo chân Futures chỉ để hiển thị; R dùng phí của vị thế. Dừng lỗ sai phía → 409 `STOP_WRONG_SIDE`, kể cả lúc tự lấy từ SL của lệnh: SL sai phía thì để trống, không lấy.
+
+**Quyết định của lead sau đợt A1 hợp đồng (2026-10-13):**
+1. Duyệt lý do `NO_OPENING_FILL`.
+2. `@cex/contracts` phụ thuộc `@cex/core`: chấp nhận, vì mock dùng chung hàm tính với server. Điều kiện: `@cex/core` không bao giờ import `@cex/contracts`. Lead sinh lại `package-lock.json` khi gộp.
+3. `infra/ui-coverage.mjs`: lead thêm `journalAttachment` vào danh sách OPTIONAL, vì giao diện dùng `journalAttachmentUrl` thay vì gọi qua client.
+4. Tắt tự ghi khi đang có mục `AUTO` mở: mục đó vẫn nhận lần khớp tới khi đóng. Mục Futures `MANUAL` nhận các chân về sau của chính vị thế của nó (mục 2.2, 2.4).
+5. `adjustmentReason` là enum `JournalReconcileIssueType`. `realizedPnl`, `dustQty`, `liquidated` nằm trong `result` của mục.
 
 **Sau đợt:**
 - Lead viết `docs/antigravity/PROMPT-14-nhat-ky-giao-dich.md`. Antigravity làm giao diện trên mock **ngay từ đây**, song song A2–A4.
