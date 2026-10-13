@@ -17,11 +17,13 @@ const buy = (id: number, qty: string, price: string, quote: string, fee: string,
 const sell = (id: number, qty: string, price: string, quote: string, fee: string, min = id): SpotFillInput => ({ id, side: 'SELL', price, quantity: qty, quoteQty: quote, fee, createdAt: at(min) });
 const RULES = { stepSize: '0.0001', minNotional: '5' };
 
-/** applies fills one by one, as the server's allocator would */
+/** applies fills one by one, as the server's allocator would (afterFillId = the previous recorded fill) */
 function run(fills: SpotFillInput[], rules = RULES) {
   let state: SpotEntryState | null = null;
+  let after: string | number | null = null;
   return fills.map((f) => {
-    const res = allocateSpotFill(state, f, rules);
+    const res = allocateSpotFill(state, f, rules, after);
+    after = f.id;
     if (res.newState) state = res.newState.status === 'OPEN' ? res.newState : null;
     return res;
   });
@@ -104,12 +106,45 @@ describe('allocateSpotFill — spot round trip (Module A §2.1)', () => {
     expect(computeEntryResult(c!.newState!, { initialStop: null }).netPnl).toBe('0.00350208');
   });
 
+  it('rounding directions at 8 dp: entry proceeds DOWN, entry fee UP (a buy fee leaves 8-decimal open quantity)', () => {
+    // step 0.000001, tick 0.01. BUY 1 @ 3 = 3 USDT, fee 0.00123449 (base) → open 0.99876551 (8 dp)
+    // SELL 1 @ 3.07 = 3.07, fee 0.00307 → entry part 0.99876551, unattributed 0.00123449
+    //   proceeds 3.07 × 0.99876551 = 3.0662101157 → DOWN 3.06621011 (half-up would be 3.06621012)
+    //   fee 0.00307 × 0.99876551 = 0.0030662101157 → UP 0.00306622 (half-up / down would be 0.00306621)
+    //   unattributed: 3.07 − 3.06621011 = 0.00378989 ; 0.00307 − 0.00306622 = 0.00000378
+    // realized = 3.06621011 − 0.00306622 − 3 = 0.06314389
+    // (the 0.99876547 example gives 3.0662099929: down and half-up both 3.06620999, so it cannot tell them apart)
+    const rules = { stepSize: '0.000001', minNotional: '1' };
+    const [, c] = run([buy(1, '1', '3', '3', '0.00123449'), sell(2, '1', '3.07', '3.07', '0.00307')], rules);
+    expect(c).toMatchObject({ action: 'CLOSE', allocatedQty: '0.99876551', unattributedQty: '0.00123449', allocatedQuote: '3.06621011', allocatedFee: '0.00306622' });
+    expect(computeEntryResult(c!.newState!, { initialStop: null }).netPnl).toBe('0.06314389');
+  });
+
+  it('a negative PnL with a remainder rounds toward −∞ (not toward 0, not half-up)', () => {
+    // step 0.001. BUY 1 @ 100, fee 0.0013 → net 0.9987 ; SELL 0.998 @ 90 = 89.82, fee 0.08982 → left 0.0007 < step → CLOSE
+    // cost of the sold part = 100 × 0.998 / 0.9987 = 99.92990888154600981… (…888|1546 beyond 8 dp)
+    // realized = 89.82 − 0.08982 − 99.929908881546… = −10.199728881546…
+    //   toward −∞ → −10.19972889 ; toward 0 / half-up → −10.19972888
+    // risk = |100 − 90| × 1 = 10 → R = −1.019972889 → half-up −1.01997289
+    const rules = { stepSize: '0.001', minNotional: '5' };
+    const [, c] = run([buy(1, '1', '100', '100', '0.0013'), sell(2, '0.998', '90', '89.82', '0.08982')], rules);
+    expect(c!.newState!.dustQty).toBe('0.00070000');
+    expect(computeEntryResult(c!.newState!, { initialStop: '90' })).toMatchObject({ netPnl: '-10.19972889', rMultiple: '-1.01997289', outcome: 'LOSS' });
+  });
+
+  it('a LONG stop above the entry is meaningless: risk and R null', () => {
+    // BUY 10 @ 3, SELL 10 @ 3.2 (no fees) → net 2 ; stop 3.1 is above the entry → null (was R 0.6386-like before)
+    const [, c] = run([buy(1, '10', '3', '30', '0'), sell(2, '10', '3.2', '32', '0')]);
+    expect(computeEntryResult(c!.newState!, { initialStop: '3.1' })).toMatchObject({ netPnl: '2.00000000', riskUsdt: null, rMultiple: null, outcome: 'WIN' });
+    expect(computeEntryResult(c!.newState!, { initialStop: '2.9' })).toMatchObject({ riskUsdt: '1.00000000', rMultiple: '2.00000000' });
+  });
+
   it('sell with no open entry (coins from faucet or before) → UNATTRIBUTED, no entry opened', () => {
-    const r = allocateSpotFill(null, sell(1, '0.2', '100', '20', '0.02'), RULES);
+    const r = allocateSpotFill(null, sell(1, '0.2', '100', '20', '0.02'), RULES, null);
     expect(r).toEqual({ action: 'UNATTRIBUTED', allocatedQty: '0.00000000', unattributedQty: '0.20000000', allocatedQuote: '0.00000000', allocatedFee: '0.00000000', newState: null, outOfOrder: false });
     // a CLOSED entry counts as "no open entry"
     const [, closed] = run([buy(1, '1', '100', '100', '0'), sell(2, '1', '100', '100', '0')]);
-    expect(allocateSpotFill(closed!.newState!, sell(3, '0.1', '100', '10', '0'), RULES).action).toBe('UNATTRIBUTED');
+    expect(allocateSpotFill(closed!.newState!, sell(3, '0.1', '100', '10', '0'), RULES, 2).action).toBe('UNATTRIBUTED');
   });
 
   it('left-over below stepSize → CLOSE with dust, no PnL on the dust', () => {
@@ -139,28 +174,49 @@ describe('allocateSpotFill — spot round trip (Module A §2.1)', () => {
   it('buy after the entry closed opens a NEW entry with the current lot rules; an open entry keeps its own copy', () => {
     const [, c] = run([buy(1, '1', '100', '100', '0'), sell(2, '1', '100', '100', '0')]);
     const newRules = { stepSize: '0.001', minNotional: '10' };
-    const n = allocateSpotFill(c!.newState!, buy(3, '2', '101', '202', '0.002'), newRules);
+    const n = allocateSpotFill(c!.newState!, buy(3, '2', '101', '202', '0.002'), newRules, 2);
     expect(n.action).toBe('OPEN');
     expect(n.newState).toMatchObject({ openFillId: '3', status: 'OPEN', lotRules: { stepSize: '0.001', minNotional: '10' }, buyQty: '2.00000000', soldQty: '0.00000000' });
     // ADD with other rules passed: the copied snapshot stays
-    const add = allocateSpotFill(n.newState, buy(4, '1', '102', '102', '0.001'), { stepSize: '1', minNotional: '1000' });
+    const add = allocateSpotFill(n.newState, buy(4, '1', '102', '102', '0.001'), { stepSize: '1', minNotional: '1000' }, 3);
     expect(add.action).toBe('ADD');
     expect(add.newState!.lotRules).toEqual({ stepSize: '0.001', minNotional: '10' });
   });
 
-  it('flags a fill older than the entry’s last fill (out of id order → rebuild)', () => {
+  it('flags a fill at or below afterFillId (out of id order → rebuild); ids compare numerically', () => {
     const [o] = run([buy(5, '1', '100', '100', '0')]);
-    expect(allocateSpotFill(o!.newState, buy(4, '1', '100', '100', '0'), RULES).outOfOrder).toBe(true);
-    const add = allocateSpotFill(o!.newState, buy(10, '1', '100', '100', '0'), RULES); // 10 > 5 numerically
+    expect(allocateSpotFill(o!.newState, buy(4, '1', '100', '100', '0'), RULES, 5).outOfOrder).toBe(true);
+    const add = allocateSpotFill(o!.newState, buy(10, '1', '100', '100', '0'), RULES, 5); // 10 > 5 numerically
     expect(add.outOfOrder).toBe(false);
     expect(add.newState!.lastFillId).toBe('10');
   });
 
+  // Entry opened by #1 and closed by #5; then #4 (BUY) and #3 (SELL 0.5) commit late (Module A §2.2 point 2).
+  // In id order the truth is: #1 OPEN, #3 REDUCE (0.5 × 102 = 51 ≥ 5), #4 ADD, #5 CLOSE — one entry, nothing unattributed.
+  const LATE = { b1: buy(1, '1', '100', '100', '0'), s3: sell(3, '0.5', '102', '51', '0'), b4: buy(4, '0.5', '105', '52.5', '0'), s5: sell(5, '1', '110', '110', '0') };
+
+  it('late BUY after the entry closed: flagged although no entry is open, and differs from the replay', () => {
+    const closed = run([LATE.b1, LATE.s5])[1]!.newState!;
+    expect(closed.status).toBe('CLOSED');
+    const late = allocateSpotFill(closed, LATE.b4, RULES, 5);
+    expect(late).toMatchObject({ action: 'OPEN', outOfOrder: true });
+    const truth = replayAllocations([LATE.b1, LATE.s3, LATE.b4, LATE.s5], RULES).allocations.find((a) => a.fillId === '4')!;
+    expect(truth).toMatchObject({ action: 'ADD', entryOpenFillId: '1' });
+    expect(truth.action).not.toBe(late.action);
+  });
+
+  it('late SELL with no open entry: flagged on the UNATTRIBUTED branch too, and differs from the replay', () => {
+    const late = allocateSpotFill(null, LATE.s3, RULES, 5);
+    expect(late).toMatchObject({ action: 'UNATTRIBUTED', unattributedQty: '0.50000000', outOfOrder: true });
+    const truth = replayAllocations([LATE.b1, LATE.s3, LATE.b4, LATE.s5], RULES).allocations.find((a) => a.fillId === '3')!;
+    expect(truth).toMatchObject({ action: 'REDUCE', allocatedQty: '0.50000000', unattributedQty: '0.00000000' });
+  });
+
   it('rejects malformed fills', () => {
-    expect(() => allocateSpotFill(null, buy(1, '0.123456789', '100', '12.3456789', '0'), RULES)).toThrow(/decimals/);
-    expect(() => allocateSpotFill(null, buy(1, '1', '100', '100', '1'), RULES)).toThrow(/fee/);
-    expect(() => allocateSpotFill(null, buy(1, '0', '100', '0', '0'), RULES)).toThrow();
-    expect(() => allocateSpotFill(null, { ...buy(1, '1', '100', '100', '0'), createdAt: 'yesterday' }, RULES)).toThrow();
+    expect(() => allocateSpotFill(null, buy(1, '0.123456789', '100', '12.3456789', '0'), RULES, null)).toThrow(/decimals/);
+    expect(() => allocateSpotFill(null, buy(1, '1', '100', '100', '1'), RULES, null)).toThrow(/fee/);
+    expect(() => allocateSpotFill(null, buy(1, '0', '100', '0', '0'), RULES, null)).toThrow();
+    expect(() => allocateSpotFill(null, { ...buy(1, '1', '100', '100', '0'), createdAt: 'yesterday' }, RULES, null)).toThrow();
   });
 });
 
@@ -196,12 +252,13 @@ describe('allocateFuturesLegs (Module A §2.1)', () => {
   });
 
   it('flip: one fill → CLOSE leg into the old entry + OPEN leg into the new one; fee split pro rata, exact sum', () => {
-    // SELL 3 @ 100 closes LONG #7 (1) and opens SHORT #8 (2). Fill fee 0.10000001:
-    // CLOSE fee = roundUp(0.10000001 × 1/3 = 0.0333333366…) = 0.03333334 ; OPEN fee = 0.10000001 − 0.03333334 = 0.06666667
-    const legs = allocateFuturesLegs(ffill({ id: 20, side: 'SELL', price: '100', quantity: '3', fee: '0.10000001', realizedPnl: '-5', positionId: 8, closedPositionId: 7, closeQty: '1', openQty: '2' }));
+    // SELL 3 @ 100 closes LONG #7 (1) and opens SHORT #8 (2). Fill fee 0.1:
+    // CLOSE fee = roundUp(0.1 × 1/3 = 0.0333333333…) = 0.03333334 (half-up or down would give 0.03333333)
+    // OPEN fee = 0.1 − 0.03333334 = 0.06666666 (exact remainder)
+    const legs = allocateFuturesLegs(ffill({ id: 20, side: 'SELL', price: '100', quantity: '3', fee: '0.1', realizedPnl: '-5', positionId: 8, closedPositionId: 7, closeQty: '1', openQty: '2' }));
     expect(legs).toEqual([
       { fillId: '20', leg: 'CLOSE', positionId: '7', side: 'SELL', price: '100', qty: '1.00000000', quote: '100.00000000', fee: '0.03333334', realizedPnl: '-5.00000000', createdAt: at(0) },
-      { fillId: '20', leg: 'OPEN', positionId: '8', side: 'SELL', price: '100', qty: '2.00000000', quote: '200.00000000', fee: '0.06666667', realizedPnl: '0.00000000', createdAt: at(0) },
+      { fillId: '20', leg: 'OPEN', positionId: '8', side: 'SELL', price: '100', qty: '2.00000000', quote: '200.00000000', fee: '0.06666666', realizedPnl: '0.00000000', createdAt: at(0) },
     ]);
   });
 
@@ -255,8 +312,10 @@ describe('futuresEntryResult (Module A §2.5)', () => {
 
   it('SHORT with positive funding received', () => {
     // OPEN 1 @ 100, CLOSE 1 @ 90 ; realized 10, fees 0.076, funding +0.12 → net 10.044 ; risk |100 − 104| × 1 = 4 → R 2.511
-    const r = futuresEntryResult(pos({ side: 'SHORT', realizedPnl: '10', fees: '0.076', funding: '0.12', legs: [{ leg: 'OPEN', price: '100', qty: '1' }, { leg: 'CLOSE', price: '90', qty: '1' }] }), { initialStop: '104' });
-    expect(r).toMatchObject({ direction: 'SHORT', netPnl: '10.04400000', funding: '0.12000000', rMultiple: '2.51100000', outcome: 'WIN' });
+    const short = pos({ side: 'SHORT', realizedPnl: '10', fees: '0.076', funding: '0.12', legs: [{ leg: 'OPEN', price: '100', qty: '1' }, { leg: 'CLOSE', price: '90', qty: '1' }] });
+    expect(futuresEntryResult(short, { initialStop: '104' })).toMatchObject({ direction: 'SHORT', netPnl: '10.04400000', funding: '0.12000000', rMultiple: '2.51100000', outcome: 'WIN' });
+    // a SHORT stop below the entry is on the wrong side → no risk, no R (the side comes from the position)
+    expect(futuresEntryResult(short, { initialStop: '96' })).toMatchObject({ riskUsdt: null, rMultiple: null, outcome: 'WIN' });
   });
 
   it('liquidated position', () => {

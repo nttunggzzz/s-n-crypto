@@ -58,7 +58,8 @@ interface TimeKey {
   sub: number;
 }
 
-const ISO_FRACTION_RE = /T\d{2}:\d{2}:\d{2}\.(\d+)/;
+/** Fraction of seconds in ISO ("…T10:00:00.123456Z") or PostgreSQL text ("… 10:00:00.123456+00") form. */
+const ISO_FRACTION_RE = /[T ]\d{2}:\d{2}:\d{2}\.(\d+)/;
 
 /** Parses a time; throws on an invalid one. */
 export function timeKey(t: TimeLike, what = 'time'): TimeKey {
@@ -130,13 +131,16 @@ export function compareCloseKey(a: { closedAt: TimeLike; id: RecordId }, b: { cl
 
 /**
  * Planned price risk in quote currency: |entryPrice − stopPrice| × quantity, rounded half-up to 8 dp.
+ * - direction: LONG needs stop < entry, SHORT needs stop > entry; a stop on the wrong side (or equal to the entry)
+ *   has no meaning as a risk → null (the server refuses such input with 409 STOP_WRONG_SIDE).
  * - entryPrice: realised volume-weighted average entry price, before fees.
  * - stopPrice: the INITIAL stop (moving the stop later never changes this). null/undefined → null.
  * - quantity: entry quantity (Σ quantity entered, before fees).
- * Returns null when there is no stop, the quantity is 0, or the risk rounds to 0 (R undefined).
+ * Returns null when there is no stop, the stop is on the wrong side, the quantity is 0, or the risk rounds to 0 (R undefined).
  * Inputs: decimal strings or Dec. Throws on non-positive prices or a negative quantity.
  */
-export function riskAmount(i: { entryPrice: DecLike; stopPrice: DecLike | null | undefined; quantity: DecLike }): Dec | null {
+export function riskAmount(i: { direction: 'LONG' | 'SHORT'; entryPrice: DecLike; stopPrice: DecLike | null | undefined; quantity: DecLike }): Dec | null {
+  if (i.direction !== 'LONG' && i.direction !== 'SHORT') throw new Error('riskAmount: direction must be LONG or SHORT');
   if (i.stopPrice === null || i.stopPrice === undefined) return null;
   const entry = toDec(i.entryPrice, 'riskAmount.entryPrice');
   const stop = toDec(i.stopPrice, 'riskAmount.stopPrice');
@@ -144,6 +148,7 @@ export function riskAmount(i: { entryPrice: DecLike; stopPrice: DecLike | null |
   if (entry.lte(0)) throw new Error('riskAmount: entryPrice must be > 0');
   if (stop.lte(0)) throw new Error('riskAmount: stopPrice must be > 0');
   if (qty.lt(0)) throw new Error('riskAmount: quantity must be >= 0');
+  if (i.direction === 'LONG' ? stop.gte(entry) : stop.lte(entry)) return null;
   const risk = entry.sub(stop).abs().mul(qty).toDecimalPlaces(AMOUNT_SCALE, Dec.ROUND_HALF_UP);
   return risk.gt(0) ? risk : null;
 }
