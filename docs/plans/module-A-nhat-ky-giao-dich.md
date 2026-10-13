@@ -218,7 +218,7 @@ Không thêm gì vào `user_preferences`.
 | `journalAttachment` | GET `/api/v1/journal/attachments/:attachmentId` | **trả ảnh nhị phân** (định dạng mới `format: 'binary'`); giao diện dùng `<img src>` qua `journalAttachmentUrl(id)` |
 | `journalDeleteAttachment` | DELETE `/api/v1/journal/attachments/:attachmentId` | |
 
-Thêm vào hợp đồng Futures: `FuturesTrade` có thêm `closedPositionId`, `closeQty`, `openQty` (nullable, thay đổi tương thích).
+Ba cột mới của `futures_trades` **chỉ dùng nội bộ**, không đưa vào hợp đồng `FuturesTrade`. Nhật ký trả chân lần khớp qua `JournalFill.leg`. Đưa vào hợp đồng trước khi server có cột sẽ làm bước kiểm phản hồi theo hợp đồng (bất biến 8) báo lỗi giữa A1 và A2.
 
 Mã lỗi:
 - **`NOT_FOUND`**: không phải của mình, hoặc không có.
@@ -247,7 +247,6 @@ Mã lỗi:
    - schema: `JournalPlan`, `JournalResult` (`entryQty, avgEntryPrice, avgExitPrice, netPnl, fees, funding, riskUsdt, rMultiple, outcome, holdingMs` — đều nullable khi chưa có), `JournalFill` (có `leg`), `JournalSettings` (`autoJournal`, `autoSince`), `JournalUpdateSettingsRequest` (`autoJournal` — **không** nhận mốc thời gian), `JournalEntry` (có `status` OPEN/CLOSED/VOID, `closeReason`, `needsReview`, `adjustedAt`, `adjustmentReason`), `JournalEntryDetail` (+ `fills`, `attachments`), `JournalCreateRequest` (`orderIds` **hoặc** `futuresPositionId`), `JournalUpdateRequest` (có `addOrderIds`), `JournalListQuery`, `JournalStatsQuery`, `JournalStats` (có `basis`, và `excluded: { void, needsReview }` — số mục bị loại khỏi thống kê), `JournalSetupList`, `JournalAttachment`, `JournalAttachmentUpload` (`dataBase64` ≤ 1.400.000 ký tự);
    - hằng số dùng chung: `JOURNAL_LIMITS = { notes: 5000, tags: 10, tagLength: 24, setupLength: 40, attachmentsPerEntry: 4, attachmentBytes: 1_048_576, userQuotaBytes: 52_428_800 }`.
 2. `endpoints.ts`: 12 endpoint ở mục 2.7. **Không** thêm gì vào `Preferences` (lý do ở mục 2.2).
-   `futures.ts`: `FuturesTrade` thêm `closedPositionId`, `closeQty`, `openQty` (nullable; thay đổi tương thích).
 3. Khung hợp đồng: thêm `format: 'binary'` cho phản hồi nhị phân.
    - `server/src/lib/http.ts`: gửi `Buffer` + `Content-Type`, **không** kiểm schema phản hồi;
    - client: không gọi `fetch` cho endpoint này, chỉ có hàm `journalAttachmentUrl(id)` giống `exportUrl`;
@@ -300,7 +299,7 @@ Mã lỗi:
 **Nghiệm thu**
 - [ ] Typecheck đạt; `npx vitest run packages/contracts packages/core` đạt.
 - [ ] Drift check liệt kê đúng 12 endpoint chưa có route. Lint 0 lỗi.
-- [ ] CHANGELOG ghi rõ "Thêm" và "Thay đổi nhỏ có thể ảnh hưởng UI" (`format: 'binary'`, ba trường mới của `FuturesTrade`).
+- [ ] CHANGELOG ghi rõ "Thêm" và "Thay đổi nhỏ có thể ảnh hưởng UI" (`format: 'binary'`).
 
 **Lệnh giao việc**
 > (contract-designer) Làm **Đợt A1 phần hợp đồng** theo `docs/plans/module-A-nhat-ky-giao-dich.md` mục 2 và "Đợt A1", cùng `docs/plans/quy-uoc-R-va-nguon-du-lieu.md`. Nhánh `be/journal-a1-contracts`. Các quyết định đã duyệt: <dán A-D1…A-D7>. Mock gọi `allocateSpotFill`, `allocateFuturesLegs`, `computeEntryResult`, `computeJournalStats` từ `@cex/core` (nhánh `be/journal-a1-stats` sẽ gộp trước bạn — tạm import theo tên đó). Báo cáo theo mẫu trong định nghĩa agent.
