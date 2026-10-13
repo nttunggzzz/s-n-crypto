@@ -11,27 +11,38 @@ const day = (n: number) => `2026-10-${String(n).padStart(2, '0')}T12:00:00.000Z`
 describe('riskAmount', () => {
   it('|entry − stop| × qty, price risk only', () => {
     // LONG: |100 − 95| × 2 = 10 ; SHORT: |100 − 105| × 2 = 10 (always positive)
-    expect(s(riskAmount({ entryPrice: '100', stopPrice: '95', quantity: '2' }))).toBe('10.00000000');
-    expect(s(riskAmount({ entryPrice: '100', stopPrice: '105', quantity: '2' }))).toBe('10.00000000');
+    expect(s(riskAmount({ direction: 'LONG', entryPrice: '100', stopPrice: '95', quantity: '2' }))).toBe('10.00000000');
+    expect(s(riskAmount({ direction: 'SHORT', entryPrice: '100', stopPrice: '105', quantity: '2' }))).toBe('10.00000000');
+  });
+
+  it('a stop on the wrong side (or at the entry) has no meaning → null, both directions', () => {
+    // LONG entry 3, stop 3.1 (above): without the direction check this gave risk 0.1 × qty and R 0.6386 on a loss-free trade
+    expect(riskAmount({ direction: 'LONG', entryPrice: '3', stopPrice: '3.1', quantity: '10' })).toBeNull();
+    expect(riskAmount({ direction: 'LONG', entryPrice: '3', stopPrice: '3', quantity: '10' })).toBeNull();
+    expect(s(riskAmount({ direction: 'LONG', entryPrice: '3', stopPrice: '2.9', quantity: '10' }))).toBe('1.00000000');
+    // SHORT entry 100, stop 95 (below) → null ; stop 105 → 5 × 2 = 10
+    expect(riskAmount({ direction: 'SHORT', entryPrice: '100', stopPrice: '95', quantity: '2' })).toBeNull();
+    expect(riskAmount({ direction: 'SHORT', entryPrice: '100', stopPrice: '100', quantity: '2' })).toBeNull();
+    expect(s(riskAmount({ direction: 'SHORT', entryPrice: '100', stopPrice: '105', quantity: '2' }))).toBe('10.00000000');
   });
 
   it('no initial stop, zero distance or zero quantity → null (R undefined, A-D4)', () => {
-    expect(riskAmount({ entryPrice: '100', stopPrice: null, quantity: '2' })).toBeNull();
-    expect(riskAmount({ entryPrice: '100', stopPrice: undefined, quantity: '2' })).toBeNull();
-    expect(riskAmount({ entryPrice: '100', stopPrice: '100', quantity: '2' })).toBeNull();
-    expect(riskAmount({ entryPrice: '100', stopPrice: '95', quantity: '0' })).toBeNull();
+    expect(riskAmount({ direction: 'LONG', entryPrice: '100', stopPrice: null, quantity: '2' })).toBeNull();
+    expect(riskAmount({ direction: 'LONG', entryPrice: '100', stopPrice: undefined, quantity: '2' })).toBeNull();
+    expect(riskAmount({ direction: 'LONG', entryPrice: '100', stopPrice: '95', quantity: '0' })).toBeNull();
   });
 
   it('rounds to 8 dp half-up, so a non-terminating average entry still gives the exact risk', () => {
     // 3 buys for 220 USDT, 3 units: avg = 73.333… ; risk = |220 − 70 × 3| = 10 exactly
-    expect(s(riskAmount({ entryPrice: new Dec(220).div(3), stopPrice: '70', quantity: '3' }))).toBe('10.00000000');
+    expect(s(riskAmount({ direction: 'LONG', entryPrice: new Dec(220).div(3), stopPrice: '70', quantity: '3' }))).toBe('10.00000000');
   });
 
   it('rejects impossible inputs', () => {
-    expect(() => riskAmount({ entryPrice: '0', stopPrice: '1', quantity: '1' })).toThrow();
-    expect(() => riskAmount({ entryPrice: '100', stopPrice: '0', quantity: '1' })).toThrow();
-    expect(() => riskAmount({ entryPrice: '100', stopPrice: '90', quantity: '-1' })).toThrow();
-    expect(() => riskAmount({ entryPrice: '1e2', stopPrice: '90', quantity: '1' })).toThrow();
+    expect(() => riskAmount({ direction: 'LONG', entryPrice: '0', stopPrice: '1', quantity: '1' })).toThrow();
+    expect(() => riskAmount({ direction: 'LONG', entryPrice: '100', stopPrice: '0', quantity: '1' })).toThrow();
+    expect(() => riskAmount({ direction: 'LONG', entryPrice: '100', stopPrice: '90', quantity: '-1' })).toThrow();
+    expect(() => riskAmount({ direction: 'LONG', entryPrice: '1e2', stopPrice: '90', quantity: '1' })).toThrow();
+    expect(() => riskAmount({ direction: 'UP' as never, entryPrice: '100', stopPrice: '90', quantity: '1' })).toThrow();
   });
 });
 
@@ -59,7 +70,7 @@ describe('rMultiple', () => {
     // gross = (100 − 90) × 2 = 20 → net = 19.81 ; risk = |100 − 105| × 2 = 10 ; R = 1.981
     const gross = pnl('SHORT', new Dec(100), new Dec(90), new Dec(2));
     expect(gross.toFixed(8)).toBe('20.00000000');
-    const risk = riskAmount({ entryPrice: '100', stopPrice: '105', quantity: '2' });
+    const risk = riskAmount({ direction: 'SHORT', entryPrice: '100', stopPrice: '105', quantity: '2' });
     expect(s(rMultiple({ netPnl: gross.sub('0.19'), risk }))).toBe('1.98100000');
     // stopped out at 105: gross (100 − 105) × 2 = −10, fees 0.1 + 0.105 → net −10.205 → R −1.0205 (fees make it worse than −1R)
     const lossGross = pnl('SHORT', new Dec(100), new Dec(105), new Dec(2));
@@ -236,6 +247,14 @@ describe('summarizeR', () => {
     expect(() => summarizeR([late, early])).toThrow(/not sorted/);
   });
 
+  it('also reads microseconds of PostgreSQL text timestamps ("YYYY-MM-DD hh:mm:ss.ffffff+00", read with ::text)', () => {
+    // same millisecond .123, microseconds 100 < 400: sorted ; the reverse order is not
+    const early = { id: 'b', closedAt: '2026-10-13 10:00:00.123100+00', r: '1', netPnl: null };
+    const late = { id: 'a', closedAt: '2026-10-13 10:00:00.123400+00', r: '1', netPnl: null };
+    expect(summarizeR([early, late]).rCurve.map((p) => p.closedAt)).toEqual(['2026-10-13T10:00:00.123Z', '2026-10-13T10:00:00.123Z']);
+    expect(() => summarizeR([late, early])).toThrow(/not sorted/);
+  });
+
   it('accepts only R from rMultiple (≤ 8 dp) and money at ≤ 8 dp; an item needs R or net PnL', () => {
     expect(() => summarizeR([{ id: 1, closedAt: day(1), r: '0.123456789', netPnl: null }])).toThrow(/rMultiple/);
     expect(() => summarizeR([{ id: 1, closedAt: day(1), r: null, netPnl: '1.000000001' }])).toThrow();
@@ -249,10 +268,10 @@ describe('one R for journal and signals (R convention §3)', () => {
     // Spot entry: BUY 2 @ 100 (fee 0.002 base), SELL 1.998 @ 104 (fee 0.207792). Initial stop 98.
     // net = 207.792 − 0.207792 − 200 = 7.584208 ; risk = |100 − 98| × 2 = 4 ; R = 1.896052
     const rules = { stepSize: '0.001', minNotional: '5' };
-    const a = allocateSpotFill(null, { id: 1, side: 'BUY', price: '100', quantity: '2', quoteQty: '200', fee: '0.002', createdAt: day(1) }, rules);
-    const b = allocateSpotFill(a.newState, { id: 2, side: 'SELL', price: '104', quantity: '1.998', quoteQty: '207.792', fee: '0.207792', createdAt: day(2) }, rules);
+    const a = allocateSpotFill(null, { id: 1, side: 'BUY', price: '100', quantity: '2', quoteQty: '200', fee: '0.002', createdAt: day(1) }, rules, null);
+    const b = allocateSpotFill(a.newState, { id: 2, side: 'SELL', price: '104', quantity: '1.998', quoteQty: '207.792', fee: '0.207792', createdAt: day(2) }, rules, 1);
     const journal = computeEntryResult(b.newState!, { initialStop: '98' });
-    const direct = rMultiple({ netPnl: '7.584208', risk: riskAmount({ entryPrice: '100', stopPrice: '98', quantity: '2' }) });
+    const direct = rMultiple({ netPnl: '7.584208', risk: riskAmount({ direction: 'LONG', entryPrice: '100', stopPrice: '98', quantity: '2' }) });
     expect(journal.netPnl).toBe('7.58420800');
     expect(journal.rMultiple).toBe('1.89605200');
     expect(s(direct)).toBe(journal.rMultiple);
@@ -266,7 +285,7 @@ describe('one R for journal and signals (R convention §3)', () => {
       },
       { initialStop: '105' },
     );
-    const signalLike = rMultiple({ netPnl: pnl('SHORT', new Dec(100), new Dec(90), new Dec(2)).sub('0.19').sub('0.01'), risk: riskAmount({ entryPrice: '100', stopPrice: '105', quantity: '2' }) });
+    const signalLike = rMultiple({ netPnl: pnl('SHORT', new Dec(100), new Dec(90), new Dec(2)).sub('0.19').sub('0.01'), risk: riskAmount({ direction: 'SHORT', entryPrice: '100', stopPrice: '105', quantity: '2' }) });
     expect(fut.rMultiple).toBe('1.98000000');
     expect(s(signalLike)).toBe(fut.rMultiple);
   });

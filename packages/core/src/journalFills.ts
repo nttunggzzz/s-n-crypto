@@ -102,7 +102,11 @@ export interface SpotAllocationResult {
   allocatedFee: string;
   /** the entry after this fill; null for UNATTRIBUTED (no entry touched) */
   newState: SpotEntryState | null;
-  /** true when the fill id is not greater than the entry's last fill id (processed out of id order → rebuild with replayAllocations) */
+  /**
+   * true when the fill id is not greater than `afterFillId` (the largest fill of this (user, pair) already recorded):
+   * the fill committed out of id order, so this allocation may differ from `replayAllocations` → rebuild (Module A §2.3 (e)).
+   * Checked on every branch, OPEN and UNATTRIBUTED included.
+   */
   outOfOrder: boolean;
 }
 
@@ -148,13 +152,22 @@ const d = (v: string) => new Dec(v);
  * - entryState: the OPEN entry, or null / a CLOSED entry when none is open.
  * - lotRules: the pair's CURRENT rules; used (and copied into the state) only when this fill opens a new entry —
  *   an existing entry keeps the rules copied when it opened.
+ * - afterFillId (REQUIRED from the caller): the largest fill id of this (user, pair) that already has a journal_fills
+ *   row — UNATTRIBUTED rows included, any entry — or null when there is none. A fill at or below it is flagged
+ *   `outOfOrder` (the open entry alone cannot tell: e.g. a late BUY after the entry closed, or a late SELL with no open entry).
  * A SELL split between the entry and the unattributed part splits proceeds and fee pro rata by quantity, at 8 dp:
  * the entry's proceeds round DOWN, its fee rounds UP; the unattributed part gets the exact remainder.
  */
-export function allocateSpotFill(entryState: SpotEntryState | null, fill: SpotFillInput, lotRules: JournalLotRules): SpotAllocationResult {
+export function allocateSpotFill(
+  entryState: SpotEntryState | null,
+  fill: SpotFillInput,
+  lotRules: JournalLotRules,
+  afterFillId: RecordId | null,
+): SpotAllocationResult {
   const f = normSpotFill(fill);
   const open = entryState !== null && entryState.status === 'OPEN' ? entryState : null;
-  const outOfOrder = open !== null && compareRecordIds(f.id, open.lastFillId) <= 0;
+  const outOfOrder = afterFillId !== null && compareRecordIds(f.id, afterFillId) <= 0;
+  const lastFillId = open !== null && compareRecordIds(f.id, open.lastFillId) <= 0 ? open.lastFillId : f.id;
 
   if (f.side === 'BUY') {
     const net = f.qty.sub(f.fee);
@@ -180,11 +193,11 @@ export function allocateSpotFill(entryState: SpotEntryState | null, fill: SpotFi
         openQty: s8(net),
         dustQty: s8(ZERO),
       };
-      return { action: 'OPEN', allocatedQty: s8(f.qty), unattributedQty: s8(ZERO), allocatedQuote: s8(f.quote), allocatedFee: s8(f.fee), newState, outOfOrder: false };
+      return { action: 'OPEN', allocatedQty: s8(f.qty), unattributedQty: s8(ZERO), allocatedQuote: s8(f.quote), allocatedFee: s8(f.fee), newState, outOfOrder };
     }
     const newState: SpotEntryState = {
       ...open,
-      lastFillId: outOfOrder ? open.lastFillId : f.id,
+      lastFillId,
       fillCount: open.fillCount + 1,
       buyQty: s8(d(open.buyQty).add(f.qty)),
       buyQuote: s8(d(open.buyQuote).add(f.quote)),
@@ -197,7 +210,7 @@ export function allocateSpotFill(entryState: SpotEntryState | null, fill: SpotFi
 
   // SELL
   if (open === null) {
-    return { action: 'UNATTRIBUTED', allocatedQty: s8(ZERO), unattributedQty: s8(f.qty), allocatedQuote: s8(ZERO), allocatedFee: s8(ZERO), newState: null, outOfOrder: false };
+    return { action: 'UNATTRIBUTED', allocatedQty: s8(ZERO), unattributedQty: s8(f.qty), allocatedQuote: s8(ZERO), allocatedFee: s8(ZERO), newState: null, outOfOrder };
   }
   const openQty = d(open.openQty);
   const alloc = f.qty.lte(openQty) ? f.qty : openQty;
@@ -210,7 +223,7 @@ export function allocateSpotFill(entryState: SpotEntryState | null, fill: SpotFi
   const newState: SpotEntryState = {
     ...open,
     status: closes ? 'CLOSED' : 'OPEN',
-    lastFillId: outOfOrder ? open.lastFillId : f.id,
+    lastFillId,
     closedAt: closes ? f.at : null,
     firstReduceAt: open.firstReduceAt ?? (alloc.gt(0) ? f.at : null),
     fillCount: open.fillCount + 1,
@@ -250,7 +263,12 @@ interface EntryResultBase {
   avgEntryPrice: string | null;
   /** volume-weighted average exit price of the reduced part (12 dp, half-up); null when nothing was reduced */
   avgExitPrice: string | null;
-  /** net PnL of the part already closed (OPEN entries too); null when nothing was reduced */
+  /**
+   * PnL realized so far (OPEN entries too); null when nothing was reduced. Meaning differs by market:
+   * - spot: net PnL of the SOLD part only (proceeds − sell fees − own cost of the sold quantity);
+   * - futures: the position's realized_pnl − ALL fees paid so far (incl. the opening fee of the part still open)
+   *   + funding so far. When CLOSED both equal netPnl.
+   */
   realizedPnl: string | null;
   /** net PnL of the whole entry — CLOSED only (OPEN → null) */
   netPnl: string | null;
@@ -258,7 +276,7 @@ interface EntryResultBase {
   fees: string | null;
   /** futures: signed funding (+ received); spot: null (not applicable) */
   funding: string | null;
-  /** |avgEntryPrice − initialStop| × entryQty; null without an initial stop */
+  /** |avgEntryPrice − initialStop| × entryQty; null without an initial stop or with a stop on the wrong side */
   riskUsdt: string | null;
   /** netPnl ÷ riskUsdt — CLOSED only, null without an initial stop */
   rMultiple: string | null;
@@ -310,7 +328,7 @@ function resultTail(status: 'OPEN' | 'CLOSED', net: Dec | null, risk: Dec | null
  *   realized    = floorSigned(sellQuote − sellFee − unit cost × soldQty)   (8 dp, toward −∞; dust has no PnL)
  *   entry price = buyQuote ÷ buyQty (before fee); entry qty = buyQty
  *   fees        = roundUp(buyFee × fill price (Σ) + sellFee)
- *   risk        = riskAmount(entry price, initial stop, buyQty);  R = rMultiple(realized, risk) when CLOSED
+ *   risk        = riskAmount(LONG, entry price, initial stop, buyQty);  R = rMultiple(realized, risk) when CLOSED
  */
 export function computeEntryResult(state: SpotEntryState, plan: JournalPlanInput): SpotEntryResult {
   const buyQty = d(state.buyQty);
@@ -321,7 +339,7 @@ export function computeEntryResult(state: SpotEntryState, plan: JournalPlanInput
   if (buyQty.lte(0) || netQty.lte(0)) throw new Error('computeEntryResult: entry has no bought quantity');
   const avgEntry = buyQuote.div(buyQty);
   const realized = soldQty.gt(0) ? floorSigned(sellQuote.sub(d(state.sellFee)).sub(buyQuote.mul(soldQty).div(netQty))) : null;
-  const risk = riskAmount({ entryPrice: avgEntry, stopPrice: plan.initialStop, quantity: buyQty });
+  const risk = riskAmount({ direction: 'LONG', entryPrice: avgEntry, stopPrice: plan.initialStop, quantity: buyQty });
   return {
     rMetricsVersion: R_METRICS_VERSION,
     market: 'SPOT',
@@ -443,11 +461,14 @@ export interface FuturesPositionInput {
 
 /**
  * Result of a FUTURES entry (Module A §2.5):
- *   net PnL     = realized_pnl − fees + funding of the position (as pnlService) — CLOSED; same value as `realizedPnl` so far when OPEN
+ *   net PnL     = realized_pnl − fees + funding of the position (as pnlService) — CLOSED only
+ *   realizedPnl = the same expression on an OPEN position once something was closed: it already subtracts every fee
+ *                 paid so far, including the opening fee of the part still open, and adds funding so far
+ *                 (unlike spot, where it covers the sold part only)
  *   entry qty   = Σ OPEN-leg qty (not max_quantity: it differs after adding again following a partial close)
  *   entry price = Σ(price × qty) ÷ Σ qty over OPEN legs (volume-weighted, R convention §1)
  *   exit price  = the same over CLOSE legs
- *   risk        = riskAmount(entry price, initial stop of the opening order, entry qty);  R = rMultiple(net PnL, risk)
+ *   risk        = riskAmount(side, entry price, initial stop of the opening order, entry qty);  R = rMultiple(net PnL, risk)
  */
 export function futuresEntryResult(position: FuturesPositionInput, plan: JournalPlanInput): FuturesEntryResult {
   let openQty = ZERO;
@@ -475,7 +496,7 @@ export function futuresEntryResult(position: FuturesPositionInput, plan: Journal
   const funding = scale8(toDec(position.funding, 'position.funding'), 'position.funding');
   const net = realizedPnl.sub(fees).add(funding);
   const avgEntry = openQty.gt(0) ? openNotional.div(openQty) : null;
-  const risk = avgEntry ? riskAmount({ entryPrice: avgEntry, stopPrice: plan.initialStop, quantity: openQty }) : null;
+  const risk = avgEntry ? riskAmount({ direction: position.side, entryPrice: avgEntry, stopPrice: plan.initialStop, quantity: openQty }) : null;
   const reduced = closeQty.gt(0);
   return {
     rMetricsVersion: R_METRICS_VERSION,
@@ -550,9 +571,11 @@ export function replayAllocations(
   const entries = new Map<string, SpotEntryState>();
   if (state) entries.set(state.openFillId, state);
   const allocations: SpotAllocation[] = [];
+  let after: RecordId | null = state ? state.lastFillId : null;
   for (const fill of sorted) {
     const rules = typeof lotRulesSnapshot === 'function' ? lotRulesSnapshot(fill) : lotRulesSnapshot;
-    const res = allocateSpotFill(state, fill, rules);
+    const res = allocateSpotFill(state, fill, rules, after);
+    after = fill.id;
     const target = res.newState;
     allocations.push({
       fillId: recordIdText(fill.id),
