@@ -272,7 +272,7 @@ Mã lỗi:
    - `computeEntryResult(state, plan)` cho Spot (mục 2.5); `futuresEntryResult(position, plan)` cho Futures;
    - `allocateFuturesLegs(fill)` trả về chân `CLOSE` (`closed_position_id`, `close_qty`) và chân `OPEN` (`position_id`, `open_qty`) theo mục 2.1;
    - `replayAllocations(fills[], lotRulesSnapshot)`: dựng lại toàn bộ phân bổ của một (người dùng, cặp) từ danh sách lần khớp theo `id`, dùng luật cặp **đã chép vào mục** — cho đối soát loại (d), (e) ở mục 2.3;
-   - `fillFingerprint(fill)`: sha256 ổn định của giá, khối lượng, phí, phía, mã lệnh (+ ba cột chân với Futures).
+   - `@cex/core` phải chạy được trên trình duyệt (giao diện import nó): **không** import `node:*`. Vì vậy `fillFingerprint` (sha256) viết ở server trong A2 (`server/src/modules/journal/fingerprint.ts`), không ở đây.
 3. `packages/core/src/journalStats.ts`: `computeJournalStats(closedEntries, opts)` gồm:
    - `summarizeR`;
    - nhóm theo setup / symbol / direction / ngày trong tuần GMT+7 / lỗi (số lần + tổng R + tổng USDT);
@@ -348,7 +348,7 @@ Mã lỗi:
    - giới hạn độ dài → 400; mục của người khác → 404;
    - xóa mục MANUAL không đụng lệnh; xóa AUTO → 409;
    - `initialStop` khóa sau lần bán đầu tiên;
-   - mỗi dòng `journal_fills` có `fill_fingerprint` đúng.
+   - mỗi dòng `journal_fills` có `fill_fingerprint` đúng (`journal/fingerprint.ts`: sha256 ổn định của giá, khối lượng, phí, phía, mã lệnh, + ba cột chân với Futures).
 
 **Không làm:** tự ghi nhật ký (A3), thống kê (A3), đối soát (A3R), ảnh (A4). Nhưng migration của đợt này **đã có đủ cột và bảng cho đối soát** (mục 2.6) để A3R không cần migration riêng.
 
