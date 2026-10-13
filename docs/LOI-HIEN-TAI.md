@@ -27,7 +27,9 @@ Rà soát: **2026-10-11** (Claude Code). Cập nhật lần cuối: 2026-10-11 t
 | 2026-10-13 | **Có rồi:** server giữ kết nối keep-alive 120 s (trước 5 s) — L-06, `bbe2a53`. Hết `ECONNRESET` trong e2e và lỗi 502 ngẫu nhiên sau cloudflared | Không đổi code UI | **Có rồi** — sàn thật cần `host update` |
 | 2026-10-13 | **Chủ dự án quyết: tạm tắt mọi tính năng cần email** (chưa có tên miền gửi mail). Không đổi backend: công tắc là `publicConfig.emailDelivery` (`'log'` hiện nay) | [PROMPT-13](antigravity/PROMPT-13-tam-an-tinh-nang-email.md): ẩn "Quên mật khẩu", Mã chống lừa đảo, nút gửi lại email khi `emailDelivery !== 'sent'`; test `e2e/tests/email-features.spec.ts` (đỏ tới khi xong) | Chờ Antigravity |
 | 2026-10-13 | **Kế hoạch Module A (Nhật ký giao dịch) + Module C (Engine tín hiệu, chỉ Admin).** Hệ phân tích Antigravity viết trong `main` đã được Claude Code tiếp nhận (đợt C0, nhánh `be/analysis`); `AGENT-HANDOFF/prompts/phase-3.md` bị Module C thay thế | Đọc [THONG-BAO-2026-10-13-module-A-C.md](antigravity/THONG-BAO-2026-10-13-module-A-C.md). **Không** sửa file phân tích trong `main`, **không** làm `phase-3.md`, chỉ làm trong `ui/`. Việc kế tiếp: PROMPT-13 → L-01…L-05 → PROMPT-14 (sắp có) | Chờ Antigravity đọc |
-| (không đổi) | Hợp đồng hiện tại: **0.12.0**. Không có endpoint nào bị xóa/đổi tên gần đây | — | — |
+| 2026-10-14 | **Có rồi (contracts 0.13.0, `781e246`):** kiểu dữ liệu hệ phân tích (`analysis.ts`), chỉ export, **không có endpoint** | Không làm gì (chưa có giao diện cho phân tích ở GĐ4; trang Admin tín hiệu là PROMPT-15, sau C1) | **Có rồi** |
+| 2026-10-14 | **Có rồi (contracts 0.14.0, `35aab16`): hợp đồng Nhật ký giao dịch** — 12 endpoint `journal*`, định dạng phản hồi nhị phân (`journalAttachmentUrl`), mã lỗi 413/415, mock chạy cùng hàm tính với server. **Server chưa có route** (A2–A4) | [PROMPT-14](antigravity/PROMPT-14-nhat-ky-giao-dich.md): làm trên mock (`VITE_USE_MOCKS=true`), sau PROMPT-13 và L-01…L-05 | Chờ Antigravity (server: chờ A2–A4) |
+| (không đổi) | Hợp đồng hiện tại: **0.14.0**. Không có endpoint nào bị xóa/đổi tên gần đây | — | — |
 
 ## 0. Bức tranh tổng thể
 

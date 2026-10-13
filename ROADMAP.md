@@ -110,12 +110,15 @@
 
 ### Giai đoạn 4 — Engine tín hiệu (chạy ngầm)
 > Kế hoạch thực hiện (2026-10-13): [docs/plans/module-C-engine-tin-hieu.md](docs/plans/module-C-engine-tin-hieu.md) — đợt C0…C7, đội sub-agent: [docs/plans/README.md](docs/plans/README.md)
+> Tiến độ 2026-10-14: **C0 xong** — hệ phân tích đa tác tử đã vào `main` (`781e246`, contracts 0.13.0, ghi nguồn 3 giấy phép). Tiếp: C1 (hợp đồng tín hiệu, chỉ Admin).
+> 🚦 Cổng M3 chỉ là điều kiện để **xem xét** phát hành; bán tín hiệu cần phê duyệt riêng (Module C mục 3.4).
 - [ ] P06: Chuyển & sửa engine cũ (nến đã đóng, đủ lịch sử, bỏ số liệu bịa, sửa hướng/R:R/SHORT), lưu nến, phiên bản engine, **bot tự vào lệnh bằng OCO**, backtest trung thực + walk-forward
 - [ ] P09: Trang "Hiệu quả tín hiệu", cấu hình engine
 - [ ] 🚦 **Cổng M3:** ≥ ~100 tín hiệu, kỳ vọng sau phí > 0 trên số liệu chạy thật → mới công bố
 
 ### Giai đoạn 5 — Nhật ký & thống kê (song song với giai đoạn 4)
 > Kế hoạch thực hiện (2026-10-13): [docs/plans/module-A-nhat-ky-giao-dich.md](docs/plans/module-A-nhat-ky-giao-dich.md) — đợt A1…A6
+> Tiến độ 2026-10-14: **A1 xong** — hợp đồng nhật ký 0.14.0 + hàm R chung / phân bổ lần khớp / thống kê ở `@cex/core` (`35aab16`). Giao diện: [PROMPT-14](docs/antigravity/PROMPT-14-nhat-ky-giao-dich.md) (trên mock). Tiếp: A2 (bảng + lõi server).
 - [ ] P05: Ghi chú/nhãn setup/ảnh cho lệnh, thống kê cá nhân (win rate, kỳ vọng R, drawdown, theo coin)
 - [ ] P08: Giao diện nhật ký & thống kê
 
