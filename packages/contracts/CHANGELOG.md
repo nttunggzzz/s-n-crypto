@@ -1,5 +1,27 @@
 # Changelog — @cex/contracts
 
+## 0.13.0 — 2026-10-13 (Kiểu dữ liệu hệ phân tích)
+**Thêm: kiểu dữ liệu hệ phân tích (chỉ export, chưa có endpoint).** Không thêm, không đổi endpoint (vẫn 128). UI không cần làm gì.
+- File mới `src/analysis.ts` (export từ `index.ts`): `CryptoMarketSnapshot`, `DepartmentFinding`, `EvidenceItem`, `RiskFlag`,
+  `BullBearDebateResult`, `RiskExecutionReview`, `PositionSizingLadderOutput`, `InvalidationCondition`, `AdvisoryTradeProposal`
+  (`advisoryOnly: true`, `liveExecutionEnabled: false`), `CryptoMarketAnalysisReport`, `WalkForwardFoldMetrics`, `BacktestEvaluationSummary`.
+  Dùng nội bộ cho engine tín hiệu (Module C); C1 sẽ nhúng `CryptoMarketAnalysisReport` vào hợp đồng Admin.
+- Chuẩn hóa so với bản chép `be/analysis` (bản đó chưa từng phát hành):
+  - `audit.PriorLessonsUsed` → `audit.priorLessonsUsed`;
+  - `SnapshotDerivativesState.nextFundingTime`: `EpochMs` → `IsoDateTime` (cùng kiểu `FuturesMarkPrice.nextFundingTime`);
+  - `SnapshotDerivativesState.maxLeverage` / `maintenanceMarginRate` / `takerFeeRate` → `nullable` (không còn mặc định đoán 20 / 0.0050 / 0.0004);
+  - `SnapshotPortfolioContext.equityUsdt` / `availableUsdt` / `currentDrawdownPct` / `dailyLossPct` / `weeklyLossPct` / `consecutiveLosses`
+    → `nullable` (`NOT_PROVIDED` không còn ghi số 0);
+  - `BacktestEvaluationSummary.sharpeRatio` / `sortinoRatio` / `calmarRatio` / `deflatedSharpeRatio` / `probabilityOfBacktestOverfitting` /
+    `winRatePct` / `profitFactor` / `walkForwardEfficiencyRatio` và `WalkForwardFoldMetrics.inSampleSharpe` / `outOfSampleSharpe` → `nullable`
+    (không xác định được thì `null`, không còn số giữ chỗ 0 / 0.5 / 9.99).
+  - `CryptoMarketSnapshot.spot.orderBookSynthetic: boolean` (mới): `true` chỉ khi backtest dựng sổ lệnh từ spread/khối lượng của nến;
+    bằng chứng lấy từ sổ lệnh đó là `INFERRED`, không phải `OBSERVED`.
+  - `CircuitBreakerStatusSchema` thêm `NOT_APPLICABLE`: danh mục `NOT_PROVIDED` thì các cầu dao danh mục "không áp dụng" (trước đây ghi `NORMAL`).
+  - Chú thích: `deflatedSharpeRatio` chỉ hiệu chỉnh nhiều lần thử (coi lợi nhuận là phân phối chuẩn);
+    `probabilityOfBacktestOverfitting` là phép sàng lọc 4 khúc, không phải CSCV đầy đủ; `verdict = PASS_RESEARCH_GATE` **không phải** cổng M3.
+- Nguồn: chuyển thể từ TauricResearch/TradingAgents v0.6.0 (Apache-2.0), xem `THIRD_PARTY_NOTICES.md` ở gốc repo.
+
 ## 0.12.0 — 2026-10-12 (Realtime `onClose`, `publicConfig.emailDelivery`)
 Chỉ thêm, không đổi endpoint (vẫn 128). Hai việc UI đã xin ở `docs/parts/contract-requests.md` (R-16, N-13).
 - **`RealtimeClient.onClose(cb)`** → hàm hủy đăng ký. `cb({ code, reason })` được gọi mỗi lần kết nối đóng (mạng rớt, server khởi động lại,
