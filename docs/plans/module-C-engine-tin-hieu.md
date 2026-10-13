@@ -463,6 +463,11 @@ Git không cho một nhánh mở ở hai worktree cùng lúc, nên sub-agent kh�
 
 **Việc — quant-engineer**
 1. `server/src/modules/signals/extract.ts`: hàm thuần `extractSignal(report, config, openSignals) → { signal } | { reason }` đúng mục 3.
+1b. Trước khi tạo phiên bản engine 1 (câu hỏi mở từ C0, lead đã chốt 2026-10-13):
+   - `computeCryptoRegimeCompositeDec` (`packages/core/src/quant.ts`) phải dùng đúng điều kiện dừng của nguồn MIT (`crypto-regime-analyzer`): cần ≥ 4 thành phần và ≥ 65% trọng số. Thiếu thì trả `null` / bỏ phiếu trắng, không tính từ 1 thành phần;
+   - engine tín hiệu chạy với bối cảnh danh mục `NOT_PROVIDED`. Các cầu dao cần dữ liệu danh mục (drawdown, lỗ ngày/tuần) báo **"không áp dụng"**, không coi là 0% (bất biến 6).
+
+   Cả hai làm trước khi có phiên bản 1, nên không phải đếm lại.
 2. Test vàng: mỗi lý do từ chối một ca; LONG/SHORT; sai phía SL/TP; R:R đúng ngưỡng (≥, không >); cặp đang có tín hiệu mở (cùng chiều, ngược chiều, khác khung đều từ chối `DUPLICATE`); `REVIEW`.
 
 **Việc — backend-builder**
@@ -576,6 +581,13 @@ Git không cho một nhánh mở ở hai worktree cùng lúc, nên sub-agent kh�
 | Thời lượng | 1–2 lượt |
 
 **Việc**
+0. Lưu ý về `server/src/modules/analysis/backtester.ts` có sẵn (từ C0):
+   - Sharpe luôn quy năm bằng 365, bất kể khung nến;
+   - WFE là thương của hai số âm nên ra số dương gây hiểu nhầm;
+   - giữ lệnh đúng 1 nến, bỏ qua SL/TP, không theo mô hình khớp mục 3.2;
+   - DSR tính bằng float.
+
+   Backtest của C4 **không** dùng cách chấm của file này: chấm bằng `advanceSignal`, chỉ lấy DSR/PBO. Phần DSR/PBO dùng lại thì sửa cách quy năm theo khung nến và WFE trước.
 1. `server/scripts/signalsBackfill.ts`:
    - tải nến Binance REST cho `watchlist × {1h, 4h} × 12 tháng` vào `candles` (`source = 'binance-rest'`, `onConflictDoNothing`);
    - tôn trọng giới hạn trọng số Binance (bất biến 15: tổng IP 6000/phút — tự giới hạn ≤ 1200/phút);
