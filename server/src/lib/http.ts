@@ -1,6 +1,6 @@
 import type { NextFunction, Request, Response, Router } from 'express';
 import { ZodError, type z } from 'zod';
-import { endpoints, hasPermission, STAFF_ROLES, type AuthLevel, type EndpointName, type EndpointOutput, type Endpoints, type Permission } from '@cex/contracts';
+import { endpoints, hasPermission, STAFF_ROLES, type AuthLevel, type BinaryFile, type EndpointName, type EndpointOutput, type Endpoints, type Permission } from '@cex/contracts';
 import { AppError } from './errors.ts';
 import { logger } from '../logger.ts';
 import type { AuthContext } from '../modules/auth/authService.ts';
@@ -61,7 +61,7 @@ export function route<N extends EndpointName>(
         if (!perm || !hasPermission(auth.user.role, perm)) throw new AppError('FORBIDDEN', `Missing permission ${perm ?? '(none declared)'}`);
       }
     }
-    const d = def as { path: string; params?: z.ZodType; query?: z.ZodType; body?: z.ZodType; response: z.ZodType; status?: number; format?: 'json' | 'csv' };
+    const d = def as { path: string; params?: z.ZodType; query?: z.ZodType; body?: z.ZodType; response: z.ZodType; status?: number; format?: 'json' | 'csv' | 'binary' };
     const ctx = {
       params: d.params ? d.params.parse(req.params) : undefined,
       query: d.query ? d.query.parse(req.query) : undefined,
@@ -71,6 +71,18 @@ export function route<N extends EndpointName>(
       res,
     } as RouteCtx<N>;
     const result = await handler(ctx);
+    if (d.format === 'binary') {
+      // Raw bytes (BinaryFile): sent as-is, no schema check. Extra headers (nosniff, CSP, cache, ETag) are set by the handler on ctx.res.
+      const file = result as BinaryFile;
+      if (!(file?.data instanceof Uint8Array) || typeof file.contentType !== 'string' || !file.contentType) {
+        throw new Error(`response of ${name} is not a BinaryFile`);
+      }
+      res
+        .status(d.status ?? 200)
+        .type(file.contentType)
+        .send(Buffer.from(file.data.buffer, file.data.byteOffset, file.data.byteLength));
+      return;
+    }
     if (opts.validateResponses) {
       const check = d.response.safeParse(result);
       if (!check.success) {
@@ -99,6 +111,14 @@ export function errorHandler(err: unknown, req: Request, res: Response, _next: N
   }
   if (err && typeof err === 'object' && (err as { type?: string }).type === 'entity.parse.failed') {
     res.status(400).json({ error: { code: 'VALIDATION_ERROR', message: 'Malformed JSON body' } });
+    return;
+  }
+  // body-parser: JSON body above the limit of its path (32 KB; larger only where a route mounts its own parser)
+  if (err && typeof err === 'object' && (err as { type?: string }).type === 'entity.too.large') {
+    const limit = (err as { limit?: unknown }).limit;
+    res.status(413).json({
+      error: { code: 'PAYLOAD_TOO_LARGE', message: 'Request body too large', details: { reason: 'BODY_TOO_LARGE', ...(typeof limit === 'number' ? { limitBytes: limit } : {}) } },
+    });
     return;
   }
   logger.error({ err, method: req.method, path: req.path }, 'unhandled error');
