@@ -30,6 +30,7 @@ import {
   futuresLegsOf,
   futuresResult,
   journalStats,
+  maxFillId,
   positionInput,
   replayManualSpot,
   spotFillOfTrade,
@@ -67,6 +68,15 @@ const openAutoSpotEntry = (symbol: string) => mine().find((e) => e.detail.market
 const ordersOfWallet = (): Order[] => [...mockStore.openOrders, ...mockStore.history];
 const tradesOfOrder = (orderId: string) => mockStore.trades.filter((t) => t.orderId === orderId);
 const mockPositions = (): MockPosition[] => [...mockStore.futures.positions, ...mockStore.futures.closed];
+
+/** Largest spot fill id of a pair that already has a journal row (entries' fills + skipped/unattributed rows of the wallet). */
+function lastRecordedSpotFill(symbol: string): string | null {
+  const inEntries = mine()
+    .filter((e) => e.detail.market === 'SPOT' && e.detail.symbol === symbol)
+    .flatMap((e) => e.detail.fills.map((f) => f.tradeId));
+  const inWallet = mockStore.trades.filter((t) => t.symbol === symbol && js().claimed[spotKey(t.id)] !== undefined).map((t) => t.id);
+  return maxFillId([...inEntries, ...inWallet]);
+}
 
 function inAutoWindow(at: string): boolean {
   const t = Date.parse(at);
@@ -224,7 +234,7 @@ function autoJournal(): void {
       continue;
     }
     const open = openAutoSpotEntry(t.symbol);
-    const res = allocateSpot(open?.spotState ?? null, spotFillOfTrade(t), mockLotRules(t.symbol));
+    const res = allocateSpot(open?.spotState ?? null, spotFillOfTrade(t), mockLotRules(t.symbol), lastRecordedSpotFill(t.symbol));
     if (res.action === 'UNATTRIBUTED') {
       s.claimed[spotKey(t.id)] = null; // a sell with no open entry (coins from before / the faucet / a bot)
       continue;
@@ -344,11 +354,11 @@ function createFromPosition(positionId: string): MockJournalEntry {
   const f = mockStore.futures;
   const found: { t: FuturesTrade; l: FuturesLeg }[] = [];
   for (const t of [...f.trades].filter((x) => x.symbol === pos.symbol).sort(byId)) {
-    let legs: FuturesLeg[] | null = null;
+    let legs: FuturesLeg[] | null;
     try {
       legs = futuresLegsOf(t, f.legs[t.id], qtyDecimals(t.symbol));
     } catch {
-      legs = null;
+      legs = null; // legs the core refuses: treated like a fill without legs
     }
     for (const l of legs ?? []) if (l.positionId === positionId) found.push({ t, l });
   }

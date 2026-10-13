@@ -103,6 +103,7 @@ describe('journal mock: entries', () => {
     expect((await api.journalUpdate({ params: { entryId: J(4) }, body: { initialStop: null } })).result.riskUsdt).toBeNull();
     // J8: SHORT SOL at 114
     await expect(api.journalUpdate({ params: { entryId: J(8) }, body: { initialStop: '110' } })).rejects.toSatisfy(reason('STOP_WRONG_SIDE'));
+    await expect(api.journalUpdate({ params: { entryId: J(8) }, body: { initialStop: '114' } })).rejects.toSatisfy(reason('STOP_WRONG_SIDE')); // equal = no risk
     expect((await api.journalUpdate({ params: { entryId: J(8) }, body: { initialStop: '120' } })).result.riskUsdt).toBe('30.00000000');
   });
 });

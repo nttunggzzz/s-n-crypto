@@ -10,6 +10,7 @@ import {
   allocateFuturesLegs,
   allocateSpotFill,
   compareCloseKey,
+  compareRecordIds,
   computeEntryResult,
   computeJournalStats,
   futuresEntryResult,
@@ -49,9 +50,16 @@ export const spotFillOfJournalFill = (f: JournalFill): SpotFillInput => ({
   createdAt: f.executedAt,
 });
 
-export function allocateSpot(state: SpotEntryState | null, fill: SpotFillInput, lot: JournalLotRules): SpotAllocationResult {
-  return allocateSpotFill(state, fill, lot);
+/**
+ * afterFillId: the largest spot fill id of this (user, pair) that already has a journal row (UNATTRIBUTED included), or null.
+ * The mock records fills in id order, so `outOfOrder` stays false here (the server rebuilds when it is true — module A §2.3 (e)).
+ */
+export function allocateSpot(state: SpotEntryState | null, fill: SpotFillInput, lot: JournalLotRules, afterFillId: string | null): SpotAllocationResult {
+  return allocateSpotFill(state, fill, lot, afterFillId);
 }
+
+/** Largest fill id (numeric ids, compared like PostgreSQL bigint). */
+export const maxFillId = (ids: readonly string[]): string | null => ids.reduce<string | null>((m, id) => (m === null || compareRecordIds(id, m) > 0 ? id : m), null);
 
 /**
  * Fills chosen for ONE MANUAL entry, replayed in fill id order. Exactly one round trip is accepted:

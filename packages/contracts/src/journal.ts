@@ -178,7 +178,11 @@ export const JournalResult = z.object({
   avgEntryPrice: DecimalString.nullable(),
   /** Average price of the allocated sells / CLOSE legs (up to 12 decimals); null before the first exit. */
   avgExitPrice: DecimalString.nullable(),
-  /** Net PnL of the part already closed (OPEN entries too); null before the first exit. */
+  /**
+   * PnL realized so far (OPEN entries too); null before the first exit. Once CLOSED it equals netPnl. While OPEN it differs by market:
+   *  - SPOT: net PnL of the SOLD part only (proceeds − sell fees − the entry's own cost of the sold quantity);
+   *  - FUTURES: the position's realized PnL − ALL fees paid so far (incl. the opening fee of the part still open) + funding so far.
+   */
   realizedPnl: DecimalString.nullable(),
   /** USDT after every fee (and funding for futures) of the whole entry. Null until CLOSED. */
   netPnl: DecimalString.nullable(),
@@ -186,7 +190,10 @@ export const JournalResult = z.object({
   fees: DecimalString.nullable(),
   /** FUTURES: net funding (+ received, − paid), inside the PnL. SPOT: null (does not apply). */
   funding: DecimalString.nullable(),
-  /** |avgEntryPrice − initialStop| × entryQty (price risk only, fees not added); null without an initial stop. */
+  /**
+   * |avgEntryPrice − initialStop| × entryQty (price risk only, fees not added); null without an initial stop, or when the stop is
+   * on the wrong side of the average entry (LONG: stop ≥ entry; SHORT: stop ≤ entry — e.g. an order SL left behind after adding).
+   */
   riskUsdt: DecimalString.nullable(),
   /** netPnl ÷ riskUsdt (netPnl already carries the sign of a SHORT); null without an initial stop or while OPEN. */
   rMultiple: DecimalString.nullable(),

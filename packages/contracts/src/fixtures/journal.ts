@@ -96,8 +96,8 @@ export const fixtureJournalEntries: JournalEntryDetail[] = [
     exitQty: '0.39960000',
     result: spotResult({ status: 'CLOSED', entryQty: '0.40000000', avgEntryPrice: '2400', avgExitPrice: '2520', realizedPnl: '45.98500800', netPnl: '45.98500800', fees: '1.96699200', riskUsdt: '24.00000000', rMultiple: '1.91604200', outcome: 'WIN', holdingMs: 109_800_000 }),
     fills: [
-      fill({ id: '7101', tradeId: '9101', orderId: '8101', leg: 'SPOT', side: 'BUY', price: '2400.00000000', quantity: '0.40000000', fee: '0.00040000', feeAsset: 'ETH', allocatedQty: '0.40000000', allocatedQuote: '960.00000000', allocatedFee: '0.00040000', executedAt: '2026-10-02T03:00:00.000Z' }),
-      fill({ id: '7102', tradeId: '9102', orderId: '8102', leg: 'SPOT', side: 'SELL', price: '2520.00000000', quantity: '0.39960000', fee: '1.00699200', feeAsset: 'USDT', allocatedQty: '0.39960000', allocatedQuote: '1006.99200000', allocatedFee: '1.00699200', executedAt: '2026-10-03T09:30:00.000Z' }),
+      fill({ id: '7101', tradeId: '411', orderId: '8101', leg: 'SPOT', side: 'BUY', price: '2400.00000000', quantity: '0.40000000', fee: '0.00040000', feeAsset: 'ETH', allocatedQty: '0.40000000', allocatedQuote: '960.00000000', allocatedFee: '0.00040000', executedAt: '2026-10-02T03:00:00.000Z' }),
+      fill({ id: '7102', tradeId: '412', orderId: '8102', leg: 'SPOT', side: 'SELL', price: '2520.00000000', quantity: '0.39960000', fee: '1.00699200', feeAsset: 'USDT', allocatedQty: '0.39960000', allocatedQuote: '1006.99200000', allocatedFee: '1.00699200', executedAt: '2026-10-03T09:30:00.000Z' }),
     ],
     attachments: [pngOfJ1],
     openedAt: '2026-10-02T03:00:00.000Z',
@@ -126,8 +126,8 @@ export const fixtureJournalEntries: JournalEntryDetail[] = [
     exitQty: '4.99500000',
     result: spotResult({ status: 'CLOSED', entryQty: '5.00000000', avgEntryPrice: '120', avgExitPrice: '114', realizedPnl: '-31.13943000', netPnl: '-31.13943000', fees: '1.16943000', riskUsdt: '25.00000000', rMultiple: '-1.24557720', outcome: 'LOSS', holdingMs: 50_400_000 }),
     fills: [
-      fill({ id: '7201', tradeId: '9201', orderId: '8201', leg: 'SPOT', side: 'BUY', price: '120.00000000', quantity: '5.00000000', fee: '0.00500000', feeAsset: 'SOL', allocatedQty: '5.00000000', allocatedQuote: '600.00000000', allocatedFee: '0.00500000', executedAt: '2026-10-03T12:00:00.000Z' }),
-      fill({ id: '7202', tradeId: '9202', orderId: '8202', leg: 'SPOT', side: 'SELL', price: '114.00000000', quantity: '4.99500000', fee: '0.56943000', feeAsset: 'USDT', allocatedQty: '4.99500000', allocatedQuote: '569.43000000', allocatedFee: '0.56943000', executedAt: '2026-10-04T02:00:00.000Z' }),
+      fill({ id: '7201', tradeId: '421', orderId: '8201', leg: 'SPOT', side: 'BUY', price: '120.00000000', quantity: '5.00000000', fee: '0.00500000', feeAsset: 'SOL', allocatedQty: '5.00000000', allocatedQuote: '600.00000000', allocatedFee: '0.00500000', executedAt: '2026-10-03T12:00:00.000Z' }),
+      fill({ id: '7202', tradeId: '422', orderId: '8202', leg: 'SPOT', side: 'SELL', price: '114.00000000', quantity: '4.99500000', fee: '0.56943000', feeAsset: 'USDT', allocatedQty: '4.99500000', allocatedQuote: '569.43000000', allocatedFee: '0.56943000', executedAt: '2026-10-04T02:00:00.000Z' }),
     ],
     attachments: [],
     openedAt: '2026-10-03T12:00:00.000Z',
@@ -156,8 +156,8 @@ export const fixtureJournalEntries: JournalEntryDetail[] = [
     exitQty: '0.01000000',
     result: futuresResult({ direction: 'LONG', status: 'CLOSED', entryQty: '0.01000000', avgEntryPrice: '80000', avgExitPrice: '80080', realizedPnl: Z, netPnl: Z, fees: '0.80040000', funding: '0.00040000', riskUsdt: '10.00000000', rMultiple: Z, outcome: 'BREAKEVEN', holdingMs: 7_200_000 }),
     fills: [
-      fill({ id: '7301', tradeId: '9301', orderId: '8301', leg: 'OPEN', side: 'BUY', price: '80000.00000000', quantity: '0.01000000', fee: '0.40000000', feeAsset: 'USDT', allocatedQty: '0.01000000', allocatedQuote: '800.00000000', allocatedFee: '0.40000000', executedAt: '2026-10-07T08:00:00.000Z' }),
-      fill({ id: '7302', tradeId: '9302', orderId: '8302', leg: 'CLOSE', side: 'SELL', price: '80080.00000000', quantity: '0.01000000', fee: '0.40040000', feeAsset: 'USDT', allocatedQty: '0.01000000', allocatedQuote: '800.80000000', allocatedFee: '0.40040000', executedAt: '2026-10-07T10:00:00.000Z' }),
+      fill({ id: '7301', tradeId: '431', orderId: '8301', leg: 'OPEN', side: 'BUY', price: '80000.00000000', quantity: '0.01000000', fee: '0.40000000', feeAsset: 'USDT', allocatedQty: '0.01000000', allocatedQuote: '800.00000000', allocatedFee: '0.40000000', executedAt: '2026-10-07T08:00:00.000Z' }),
+      fill({ id: '7302', tradeId: '432', orderId: '8302', leg: 'CLOSE', side: 'SELL', price: '80080.00000000', quantity: '0.01000000', fee: '0.40040000', feeAsset: 'USDT', allocatedQty: '0.01000000', allocatedQuote: '800.80000000', allocatedFee: '0.40040000', executedAt: '2026-10-07T10:00:00.000Z' }),
     ],
     attachments: [],
     openedAt: '2026-10-07T08:00:00.000Z',
@@ -217,8 +217,8 @@ export const fixtureJournalEntries: JournalEntryDetail[] = [
     exitQty: '499.50000000',
     result: spotResult({ status: 'CLOSED', entryQty: '500.00000000', avgEntryPrice: '1.3', avgExitPrice: '1.35', realizedPnl: '23.65067500', netPnl: '23.65067500', fees: '1.32432500', riskUsdt: null, rMultiple: null, outcome: 'WIN', holdingMs: 180_000_000 }),
     fills: [
-      fill({ id: '7501', tradeId: '9501', orderId: '8501', leg: 'SPOT', side: 'BUY', price: '1.30000000', quantity: '500.00000000', fee: '0.50000000', feeAsset: 'XRP', allocatedQty: '500.00000000', allocatedQuote: '650.00000000', allocatedFee: '0.50000000', executedAt: '2026-09-28T08:00:00.000Z' }),
-      fill({ id: '7502', tradeId: '9502', orderId: '8502', leg: 'SPOT', side: 'SELL', price: '1.35000000', quantity: '499.50000000', fee: '0.67432500', feeAsset: 'USDT', allocatedQty: '499.50000000', allocatedQuote: '674.32500000', allocatedFee: '0.67432500', executedAt: '2026-09-30T10:00:00.000Z' }),
+      fill({ id: '7501', tradeId: '451', orderId: '8501', leg: 'SPOT', side: 'BUY', price: '1.30000000', quantity: '500.00000000', fee: '0.50000000', feeAsset: 'XRP', allocatedQty: '500.00000000', allocatedQuote: '650.00000000', allocatedFee: '0.50000000', executedAt: '2026-09-28T08:00:00.000Z' }),
+      fill({ id: '7502', tradeId: '452', orderId: '8502', leg: 'SPOT', side: 'SELL', price: '1.35000000', quantity: '499.50000000', fee: '0.67432500', feeAsset: 'USDT', allocatedQty: '499.50000000', allocatedQuote: '674.32500000', allocatedFee: '0.67432500', executedAt: '2026-09-30T10:00:00.000Z' }),
     ],
     attachments: [],
     openedAt: '2026-09-28T08:00:00.000Z',
@@ -248,8 +248,8 @@ export const fixtureJournalEntries: JournalEntryDetail[] = [
     exitQty: '0.20000000',
     result: futuresResult({ direction: 'SHORT', status: 'CLOSED', entryQty: '0.20000000', avgEntryPrice: '2500', avgExitPrice: '2610', realizedPnl: '-24.96000000', netPnl: '-24.96000000', fees: '2.86000000', funding: '-0.10000000', riskUsdt: '24.00000000', rMultiple: '-1.04000000', outcome: 'LOSS', holdingMs: 21_600_000 }, true),
     fills: [
-      fill({ id: '7601', tradeId: '9601', orderId: '8601', leg: 'OPEN', side: 'SELL', price: '2500.00000000', quantity: '0.20000000', fee: '0.25000000', feeAsset: 'USDT', allocatedQty: '0.20000000', allocatedQuote: '500.00000000', allocatedFee: '0.25000000', executedAt: '2026-10-05T01:00:00.000Z' }),
-      fill({ id: '7602', tradeId: '9602', orderId: '8602', leg: 'CLOSE', side: 'BUY', price: '2610.00000000', quantity: '0.20000000', fee: '2.61000000', feeAsset: 'USDT', allocatedQty: '0.20000000', allocatedQuote: '522.00000000', allocatedFee: '2.61000000', executedAt: '2026-10-05T07:00:00.000Z' }),
+      fill({ id: '7601', tradeId: '461', orderId: '8601', leg: 'OPEN', side: 'SELL', price: '2500.00000000', quantity: '0.20000000', fee: '0.25000000', feeAsset: 'USDT', allocatedQty: '0.20000000', allocatedQuote: '500.00000000', allocatedFee: '0.25000000', executedAt: '2026-10-05T01:00:00.000Z' }),
+      fill({ id: '7602', tradeId: '462', orderId: '8602', leg: 'CLOSE', side: 'BUY', price: '2610.00000000', quantity: '0.20000000', fee: '2.61000000', feeAsset: 'USDT', allocatedQty: '0.20000000', allocatedQuote: '522.00000000', allocatedFee: '2.61000000', executedAt: '2026-10-05T07:00:00.000Z' }),
     ],
     attachments: [],
     openedAt: '2026-10-05T01:00:00.000Z',
@@ -279,14 +279,14 @@ export const fixtureJournalEntries: JournalEntryDetail[] = [
     exitQty: '10.00000000',
     result: futuresResult({ direction: 'LONG', status: 'CLOSED', entryQty: '10.00000000', avgEntryPrice: '110', avgExitPrice: '114', realizedPnl: '38.76000000', netPnl: '38.76000000', fees: '1.12000000', funding: '-0.12000000', riskUsdt: '30.00000000', rMultiple: '1.29200000', outcome: 'WIN', holdingMs: 28_800_000 }),
     fills: [
-      fill({ id: '7701', tradeId: '9701', orderId: '8701', leg: 'OPEN', side: 'BUY', price: '110.00000000', quantity: '10.00000000', fee: '0.55000000', feeAsset: 'USDT', allocatedQty: '10.00000000', allocatedQuote: '1100.00000000', allocatedFee: '0.55000000', executedAt: '2026-10-07T22:00:00.000Z' }),
-      fill({ id: '7702', tradeId: '9702', orderId: '8702', leg: 'CLOSE', side: 'SELL', price: '114.00000000', quantity: '15.00000000', fee: '0.85500000', feeAsset: 'USDT', allocatedQty: '10.00000000', allocatedQuote: '1140.00000000', allocatedFee: '0.57000000', executedAt: '2026-10-08T06:00:00.000Z' }),
+      fill({ id: '7701', tradeId: '471', orderId: '8701', leg: 'OPEN', side: 'BUY', price: '110.00000000', quantity: '10.00000000', fee: '0.55000000', feeAsset: 'USDT', allocatedQty: '10.00000000', allocatedQuote: '1100.00000000', allocatedFee: '0.55000000', executedAt: '2026-10-07T22:00:00.000Z' }),
+      fill({ id: '7702', tradeId: '472', orderId: '8702', leg: 'CLOSE', side: 'SELL', price: '114.00000000', quantity: '15.00000000', fee: '0.85500000', feeAsset: 'USDT', allocatedQty: '10.00000000', allocatedQuote: '1140.00000000', allocatedFee: '0.57000000', executedAt: '2026-10-08T06:00:00.000Z' }),
     ],
     attachments: [],
     openedAt: '2026-10-07T22:00:00.000Z',
     closedAt: '2026-10-08T06:00:00.000Z',
   }),
-  // J8 SOLUSDT futures SHORT, OPEN — the OPEN leg (5 of 15) of the flip fill 9702. No stop on the flip order → R null.
+  // J8 SOLUSDT futures SHORT, OPEN — the OPEN leg (5 of 15) of the flip fill 472. No stop on the flip order → R null.
   entry({
     id: J(8),
     market: 'FUTURES',
@@ -308,7 +308,7 @@ export const fixtureJournalEntries: JournalEntryDetail[] = [
     exitQty: Z,
     result: futuresResult({ direction: 'SHORT', status: 'OPEN', entryQty: '5.00000000', avgEntryPrice: '114', avgExitPrice: null, realizedPnl: null, netPnl: null, fees: '0.28500000', funding: Z, riskUsdt: null, rMultiple: null, outcome: null, holdingMs: null }),
     fills: [
-      fill({ id: '7801', tradeId: '9702', orderId: '8702', leg: 'OPEN', side: 'SELL', price: '114.00000000', quantity: '15.00000000', fee: '0.85500000', feeAsset: 'USDT', allocatedQty: '5.00000000', allocatedQuote: '570.00000000', allocatedFee: '0.28500000', executedAt: '2026-10-08T06:00:00.000Z' }),
+      fill({ id: '7801', tradeId: '472', orderId: '8702', leg: 'OPEN', side: 'SELL', price: '114.00000000', quantity: '15.00000000', fee: '0.85500000', feeAsset: 'USDT', allocatedQty: '5.00000000', allocatedQuote: '570.00000000', allocatedFee: '0.28500000', executedAt: '2026-10-08T06:00:00.000Z' }),
     ],
     attachments: [],
     openedAt: '2026-10-08T06:00:00.000Z',
@@ -337,8 +337,8 @@ export const fixtureJournalEntries: JournalEntryDetail[] = [
     exitQty: '999.00000000',
     result: spotResult({ status: 'CLOSED', entryQty: '1000.00000000', avgEntryPrice: '0.08', avgExitPrice: '0.085', realizedPnl: '4.83008500', netPnl: '4.83008500', fees: '0.16491500', riskUsdt: '4.00000000', rMultiple: '1.20752125', outcome: 'WIN', holdingMs: 43_200_000 }),
     fills: [
-      fill({ id: '7901', tradeId: '9901', orderId: '8901', leg: 'SPOT', side: 'BUY', price: '0.08000000', quantity: '1000.00000000', fee: '1.00000000', feeAsset: 'DOGE', allocatedQty: '1000.00000000', allocatedQuote: '80.00000000', allocatedFee: '1.00000000', executedAt: '2026-10-06T00:00:00.000Z' }),
-      fill({ id: '7902', tradeId: '9902', orderId: '8902', leg: 'SPOT', side: 'SELL', price: '0.08500000', quantity: '1500.00000000', fee: '0.12750000', feeAsset: 'USDT', allocatedQty: '999.00000000', unattributedQty: '501.00000000', allocatedQuote: '84.91500000', allocatedFee: '0.08491500', executedAt: '2026-10-06T12:00:00.000Z' }),
+      fill({ id: '7901', tradeId: '491', orderId: '8901', leg: 'SPOT', side: 'BUY', price: '0.08000000', quantity: '1000.00000000', fee: '1.00000000', feeAsset: 'DOGE', allocatedQty: '1000.00000000', allocatedQuote: '80.00000000', allocatedFee: '1.00000000', executedAt: '2026-10-06T00:00:00.000Z' }),
+      fill({ id: '7902', tradeId: '492', orderId: '8902', leg: 'SPOT', side: 'SELL', price: '0.08500000', quantity: '1500.00000000', fee: '0.12750000', feeAsset: 'USDT', allocatedQty: '999.00000000', unattributedQty: '501.00000000', allocatedQuote: '84.91500000', allocatedFee: '0.08491500', executedAt: '2026-10-06T12:00:00.000Z' }),
     ],
     attachments: [],
     openedAt: '2026-10-06T00:00:00.000Z',
@@ -368,7 +368,7 @@ export const fixtureJournalEntries: JournalEntryDetail[] = [
     exitQty: Z,
     result: spotResult({ status: 'OPEN', entryQty: '2000.00000000', avgEntryPrice: '0.25', avgExitPrice: null, realizedPnl: null, netPnl: null, fees: '0.50000000', riskUsdt: '30.00000000', rMultiple: null, outcome: null, holdingMs: null }),
     fills: [
-      fill({ id: '7951', tradeId: '9951', orderId: '8951', leg: 'SPOT', side: 'BUY', price: '0.25000000', quantity: '2000.00000000', fee: '2.00000000', feeAsset: 'ADA', allocatedQty: '2000.00000000', allocatedQuote: '500.00000000', allocatedFee: '2.00000000', executedAt: '2026-10-06T09:00:00.000Z' }),
+      fill({ id: '7951', tradeId: '495', orderId: '8951', leg: 'SPOT', side: 'BUY', price: '0.25000000', quantity: '2000.00000000', fee: '2.00000000', feeAsset: 'ADA', allocatedQty: '2000.00000000', allocatedQuote: '500.00000000', allocatedFee: '2.00000000', executedAt: '2026-10-06T09:00:00.000Z' }),
     ],
     attachments: [],
     openedAt: '2026-10-06T09:00:00.000Z',
@@ -398,8 +398,8 @@ export const fixtureJournalEntries: JournalEntryDetail[] = [
     exitQty: '29.97000000',
     result: spotResult({ status: 'CLOSED', entryQty: '30.00000000', avgEntryPrice: '10', avgExitPrice: '10.5', realizedPnl: '14.37031500', netPnl: '14.37031500', fees: '0.61468500', riskUsdt: '9.00000000', rMultiple: '1.59670167', outcome: 'WIN', holdingMs: 50_400_000 }),
     fills: [
-      fill({ id: '7961', tradeId: '9961', orderId: '8961', leg: 'SPOT', side: 'BUY', price: '10.00000000', quantity: '30.00000000', fee: '0.03000000', feeAsset: 'AVAX', allocatedQty: '30.00000000', allocatedQuote: '300.00000000', allocatedFee: '0.03000000', executedAt: '2026-10-08T01:00:00.000Z' }),
-      fill({ id: '7962', tradeId: '9962', orderId: '8962', leg: 'SPOT', side: 'SELL', price: '10.50000000', quantity: '29.97000000', fee: '0.31468500', feeAsset: 'USDT', allocatedQty: '29.97000000', allocatedQuote: '314.68500000', allocatedFee: '0.31468500', executedAt: '2026-10-08T15:00:00.000Z' }),
+      fill({ id: '7961', tradeId: '497', orderId: '8961', leg: 'SPOT', side: 'BUY', price: '10.00000000', quantity: '30.00000000', fee: '0.03000000', feeAsset: 'AVAX', allocatedQty: '30.00000000', allocatedQuote: '300.00000000', allocatedFee: '0.03000000', executedAt: '2026-10-08T01:00:00.000Z' }),
+      fill({ id: '7962', tradeId: '498', orderId: '8962', leg: 'SPOT', side: 'SELL', price: '10.50000000', quantity: '29.97000000', fee: '0.31468500', feeAsset: 'USDT', allocatedQty: '29.97000000', allocatedQuote: '314.68500000', allocatedFee: '0.31468500', executedAt: '2026-10-08T15:00:00.000Z' }),
     ],
     attachments: [],
     openedAt: '2026-10-08T01:00:00.000Z',
