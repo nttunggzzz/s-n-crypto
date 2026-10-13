@@ -75,6 +75,9 @@ Mỗi lần khớp Futures có **tối đa hai chân**:
 - chân `OPEN` (`open_qty > 0`) thuộc mục của `position_id`.
 
 Vị thế đóng (kể cả TP/SL, thanh lý, đảo chiều) → mục đóng. Bị thanh lý thì có cờ `liquidated`.
+Mục `AUTO` của một vị thế **chỉ được mở bởi chân `OPEN` đầu tiên** của vị thế đó (lúc mở vị thế), và chân đó phải nằm trong cửa sổ tự ghi.
+Vị thế mở từ lúc ngoài cửa sổ rồi vào thêm trong cửa sổ thì **không** mở mục giữa chừng: các chân về sau của nó (`OPEN` lẫn `CLOSE`) ghi `unattributed`.
+Lý do: lãi/lỗ lấy theo cả vị thế còn rủi ro chỉ tính trên phần vào thêm, nên R sẽ sai (chốt sau rà soát A1 hợp đồng).
 Lần khớp Futures từ trước khi có ba cột này không bao giờ vào nhật ký tự động: nó nằm trước cửa sổ tự ghi, xem 2.2.
 
 **Lần khớp không vào nhật ký vĩnh viễn** (vẫn ghi một dòng `journal_fills` có `entry_id = null` và lý do, để không xét lại):
@@ -158,12 +161,13 @@ Lần khớp **nằm ngoài cửa sổ tự ghi** (trước ngày phát hành, h
 - Có lệch loại (b), (d) hoặc (e) → cảnh báo Telegram qua `ops/alerts`, giống đối soát sổ cái.
 
 ### 2.4 Mục do người dùng tạo (`MANUAL`)
-- **Nguồn:** chỉ những lần khớp **chưa có dòng** `journal_fills`, tức nằm ngoài cửa sổ tự ghi hoặc thuộc một mục `MANUAL` đã xóa. Lần khớp đã thuộc mục khác, hoặc đã bị loại vĩnh viễn (bot) → 409 `FILL_ALREADY_JOURNALED` / `BOT_ORDER`.
+- **Nguồn:** những lần khớp **chưa có dòng** `journal_fills` (nằm ngoài cửa sổ tự ghi, hoặc thuộc một mục `MANUAL` đã xóa), **hoặc** có dòng nhưng `entry_id = null` và `skip_reason = null` (dòng `unattributed`). Dòng `unattributed` được phân bổ lại trong cùng khóa của người dùng (chốt sau rà soát A1 hợp đồng: không thì lần bán trong cửa sổ của một lần mua ngoài cửa sổ sẽ không bao giờ đóng được mục MANUAL). Lần khớp đã thuộc mục khác, hoặc đã bị loại vĩnh viễn (bot) → 409 `FILL_ALREADY_JOURNALED` / `BOT_ORDER`.
   Người dùng tự chọn lệnh cũ không phải "tự động nhập lịch sử", nên không trái A-D2.
 - **Tạo:**
   - Spot: chọn ≥ 1 lệnh đã khớp cùng cặp (`orderIds`). Server lấy **mọi** lần khớp của các lệnh đó và chạy **cùng bộ phân bổ** theo `id`.
   - Futures: chọn một vị thế (`futuresPositionId`); lấy mọi chân của vị thế đó.
 - **Vòng đời:** trạng thái tính như mục `AUTO`. Mục còn mở thì người dùng **thêm** lệnh được (`addOrderIds` trong `journalUpdate`, chỉ thêm, không gỡ); bộ phân bổ dựng lại toàn bộ mục theo `id`.
+  `addOrderIds` với một lệnh đã có một phần lần khớp trong **chính mục này** (lệnh khớp tiếp sau khi tạo mục): bỏ qua các lần khớp đã thuộc mục, chỉ thêm phần mới. Không trả 409.
   Bộ tự ghi **không** gắn lần khớp Spot vào mục `MANUAL`; người dùng thêm bằng `addOrderIds`.
   Riêng Futures, mục `MANUAL` gắn 1-1 với một vị thế (`unique(futures_position_id)`), nên các chân về sau **của chính vị thế đó** được bộ tự ghi gắn vào mục, bất kể cửa sổ. Như vậy mục không kẹt ở `OPEN` (chốt sau A1).
   Lệnh được chọn mà lần khớp sớm nhất là lệnh bán (không có lần mở) → 409 `NO_OPENING_FILL`.
@@ -483,7 +487,8 @@ Mã lỗi:
 | Thời lượng | 1 lượt |
 
 **Việc**
-1. Bộ đọc JSON riêng cho đúng đường dẫn upload (giới hạn 1,5 MB), gắn **trước** bộ đọc JSON chung 32 KB trong `app.ts`. Đường dẫn khác vẫn 32 KB.
+1. Bộ đọc JSON riêng cho đúng đường dẫn upload (giới hạn 1,5 MB). Đường dẫn khác vẫn 32 KB.
+   Lưu ý (rà soát A1): `express.json({ limit: '32kb' })` đang gắn chung ở `server/src/app.ts:75`, chạy trước mọi router. Gắn thêm parser riêng ở router sẽ không có tác dụng: phải sửa `app.ts` cho parser chung **bỏ qua** đường dẫn upload. Khung `format: 'binary'` không cản việc này (helmet đã đặt `nosniff` và CSP; header đặt trên `ctx.res` vẫn giữ).
 2. Kiểm ảnh:
    - giải base64 → kiểm **chữ ký đầu file** (PNG `89 50 4E 47 0D 0A 1A 0A`, JPEG `FF D8 FF`, WebP `RIFF....WEBP`) **và** khớp `contentType` khai báo;
    - ≤ 1 MB, ≤ 4 ảnh/mục (409), tổng ≤ 50 MB/người (413);
