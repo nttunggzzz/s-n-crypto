@@ -109,11 +109,13 @@
 - Thiết kế: [docs/proposals/2026-10-09-futures-mo-phong.md](docs/proposals/2026-10-09-futures-mo-phong.md)
 
 ### Giai đoạn 4 — Engine tín hiệu (chạy ngầm)
+> Kế hoạch thực hiện (2026-10-13): [docs/plans/module-C-engine-tin-hieu.md](docs/plans/module-C-engine-tin-hieu.md) — đợt C0…C7, đội sub-agent: [docs/plans/README.md](docs/plans/README.md)
 - [ ] P06: Chuyển & sửa engine cũ (nến đã đóng, đủ lịch sử, bỏ số liệu bịa, sửa hướng/R:R/SHORT), lưu nến, phiên bản engine, **bot tự vào lệnh bằng OCO**, backtest trung thực + walk-forward
 - [ ] P09: Trang "Hiệu quả tín hiệu", cấu hình engine
 - [ ] 🚦 **Cổng M3:** ≥ ~100 tín hiệu, kỳ vọng sau phí > 0 trên số liệu chạy thật → mới công bố
 
 ### Giai đoạn 5 — Nhật ký & thống kê (song song với giai đoạn 4)
+> Kế hoạch thực hiện (2026-10-13): [docs/plans/module-A-nhat-ky-giao-dich.md](docs/plans/module-A-nhat-ky-giao-dich.md) — đợt A1…A6
 - [ ] P05: Ghi chú/nhãn setup/ảnh cho lệnh, thống kê cá nhân (win rate, kỳ vọng R, drawdown, theo coin)
 - [ ] P08: Giao diện nhật ký & thống kê
 
