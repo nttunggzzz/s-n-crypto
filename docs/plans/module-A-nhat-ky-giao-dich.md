@@ -403,6 +403,8 @@ Mã lỗi:
 1. `server/src/modules/journal/auto.ts`, đúng mục 2.2:
    - **Quét** các lần khớp **đủ điều kiện tự ghi** (nằm trong cửa sổ của người đó) chưa có dòng `journal_fills` (anti-join, cũ hơn 2 giây), theo từng người dùng.
    - Gọi `processFills`, mỗi người một transaction.
+   - Điều kiện "cặp/vị thế đang có mục AUTO mở" (mục 2.2) xét **theo thứ tự `id`**: chỉ tính khi lần khớp mở mục có `id` nhỏ hơn lần khớp đang xét. Nếu xét theo trạng thái hiện tại, một lần mua làm lúc đang tắt (id nhỏ) sẽ bị kéo nhầm vào mục AUTO mở sau nó. Mock của hợp đồng (`c072b09`) đã làm đúng như vậy; server phải làm giống.
+   - Cửa sổ tính nửa mở `[started_at, ended_at)`.
    - Lần khớp bị loại vĩnh viễn (bot, `source ≠ USER`) ghi dòng có `skip_reason`. Lần khớp ngoài cửa sổ **không** ghi gì (để trống cho mục MANUAL).
    - Đánh thức bằng `ex.events` (Spot) và `FuturesEvents` sau commit. Quét định kỳ 60 giây. Quét toàn bộ lúc khởi động.
    - Lỗi: ghi log + thử lại tăng dần. **Không bao giờ** làm chậm hay hỏng việc đặt lệnh: không chạy trong transaction khớp lệnh, không `await` trong đường khớp lệnh.
