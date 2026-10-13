@@ -105,6 +105,7 @@ Lần khớp **nằm ngoài cửa sổ tự ghi** (trước ngày phát hành, h
    - Bộ xử lý tìm các lần khớp **đủ điều kiện tự ghi** mà **chưa có** dòng `journal_fills` (anti-join), cũ hơn **2 giây**, rồi xử lý theo `id` tăng dần.
    - Sự kiện `ex.events` (Spot) và `FuturesEvents` sau commit chỉ dùng để **đánh thức**.
    - Quét lúc khởi động và mỗi 60 giây.
+   - Khi `allocateSpotFill` báo `outOfOrder` (lần khớp có `id` nhỏ hơn lần đã phân bổ của cùng cặp), bộ xử lý **dựng lại ngay** phân bổ của (người dùng, cặp) đó trong cùng transaction và khóa, không chờ đối soát hằng ngày.
    - Mốc 2 giây **không bảo đảm** đúng thứ tự: `created_at` mặc định là `now()` = lúc **bắt đầu** transaction, và mã `id` lấy lúc chèn có thể commit lệch thứ tự. Lệch thứ tự hiếm xảy ra, nhưng được đối soát bắt và sửa (loại (e), mục 2.3).
 3. **Tuần tự theo người dùng:** mọi thao tác ghi nhật ký của một người (bộ tự ghi, tạo mục tay, đối soát) chạy trong transaction có `pg_advisory_xact_lock` theo người đó.
 4. Trong cùng **một transaction**: chèn dòng `journal_fills`, cập nhật mục, tính lại kết quả.
@@ -174,7 +175,7 @@ R theo [quy ước chung](quy-uoc-R-va-nguon-du-lieu.md), hàm `@cex/core/rMetri
 
 **Futures:**
 - Lãi/lỗ: `realized_pnl − fees + funding` của vị thế, đúng định nghĩa đang dùng ở `pnlService.ts:100`. Vị thế được cập nhật đúng cả khi đóng bằng lệnh đảo chiều.
-- Giá vào = `entry_price`.
+- Giá vào = trung bình theo khối lượng của các chân `OPEN` (không dùng `entry_price` của vị thế; hai số khác nhau khi vào thêm sau khi đóng một phần — chốt 2026-10-13 sau A1).
 - Khối lượng vào = Σ `open_qty` của các chân `OPEN` (**không** dùng `max_quantity`, vì cột này khác tổng khối lượng đã vào khi vào thêm sau khi đóng một phần).
 
 **Dừng lỗ ban đầu** (mẫu số R):
@@ -225,7 +226,8 @@ Mã lỗi:
 - **`CONFLICT`**, có `details.reason`:
   - `FILL_ALREADY_JOURNALED`, `SYMBOL_MISMATCH`, `MARKET_MISMATCH`;
   - `BOT_ORDER`, `ORDER_NOT_FILLED`, `STOP_LOCKED`;
-  - `AUTO_ENTRY_NOT_DELETABLE`, `ENTRY_NOT_EXTENDABLE`, `TOO_MANY_ATTACHMENTS`.
+  - `AUTO_ENTRY_NOT_DELETABLE`, `ENTRY_NOT_EXTENDABLE`, `TOO_MANY_ATTACHMENTS`;
+  - `LEGACY_FUTURES_FILL` (mục MANUAL từ vị thế có lần khớp trước khi có cột chân lệnh), `MULTIPLE_ROUND_TRIPS` (lệnh được chọn tạo ra hơn một vòng giao dịch), `STOP_WRONG_SIDE` (LONG: dừng lỗ ≥ giá vào trung bình; SHORT: ≤).
 - **Mới — `PAYLOAD_TOO_LARGE` (413):** ảnh > 1 MB hoặc vượt hạn mức.
 - **Mới — `UNSUPPORTED_MEDIA_TYPE` (415):** không phải PNG/JPEG/WebP thật.
 
@@ -305,6 +307,15 @@ Mã lỗi:
 > (contract-designer) Làm **Đợt A1 phần hợp đồng** theo `docs/plans/module-A-nhat-ky-giao-dich.md` mục 2 và "Đợt A1", cùng `docs/plans/quy-uoc-R-va-nguon-du-lieu.md`. Nhánh `be/journal-a1-contracts`. Các quyết định đã duyệt: <dán A-D1…A-D7>. Mock gọi `allocateSpotFill`, `allocateFuturesLegs`, `computeEntryResult`, `computeJournalStats` từ `@cex/core` (nhánh `be/journal-a1-stats` sẽ gộp trước bạn — tạm import theo tên đó). Báo cáo theo mẫu trong định nghĩa agent.
 >
 > (quant-engineer) Làm **Đợt A1 phần công thức** theo cùng hai file. Nhánh `be/journal-a1-stats`. Chỉ sửa `packages/core/src/{rMetrics,journalFills,journalStats}.ts`, test của chúng, và `packages/core/src/index.ts` (export).
+
+**Quyết định của lead sau đợt A1 công thức (2026-10-13)** — trả lời 7 câu hỏi của quant-engineer:
+1. Giá vào Futures = trung bình theo khối lượng của các chân `OPEN` (mục 2.5).
+2. Thứ tự: thời điểm trong DB có micro giây, Drizzle trả `Date` (mili giây). Mọi truy vấn đưa vào `summarizeR` sắp `ORDER BY date_trunc('milliseconds', closed_at), id`, hoặc sắp lại bằng `compareCloseKey`. Áp cho A3, C3.
+3. Không có lệnh thua → profit factor `null` (không phải vô cực). Mục hòa nằm trong mẫu số win rate và cắt chuỗi thắng/thua.
+4. Vị thế Futures mở **trước** cửa sổ tự ghi: chân `CLOSE` của nó ghi `unattributed`, như Spot. Mục MANUAL từ vị thế có lần khớp trước A2 → 409 `LEGACY_FUTURES_FILL`.
+5. Lệnh chọn cho một mục MANUAL tạo ra hơn một vòng giao dịch → 409 `MULTIPLE_ROUND_TRIPS`.
+6. `outOfOrder` → bộ tự ghi dựng lại ngay (mục 2.2). Đối soát loại (e) vẫn là lưới an toàn.
+7. Phí theo chân Futures chỉ để hiển thị; R dùng phí của vị thế. Dừng lỗ sai phía → 409 `STOP_WRONG_SIDE`, kể cả lúc tự lấy từ SL của lệnh: SL sai phía thì để trống, không lấy.
 
 **Sau đợt:**
 - Lead viết `docs/antigravity/PROMPT-14-nhat-ky-giao-dich.md`. Antigravity làm giao diện trên mock **ngay từ đây**, song song A2–A4.
