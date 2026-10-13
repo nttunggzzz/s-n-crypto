@@ -34,6 +34,20 @@ export async function runDerivativesPositioningAgent(
   const deriv = snapshot.derivatives;
   if (!deriv || deriv.status === 'UNAVAILABLE' || !deriv.markPrice) {
     missingData.push('derivatives.markPrice / futures feed unavailable');
+    // Without a mark price an open futures position on this symbol cannot be checked for liquidation: fail closed.
+    const openFutures = snapshot.portfolio.activePositions.filter(
+      (p) => p.symbol === snapshot.symbol && p.marketType === 'FUTURES_PERP',
+    );
+    for (const pos of openFutures) {
+      riskFlags.push({
+        code: 'DERIV_LIQUIDATION_BUFFER_UNKNOWN',
+        severity: 'BLOCKER',
+        department,
+        title: 'Liquidation buffer of an active futures position is unknown',
+        detail: `Active ${pos.side} position exists but the futures mark price is unavailable; liquidation proximity cannot be checked.`,
+        blocksExecution: true,
+      });
+    }
     return {
       department,
       status: 'UNAVAILABLE',
@@ -50,7 +64,9 @@ export async function runDerivativesPositioningAgent(
   }
 
   const markPrice = dec(deriv.markPrice);
-  const indexPrice = deriv.indexPrice ? dec(deriv.indexPrice) : snapshot.spot.lastPrice ? dec(snapshot.spot.lastPrice) : null;
+  // No index price -> no basis (the spot last price is not the perpetual's index).
+  const indexPrice = deriv.indexPrice ? dec(deriv.indexPrice) : null;
+  if (!indexPrice) missingData.push('derivatives.indexPrice (basis not computed)');
   const funding8h = deriv.lastFundingRate ? dec(deriv.lastFundingRate) : null;
   const basisBps = perpBasisBpsDec(markPrice, indexPrice);
   const fundingAprPct = fundingAnnualizedPctDec(funding8h, 3);

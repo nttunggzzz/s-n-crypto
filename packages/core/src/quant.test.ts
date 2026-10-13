@@ -275,6 +275,42 @@ describe('@cex/core quant calculators', () => {
       expect(regime.score!.gte(dec('80'))).toBe(true);
       expect(regime.zone).toBe('RISK_ON');
     });
+
+    it('regime composite fails closed like the source scorer.py: needs >= 4 components AND >= 65% of the weight', () => {
+      // 4 components, weight 0.25 + 0.15 + 0.15 + 0.10 = 0.65 (exactly the floor) -> scored.
+      // score = (85*0.25 + 82*0.15 + 80*0.15 + 88*0.10) / 0.65 = (21.25 + 12.3 + 12 + 8.8) / 0.65 = 54.35 / 0.65 = 83.6153.. -> 83.61
+      const atFloor = computeCryptoRegimeCompositeDec({
+        btcTrendScore: dec('85'),
+        perpFundingScore: dec('82'),
+        drawdownVolScore: dec('80'),
+        momentumThrustScore: dec('88'),
+      });
+      expect(atFloor.score?.toFixed(2)).toBe('83.61');
+
+      // 4 components but only 0.20 + 0.15 + 0.15 + 0.10 = 0.60 of the weight (< 0.65) -> null.
+      const lightWeight = computeCryptoRegimeCompositeDec({
+        altBreadthScore: dec('70'),
+        btcDominanceScore: dec('70'),
+        drawdownVolScore: dec('70'),
+        momentumThrustScore: dec('70'),
+      });
+      expect(lightWeight.score).toBeNull();
+      expect(lightWeight.zone).toBe('UNAVAILABLE');
+      expect(lightWeight.availableComponents).toBe(4);
+
+      // 3 components with 0.25 + 0.20 + 0.15 = 0.60 -> null (fewer than 4 components).
+      const three = computeCryptoRegimeCompositeDec({
+        btcTrendScore: dec('90'),
+        altBreadthScore: dec('90'),
+        btcDominanceScore: dec('90'),
+      });
+      expect(three.score).toBeNull();
+      expect(three.zone).toBe('UNAVAILABLE');
+      expect(three.availableComponents).toBe(3);
+
+      // A single component is never redistributed to 100% of the score.
+      expect(computeCryptoRegimeCompositeDec({ btcTrendScore: dec('95') }).score).toBeNull();
+    });
   });
 
   describe('position sizing ladder, VaR/CVaR, and circuit breakers', () => {

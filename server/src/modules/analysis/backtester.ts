@@ -18,6 +18,7 @@ import {
   roundDown,
   roundUp,
   smaDec,
+  spreadBpsDec,
   toFixedStr,
   ZERO,
   type Dec,
@@ -25,11 +26,20 @@ import {
 import { CryptoTradingAgentsOrchestrator } from './orchestrator.ts';
 import type { RawCandleInput } from './snapshotBuilder.ts';
 
+/**
+ * One historical bar plus whatever market state was recorded with it. Every optional field that is absent stays
+ * absent in the analysis snapshot (null / UNAVAILABLE); nothing is filled in with a default.
+ */
 export interface HistoricalBacktestBar extends RawCandleInput {
+  /** Feed status at the bar close. Absent -> treated as UNAVAILABLE (no trade), never assumed LIVE. */
   dataStatus?: DataStatus;
+  /** Top-of-book spread at the bar close. With no `bids`/`asks`, a synthetic book is built from it (flagged synthetic). */
   spreadBps?: string;
   fundingRate8h?: string | null;
   openInterest?: string;
+  /** Perpetual mark / index at the bar close. Absent -> the derivatives department abstains. */
+  markPrice?: string;
+  indexPrice?: string;
   bids?: SnapshotBookLevel[];
   asks?: SnapshotBookLevel[];
 }
@@ -64,6 +74,28 @@ export interface SimulatedTradeRecord {
 
 const PROFITABILITY_DISCLAIMER =
   'DISCLAIMER: Historical simulation results, walk-forward metrics, and multi-agent confidence scores are for research evaluation only and never guarantee future live trading profitability. Live order execution is permanently disabled.';
+
+const DAY_MS = 86_400_000;
+
+/**
+ * Quote volume of the 24h window ending at `bars[i]` (close times in (t − 24h, t]). `null` unless the window is
+ * complete (24h / bar length bars, all with a recorded `quoteVolume`) — a single bar is never reported as 24h volume.
+ */
+function quoteVolumeOver24h(bars: readonly HistoricalBacktestBar[], i: number): string | null {
+  const bar = bars[i]!;
+  const barMs = bar.closeTime - bar.openTime + 1;
+  if (barMs <= 0 || DAY_MS % barMs !== 0) return null;
+  const needed = DAY_MS / barMs;
+  let sum = ZERO;
+  let count = 0;
+  for (let j = i; j >= 0 && bars[j]!.closeTime > bar.closeTime - DAY_MS; j--) {
+    const qv = bars[j]!.quoteVolume;
+    if (qv === undefined) return null;
+    sum = sum.add(dec(qv));
+    count++;
+  }
+  return count === needed ? toFixedStr(sum) : null;
+}
 
 /** Signed ratio floored to 4 decimals as a string, or `null` when the ratio is undefined. */
 function fixed4OrNull(value: Dec | null): string | null {
@@ -114,33 +146,66 @@ function computeSharpeAndSortinoDec(barReturns: readonly Dec[], barsPerYear = 36
 }
 
 /**
- * Computes Deflated Sharpe Ratio (Bailey & López de Prado, 2014) to penalize multiple testing and fat tails.
- * `null` when the observed Sharpe is undefined or there are fewer than 5 returns.
+ * Inverse standard normal CDF Φ⁻¹(p) for 0 < p < 1 (Acklam's rational approximation, relative error < 1.2e-9).
+ * Returns NaN outside (0, 1) so callers can reject the result.
  */
-function computeDeflatedSharpeRatioDec(
+export function inverseNormalCdf(p: number): number {
+  if (!(p > 0 && p < 1)) return Number.NaN;
+  const a = [-39.69683028665376, 220.9460984245205, -275.9285104469687, 138.357751867269, -30.66479806614716, 2.506628277459239];
+  const b = [-54.47609879822406, 161.5858368580409, -155.6989798598866, 66.80131188771972, -13.28068155288572];
+  const c = [-0.007784894002430293, -0.3223964580411365, -2.400758277161838, -2.549732539343734, 4.374664141464968, 2.938163982698783];
+  const d = [0.007784695709041462, 0.3224671290700398, 2.445134137142996, 3.754408661907416];
+  const pLow = 0.02425;
+  if (p < pLow) {
+    const q = Math.sqrt(-2 * Math.log(p));
+    return (((((c[0]! * q + c[1]!) * q + c[2]!) * q + c[3]!) * q + c[4]!) * q + c[5]!) / ((((d[0]! * q + d[1]!) * q + d[2]!) * q + d[3]!) * q + 1);
+  }
+  if (p > 1 - pLow) {
+    const q = Math.sqrt(-2 * Math.log(1 - p));
+    return -(((((c[0]! * q + c[1]!) * q + c[2]!) * q + c[3]!) * q + c[4]!) * q + c[5]!) / ((((d[0]! * q + d[1]!) * q + d[2]!) * q + d[3]!) * q + 1);
+  }
+  const q = p - 0.5;
+  const r = q * q;
+  return ((((((a[0]! * r + a[1]!) * r + a[2]!) * r + a[3]!) * r + a[4]!) * r + a[5]!) * q) / (((((b[0]! * r + b[1]!) * r + b[2]!) * r + b[3]!) * r + b[4]!) * r + 1);
+}
+
+/**
+ * Deflated Sharpe Ratio (Bailey & López de Prado, 2014), multiple-testing part only.
+ * - Benchmark SR0 = expected maximum Sharpe of N independent null trials:
+ *   N = 1 -> SR0 = 0; N >= 2 -> SR0 = [(1 − γ)·Φ⁻¹(1 − 1/N) + γ·Φ⁻¹(1 − 1/(N·e))] / √n (γ = Euler–Mascheroni).
+ * - DSR = Φ((SR − SR0)·√(n − 1)) with SR the per-bar Sharpe. It does NOT apply the skewness/kurtosis correction of the
+ *   paper (returns are treated as normal), so fat tails are not penalized. Floating-point math: this is a probability,
+ *   not money.
+ * - `null` when the observed Sharpe is undefined, there are fewer than 5 returns, N < 1, or the result is not finite.
+ */
+export function computeDeflatedSharpeRatioDec(
   observedSharpe: Dec | null,
   barReturns: readonly Dec[],
   numTrials = 10,
+  barsPerYear = 365,
 ): Dec | null {
-  if (observedSharpe === null || barReturns.length < 5) return null;
+  if (observedSharpe === null || barReturns.length < 5 || !Number.isInteger(numTrials) || numTrials < 1) return null;
   const n = barReturns.length;
-  const trials = Math.max(2, numTrials);
-  // Expected maximum Sharpe under null hypothesis of N independent trials
-  const eulerMascheroni = 0.5772156649;
-  const z1 = Math.sqrt(2 * Math.log(trials));
-  const z2 = Math.sqrt(2 * Math.log(trials / Math.E));
-  const srBenchmark = (1 - eulerMascheroni) * z1 + eulerMascheroni * z2;
-  const sr0 = srBenchmark / Math.sqrt(Math.max(1, n));
+  const eulerMascheroni = 0.5772156649015329;
+  const srBenchmark =
+    numTrials === 1
+      ? 0
+      : (1 - eulerMascheroni) * inverseNormalCdf(1 - 1 / numTrials) +
+        eulerMascheroni * inverseNormalCdf(1 - 1 / (numTrials * Math.E));
+  const sr0 = srBenchmark / Math.sqrt(n);
 
-  const srNum = observedSharpe.toNumber() / Math.sqrt(365);
-  const diff = (srNum - sr0) * Math.sqrt(Math.max(1, n - 1));
-  const prob = normalCdf(diff);
+  const srPerBar = observedSharpe.toNumber() / Math.sqrt(barsPerYear);
+  const z = (srPerBar - sr0) * Math.sqrt(n - 1);
+  if (!Number.isFinite(z)) return null;
+  const prob = normalCdf(z);
+  if (!Number.isFinite(prob)) return null;
   return floorSigned(dec(prob.toFixed(6)), 4);
 }
 
 /**
- * Estimates Probability of Backtest Overfitting (PBO) across 4 sub-period partitions
- * by comparing in-sample vs out-of-sample return rank consistency.
+ * Overfitting heuristic labelled "PBO": 4 equal chunks, 4 fixed in-sample/out-of-sample pairings, share of pairings where
+ * the out-of-sample Sharpe is <= 0 or below a quarter of the in-sample Sharpe. This is a simplified screen, NOT the full
+ * combinatorially symmetric cross-validation (CSCV) of Bailey et al. across strategy configurations.
  * `null` (not estimable) when there are fewer than 8 returns or any partition's Sharpe is undefined —
  * never a placeholder such as 0.5.
  */
@@ -178,7 +243,9 @@ function estimatePboDec(barReturns: readonly Dec[]): Dec | null {
  * Point-in-time Historical Simulation & Walk-Forward Evaluator.
  *
  * Strictly separates historical simulation from live trading (`mode: 'HISTORICAL_SIMULATION'`, `liveExecutionEnabled: false`).
- * Signals at bar `t` close execute at bar `t + 1` open with realistic fees, orderbook slippage, 8h funding, and bar volume caps.
+ * Signals at bar `t` close execute at bar `t + 1` open with fees, orderbook slippage, 8h funding, and bar volume caps.
+ * Market state the bars did not record (status, book, trades, mark/index, funding, OI, 24h ticker) is passed as
+ * missing, never filled in; a book synthesised from the bar spread is flagged `orderBookSynthetic`.
  */
 export async function runWalkForwardBacktest(input: WalkForwardBacktestInput): Promise<{
   summary: BacktestEvaluationSummary;
@@ -205,37 +272,68 @@ export async function runWalkForwardBacktest(input: WalkForwardBacktestInput): P
   let consecutiveLosses = 0;
   let totalNotionalTraded = ZERO;
 
-  const oiHistory: string[] = [];
+  // Close time -> bar, for the real 24h look-back (a 1-bar change is never relabelled as a 24h change).
+  const barByCloseTime = new Map<number, HistoricalBacktestBar>(bars.map((b) => [b.closeTime, b]));
 
   for (let i = 0; i < bars.length; i++) {
     const bar = bars[i]!;
-    if (bar.openInterest) oiHistory.push(bar.openInterest);
-    else oiHistory.push(toFixedStr(dec(bar.volume).mul(dec(bar.close))));
-
     if (i < warmup || i >= bars.length - 1) {
       continue;
     }
 
     const nextBar = bars[i + 1]!;
-    const status: DataStatus = bar.dataStatus ?? 'LIVE';
-    const spreadBps = dec(bar.spreadBps ?? '4.0');
+    // A bar without a recorded feed status is not assumed LIVE.
+    const status: DataStatus = bar.dataStatus ?? 'UNAVAILABLE';
     const mid = dec(bar.close);
-    const halfSpread = mid.mul(spreadBps).div(20_000);
-    const bestBid = mid.sub(halfSpread);
-    const bestAsk = mid.add(halfSpread);
 
-    // Construct synthetic or explicit L2 book at bar t close
-    const barQuoteVol =
-      bar.quoteVolume !== undefined ? dec(bar.quoteVolume) : dec(bar.volume).mul(mid);
-    const levelQty = floorToStep(maxDec(stepSize.mul(10), barQuoteVol.mul('0.05').div(mid)), stepSize);
-    const bids: SnapshotBookLevel[] = bar.bids ?? [
-      { price: bestBid.toFixed(2), qty: levelQty.toFixed(stepSize.decimalPlaces()) },
-      { price: bestBid.mul('0.998').toFixed(2), qty: levelQty.mul(2).toFixed(stepSize.decimalPlaces()) },
-    ];
-    const asks: SnapshotBookLevel[] = bar.asks ?? [
-      { price: bestAsk.toFixed(2), qty: levelQty.toFixed(stepSize.decimalPlaces()) },
-      { price: bestAsk.mul('1.002').toFixed(2), qty: levelQty.mul(2).toFixed(stepSize.decimalPlaces()) },
-    ];
+    // Order book at bar t close: the bar's recorded levels when it has them; otherwise a synthetic two-level book from
+    // the bar's spread and volume, flagged `orderBookSynthetic` so its evidence is INFERRED, not OBSERVED.
+    // Neither -> no book at all: the order-flow department blocks and no trade is simulated.
+    const recordedBook = (bar.bids?.length ?? 0) > 0 && (bar.asks?.length ?? 0) > 0;
+    const spreadBps: Dec | null =
+      bar.spreadBps !== undefined
+        ? dec(bar.spreadBps)
+        : recordedBook
+          ? spreadBpsDec(dec(bar.bids![0]!.price), dec(bar.asks![0]!.price))
+          : null;
+    let bids: SnapshotBookLevel[] = [];
+    let asks: SnapshotBookLevel[] = [];
+    let orderBookSynthetic = false;
+    if (recordedBook) {
+      bids = bar.bids!;
+      asks = bar.asks!;
+    } else if (spreadBps !== null) {
+      const halfSpread = mid.mul(spreadBps).div(20_000);
+      const synthBid = mid.sub(halfSpread);
+      const synthAsk = mid.add(halfSpread);
+      const barQuoteVol = bar.quoteVolume !== undefined ? dec(bar.quoteVolume) : dec(bar.volume).mul(mid);
+      const levelQty = floorToStep(maxDec(stepSize.mul(10), barQuoteVol.mul('0.05').div(mid)), stepSize);
+      bids = [
+        { price: synthBid.toFixed(2), qty: levelQty.toFixed(stepSize.decimalPlaces()) },
+        { price: synthBid.mul('0.998').toFixed(2), qty: levelQty.mul(2).toFixed(stepSize.decimalPlaces()) },
+      ];
+      asks = [
+        { price: synthAsk.toFixed(2), qty: levelQty.toFixed(stepSize.decimalPlaces()) },
+        { price: synthAsk.mul('1.002').toFixed(2), qty: levelQty.mul(2).toFixed(stepSize.decimalPlaces()) },
+      ];
+      orderBookSynthetic = true;
+    }
+
+    // 24h ticker fields only from a complete 24h window of recorded bars; otherwise null.
+    const dayAgo = barByCloseTime.get(bar.closeTime - DAY_MS);
+    const priceChangePct24h =
+      dayAgo && dec(dayAgo.close).gt(ZERO)
+        ? dec(bar.close).sub(dayAgo.close).div(dayAgo.close).mul(100).toFixed(2)
+        : null;
+    const quoteVolume24h = quoteVolumeOver24h(bars, i);
+
+    // Derivatives only from what the bar recorded: no spot close as mark/index, no default funding, no volume x price
+    // as open interest, no invented next funding time. Without a mark the derivatives department abstains.
+    const oiWindow = bars.slice(Math.max(0, i - 10), i + 1);
+    const openInterestSeries = oiWindow.every((b) => b.openInterest !== undefined)
+      ? oiWindow.map((b) => b.openInterest!)
+      : [];
+    const derivativesStatus: DataStatus = bar.markPrice !== undefined ? status : 'UNAVAILABLE';
 
     const currentDd = maxDrawdownPctDec(equityCurve);
 
@@ -245,57 +343,38 @@ export async function runWalkForwardBacktest(input: WalkForwardBacktestInput): P
       interval: input.interval,
       asOfMs: bar.closeTime,
       spotDataStatus: status,
-      futuresDataStatus: status,
+      futuresDataStatus: derivativesStatus,
       rules: input.rules,
       spot: {
         lastPrice: bar.close,
-        bestBid: bestBid.toFixed(2),
-        bestAsk: bestAsk.toFixed(2),
-        priceChangePct24h:
-          i >= 1
-            ? dec(bar.close).sub(dec(bars[i - 1]!.close)).div(dec(bars[i - 1]!.close)).mul(100).toFixed(2)
-            : '0.00',
-        quoteVolume24h: toFixedStr(barQuoteVol),
+        bestBid: bids[0]?.price ?? null,
+        bestAsk: asks[0]?.price ?? null,
+        priceChangePct24h,
+        quoteVolume24h,
         tickerUpdatedAtMs: bar.closeTime,
-        bookUpdatedAtMs: bar.closeTime,
+        bookUpdatedAtMs: bids.length > 0 || asks.length > 0 ? bar.closeTime : null,
         bids,
         asks,
-        recentTrades: [
-          {
-            id: `t-${i}-1`,
-            price: bar.close,
-            qty: floorToStep(maxDec(stepSize, dec(bar.volume).mul('0.6')), stepSize).toFixed(stepSize.decimalPlaces()),
-            quoteQty: toFixedStr(barQuoteVol.mul('0.6')),
-            isBuyerMaker: dec(bar.close).lt(dec(bar.open)),
-            time: bar.closeTime - 1000,
-          },
-          {
-            id: `t-${i}-2`,
-            price: bar.close,
-            qty: floorToStep(maxDec(stepSize, dec(bar.volume).mul('0.4')), stepSize).toFixed(stepSize.decimalPlaces()),
-            quoteQty: toFixedStr(barQuoteVol.mul('0.4')),
-            isBuyerMaker: dec(bar.close).gte(dec(bar.open)),
-            time: bar.closeTime - 500,
-          },
-        ],
+        orderBookSynthetic,
+        // No historical public trades are recorded with a bar; candle-direction proxies would be invented order flow.
+        recentTrades: [],
         candles: bars.slice(0, i + 1).map((b) => ({ ...b, closed: true })),
       },
       derivatives: {
-        status,
-        markPrice: bar.close,
-        indexPrice: bar.close,
-        lastFundingRate: bar.fundingRate8h ?? '0.000100',
-        nextFundingTime: bar.closeTime + 8 * 3_600_000,
-        openInterestSeries: oiHistory.slice(Math.max(0, i - 10), i + 1),
-        updatedAtMs: bar.closeTime,
+        status: derivativesStatus,
+        markPrice: bar.markPrice ?? null,
+        indexPrice: bar.indexPrice ?? null,
+        lastFundingRate: bar.fundingRate8h ?? null,
+        nextFundingTime: null,
+        openInterestSeries,
+        updatedAtMs: bar.markPrice !== undefined ? bar.closeTime : null,
       },
+      // The simulation tracks equity, drawdown and the loss streak; daily/weekly loss are not tracked -> not provided.
       portfolio: {
         provided: true,
         equityUsdt: toFixedStr(equity),
         availableUsdt: toFixedStr(equity),
         currentDrawdownPct: currentDd.toFixed(4),
-        dailyLossPct: '0.0000',
-        weeklyLossPct: '0.0000',
         consecutiveLosses,
         activePositions: [],
       },
@@ -334,16 +413,11 @@ export async function runWalkForwardBacktest(input: WalkForwardBacktestInput): P
 
     let executedQty = rawQty;
     let liquidityCapped = false;
-    if (executedQty.gt(maxBarQty) && maxBarQty.gt(ZERO)) {
+    // maxBarQty can be 0 (next bar too thin for one step): then nothing fills — it is never "uncapped".
+    if (executedQty.gt(maxBarQty)) {
       executedQty = maxBarQty;
       liquidityCapped = true;
       liquidityCappedTrades++;
-    }
-
-    if (executedQty.lte(ZERO)) {
-      barReturns.push(ZERO);
-      equityCurve.push(equity);
-      continue;
     }
 
     const entryNotional = executedQty.mul(nextOpen);
@@ -354,7 +428,18 @@ export async function runWalkForwardBacktest(input: WalkForwardBacktestInput): P
       entryNotional,
       stepSize,
     );
-    const slipBps = maxDec(spreadBps.div(2), depthSlip.slippageBps ?? spreadBps.div(2));
+    const halfSpreadBps = spreadBps !== null ? spreadBps.div(2) : null;
+    const slipBps =
+      depthSlip.slippageBps !== null && halfSpreadBps !== null
+        ? maxDec(halfSpreadBps, depthSlip.slippageBps)
+        : (depthSlip.slippageBps ?? halfSpreadBps);
+
+    // Nothing fills, or the execution cost cannot be estimated (no spread, no book) -> no simulated trade.
+    if (executedQty.lte(ZERO) || slipBps === null) {
+      barReturns.push(ZERO);
+      equityCurve.push(equity);
+      continue;
+    }
 
     // Apply entry + exit slippage (roundUp cost)
     const entrySlipCost = roundUp(entryNotional.mul(slipBps).div(10_000), AMOUNT_SCALE);
@@ -367,8 +452,13 @@ export async function runWalkForwardBacktest(input: WalkForwardBacktestInput): P
     const exitFee = roundUp(exitNotional.mul(feeRate), AMOUNT_SCALE);
     const tradeFees = entryFee.add(exitFee);
 
-    // Apply perpetual funding payment (`fundingPayment` returns + received, - paid)
-    const fundingRateDec = dec(nextBar.fundingRate8h ?? '0.0001');
+    // Apply perpetual funding payment (`fundingPayment` returns + received, - paid).
+    // No recorded rate -> 0.01% charged AGAINST the position (Module C §3.2 convention), never a default sign that
+    // would pay a SHORT.
+    const fundingRateDec =
+      nextBar.fundingRate8h !== undefined && nextBar.fundingRate8h !== null
+        ? dec(nextBar.fundingRate8h)
+        : dec(side === 'LONG' ? '0.0001' : '-0.0001');
     const fundingCashflow = fundingPayment(side, executedQty, nextClose, fundingRateDec);
     const fundingCost = fundingCashflow.negated();
 
@@ -517,12 +607,15 @@ export async function runWalkForwardBacktest(input: WalkForwardBacktestInput): P
     }
   }
 
+  // WFE = ΣOOS / ΣIS only when the in-sample Sharpe sum is positive (> 0.01): with ΣIS <= 0 the ratio is meaningless
+  // (two losing sides would give a "good" positive ratio), so it is null.
   const wfEfficiency =
-    walkForwardFolds.length > 0 && isSharpeSum !== null && oosSharpeSum !== null && isSharpeSum.abs().gt('0.01')
+    walkForwardFolds.length > 0 && isSharpeSum !== null && oosSharpeSum !== null && isSharpeSum.gt('0.01')
       ? oosSharpeSum.div(isSharpeSum)
       : null;
 
-  // PASS needs both overfitting diagnostics to be defined; an inestimable PBO/DSR can never pass.
+  // Research screen only. `PASS_RESEARCH_GATE` is NOT the M3 gate (Module C §3.3: live MODELED_CANDLES of one engine
+  // version) and never releases or unlocks anything. PASS needs both overfitting diagnostics to be defined.
   const verdict =
     pbo !== null && dsr !== null && pbo.lt('0.50') && dsr.gte('0.50') && totalReturnPct.gt(ZERO)
       ? 'PASS_RESEARCH_GATE'

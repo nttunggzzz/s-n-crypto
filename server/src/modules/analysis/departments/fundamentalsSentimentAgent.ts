@@ -83,6 +83,11 @@ export async function runCryptoFundamentalsSentimentAgent(
   for (const m of regime.missingComponents) {
     missingData.push(`regime.${m}`);
   }
+  if (regime.score === null && regime.availableComponents > 0) {
+    missingData.push(
+      `cryptoRegimeComposite (only ${regime.availableComponents}/6 components; needs >= 4 and >= 65% of the weight)`,
+    );
+  }
 
   // Score calculation
   let rawScore = ZERO;

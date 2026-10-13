@@ -15,6 +15,11 @@
   - `BacktestEvaluationSummary.sharpeRatio` / `sortinoRatio` / `calmarRatio` / `deflatedSharpeRatio` / `probabilityOfBacktestOverfitting` /
     `winRatePct` / `profitFactor` / `walkForwardEfficiencyRatio` và `WalkForwardFoldMetrics.inSampleSharpe` / `outOfSampleSharpe` → `nullable`
     (không xác định được thì `null`, không còn số giữ chỗ 0 / 0.5 / 9.99).
+  - `CryptoMarketSnapshot.spot.orderBookSynthetic: boolean` (mới): `true` chỉ khi backtest dựng sổ lệnh từ spread/khối lượng của nến;
+    bằng chứng lấy từ sổ lệnh đó là `INFERRED`, không phải `OBSERVED`.
+  - `CircuitBreakerStatusSchema` thêm `NOT_APPLICABLE`: danh mục `NOT_PROVIDED` thì các cầu dao danh mục "không áp dụng" (trước đây ghi `NORMAL`).
+  - Chú thích: `deflatedSharpeRatio` chỉ hiệu chỉnh nhiều lần thử (coi lợi nhuận là phân phối chuẩn);
+    `probabilityOfBacktestOverfitting` là phép sàng lọc 4 khúc, không phải CSCV đầy đủ; `verdict = PASS_RESEARCH_GATE` **không phải** cổng M3.
 - Nguồn: chuyển thể từ TauricResearch/TradingAgents v0.6.0 (Apache-2.0), xem `THIRD_PARTY_NOTICES.md` ở gốc repo.
 
 ## 0.12.0 — 2026-10-12 (Realtime `onClose`, `publicConfig.emailDelivery`)

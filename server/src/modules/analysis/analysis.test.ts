@@ -1,6 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { CryptoMarketAnalysisReport, BacktestEvaluationSummary } from '@cex/contracts';
+import {
+  CryptoMarketAnalysisReport,
+  BacktestEvaluationSummary,
+  type CryptoMarketSnapshot,
+  type DepartmentFinding,
+} from '@cex/contracts';
 import { dec, toFixedStr } from '@cex/core';
+import { computeDeflatedSharpeRatioDec } from './backtester.ts';
+import { runDerivativesPositioningAgent } from './departments/derivativesAgent.ts';
+import { runOrderFlowMicrostructureAgent } from './departments/orderFlowAgent.ts';
 import {
   buildCryptoMarketSnapshot,
   CryptoTradingAgentsOrchestrator,
@@ -462,8 +470,10 @@ describe('Phase 5 Validation: Crypto-Native Multi-Agent Market Analysis Subsyste
 
     for (let i = 0; i < 42; i++) {
       const step = i % 5 === 0 ? dec('-80') : dec('210');
-      const open = price;
-      const close = price.add(step);
+      // Each bar opens 15 away from the previous close (alternating gap), so "fill at bar t close" and
+      // "fill at bar t+1 open" are different prices and the entry-price assertion below can tell them apart.
+      const open = price.add(i % 2 === 0 ? '15' : '-15');
+      const close = open.add(step);
       const high = (close.gt(open) ? close : open).add('120');
       const low = (close.lt(open) ? close : open).sub('90');
       // Make bar 28 have constrained volume so liquidity participation cap is exercised
@@ -512,6 +522,12 @@ describe('Phase 5 Validation: Crypto-Native Multi-Agent Market Analysis Subsyste
     expect(summary.mode).toBe('HISTORICAL_SIMULATION');
     expect(summary.liveExecutionEnabled).toBe(false);
     expect(trades.length).toBeGreaterThan(0);
+    // No look-ahead fill: a decision at bar i close fills at bar i+1 OPEN (and the 1-bar hold exits at bar i+1 close).
+    for (const t of trades) {
+      const fillBar = bars[t.entryBarIndex]!;
+      expect(t.entryPrice).toBe(dec(fillBar.open).toFixed(2));
+      expect(t.exitPrice).toBe(dec(fillBar.close).toFixed(2));
+    }
     expect(dec(summary.totalFeesPaidUsdt).gt(0)).toBe(true);
     expect(dec(summary.totalSlippageCostUsdt).gt(0)).toBe(true);
     expect(dec(summary.totalFundingPaidUsdt).gt(0)).toBe(true);
@@ -539,10 +555,12 @@ describe('Phase 5 Validation: Crypto-Native Multi-Agent Market Analysis Subsyste
 
     const report = await new CryptoTradingAgentsOrchestrator().analyzeFromRawInput(input);
     expect(report.audit.priorLessonsUsed).toBe(0);
-    expect(report.riskReview.circuitBreakerStatus).toBe('NORMAL');
+    // No portfolio -> the portfolio circuit breakers are NOT_APPLICABLE, not a made-up NORMAL.
+    expect(report.riskReview.circuitBreakerStatus).toBe('NOT_APPLICABLE');
     const risk = report.departmentFindings.find((d) => d.department === 'risk_execution_review')!;
-    expect(risk.missingData).toContain('portfolio.equityUsdt (using $10,000 reference baseline)');
-    expect(risk.missingData).toContain('portfolio.currentDrawdownPct (not provided; circuit breaker cannot use it)');
+    expect(risk.missingData).toContain(
+      'portfolio (NOT_PROVIDED): sizing uses the $10,000 reference baseline; portfolio circuit breakers not applicable',
+    );
 
     // An active futures position whose maintenance margin rate is unknown everywhere fails closed.
     const unknownMmr = await new CryptoTradingAgentsOrchestrator().analyzeFromRawInput({
@@ -622,4 +640,260 @@ describe('Phase 5 Validation: Crypto-Native Multi-Agent Market Analysis Subsyste
     // totalReturn 0 > -5 and drawdown 0 < 15, but PBO/DSR are null -> never PASS_RESEARCH_GATE.
     expect(summary.verdict).toBe('CAUTIOUS_INCONCLUSIVE');
   });
+
+  it('10. Deflated Sharpe is finite for 1, 2, 3 and 10 trials and never rises as the trial count grows', () => {
+    // Observed annualized Sharpe 20 on n = 10 returns -> per-bar SR = 20 / sqrt(365) = 1.046848, sqrt(n - 1) = 3.
+    // N = 1: SR0 = 0 -> z = 3.140544 -> Phi(z) = 0.999157 -> "0.9991".
+    //   (Before the fix N = 1 and N = 2 both became trials = 2, sqrt(2 ln(2/e)) = NaN, Phi(NaN) = 0 -> a fake "0.0000".)
+    // N = 10: SR0 = [(1 - g) Phi^-1(0.9) + g Phi^-1(1 - 1/(10e))] / sqrt(10)
+    //       = (0.42278 * 1.28155 + 0.57722 * 1.7893) / 3.16228 = 0.4979 -> z = (1.046848 - 0.4979) * 3 = 1.6467 -> ~0.950
+    const returns = Array.from({ length: 10 }, () => dec('0.01'));
+    const values = [1, 2, 3, 10].map((n) => computeDeflatedSharpeRatioDec(dec('20'), returns, n));
+    for (const v of values) {
+      expect(v).not.toBeNull();
+      expect(Number.isFinite(v!.toNumber())).toBe(true);
+    }
+    expect(values[0]!.toFixed(4)).toBe('0.9991');
+    expect(values[3]!.gte('0.9495') && values[3]!.lte('0.9510')).toBe(true);
+    for (let k = 1; k < values.length; k++) expect(values[k]!.lte(values[k - 1]!)).toBe(true);
+    expect(values[3]!.lt(values[0]!)).toBe(true);
+    // A non-positive trial count is rejected, not clamped to 2.
+    expect(computeDeflatedSharpeRatioDec(dec('20'), returns, 0)).toBeNull();
+  });
+
+  it('11. Backtest bars without recorded derivatives / status / spread are passed as missing, never filled in', async () => {
+    const baseTime = Date.parse('2026-10-01T00:00:00.000Z');
+    const makeBars = (extra: Partial<HistoricalBacktestBar>): HistoricalBacktestBar[] => {
+      const out: HistoricalBacktestBar[] = [];
+      let price = dec('60000');
+      for (let i = 0; i < 45; i++) {
+        const step = i % 5 === 0 ? dec('-80') : dec('210');
+        const close = price.add(step);
+        out.push({
+          openTime: baseTime + i * 3_600_000,
+          closeTime: baseTime + (i + 1) * 3_600_000 - 1,
+          open: price.toFixed(2),
+          high: (close.gt(price) ? close : price).add('120').toFixed(2),
+          low: (close.lt(price) ? close : price).sub('90').toFixed(2),
+          close: close.toFixed(2),
+          volume: '180.00000',
+          quoteVolume: toFixedStr(dec('180').mul(close)),
+          closed: true,
+          ...extra,
+        });
+        price = close;
+      }
+      return out;
+    };
+    const run = async (bars: HistoricalBacktestBar[]) => {
+      const seen: Array<{ snapshot: CryptoMarketSnapshot; finding: DepartmentFinding }> = [];
+      const micro: DepartmentFinding[] = [];
+      const orchestrator = new CryptoTradingAgentsOrchestrator({
+        maxDebateRounds: 1,
+        departmentOverrides: {
+          derivatives_positioning: async (snapshot, llm) => {
+            const finding = await runDerivativesPositioningAgent(snapshot, llm);
+            seen.push({ snapshot, finding });
+            return finding;
+          },
+          order_flow_microstructure: async (snapshot, llm) => {
+            const finding = await runOrderFlowMicrostructureAgent(snapshot, llm);
+            micro.push(finding);
+            return finding;
+          },
+        },
+      });
+      const result = await runWalkForwardBacktest({
+        symbol: 'BTCUSDT', interval: '1h', initialEquityUsdt: '100000.00000000', rules: BT_RULES, bars, warmupBars: 20, orchestrator,
+      });
+      return { ...result, seen, micro };
+    };
+
+    // A) LIVE bars with a spread but no funding / OI / mark: derivatives department abstains on every decision bar.
+    const bars = makeBars({ dataStatus: 'LIVE', spreadBps: '4.0000' });
+    const a = await run(bars);
+    expect(a.seen).toHaveLength(24); // decisions at bars 20..43
+    for (const { snapshot, finding } of a.seen) {
+      expect(finding.stance).toBe('ABSTAIN');
+      expect(finding.status).toBe('UNAVAILABLE');
+      expect(snapshot.futuresDataStatus).toBe('UNAVAILABLE');
+      expect(snapshot.derivatives).toMatchObject({
+        markPrice: null, indexPrice: null, lastFundingRate: null, nextFundingTime: null, openInterestSeries: [],
+      });
+      expect(snapshot.spot.recentTrades).toEqual([]); // no candle-direction "trades"
+      expect(snapshot.spot.orderBookSynthetic).toBe(true); // book from the bar spread is flagged
+    }
+    const at = (i: number) => a.seen.find((s) => s.snapshot.asOfMs === bars[i]!.closeTime)!.snapshot;
+    // Bar 23 has no bar 24h earlier -> no 24h change (the old code reported the 1-bar change as 24h).
+    expect(at(23).spot.priceChangePct24h).toBeNull();
+    // Bar 24 vs bar 0: close0 = 60000 - 80 = 59920; close24 = 60000 + 5*(-80) + 20*210 = 63800;
+    // (63800 - 59920) / 59920 * 100 = 6.47530.. -> "6.48" (half-up).
+    expect(at(24).spot.priceChangePct24h).toBe('6.48');
+    // 24h quote volume only for a complete 24-bar window: bar 20 has 21 bars -> null; bar 23 has bars 0..23.
+    expect(at(20).spot.quoteVolume24h).toBeNull();
+    const sum0to23 = bars.slice(0, 24).reduce((s, b) => s.add(b.quoteVolume!), dec('0'));
+    expect(at(23).spot.quoteVolume24h).toBe(toFixedStr(sum0to23));
+    // Evidence read from the synthetic book is INFERRED, never OBSERVED, and the department reports DEGRADED.
+    expect(a.micro).toHaveLength(24);
+    for (const f of a.micro) {
+      const bookEvidence = f.evidence.filter((e) => e.metric === 'spreadBps' || e.metric === 'depthWithin2PctUsdt');
+      expect(bookEvidence.length).toBeGreaterThan(0);
+      expect(bookEvidence.every((e) => e.kind === 'INFERRED')).toBe(true);
+      expect(f.status).toBe('DEGRADED');
+    }
+
+    // B) Bars without a recorded dataStatus are not assumed LIVE: no trade, every decision skipped.
+    const b = await run(makeBars({ spreadBps: '4.0000' }));
+    expect(b.trades).toHaveLength(0);
+    expect(b.summary.staleOrHaltedSkips).toBe(24);
+
+    // C) LIVE bars with neither a spread nor a recorded book: no book is invented -> core order-flow blocks, no trade.
+    const c = await run(makeBars({ dataStatus: 'LIVE' }));
+    expect(c.trades).toHaveLength(0);
+    expect(c.summary.staleOrHaltedSkips).toBe(24);
+    expect(c.seen.every((s) => s.snapshot.spot.bids.length === 0 && s.snapshot.spot.asks.length === 0)).toBe(true);
+  });
+
+  it('12. Risk review: a provided account with no equity is vetoed; a provided account without drawdown fails closed', async () => {
+    const orchestrator = new CryptoTradingAgentsOrchestrator();
+    const base = createBaseSnapshotInput();
+
+    const zeroEquity = await orchestrator.analyzeFromRawInput({
+      ...base,
+      portfolio: { ...base.portfolio!, equityUsdt: '0.00000000', availableUsdt: '0.00000000' },
+    });
+    expect(zeroEquity.riskReview.approved).toBe(false);
+    expect(zeroEquity.riskReview.vetoReasons.some((r) => r.includes('no positive equity'))).toBe(true);
+    expect(zeroEquity.riskReview.sizingLadder).toBeNull(); // not sized on the $10,000 baseline
+    expect(zeroEquity.advisoryProposal.recommendedQuantity).toBe('0.00000000');
+
+    const { currentDrawdownPct: _dd, ...noDrawdown } = base.portfolio!;
+    const missingDd = await orchestrator.analyzeFromRawInput({ ...base, portfolio: noDrawdown });
+    expect(missingDd.riskReview.circuitBreakerStatus).toBe('CRITICAL');
+    expect(missingDd.riskReview.circuitBreakerMultiplier).toBe('0.00');
+    expect(missingDd.riskReview.approved).toBe(false);
+    expect(missingDd.rating).toBe('REVIEW');
+  });
+
+  it('13. Derivatives: unavailable futures feed with an open position blocks; a missing index is not replaced by spot', async () => {
+    const orchestrator = new CryptoTradingAgentsOrchestrator();
+    const base = createBaseSnapshotInput();
+    const position = {
+      symbol: 'BTCUSDT',
+      marketType: 'FUTURES_PERP' as const,
+      side: 'LONG' as const,
+      qty: '0.10000',
+      entryPrice: base.spot.lastPrice!,
+      markPrice: base.spot.lastPrice!,
+      marginUsdt: '5000.00000000',
+      maintenanceMarginRate: '0.0050',
+      unrealizedPnlUsdt: '0.00000000',
+    };
+    const noFeed = await orchestrator.analyzeFromRawInput({
+      ...base,
+      derivatives: null,
+      portfolio: { ...base.portfolio!, activePositions: [position] },
+    });
+    expect(noFeed.riskFlags.some((f) => f.code === 'DERIV_LIQUIDATION_BUFFER_UNKNOWN' && f.blocksExecution)).toBe(true);
+    expect(noFeed.riskReview.approved).toBe(false);
+
+    const noIndex = await orchestrator.analyzeFromRawInput({ ...base, derivatives: { ...base.derivatives!, indexPrice: null } });
+    const deriv = noIndex.departmentFindings.find((d) => d.department === 'derivatives_positioning')!;
+    expect(deriv.metrics.indexPrice).toBeNull();
+    expect(deriv.metrics.basisBps).toBeNull(); // the old fallback computed a basis against the spot last price
+    expect(deriv.missingData).toContain('derivatives.indexPrice (basis not computed)');
+  });
+
+  it('14. On-chain data without an observation time is withheld (cannot be checked against asOf)', async () => {
+    const base = createBaseSnapshotInput();
+    const input: BuildCryptoMarketSnapshotInput = { ...base, onChainAndMacro: { ...base.onChainAndMacro!, observedAtMs: null } };
+    const { snapshot } = buildCryptoMarketSnapshot(input);
+    expect(snapshot.onChainAndMacro?.status).toBe('UNAVAILABLE');
+    expect(snapshot.onChainAndMacro?.marketCapUsd).toBeNull();
+    expect(snapshot.onChainAndMacro?.headlines).toEqual([]);
+    expect(snapshot.timestampAlignment.warnings.some((w) => w.includes('no observedAt'))).toBe(true);
+
+    const report = await new CryptoTradingAgentsOrchestrator().analyzeFromRawInput(input);
+    const fund = report.departmentFindings.find((d) => d.department === 'crypto_fundamentals_sentiment')!;
+    expect(fund.stance).toBe('ABSTAIN');
+  });
+
+  it('15. Backtest: a next bar too thin for one step fills nothing; WFE is null when the in-sample Sharpe sum is <= 0', async () => {
+    const baseTime = Date.parse('2026-10-01T00:00:00.000Z');
+
+    // A) Every bar trades 0.0001 BTC: max fill = floor(0.0001 * close * 0.05 / open, 0.00001) = floor(~0.000005) = 0.
+    //    The recorded book is deep, so the analysis still proposes trades; none may fill (the old code filled in full).
+    const thin: HistoricalBacktestBar[] = [];
+    let price = dec('60000');
+    for (let i = 0; i < 42; i++) {
+      const step = i % 5 === 0 ? dec('-80') : dec('210');
+      const close = price.add(step);
+      thin.push({
+        openTime: baseTime + i * 3_600_000,
+        closeTime: baseTime + (i + 1) * 3_600_000 - 1,
+        open: price.toFixed(2),
+        high: (close.gt(price) ? close : price).add('120').toFixed(2),
+        low: (close.lt(price) ? close : price).sub('90').toFixed(2),
+        close: close.toFixed(2),
+        volume: '0.00010',
+        quoteVolume: toFixedStr(dec('0.0001').mul(close)),
+        closed: true,
+        dataStatus: 'LIVE',
+        fundingRate8h: '0.000100',
+        bids: [{ price: close.sub('1').toFixed(2), qty: '50.00000' }, { price: close.sub('10').toFixed(2), qty: '100.00000' }],
+        asks: [{ price: close.add('1').toFixed(2), qty: '50.00000' }, { price: close.add('10').toFixed(2), qty: '100.00000' }],
+      });
+      price = close;
+    }
+    const thinRun = await runWalkForwardBacktest({
+      symbol: 'BTCUSDT', interval: '1h', initialEquityUsdt: '100000.00000000', rules: BT_RULES, bars: thin, warmupBars: 20,
+    });
+    expect(thinRun.summary.liquidityCappedTrades).toBeGreaterThanOrEqual(1); // proposals happened ...
+    expect(thinRun.trades).toHaveLength(0); // ... and none filled
+    expect(thinRun.summary.totalFeesPaidUsdt).toBe('0.00000000');
+
+    // B) The cli.ts sample series loses in-sample in both folds: WFE = sum(OOS) / sum(IS) of two negatives would look
+    //    "good" (positive), so it must be null.
+    const sample: HistoricalBacktestBar[] = [];
+    price = dec('64000');
+    for (let i = 0; i < 45; i++) {
+      const step = i % 5 === 0 ? dec('-120') : dec('185');
+      const close = price.add(step);
+      const vol = dec('180').add(String((i % 7) * 15));
+      sample.push({
+        openTime: baseTime + i * 3_600_000,
+        closeTime: baseTime + (i + 1) * 3_600_000 - 1,
+        open: price.toFixed(2),
+        high: (close.gt(price) ? close : price).add('140').toFixed(2),
+        low: (close.lt(price) ? close : price).sub('110').toFixed(2),
+        close: close.toFixed(2),
+        volume: vol.toFixed(5),
+        quoteVolume: toFixedStr(vol.mul(close)),
+        closed: true,
+        dataStatus: 'LIVE',
+        spreadBps: '3.2000',
+        fundingRate8h: '0.000100',
+      });
+      price = close;
+    }
+    const wf = await runWalkForwardBacktest({
+      symbol: 'BTCUSDT', interval: '1h', initialEquityUsdt: '100000.00000000', rules: BT_RULES, bars: sample, warmupBars: 20, walkForwardFoldCount: 2,
+    });
+    expect(wf.summary.walkForwardFolds).toHaveLength(2);
+    const isSum = wf.summary.walkForwardFolds.reduce((s, f) => s.add(f.inSampleSharpe!), dec('0'));
+    expect(isSum.lte(0)).toBe(true); // the case under test really occurs
+    expect(wf.summary.walkForwardEfficiencyRatio).toBeNull();
+  });
 });
+
+const BT_RULES = {
+  symbol: 'BTCUSDT',
+  baseAsset: 'BTC',
+  quoteAsset: 'USDT',
+  tickSize: '0.01',
+  stepSize: '0.00001',
+  minQty: '0.00010',
+  maxQty: '100.00000',
+  minNotional: '10.00',
+  feeRate: '0.0010',
+};

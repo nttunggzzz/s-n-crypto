@@ -52,6 +52,8 @@ export interface BuildCryptoMarketSnapshotInput {
     bookUpdatedAtMs?: number | null;
     bids: SnapshotBookLevel[];
     asks: SnapshotBookLevel[];
+    /** True when `bids`/`asks` were synthesised (historical simulation), not observed from a feed. Default false. */
+    orderBookSynthetic?: boolean;
     recentTrades: SnapshotPublicTrade[];
     candles: RawCandleInput[];
   };
@@ -193,9 +195,14 @@ export function buildCryptoMarketSnapshot(input: BuildCryptoMarketSnapshotInput)
     }
 
     const obsMs = input.onChainAndMacro.observedAtMs ?? null;
-    if (obsMs !== null && obsMs > asOfMs) {
-      lookaheadItemsFiltered++;
-      warnings.push(`On-chain/macro snapshot timestamp (${obsMs}) is after asOfMs (${asOfMs}); withheld to prevent look-ahead bias.`);
+    // Fail closed: without an observation time the block cannot be checked against asOfMs, so it is withheld too.
+    if (obsMs === null || obsMs > asOfMs) {
+      if (obsMs === null) {
+        warnings.push('On-chain/macro snapshot has no observedAt; withheld because it cannot be checked against asOfMs.');
+      } else {
+        lookaheadItemsFiltered++;
+        warnings.push(`On-chain/macro snapshot timestamp (${obsMs}) is after asOfMs (${asOfMs}); withheld to prevent look-ahead bias.`);
+      }
       onChainAndMacro = {
         status: 'UNAVAILABLE',
         observedAt: null,
@@ -219,7 +226,7 @@ export function buildCryptoMarketSnapshot(input: BuildCryptoMarketSnapshotInput)
     } else {
       onChainAndMacro = {
         status: input.onChainAndMacro.status,
-        observedAt: obsMs !== null ? new Date(obsMs).toISOString() : null,
+        observedAt: new Date(obsMs).toISOString(),
         marketCapUsd: input.onChainAndMacro.marketCapUsd ?? null,
         realizedCapUsd: input.onChainAndMacro.realizedCapUsd ?? null,
         dailyTxVolumeUsd: input.onChainAndMacro.dailyTxVolumeUsd ?? null,
@@ -387,6 +394,7 @@ export function buildCryptoMarketSnapshot(input: BuildCryptoMarketSnapshotInput)
           : null,
       bids: input.spot.bids,
       asks: input.spot.asks,
+      orderBookSynthetic: input.spot.orderBookSynthetic ?? false,
       recentTrades,
       closedCandles,
     },

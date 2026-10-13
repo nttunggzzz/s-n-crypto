@@ -86,9 +86,9 @@ SOFTWARE.
 | Path used | `skills/crypto-regime-analyzer` |
 | License | MIT (full text below) |
 
-Formula adapted (modified: ported to TypeScript on `Dec`; this port redistributes weights from one available component
-upward, while the source fails closed below 4 components or 65% of the model weight) in `packages/core/src/quant.ts`:
-`computeCryptoRegimeCompositeDec` (6-component weights 0.25 / 0.20 / 0.15 / 0.15 / 0.15 / 0.10, zones 80 / 40),
+Formula adapted (modified: ported to TypeScript on `Dec`) in `packages/core/src/quant.ts`:
+`computeCryptoRegimeCompositeDec` (6-component weights 0.25 / 0.20 / 0.15 / 0.15 / 0.15 / 0.10, zones 80 / 40,
+weights redistributed only when at least 4 components and 65% of the model weight remain, as in the source `scorer.py`),
 used by `fundamentalsSentimentAgent.ts`.
 
 ```text

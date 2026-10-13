@@ -104,31 +104,37 @@ export async function runOrderFlowMicrostructureAgent(
     poolOrQuoteVolumeUsdt: snapshot.spot.quoteVolume24h ? dec(snapshot.spot.quoteVolume24h) : null,
   });
 
-  // OBSERVED evidence
+  // Book evidence is OBSERVED only for a book read from a feed; a synthetic (backtest) book is INFERRED.
+  const synthetic = snapshot.spot.orderBookSynthetic;
+  const bookKind = synthetic ? ('INFERRED' as const) : ('OBSERVED' as const);
+  const syntheticNote = synthetic ? ' SYNTHETIC book built from bar spread/volume (historical simulation), not observed.' : '';
+  if (synthetic) {
+    missingData.push('spot.orderBook (no recorded book; synthetic book from bar spread/volume)');
+  }
   if (spreadBps) {
     evidence.push({
       id: `${snapshot.snapshotId}-micro-spread`,
-      kind: 'OBSERVED',
+      kind: bookKind,
       department,
       metric: 'spreadBps',
       value: spreadBps.toFixed(4),
-      source: 'spot.orderBook.topOfBook',
+      source: synthetic ? 'spot.orderBook.synthetic' : 'spot.orderBook.topOfBook',
       observedAt: snapshot.spot.bookUpdatedAt ?? snapshot.asOf,
       dataStatus: snapshot.spotDataStatus,
-      note: `Top-of-book bid=${bestBid.toFixed(4)}, ask=${bestAsk.toFixed(4)}.`,
+      note: `Top-of-book bid=${bestBid.toFixed(4)}, ask=${bestAsk.toFixed(4)}.${syntheticNote}`,
     });
   }
 
   evidence.push({
     id: `${snapshot.snapshotId}-micro-depth2pct`,
-    kind: 'OBSERVED',
+    kind: bookKind,
     department,
     metric: 'depthWithin2PctUsdt',
     value: roundDown(depthWithin2PctUsdt, 2).toFixed(2),
-    source: 'spot.orderBook.L2',
+    source: synthetic ? 'spot.orderBook.synthetic' : 'spot.orderBook.L2',
     observedAt: snapshot.spot.bookUpdatedAt ?? snapshot.asOf,
     dataStatus: snapshot.spotDataStatus,
-    note: 'Combined bid + ask notional depth within 2% of mid price.',
+    note: `Combined bid + ask notional depth within 2% of mid price.${syntheticNote}`,
   });
 
   if (takerFlow.imbalanceRatio) {
@@ -233,7 +239,7 @@ export async function runOrderFlowMicrostructureAgent(
 
   return {
     department,
-    status: snapshot.spotDataStatus === 'LIVE' ? 'OK' : 'DEGRADED',
+    status: snapshot.spotDataStatus === 'LIVE' && !synthetic ? 'OK' : 'DEGRADED',
     stance,
     score: clampedScore.toFixed(2),
     confidence: floorSigned(rawConf, 2).toFixed(2),

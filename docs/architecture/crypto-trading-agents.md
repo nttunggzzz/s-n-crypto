@@ -8,7 +8,7 @@
 | **Local Isolated Clone** | `D:\Claude\crypto\vendor\TradingAgents` (gitignored via `/vendor/` in `.gitignore`) |
 | **Default Branch** | `main` |
 | **Pinned Commit SHA** | `1394a3f72aa4393e1a98f51b382434c4b4c2d972` (`1394a3f`) |
-| **Upstream Release Tag** | `v0.6.0` (2026-04-14) |
+| **Upstream Release Tag** | `v0.6.0` (2026-10-03, upstream `CHANGELOG.md` "[0.6.0] — 2026-10-03"; tag `v0.6.0` points at `1394a3f`) |
 | **License** | `Apache-2.0` (`vendor/TradingAgents/LICENSE`) |
 
 ---
@@ -34,7 +34,7 @@
 
 ### Reusable Upstream Patterns Preserved
 1. **Verified Point-in-Time Snapshot (`snapshot.py` #830 + `date_window.py` #1251)**: `buildCryptoMarketSnapshot` freezes authoritative numbers, filters out unclosed bars (`closed !== true`) and future items (`> asOfMs`), and computes a SHA-256 `snapshotHash`.
-2. **Explicit Absence Markers (`prompt_fallbacks.py` #1176)**: Missing or disconnected feeds (`derivatives: null`, `onChainAndMacro: null`) emit `DATA_UNAVAILABLE` and `status: 'UNAVAILABLE'` instead of fabricating data.
+2. **Explicit Absence Markers (`tradingagents/agents/context.py` `report_or_absent` / `opponent_argument_or_opening`, #1176)**: Missing or disconnected feeds (`derivatives: null`, `onChainAndMacro: null`) emit `DATA_UNAVAILABLE` and `status: 'UNAVAILABLE'` instead of fabricating data.
 3. **3-State Portfolio Context & Fingerprint (`portfolio.py`)**: `NOT_PROVIDED` | `FLAT` | `ACTIVE_POSITIONS` with deterministic SHA-256 `fingerprint`.
 4. **5-Tier Rating + Non-Tradeable `REVIEW` Sentinel (`rating.py` #1170)**: `BUY`, `OVERWEIGHT`, `HOLD`, `UNDERWEIGHT`, `SELL`, plus `REVIEW` whenever data is `STALE`/`UNAVAILABLE`, core departments fail, or circuit breakers halt trading.
 

@@ -15,9 +15,11 @@ import {
   toOptionalFixedStr,
   ZERO,
   type BookLevel,
+  type Dec,
 } from '@cex/core';
 import type {
   BullBearDebateResult,
+  CircuitBreakerStatusSchema,
   CryptoMarketSnapshot,
   DepartmentFinding,
   PositionSizingLadderOutput,
@@ -76,23 +78,46 @@ export async function runRiskExecutionReviewAgent(params: {
   }
 
   // 3. Evaluate portfolio circuit breakers (`risk-management` skill).
-  // Account figures the caller did not provide are null in the snapshot. A breaker cannot fire on a figure
-  // nobody supplied, so a missing drawdown is evaluated as no drawdown and listed in `missingData` below.
+  // - NOT_PROVIDED: there is no account to protect -> NOT_APPLICABLE (not "NORMAL"); sizing uses a reference baseline.
+  // - Provided without a drawdown: the breakers cannot be evaluated -> fail closed (CRITICAL, size 0, veto).
+  // - Provided with a drawdown: evaluate; daily/weekly loss or loss streak that were not provided are skipped and
+  //   listed in `missingData`.
   const portfolio = snapshot.portfolio;
-  const cb = evaluateCircuitBreakersDec({
-    currentDrawdownPct: portfolio.currentDrawdownPct !== null ? dec(portfolio.currentDrawdownPct) : ZERO,
-    dailyLossPct: portfolio.dailyLossPct !== null ? dec(portfolio.dailyLossPct) : null,
-    weeklyLossPct: portfolio.weeklyLossPct !== null ? dec(portfolio.weeklyLossPct) : null,
-    consecutiveLosses: portfolio.consecutiveLosses ?? undefined,
-  });
-  const missingPortfolioFields = (
-    ['equityUsdt', 'currentDrawdownPct', 'dailyLossPct', 'weeklyLossPct', 'consecutiveLosses'] as const
-  ).filter((k) => portfolio[k] === null);
+  const portfolioProvided = portfolio.status !== 'NOT_PROVIDED';
+  const cb: { halted: boolean; sizeMultiplier: Dec; status: CircuitBreakerStatusSchema; reasons: string[] } =
+    !portfolioProvided
+      ? { halted: false, sizeMultiplier: dec('1'), status: 'NOT_APPLICABLE', reasons: [] }
+      : portfolio.currentDrawdownPct === null
+        ? {
+            halted: true,
+            sizeMultiplier: ZERO,
+            status: 'CRITICAL',
+            reasons: ['Portfolio currentDrawdownPct was not provided; circuit breakers cannot be evaluated (fail closed).'],
+          }
+        : evaluateCircuitBreakersDec({
+            currentDrawdownPct: dec(portfolio.currentDrawdownPct),
+            dailyLossPct: portfolio.dailyLossPct !== null ? dec(portfolio.dailyLossPct) : null,
+            weeklyLossPct: portfolio.weeklyLossPct !== null ? dec(portfolio.weeklyLossPct) : null,
+            consecutiveLosses: portfolio.consecutiveLosses ?? undefined,
+          });
   if (cb.halted) {
     for (const r of cb.reasons) {
       vetoReasons.push(`Circuit Breaker (${cb.status}): ${r}`);
     }
   }
+  // A provided account with no positive equity cannot be sized (no $10,000 baseline for a real account).
+  const providedEquity =
+    portfolioProvided && portfolio.equityUsdt !== null && dec(portfolio.equityUsdt).gt(ZERO) ? dec(portfolio.equityUsdt) : null;
+  if (portfolioProvided && providedEquity === null) {
+    vetoReasons.push(
+      `Provided portfolio has no positive equity (equityUsdt=${portfolio.equityUsdt ?? 'null'}); position cannot be sized.`,
+    );
+  }
+  const missingData: string[] = !portfolioProvided
+    ? ['portfolio (NOT_PROVIDED): sizing uses the $10,000 reference baseline; portfolio circuit breakers not applicable']
+    : (['equityUsdt', 'currentDrawdownPct', 'dailyLossPct', 'weeklyLossPct', 'consecutiveLosses'] as const)
+        .filter((k) => portfolio[k] === null)
+        .map((k) => `portfolio.${k} (not provided)`);
 
   // 4. Determine candidate trade direction from debate conviction
   const conviction = dec(debate.debateConvictionScore);
@@ -127,7 +152,17 @@ export async function runRiskExecutionReviewAgent(params: {
   let sizingLadderOutput: PositionSizingLadderOutput | null = null;
   let estimatedSlippageBpsStr: string | null = null;
 
-  if (rawRefPrice && dec(rawRefPrice).gt(ZERO) && tickSize.gt(ZERO) && proposedDirection !== 'NONE') {
+  // Sizing equity: the account's own equity, or the $10,000 reference baseline only when no portfolio was provided.
+  // A provided account without positive equity is not sized at all (vetoed above).
+  const sizingEquity = portfolioProvided ? providedEquity : dec('10000');
+
+  if (
+    rawRefPrice &&
+    dec(rawRefPrice).gt(ZERO) &&
+    tickSize.gt(ZERO) &&
+    proposedDirection !== 'NONE' &&
+    sizingEquity !== null
+  ) {
     const entryDec =
       proposedDirection === 'LONG'
         ? ceilToStep(dec(rawRefPrice), tickSize)
@@ -156,11 +191,6 @@ export async function runRiskExecutionReviewAgent(params: {
     stopLossPriceStr = stopDec.toFixed(tickSize.decimalPlaces());
     takeProfitPriceStr = tpDec.toFixed(tickSize.decimalPlaces());
 
-    const equityDec =
-      portfolio.status !== 'NOT_PROVIDED' && portfolio.equityUsdt !== null && dec(portfolio.equityUsdt).gt(ZERO)
-        ? dec(portfolio.equityUsdt)
-        : dec('10000'); // Reference $10,000 paper sizing baseline when no account equity is provided
-
     const visibleDepthUsdt =
       microFinding?.metrics.depthWithin2PctUsdt && dec(microFinding.metrics.depthWithin2PctUsdt).gt(ZERO)
         ? dec(microFinding.metrics.depthWithin2PctUsdt)
@@ -171,7 +201,7 @@ export async function runRiskExecutionReviewAgent(params: {
 
     const ladder = computePositionSizingLadder({
       side: proposedDirection,
-      equityUsdt: equityDec,
+      equityUsdt: sizingEquity,
       entryPrice: entryDec,
       stopLossPrice: stopDec,
       takeProfitPrice: tpDec,
@@ -321,11 +351,7 @@ export async function runRiskExecutionReviewAgent(params: {
       detail: reason,
       blocksExecution: true,
     })),
-    missingData: missingPortfolioFields.map((k) =>
-      k === 'equityUsdt'
-        ? 'portfolio.equityUsdt (using $10,000 reference baseline)'
-        : `portfolio.${k} (not provided; circuit breaker cannot use it)`,
-    ),
+    missingData,
     durationMs: Math.max(0, Date.now() - startMs),
   };
 

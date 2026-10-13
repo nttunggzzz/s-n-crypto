@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   AdvisoryTradeProposal,
   BacktestEvaluationSummary,
+  CircuitBreakerStatusSchema,
   CryptoMarketAnalysisReport,
   CryptoMarketSnapshot,
   DepartmentFinding,
@@ -175,6 +176,7 @@ describe('@cex/contracts analysis schemas', () => {
         bookUpdatedAt: '2026-10-12T12:00:00.000Z',
         bids: [{ price: '64995.00', qty: '1.50000' }],
         asks: [{ price: '65005.00', qty: '1.25000' }],
+        orderBookSynthetic: false,
         recentTrades: [],
         closedCandles: [],
       },
@@ -203,6 +205,9 @@ describe('@cex/contracts analysis schemas', () => {
       },
     });
     expect(snap.symbol).toBe('BTCUSDT');
+    // The synthetic-book flag is required: a snapshot must say whether its book was observed.
+    const { orderBookSynthetic: _flag, ...spotWithoutFlag } = snap.spot;
+    expect(CryptoMarketSnapshot.safeParse({ ...snap, spot: spotWithoutFlag }).success).toBe(false);
 
     const report = CryptoMarketAnalysisReport.parse({
       reportId: 'rep-btc-1',
@@ -309,6 +314,9 @@ describe('@cex/contracts analysis schemas', () => {
     ).toBe(true);
     // Same type as FuturesMarkPrice.nextFundingTime: an epoch number is rejected.
     expect(SnapshotDerivativesState.safeParse({ ...derivatives, nextFundingTime: 1_791_820_800_000 }).success).toBe(false);
+
+    // No portfolio -> circuit breakers are NOT_APPLICABLE, a distinct value from NORMAL.
+    expect(CircuitBreakerStatusSchema.parse('NOT_APPLICABLE')).toBe('NOT_APPLICABLE');
   });
 
   it('reports undefined backtest ratios as null, never as a placeholder number', () => {

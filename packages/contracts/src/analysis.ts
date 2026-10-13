@@ -227,6 +227,11 @@ export const CryptoMarketSnapshot = z.object({
     bookUpdatedAt: IsoDateTime.nullable(),
     bids: z.array(SnapshotBookLevel),
     asks: z.array(SnapshotBookLevel),
+    /**
+     * `true` only in historical simulation when `bids`/`asks` were synthesised from the bar spread and volume
+     * (no recorded book). Evidence derived from a synthetic book is `INFERRED`, never `OBSERVED`.
+     */
+    orderBookSynthetic: z.boolean(),
     recentTrades: z.array(SnapshotPublicTrade),
     closedCandles: z.array(SnapshotCandle),
   }),
@@ -309,7 +314,11 @@ export const PositionSizingLadderOutput = z.object({
 });
 export type PositionSizingLadderOutput = z.infer<typeof PositionSizingLadderOutput>;
 
-export const CircuitBreakerStatusSchema = z.enum(['NORMAL', 'CAUTION', 'WARNING', 'CRITICAL', 'EMERGENCY']);
+/**
+ * `NOT_APPLICABLE`: no portfolio was provided (`NOT_PROVIDED`), so the portfolio circuit breakers have nothing to
+ * evaluate — not the same as `NORMAL`. A provided portfolio without a drawdown fails closed (`CRITICAL`, size 0).
+ */
+export const CircuitBreakerStatusSchema = z.enum(['NORMAL', 'CAUTION', 'WARNING', 'CRITICAL', 'EMERGENCY', 'NOT_APPLICABLE']);
 export type CircuitBreakerStatusSchema = z.infer<typeof CircuitBreakerStatusSchema>;
 
 export const RiskExecutionReview = z.object({
@@ -429,9 +438,15 @@ export const BacktestEvaluationSummary = z.object({
   sharpeRatio: DecimalString.nullable(),
   sortinoRatio: DecimalString.nullable(),
   calmarRatio: DecimalString.nullable(),
-  /** Deflated Sharpe Ratio (Bailey & López de Prado, 2014) adjusted for multiple testing & non-normal returns. */
+  /**
+   * Deflated Sharpe Ratio (Bailey & López de Prado, 2014), multiple-testing correction only: returns are treated as
+   * normal (no skewness/kurtosis term), so fat tails are not penalised.
+   */
   deflatedSharpeRatio: DecimalString.nullable(),
-  /** Probability of Backtest Overfitting (PBO, 0..1) estimated across combinatorial partitions. */
+  /**
+   * Overfitting heuristic (0..1) from 4 fixed in-sample/out-of-sample pairings of 4 return chunks. A simplified screen,
+   * not the full CSCV "probability of backtest overfitting" across strategy configurations.
+   */
   probabilityOfBacktestOverfitting: DecimalString.nullable(),
   winRatePct: DecimalString.nullable(),
   profitFactor: DecimalString.nullable(),
@@ -444,6 +459,7 @@ export const BacktestEvaluationSummary = z.object({
   staleOrHaltedSkips: z.number().int().nonnegative(),
   walkForwardEfficiencyRatio: DecimalString.nullable(),
   walkForwardFolds: z.array(WalkForwardFoldMetrics),
+  /** Research screen of one backtest. `PASS_RESEARCH_GATE` is NOT the M3 gate and never releases or unlocks anything. */
   verdict: z.enum(['PASS_RESEARCH_GATE', 'CAUTIOUS_INCONCLUSIVE', 'FAIL_OVERFIT_OR_NEGATIVE']),
   profitabilityDisclaimer: z.string().min(20),
 });

@@ -3,7 +3,7 @@
 //   liquidity score, smart money flow, token velocity), risk-management (circuit breakers), position-sizing (fractional Kelly).
 // - tradermonty/claude-trading-skills (c) 2026 TraderMonty: crypto-regime-analyzer (6-component regime composite).
 // Modified: ported from Python to TypeScript on Dec (decimal.js); differences from the source are noted at
-// liquidityScoreDec (weights) and computeCryptoRegimeCompositeDec (fail-closed rule).
+// liquidityScoreDec (weights).
 import { AMOUNT_SCALE, Dec, ZERO, dec, floorToStep, maxDec, minDec, roundDown, roundUp } from './decimal.ts';
 import { walkBook, type BookLevel, type Side } from './book.ts';
 import { floorSigned, isLiquidatable, liquidationPrice, type PositionSide } from './futures.ts';
@@ -501,6 +501,10 @@ export interface CryptoRegimeCompositeResult {
   missingComponents: string[];
 }
 
+/** Fail-closed thresholds of the source scorer (`crypto-regime-analyzer/scripts/scorer.py`). */
+export const REGIME_MIN_COMPONENTS = 4;
+export const REGIME_MIN_WEIGHT = new Dec('0.65');
+
 const REGIME_WEIGHTS: ReadonlyArray<{ key: keyof CryptoRegimeComponentsInput; weight: Dec }> = [
   { key: 'btcTrendScore', weight: new Dec('0.25') },
   { key: 'altBreadthScore', weight: new Dec('0.20') },
@@ -512,9 +516,10 @@ const REGIME_WEIGHTS: ReadonlyArray<{ key: keyof CryptoRegimeComponentsInput; we
 
 /**
  * 6-component Crypto Regime Composite (0..100) from `crypto-regime-analyzer`.
- * Missing components have their weight proportionally redistributed; fails closed (`UNAVAILABLE`) if 0 components exist.
- * Modified: the source (`scripts/scorer.py`) fails closed unless >= 4 components and >= 65% of the model weight remain;
- * this port redistributes from a single component upward.
+ * Missing components have their weight proportionally redistributed, but only when at least
+ * `REGIME_MIN_COMPONENTS` (4) components carrying at least `REGIME_MIN_WEIGHT` (65%) of the model weight remain —
+ * the source rule (`scripts/scorer.py` MIN_AVAILABLE_COMPONENTS / MIN_AVAILABLE_WEIGHT). Sparser input fails closed:
+ * `score: null`, zone `UNAVAILABLE`.
  */
 export function computeCryptoRegimeCompositeDec(input: CryptoRegimeComponentsInput): CryptoRegimeCompositeResult {
   let weightedSum = ZERO;
@@ -534,8 +539,8 @@ export function computeCryptoRegimeCompositeDec(input: CryptoRegimeComponentsInp
     available++;
   }
 
-  if (available === 0 || activeWeight.lte(ZERO)) {
-    return { score: null, zone: 'UNAVAILABLE', availableComponents: 0, missingComponents: missing };
+  if (available < REGIME_MIN_COMPONENTS || activeWeight.lt(REGIME_MIN_WEIGHT)) {
+    return { score: null, zone: 'UNAVAILABLE', availableComponents: available, missingComponents: missing };
   }
 
   const score = roundDown(weightedSum.div(activeWeight), 2);
