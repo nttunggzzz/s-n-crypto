@@ -12,6 +12,8 @@ Rà soát: **2026-10-11** (Claude Code). Cập nhật lần cuối: 2026-10-11 t
 > **Rà soát lần 2 (UI `d5fa8fc`, sau khi gom thư mục): [docs/reports/2026-10-12-ra-soat-ui-lan-2.md](reports/2026-10-12-ra-soat-ui-lan-2.md)** — nguyên nhân "không xác minh email / không nạp thêm tiền", kiểm lại R-01…R-18, lỗi mới N-01…N-14.
 >
 > **Rà soát lần 3 (UI `9ec5c74`): [docs/reports/2026-10-12-ra-soat-ui-lan-3.md](reports/2026-10-12-ra-soat-ui-lan-3.md)** — **chưa gộp được**: e2e 2 đỏ thật (K-02 màn đăng ký), K-01 tắt xác minh email bằng gán cứng (công tắc phải ở server). Lỗi mới K-01…K-10. Tính năng mới: [PROMPT-12 lệnh + điểm khớp B/S trên chart](antigravity/PROMPT-12-chart-lenh-va-diem-khop.md).
+>
+> **Rà soát lần 4 (UI `a225402`, 2026-10-13): [docs/reports/2026-10-13-ra-soat-ui-lan-4.md](reports/2026-10-13-ra-soat-ui-lan-4.md)** — **gộp được**: verify 232/232, e2e 39/39, K-01…K-08 + PROMPT-12 đạt (có test). Còn L-01…L-05 (P3, Antigravity). Bản sửa keep-alive L-06 (Claude Code) cần `npm run host -- update` để lên sàn thật.
 
 ## Backend → UI (Claude Code cập nhật mỗi khi đổi backend/hợp đồng; Antigravity đọc đầu mỗi phiên, cùng `packages/contracts/CHANGELOG.md`)
 
@@ -22,6 +24,7 @@ Rà soát: **2026-10-11** (Claude Code). Cập nhật lần cuối: 2026-10-11 t
 | 2026-10-12 | **Có rồi:** `npm run dev` mặc định tắt bắt xác minh email (N-01). Quyết định trong shell / `.env` thắng; `npm run dev -- --verify-email` để thử luồng thật | **Không** gán cứng "đã xác minh" trong giao diện (K-01): giao diện đọc `publicConfig.emailVerificationRequired`. Sàn thật và e2e giữ nguyên | **Có rồi** |
 | 2026-10-12 | **Có rồi:** CSP của server cho phép script / iframe / kết nối của Cloudflare Turnstile khi có `TURNSTILE_SITE_KEY` — R-04 | Không đổi code UI; kiểm widget captcha hiện trên bản build khi bật captcha | **Có rồi** |
 | 2026-10-12 | **Test nghiệm thu mới** (`e2e/tests/trade-form.spec.ts`, `email-gate.spec.ts`) — N-04, K-03, N-05, N-06, K-01, N-03 | Cần `data-testid` cho form lệnh: `order-price`, `order-quantity`, `order-total` (test đang tìm theo thứ tự ô `inputmode="decimal"`). Ghi vào `docs/antigravity/TESTIDS.md` | Chờ Antigravity |
+| 2026-10-13 | **Có rồi:** server giữ kết nối keep-alive 120 s (trước 5 s) — L-06, `bbe2a53`. Hết `ECONNRESET` trong e2e và lỗi 502 ngẫu nhiên sau cloudflared | Không đổi code UI | **Có rồi** — sàn thật cần `host update` |
 | (không đổi) | Hợp đồng hiện tại: **0.12.0**. Không có endpoint nào bị xóa/đổi tên gần đây | — | — |
 
 ## 0. Bức tranh tổng thể
