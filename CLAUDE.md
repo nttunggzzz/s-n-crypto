@@ -71,9 +71,10 @@ npm run ui-check -- [nhánh] [--base <ref>] [--e2e] [--no-verify] [--keep] [--on
                       # nhánh UI (mặc định ui/gd2-exchange) gộp <ref> (mặc định main) trong worktree tạm → verify (+ e2e);
                       #   --no-verify: bỏ verify (chỉ chạy e2e nếu có --e2e); e2e đỏ → báo cáo chép ra .e2e/ui-check/;
                       #   --only: phần còn lại của dòng lệnh đưa cho Playwright (ngầm hiểu --e2e), vd `-- --no-verify --only trade-form --project=desktop`
-npm run host -- update | start | invite "<tên>" | set-role <email> owner | status
+npm run host -- update | start | invite "<tên>" | set-role <email> owner | status | backup | schedule-backup | restore <file> --yes
                       # chạy sàn cho người dùng thật trên máy này (trước Railway): bản riêng host/, dữ liệu
                       #   host-data/ (trong thư mục dự án, git bỏ qua — cấm `git clean -x`), :8090 + link https trycloudflare — docs/deploy/may-ca-nhan.md
+                      #   `backup` = sao lưu khi đang chạy + diễn tập khôi phục (server/src/ops/logicalBackup.ts), mã hóa bằng HOST_BACKUP_PASSPHRASE
 npm run e2e           # test trình duyệt (Playwright, Edge cài sẵn): build apps/exchange, dựng 2 hệ riêng, mỗi hệ phục vụ
                       #   cả API, /ws và bản build app (giá giả lập): DB :5436 + server :5190 (email ra .e2e/outbox.jsonl) và
                       #   hệ host-mode DB :5437 + server :5191 (.e2e/host/; như sàn thật: REGISTRATION=invite,

@@ -27,8 +27,8 @@ Sàn tự host: `host-data/version.json` = `main 4e82608 + ui a225402`, verified
 
 | # | Mức | Vấn đề | Bằng chứng | Phụ trách | Việc tiếp |
 |---|---|---|---|---|---|
-| 1 | **P0** | **Mất code nếu máy hỏng**: `main` hơn `origin/main` 26 commit; nhánh `ui/gd2-exchange` (toàn bộ giao diện) **chưa từng đẩy lên GitHub** | `git rev-list --count origin/main..main` = 26; `git ls-remote` chỉ có `main` | Chủ dự án duyệt → Claude Code đẩy | `git push origin main ui/gd2-exchange` (CI GitHub sẽ chạy lại) |
-| 2 | **P0** | **Dữ liệu người dùng thật chỉ được sao lưu khi tắt/cập nhật sàn** (sao chép thư mục lúc PostgreSQL dừng), cùng ổ đĩa, không có bản ngoài máy | `infra/host.mjs` `coldBackup()`; bản mới nhất `host-data/backups/pgdata-2026-10-11…` | Claude Code | Thêm `npm run host -- backup` (pg_dump lúc đang chạy) + lịch Windows Task Scheduler hằng đêm + chép sang ổ/đám mây khác; diễn tập khôi phục |
+| 1 | ~~P0~~ **ĐÃ SỬA 2026-10-13** (`main` + `ui/gd2-exchange` đã đẩy lên GitHub) | **Mất code nếu máy hỏng**: `main` hơn `origin/main` 26 commit; nhánh `ui/gd2-exchange` (toàn bộ giao diện) **chưa từng đẩy lên GitHub** | `git rev-list --count origin/main..main` = 26; `git ls-remote` chỉ có `main` | Chủ dự án duyệt → Claude Code đẩy | `git push origin main ui/gd2-exchange` (CI GitHub sẽ chạy lại) |
+| 2 | **P0 — đã làm phần mềm 2026-10-13, còn 2 việc của chủ dự án** (xem dưới) | **Dữ liệu người dùng thật chỉ được sao lưu khi tắt/cập nhật sàn** (sao chép thư mục lúc PostgreSQL dừng), cùng ổ đĩa, không có bản ngoài máy | `infra/host.mjs` `coldBackup()`; bản mới nhất `host-data/backups/pgdata-2026-10-11…` | Claude Code | Thêm `npm run host -- backup` (pg_dump lúc đang chạy) + lịch Windows Task Scheduler hằng đêm + chép sang ổ/đám mây khác; diễn tập khôi phục |
 | 3 | **P1** | **Hai phiên cùng sửa thư mục `main` chưa commit** (module phân tích) → không gộp được nhánh UI vào `main` (cùng sửa `.gitignore`), dễ ghi đè nhau | `git status`: `M .gitignore`, `?? server/src/modules/analysis/`… | Chủ dự án / phiên kia | Phiên kia làm trên nhánh `be/analysis` (worktree riêng) và commit; sau đó Claude Code gộp UI vào `main` |
 | 4 | **P1** | **Người dùng thật không tự đặt lại mật khẩu được**: sàn tự host dùng `EMAIL_TRANSPORT=log` (email chỉ vào log) | `infra/host.mjs` `.env.host`; CHANGELOG 0.12.0 `emailDelivery: 'log'` | Chủ dự án (tên miền + Resend) / Claude Code | Trước khi có email: lệnh vận hành tạo link đặt lại mật khẩu cho người dùng (đề xuất, chưa làm); sau đó Resend |
 | 5 | **P1** | **Crash `0xC0000409` chưa rõ nguyên nhân** (O1). Supervisor tự khởi động lại, nhưng gốc rễ chưa biết | `docs/LOI-HIEN-TAI.md` O1 | Chủ dự án quyết bật crash dump (registry `LocalDumps`) | Bật dump → lần crash sau có file để phân tích |
@@ -87,3 +87,13 @@ Antigravity có thêm 8 agent và ~14 skill trong `.agent/`.
 - `npm run host -- update`: verified, e2e passed (`host-data/version.json`).
 - Module phân tích (chưa commit): `npx vitest run server/src/modules/analysis packages/core/src/quant.test.ts packages/contracts/src/analysis.test.ts` → 20/20; `tsc` server/core/contracts sạch. Không gọi mạng hay LLM, không nối API.
 - `origin/main` = `77e7708` (2026-10-11); `main` = `4e82608` (+26).
+
+## 7. Cập nhật 2026-10-13 (sau khi chủ dự án duyệt)
+- **Rủi ro #1 xong:** `git push origin main ui/gd2-exchange` (đã quét không có bí mật trong các commit). CI GitHub chạy lại cho 26 commit.
+- **Rủi ro #2 — phần mềm xong:** `npm run host -- backup | schedule-backup | restore` (`server/src/ops/logicalBackup.ts`, `backupFile.ts`).
+  - Sao lưu khi sàn đang chạy (một giao dịch REPEATABLE READ = ảnh chụp nhất quán), ghi nguyên văn `numeric` (không qua JavaScript, không mất chữ số), nén gzip, mã hóa AES-256-GCM khi có `HOST_BACKUP_PASSPHRASE`.
+  - Tự **diễn tập khôi phục** vào database tạm và đối soát sổ cái sau mỗi lần sao lưu; thất bại thì xóa file dở và báo Telegram.
+  - Giữ N bản, chép sang `HOST_BACKUP_COPY_DIR`.
+  - Test: 12 test mới (khôi phục đúng số dòng/số tiền/tiếng Việt/uid kế tiếp, trigger sổ cái còn nguyên, file cụt / sai schema / sai số dòng / sai mật khẩu bị từ chối và **không đổi gì**). Diễn tập thật trên PostgreSQL nhúng riêng (3 lần sao lưu, giữ 2 bản, khôi phục đúng/sai mật khẩu).
+  - **Chưa chạy trên sàn thật** — sàn dùng bản `host/` cũ, cần `npm run host -- update` để có lệnh mới.
+- **Việc của chủ dự án để rủi ro #2 đóng hẳn:** (1) thêm `HOST_BACKUP_PASSPHRASE` (và ghi lại) + `HOST_BACKUP_COPY_DIR` vào `host-data.env.host`; (2) chạy `npm run host -- schedule-backup`.

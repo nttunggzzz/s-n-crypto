@@ -52,6 +52,8 @@ Nhờ tách thư mục, hai bên code tiếp mà người dùng không bị ản
 | Tắt sàn | Ctrl+C trong cửa sổ đang chạy, hoặc `npm run host -- stop` từ cửa sổ khác |
 | Mời người dùng | `npm run host -- invite "<tên>" [số lượt] [số ngày]`, hoặc trang Quản trị → Mã mời |
 | Xem trạng thái | `npm run host -- status` |
+| Sao lưu ngay (sàn đang chạy cũng được) | `npm run host -- backup` |
+| Hẹn sao lưu mỗi đêm | `npm run host -- schedule-backup [HH:MM]` |
 | Cập nhật code mới (Claude/Antigravity đã xong việc) | Ctrl+C → `npm run host -- update` → `npm run host -- start` |
 | Cập nhật dù test trình duyệt còn đỏ (bản sửa gấp) | Ctrl+C → `npm run host -- update --skip-e2e` → `npm run host -- start` |
 
@@ -71,9 +73,28 @@ Nhờ tách thư mục, hai bên code tiếp mà người dùng không bị ản
 - **Email chưa gửi thật** (chưa có tên miền):
   - người dùng không cần xác minh email;
   - email "quên mật khẩu" nằm trong `host-data\logs\`: tìm dòng `EMAIL (log transport`, lấy link gửi cho người đó.
-- **Sao lưu:**
-  - mỗi lần `start`, database được chép vào `host-data\backups\` (giữ 7 bản gần nhất);
-  - khôi phục: tắt sàn, đổi tên `pgdata` cũ, chép bản sao lưu thành `pgdata`.
+- **Sao lưu (hai lớp):**
+  - **Bản chép thư mục** (`pgdata-…` trong `host-data\backups\`): mỗi lần `start` và trước `restore`, giữ 7 bản. Chỉ để quay lại nhanh trên cùng máy.
+  - **Sao lưu khi sàn đang chạy:** `npm run host -- backup` → `host-data\backups\logical\cex-<giờ>.cexbak.gz` (giữ `HOST_BACKUP_KEEP` bản, mặc định 30).
+    Ghi xong, lệnh **diễn tập khôi phục**: nạp chính file đó vào database tạm `cex_verify`, đối soát sổ cái, rồi xóa.
+    Bản sao lưu không khôi phục được thì báo lỗi (và Telegram nếu đã cài). `--no-verify` bỏ bước diễn tập.
+  - **Chạy mỗi đêm:** `npm run host -- schedule-backup [HH:MM]` (mặc định 03:30, Windows Task Scheduler; máy phải bật và bạn đã đăng nhập).
+    Gỡ: `npm run host -- unschedule-backup`. Kiểm: `schtasks /Query /TN "CEX host backup"`.
+  - **Chép ra ngoài máy** (làm ngay, đây là phần quan trọng): thêm vào `host-data\.env.host`
+    ```
+    HOST_BACKUP_PASSPHRASE=<cụm mật khẩu dài — ghi vào trình quản lý mật khẩu, mất là không mở được bản sao lưu>
+    HOST_BACKUP_COPY_DIR=E:\Backup\cex
+    HOST_BACKUP_KEEP=30
+    ```
+    `HOST_BACKUP_COPY_DIR` là ổ khác, USB hoặc thư mục đồng bộ (OneDrive, Google Drive).
+    Có `HOST_BACKUP_PASSPHRASE` thì file được mã hóa (AES-256), đưa lên đám mây cũng không đọc được.
+    Bản sao lưu chứa email và mật khẩu đã băm của người dùng: **không** chép ra ngoài khi chưa mã hóa.
+    Giữ `DATA_ENCRYPTION_KEY` ở nơi riêng, không có nó thì mã 2FA trong bản sao lưu không dùng được.
+  - **Khôi phục:** `npm run host -- stop`, rồi `npm run host -- restore <file> --yes`, rồi `start`.
+    Lệnh chép thư mục database trước khi ghi đè (quay lại được) và thay **toàn bộ** dữ liệu bằng bản sao lưu
+    (mọi thứ sau thời điểm sao lưu sẽ mất). Nó kiểm số dòng từng bảng; sai mật khẩu, file bị cắt hoặc khác phiên bản schema thì không đổi gì.
+    Cần cùng phiên bản code với lúc sao lưu (cùng số migration): khôi phục xong mới `update` lên code mới.
+  - Chưa khôi phục thử thì chưa coi là có bản sao lưu: bước diễn tập hằng đêm làm việc đó mỗi lần chạy.
 - **Captcha (Turnstile):**
   - muốn dùng: thêm `trycloudflare.com` vào Hostnames của widget, điền hai khóa vào `.env.host`;
   - để trống thì không có captcha. Đăng ký vẫn cần mã mời.
