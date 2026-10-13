@@ -23,3 +23,4 @@ export * from './client.ts';
 export * from './realtimeClient.ts';
 export * from './helpers.ts';
 export * from './apps.ts';
+export * from './analysis.ts';
