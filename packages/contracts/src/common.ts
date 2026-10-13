@@ -79,3 +79,14 @@ export const PaginationQuery = z.object({
 });
 
 export const Empty = z.object({});
+
+/**
+ * Response of an endpoint with `format: 'binary'` (0.14.0): raw bytes sent as-is with `contentType`.
+ * The server does not validate it against a schema; the typed client has no method for these endpoints —
+ * the UI loads them by URL (`<img src={journalAttachmentUrl(id)}>`).
+ */
+export const BinaryFile = z.object({
+  contentType: z.string().min(1),
+  data: z.custom<Uint8Array>((v) => v instanceof Uint8Array, 'must be bytes (Uint8Array / Buffer)'),
+});
+export type BinaryFile = z.infer<typeof BinaryFile>;

@@ -62,8 +62,24 @@ export const ErrorCode = z.enum([
   // faucet
   'FAUCET_COOLDOWN',
   'FAUCET_CAP_REACHED',
+  // uploads (0.14.0: trading journal images)
+  /** body or file too large, or the user's storage quota is used up; details.reason: PayloadTooLargeReason, details.limitBytes */
+  'PAYLOAD_TOO_LARGE',
+  /** not one of the accepted file types, or the bytes are not really that type (checked by file signature) */
+  'UNSUPPORTED_MEDIA_TYPE',
 ]);
 export type ErrorCode = z.infer<typeof ErrorCode>;
+
+/** details.reason of PAYLOAD_TOO_LARGE. */
+export const PayloadTooLargeReason = z.enum([
+  /** the JSON body is above the server's limit for this path (32 KB; journal image upload 1.5 MB) */
+  'BODY_TOO_LARGE',
+  /** one journal image above JOURNAL_LIMITS.attachmentBytes (1 MB) after base64 decoding */
+  'ATTACHMENT_TOO_LARGE',
+  /** the user's journal images would exceed JOURNAL_LIMITS.userQuotaBytes (50 MB) */
+  'ATTACHMENT_QUOTA',
+]);
+export type PayloadTooLargeReason = z.infer<typeof PayloadTooLargeReason>;
 
 export const ApiErrorBody = z.object({
   error: z.object({
@@ -114,6 +130,8 @@ export const ERROR_HTTP_STATUS: Record<ErrorCode, number> = {
   ORDER_NOT_CANCELABLE: 409,
   FAUCET_COOLDOWN: 429,
   FAUCET_CAP_REACHED: 409,
+  PAYLOAD_TOO_LARGE: 413,
+  UNSUPPORTED_MEDIA_TYPE: 415,
 };
 
 /** Error thrown by the typed API client. */

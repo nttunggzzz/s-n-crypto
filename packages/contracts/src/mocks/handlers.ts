@@ -28,6 +28,8 @@ import { adminResolvers } from './admin.ts';
 import { futuresResolvers } from './futures.ts';
 import { inviteResolvers, mockConsumeInvite } from './invites.ts';
 import { phase26Resolvers } from './phase26.ts';
+import { journalResolvers } from './journal.ts';
+import type { BinaryFile } from '../common.ts';
 const requireTradable = (symbol: string) => {
   if (mockStore.scenario === 'halted') throw new MockError('TRADING_HALTED', 'Trading is halted by the operator');
   if (!MOCK_PAIRS[symbol]) throw new MockError('NOT_FOUND', 'Unknown symbol');
@@ -365,6 +367,7 @@ const resolvers: { [N in EndpointName]: Resolver<N> } = {
   ...futuresResolvers,
   ...phase26Resolvers,
   ...inviteResolvers,
+  ...journalResolvers,
 
   markNotificationsRead: ({ body }) => {
     requireUser();
@@ -416,6 +419,14 @@ export function createMockHandlers(opts: MockHandlerOptions = {}): HttpHandler[]
           return new HttpResponse(result as string, {
             status: 200,
             headers: { 'content-type': 'text/csv; charset=utf-8', 'content-disposition': `attachment; filename="${def.path.split('/').pop()}"` },
+          });
+        }
+        if (def.format === 'binary') {
+          // raw bytes with their own type, like the server (no schema check)
+          const file = result as BinaryFile;
+          return new HttpResponse(new Uint8Array(file.data), {
+            status: def.status ?? 200,
+            headers: { 'content-type': file.contentType, 'x-content-type-options': 'nosniff', 'cache-control': 'private, max-age=3600' },
           });
         }
         return HttpResponse.json(result as object, { status: def.status ?? 200 });

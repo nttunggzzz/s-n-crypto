@@ -19,6 +19,7 @@ const OPTIONAL = {
     getOrder: 'order detail drawer is optional (rows already carry the order)',
     getOrderList: 'OCO detail is optional (rows already carry the list)',
     getGridBot: 'cards come from the list + `gridBot` events',
+    journalAttachment: 'images load through `journalAttachmentUrl(id)` in <img src>, not the typed client',
   },
 };
 
