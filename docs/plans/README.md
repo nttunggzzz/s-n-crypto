@@ -67,6 +67,7 @@ Duyệt các quyết định (bảng mục 4), bật/tắt tính năng trên sà
 **Đưa lên sàn thật** (`npm run host -- update` → `start`) chỉ khi chủ dự án đồng ý. Tính năng mới vào sàn thật ở trạng thái **tắt** nếu đợt đó ghi như vậy.
 
 ## 3. Quy tắc phối hợp (rút ra từ 2026-10-12/13)
+- **Antigravity chỉ làm trong `ui/` (nhánh `ui/gd2-exchange`).** Hệ phân tích hiện chưa commit trong `main` là do Antigravity viết ngoài vùng. Kế hoạch "Phase 3" của nó (`AGENT-HANDOFF/prompts/phase-3.md`) bị Module C thay thế (Module C mục 2.1). `AGENT-HANDOFF/` là của Antigravity: Claude Code chỉ đọc.
 - **Không phiên nào sửa thẳng thư mục `main` rồi để dở.** Mỗi phiên/agent làm trên nhánh và worktree riêng, xong thì commit. (Hôm 13/10, phần phân tích chưa commit trong `main` đã chặn việc gộp nhánh UI.)
 - Phân vùng thư mục:
   - Antigravity: `apps/**`, `packages/ui/**`;
@@ -78,7 +79,7 @@ Duyệt các quyết định (bảng mục 4), bật/tắt tính năng trên sà
 - Không có code nào tự mở tín hiệu cho người dùng khi đạt cổng M3.
 - Module C không bao giờ gọi `OrderService` từ `server/src/modules/analysis/`. Bot tín hiệu (nếu bật) ở `server/src/modules/signals/`, chỉ cho tài khoản `is_bot`, có cờ tắt/bật.
 
-## 4. Quyết định — **đã duyệt hết** (chủ dự án, 2026-10-13)
+## 4. Quyết định — **đã duyệt** (chủ dự án, 2026-10-13), trừ C-D5b đang chờ
 
 Mục tiêu sản phẩm đã được chủ dự án xác nhận ngày 2026-10-13:
 - **A** là tính năng cho người dùng sàn, không dùng AI.
@@ -91,7 +92,7 @@ Bốn mục được duyệt **có điều kiện**. Điều kiện của chủ 
 | Mã | Đã duyệt | Điều kiện của chủ dự án → nằm ở đâu |
 |---|---|---|
 | A-D1 | Một **vòng giao dịch**, ghi nhận theo **từng lần khớp**. Spot: tối đa 1 mục tự động mở/cặp; mua mở hoặc cộng; bán phân bổ tới hết khối lượng còn mở, phần dư không thuộc mục nào; lẻ dưới bước khối lượng thì đóng. Futures: một mục = một vị thế | — (Module A mục 2.1) |
-| A-D2 | Tự ghi **bật mặc định**, tắt được; **không** nhập dữ liệu trước thời điểm kích hoạt; mục tự động người dùng **không xóa được**, chỉ bổ sung ghi chú | **Có cơ chế đối soát** khi dữ liệu giao dịch bị điều chỉnh, đảo ngược hoặc phát hiện thiếu → Module A mục 2.3 + **đợt A3R** (bảng/cột có sẵn từ A2) |
+| A-D2 | Tự ghi **bật mặc định**, tắt được (cửa sổ tự ghi lưu trong bảng riêng của nhật ký, không trong preferences); **không** nhập dữ liệu trước thời điểm kích hoạt; mục tự động người dùng **không xóa được**, chỉ bổ sung ghi chú | **Có cơ chế đối soát** khi dữ liệu giao dịch bị điều chỉnh, đảo ngược hoặc phát hiện thiếu → Module A mục 2.3 + **đợt A3R** (bảng/cột có sẵn từ A2) |
 | A-D3 | Ảnh trong PostgreSQL: ≤ 1 MB/ảnh, ≤ 4 ảnh/mục, 50 MB/người, PNG/JPEG/WebP | — (A4) |
 | A-D4 | Không có dừng lỗ → R `null`; R theo **dừng lỗ ban đầu**, khóa sau lần giảm vị thế đầu tiên | — |
 | A-D5 | Lệnh bot (Grid/DCA/tín hiệu) và tài khoản bot không vào nhật ký | — |
@@ -102,20 +103,25 @@ Bốn mục được duyệt **có điều kiện**. Điều kiện của chủ 
 | C-D2 | Không dùng LLM ở GĐ4 | — |
 | C-D3 | Có bot tín hiệu trên sàn ảo, **mặc định tắt** | **Ranh giới kỹ thuật ngăn đặt lệnh thật** + **test chứng minh** bot không thể gửi lệnh tới hệ thống giao dịch thật → **đợt C5**: bốn lớp chặn (kiến trúc, lint, cấu hình từ chối khóa API sàn, test tĩnh toàn server) + test chạy với mạng bị chặn |
 | C-D4 | 10 cặp × 1h và 4h | Xác nhận lại sau C0 khi đã đo thời gian một lần phân tích |
-| C-D5 | Ngưỡng cổng M3 là **ngưỡng kiểm định ban đầu**: ≥ 100 tín hiệu đã đóng của một phiên bản; kỳ vọng R > 0; cận dưới CI 95% > 0; drawdown ≤ 20R; một cặp ≤ 40%, một tháng ≤ 50% R dương; bot cùng dấu | **Định nghĩa phương pháp tính** kỳ vọng R, CI 95%, drawdown, tỷ trọng cặp/tháng, phí/trượt giá, **tín hiệu tương quan** → Module C **mục 3.3.1**. Đạt chỉ là `ELIGIBLE_FOR_REVIEW`, **không** tự cho phép bán (mục 3.4) |
+| C-D5 | Ngưỡng cổng M3 là **ngưỡng kiểm định ban đầu**: ≥ 100 tín hiệu đã đóng của một phiên bản; kỳ vọng R > 0; cận dưới CI 95% > 0; drawdown ≤ 20R; một cặp ≤ 40%, một tháng ≤ 50% R dương; trung bình R của bot > 0 (nếu bật) | **Định nghĩa phương pháp tính** kỳ vọng R, CI 95%, drawdown, tỷ trọng cặp/tháng, phí/trượt giá, **tín hiệu tương quan** → Module C **mục 3.3.1**. Đạt chỉ là `ELIGIBLE_FOR_REVIEW`, **không** tự cho phép bán (mục 3.4) |
 | C-D6 | Nến 1m giữ 60 ngày, lần chạy không ra tín hiệu giữ 90 ngày, báo cáo đầy đủ chỉ cho tín hiệu | — |
+| **C-D5b** | **Chờ chủ dự án quyết.** Khi đã đo thật nhiều phiên bản engine, tiêu chí 3 (cận dưới CI 95% > 0) có điều chỉnh theo số phiên bản `k` không? **Đề xuất (A):** có — dùng cận dưới Bonferroni (phân vị 2,5%/k). (B): không — chỉ in để người xem xét cân nhắc | Module C mục 3.3.1 bước 3. Chưa quyết thì C1/C3 vẫn làm được: hợp đồng và hàm có tham số cho cả hai phương án |
 
 Hai điểm phương pháp mới ở mục 3.3.1 cần chủ dự án biết (không phải ngưỡng hiệu quả mới):
 1. Cần **≥ 30 ngày có tín hiệu đóng** thì khoảng tin cậy mới có nghĩa; chưa đủ thì cổng ghi `INSUFFICIENT_DATA`.
-2. Mỗi phiên bản chỉ có **một tín hiệu mở cho mỗi cặp**, bất kể chiều và khung, để giảm tín hiệu tương quan.
+2. Cần **≥ 2 tháng có tín hiệu đóng** thì tiêu chí tỷ trọng theo tháng mới có nghĩa (một tháng duy nhất luôn chiếm 100%); chưa đủ thì `INSUFFICIENT_DATA`.
+3. Mỗi phiên bản chỉ có **một tín hiệu mở cho mỗi cặp**, bất kể chiều và khung, để giảm tín hiệu tương quan.
+4. Tiêu chí bot (6) viết chính xác thành "trung bình R của bot > 0" (bằng 0 là không đạt).
 
 Quy tắc **không phải quyết định** (cố định trong kế hoạch, đổi phải có lý do và phiên bản mới):
 - mô hình khớp/phí/trượt giá (Module C mục 3.2);
 - bảo vệ holdout (C mục 3.5);
-- chống ghi trùng và đối soát nhật ký (A mục 2.2–2.3);
+- cửa sổ tự ghi, chống ghi trùng và đối soát nhật ký (A mục 2.2–2.3);
 - tách nguồn dữ liệu (quy ước chung).
 
 ## 5. Thứ tự và làn song song
+
+**Điều kiện trước lượt 1:** chủ dự án đã báo Antigravity (a) ngừng sửa các file hệ phân tích trong `main` và (b) không làm `AGENT-HANDOFF/prompts/phase-3.md`.
 
 Hai làn chạy song song (thư mục khác nhau). Chỗ đụng nhau (hợp đồng, migration) gộp lần lượt.
 

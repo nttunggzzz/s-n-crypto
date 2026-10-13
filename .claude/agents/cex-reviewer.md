@@ -22,9 +22,10 @@ Branch name (or commit range) + the task card it implements (`docs/plans/module-
    - holdout: any path where dev mode reads the holdout window; holdout run without prior hypothesis/hash or twice per version.
    - anything that turns `ELIGIBLE_FOR_REVIEW` into user-visible signals or a release flag.
    - journal reconciliation: user notes lost on replay/VOID, replay not deterministic, reconcile and auto-recorder racing without the shared lock, reconcile touching balances/orders.
-   - gate method vs §3.3.1: i.i.d. bootstrap used for the gate, missing 30-day rule, wrong drawdown origin, shares on net instead of positive R, more than one open signal per symbol.
-   - C5 boundary: try adding a forbidden import in `modules/signals` and setting `BINANCE_API_KEY` — the lint/config/static tests must go red; the blocked-network test must assert 0 outbound attempts.
-   - C0 takeover: every file on `be/analysis` is in the manifest (`docs/reports/*-c0-kiem-ke.md`) or is a change of this batch; nothing from `AGENT-HANDOFF/`, `vendor/`, other skills; license attribution matches the manifest's provenance findings.
+   - journal legs/windows: futures fills mapped by `position_id` alone, rows written for fills outside an auto-journal window, journal state stored in `user_preferences`, lot rules or market prices read at processing time (non-deterministic replay).
+   - gate method vs §3.3.1: i.i.d. bootstrap used for the gate, PRNG/block/percentile not as specified, sumN = 0 resamples not handled, missing 30-day or 2-month rule, wrong drawdown origin, shares on net instead of positive R, bot criterion not "mean > 0", familyAdjustment ignored, more than one open signal per symbol.
+   - C5 boundary: run the boundary tests and confirm each has a deliberate-violation case that fails (import-closure walker on a fixture, config with `BINANCE_API_KEY`, static scan on a sample string), and that the blocked-network test patches `net.Socket.prototype.connect`, asserts 0 outbound attempts AND the expected order count, and has a control case. Read the value-import closure of `executor.ts` yourself. You do NOT edit files to try this.
+   - C0 takeover (the uncommitted code was written by Antigravity): every file on `be/analysis` is in the manifest (`docs/reports/*-c0-kiem-ke.md`) or is a change from `be/analysis-fixes`; nothing from `AGENT-HANDOFF/`, `vendor/`, `ui/`, other skills; license attribution matches the manifest's provenance findings; no forbidden git command in the lead's log.
 4. You MAY run read-only commands: `npm run typecheck`, `npx eslint`, `npx vitest run <files>`, `git log/diff/show`. Do NOT edit files, commit, push, or run `npm run host`.
 
 ## Report (Vietnamese)

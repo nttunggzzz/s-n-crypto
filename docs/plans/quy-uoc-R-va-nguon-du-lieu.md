@@ -28,6 +28,17 @@ lãi/lỗ ròng    = lãi/lỗ theo giá − mọi phí − trượt giá − fu
   - với n = 0, mọi chỉ số là `null`.
 - `blockBootstrapRatioCI(days, { blockDays, iterations, seed, level })`: thêm ở đợt **C3**, chỉ Module C dùng (phương pháp ở Module C mục 3.3.1).
 
+### 1.1 Yêu cầu chung cho `rMetrics` (viết ở A1, Module C dùng ở C3)
+- **Đường R lũy kế bắt đầu từ 0:** `C_0 = 0`, `C_k = Σ_{i≤k} r_i`; drawdown `DD = max_k (max_{j≤k} C_j − C_k)`, cùng cách cho USDT. Chuỗi bắt đầu bằng thua có DD tính từ 0.
+- **Thứ tự do người gọi quyết định**, bằng khóa `(thời điểm đóng, id)`:
+  - nhật ký: `(closed_at, entry id)`;
+  - tín hiệu: `(exited_at, signal id)`.
+
+  `summarizeR` kiểm đầu vào đã sắp xếp; chưa sắp thì ném lỗi, không tự sắp lại.
+- **Chỉ `Dec`.** Kết quả là chuỗi. n = 0 → `null`.
+- **Phiên bản phương pháp:** `R_METRICS_VERSION` (bắt đầu = 1) in kèm mọi kết quả. Đổi công thức → tăng số, ghi CHANGELOG hợp đồng.
+- Bootstrap và cổng M3 **không** nằm trong A1. Chúng thêm ở C3 theo Module C mục 3.3.1, có phiên bản riêng `GATE_METHOD_VERSION`.
+
 Module A (`journalStats.ts`) và Module C (`signalStats.ts`) **gọi** các hàm này, **không** tự viết lại công thức.
 Test vàng của `rMetrics` là chuẩn chung. Sửa công thức R thì phải sửa ở đây, đồng thời đổi phiên bản hợp đồng và ghi CHANGELOG.
 

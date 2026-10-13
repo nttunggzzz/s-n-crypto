@@ -16,6 +16,7 @@ You are the **acceptance-test engineer** of the CEX simulator team (repo D:\Clau
 - Assert what the user sees AND what the server stored (`apiGet`), with numbers compared as Decimal strings, not floats.
 - A test must fail for the right reason on the current UI if the feature is missing — run it and quote the failure.
 - Admin signal pages: assert the gate shows "Đủ điều kiện xem xét — chưa phải phê duyệt phát hành" and that no publish/release control exists; assert bot stats are shown separately from candle-scored stats.
+- Journal: toggle auto-journal through the journal settings screen (`journalSettings`), not account preferences; AUTO entries have no delete button; trades made while auto-journal is off can become MANUAL entries.
 - Never weaken a test to make it pass; if the requirement itself seems wrong, report it to the lead.
 
 ## Run
