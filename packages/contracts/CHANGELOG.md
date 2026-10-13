@@ -1,5 +1,37 @@
 # Changelog — @cex/contracts
 
+## 0.13.0 — 2026-10-13 (Nhật ký giao dịch — Module A, đợt A1)
+Chỉ thêm. 12 endpoint mới, tổng 140. Server chưa có route cho chúng (A2–A4); giao diện làm trên mock ngay từ bản này. Hướng dẫn: README mục 14.
+
+**Thêm**
+- `stats.ts` (dùng chung với Module C): `StatsBasis` (`ACTUAL_FILLS | MODELED_CANDLES | BOT_FILLS`), `TradeOutcome`, `RSummary`, `RCurvePoint`, `PnlCurvePoint`.
+  Tên trường giống hệt `summarizeR` của `@cex/core` (`countWithR`, `totalNetPnl`, `rCurve`, `pnlCurve`…); mọi thống kê có `rMetricsVersion`.
+- `journal.ts`: enum `JournalMarket`, `JournalDirection`, `JournalStatus` (OPEN/CLOSED/VOID), `JournalOrigin`, `JournalMistake`, `JournalOutcome`,
+  `JournalStatsRange`, `JournalFillSkipReason`, `JournalFillLeg` (SPOT/OPEN/CLOSE), `JournalCloseReason`, `JournalReconcileIssueType`, `JournalImageType`,
+  `JournalConflictReason`; hằng `JOURNAL_LIMITS`; schema `JournalPlan`, `JournalResult` (= kết quả `computeEntryResult` / `futuresEntryResult`, có `rMetricsVersion`),
+  `JournalFill`, `JournalEntry` (có `status`, `closeReason`, `needsReview`, `adjustedAt`, `adjustmentReason`), `JournalEntryDetail`, `JournalCreateRequest`,
+  `JournalUpdateRequest` (`addOrderIds`), `JournalListQuery`, `JournalStatsQuery`, `JournalStats` (`basis`, `rMetricsVersion`, `excluded: { void, needsReview }`,
+  nhóm theo setup / symbol / market / direction / weekday / mistake), `JournalSetupList`, `JournalSettings`, `JournalUpdateSettingsRequest`,
+  `JournalAttachment`, `JournalAttachmentUpload`.
+- Endpoint: `journalList`, `journalGet`, `journalCreate` (201), `journalUpdate`, `journalDelete`, `journalSetups`, `journalStats`, `journalSettings`,
+  `journalUpdateSettings`, `journalUploadAttachment` (201), `journalAttachment` (ảnh nhị phân), `journalDeleteAttachment`.
+- Bật/tắt tự ghi nhật ký ở `journalSettings` / `journalUpdateSettings` (chỉ nhận `{ autoJournal }`, gửi kèm mốc thời gian → 400). **Không** thêm gì vào `Preferences`.
+- Mã lỗi `PAYLOAD_TOO_LARGE` (413, `details.reason`: `PayloadTooLargeReason`) và `UNSUPPORTED_MEDIA_TYPE` (415).
+  `CONFLICT` của nhật ký có `details.reason` (`JournalConflictReason`), thứ tự kiểm ghi trong `journal.ts`.
+- Khung hợp đồng: `format: 'binary'` + `BinaryFile`; kiểu `BinaryEndpointName`, `ClientEndpointName`; client có `journalAttachmentUrl(id)`.
+- Server (`lib/http.ts`): endpoint `format: 'binary'` gửi bytes kèm `Content-Type` (không kiểm schema phản hồi);
+  body JSON vượt giới hạn → 413 `PAYLOAD_TOO_LARGE` (`BODY_TOO_LARGE`) thay cho 500.
+- Mock: 11 mục mẫu tính tay (test so khớp từng số với `@cex/core`), tự ghi theo cửa sổ (đặt lệnh trong mock → mục AUTO, kể cả Futures và lệnh đảo chiều),
+  mục MANUAL chỉ từ lần khớp trống, ảnh thật (kiểm chữ ký file, 1 MB, 4 ảnh/mục, hạn mức 50 MB). Mọi phân bổ, kết quả, thống kê gọi
+  `allocateSpotFill`, `replayAllocations`, `allocateFuturesLegs`, `computeEntryResult`, `futuresEntryResult`, `computeJournalStats` của `@cex/core`
+  (`@cex/contracts` thêm phụ thuộc `@cex/core`).
+
+**Thay đổi nhỏ có thể ảnh hưởng UI**
+- `format: 'binary'`: `ApiClient` **không** có hàm cho endpoint nhị phân (`api.journalAttachment` không tồn tại; dùng `journalAttachmentUrl`).
+  Code duyệt mọi `EndpointName` để gọi client nên dùng `ClientEndpointName`.
+- `ErrorCode` có thêm 2 mã: bảng dịch `Record<ErrorCode, string>` của app phải thêm câu cho `PAYLOAD_TOO_LARGE`, `UNSUPPORTED_MEDIA_TYPE`.
+- Gửi body JSON quá lớn (> 32 KB) trước đây nhận 500 `INTERNAL_ERROR`, nay nhận 413 `PAYLOAD_TOO_LARGE`.
+
 ## 0.12.0 — 2026-10-12 (Realtime `onClose`, `publicConfig.emailDelivery`)
 Chỉ thêm, không đổi endpoint (vẫn 128). Hai việc UI đã xin ở `docs/parts/contract-requests.md` (R-16, N-13).
 - **`RealtimeClient.onClose(cb)`** → hàm hủy đăng ký. `cb({ code, reason })` được gọi mỗi lần kết nối đóng (mạng rớt, server khởi động lại,

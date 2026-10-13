@@ -92,10 +92,16 @@ export const JournalImageType = z.enum(['image/png', 'image/jpeg', 'image/webp']
 export type JournalImageType = z.infer<typeof JournalImageType>;
 
 /**
- * `details.reason` of a 409 CONFLICT from a journal endpoint (`details` may also carry `orderId` / `tradeId`).
- * Checks run in this order for each requested order id (journalCreate / addOrderIds), then over the whole request:
- *   not yours or unknown → 404 NOT_FOUND · BOT_ORDER · ORDER_NOT_FILLED · SYMBOL_MISMATCH · FILL_ALREADY_JOURNALED ·
- *   NO_OPENING_FILL · ENTRY_NOT_EXTENDABLE.
+ * `details.reason` of a 409 CONFLICT from a journal endpoint (`details` may also carry `orderId` / `tradeId` /
+ * `positionId` / `skipReason`). Order of the checks (the mock follows it exactly):
+ *  - journalCreate with orderIds, for each id in the order sent: unknown or not yours → 404 NOT_FOUND · BOT_ORDER ·
+ *    ORDER_NOT_FILLED · SYMBOL_MISMATCH · FILL_ALREADY_JOURNALED; then over all their fills in id order:
+ *    NO_OPENING_FILL · MULTIPLE_ROUND_TRIPS.
+ *  - journalCreate with futuresPositionId: unknown or not yours → 404 · FILL_ALREADY_JOURNALED (an entry or a journal row
+ *    already has a leg of it) · LEGACY_FUTURES_FILL.
+ *  - journalUpdate: entry not yours → 404 · addOrderIds (MARKET_MISMATCH · ENTRY_NOT_EXTENDABLE · the per-order checks
+ *    above · NO_OPENING_FILL · MULTIPLE_ROUND_TRIPS) · STOP_LOCKED · STOP_WRONG_SIDE (both judged on the entry as it
+ *    would be after addOrderIds). Nothing is changed when any check fails.
  */
 export const JournalConflictReason = z.enum([
   /** a fill of the order (or a leg of the position) already belongs to an entry or was skipped as a bot fill */
@@ -110,14 +116,20 @@ export const JournalConflictReason = z.enum([
   'ORDER_NOT_FILLED',
   /** `initialStop` sent after the first reducing fill (sell / CLOSE leg); change `plan.stop` instead (R does not move) */
   'STOP_LOCKED',
+  /** `initialStop` on the wrong side of result.avgEntryPrice (LONG: stop ≥ entry; SHORT: stop ≤ entry) */
+  'STOP_WRONG_SIDE',
   /** journalDelete on an AUTO entry (A-D2: auto entries can only be annotated) */
   'AUTO_ENTRY_NOT_DELETABLE',
-  /** `addOrderIds` on an AUTO entry or an entry that is not OPEN, or the added fills come after the entry closed */
+  /** `addOrderIds` on an AUTO entry or an entry that is not OPEN */
   'ENTRY_NOT_EXTENDABLE',
   /** the entry already has JOURNAL_LIMITS.attachmentsPerEntry images */
   'TOO_MANY_ATTACHMENTS',
-  /** nothing opens the entry: the earliest fill of the chosen spot orders is a SELL, or the position has no recorded OPEN leg */
+  /** nothing opens the entry: the earliest fill of the chosen spot orders is a SELL (spot cannot be sold short) */
   'NO_OPENING_FILL',
+  /** the chosen orders make more than one round trip (buy → closed → buy or sell again): choose the orders of one trade */
+  'MULTIPLE_ROUND_TRIPS',
+  /** the position has fills from before the exchange recorded futures legs (they cannot be split into OPEN / CLOSE) */
+  'LEGACY_FUTURES_FILL',
 ]);
 export type JournalConflictReason = z.infer<typeof JournalConflictReason>;
 
@@ -147,23 +159,32 @@ export const JournalPlan = z.object({
 export type JournalPlan = z.infer<typeof JournalPlan>;
 
 /**
- * Result computed by the server from the entry's own fills (A-D7: spot PnL against the entry's own cost, so it can differ
- * from the PnL analysis page while coins bought before are held). null = not known (yet) — show "—", never 0.
- * While OPEN: netPnl, rMultiple, outcome and holdingMs are null; the part already closed is `JournalEntry.realizedPnl`.
- * VOID entries keep what was known but are never counted.
+ * Result computed by the server from the entry's own fills with @cex/core (`computeEntryResult` for SPOT,
+ * `futuresEntryResult` for FUTURES — same field names). A-D7: spot PnL is against the entry's own cost, so it can differ
+ * from the PnL analysis page while coins bought before are held. null = not known (yet) — show "—", never 0.
+ * While OPEN: netPnl, rMultiple, outcome and holdingMs are null; the part already closed is `realizedPnl`.
+ * VOID entries keep the last result but are never counted.
  */
 export const JournalResult = z.object({
+  /** `R_METRICS_VERSION` of @cex/core used for riskUsdt / rMultiple / outcome. */
+  rMetricsVersion: z.number().int().positive(),
+  market: JournalMarket,
+  direction: JournalDirection,
+  /** State of the fills when computed (OPEN / CLOSED). The entry's own status, incl. VOID, is `JournalEntry.status`. */
+  status: z.enum(['OPEN', 'CLOSED']),
   /** SPOT: Σ bought quantity before fees. FUTURES: Σ quantity of the OPEN legs (not the position's maxQuantity). */
   entryQty: DecimalString.nullable(),
-  /** SPOT: average buy price before fees. FUTURES: the position's entry price. */
+  /** Volume-weighted average entry price before fees (up to 12 decimals). */
   avgEntryPrice: DecimalString.nullable(),
-  /** Average price of the allocated sells / CLOSE legs; null before the first exit. */
+  /** Average price of the allocated sells / CLOSE legs (up to 12 decimals); null before the first exit. */
   avgExitPrice: DecimalString.nullable(),
-  /** USDT after every fee (and funding for futures). Null until CLOSED. */
+  /** Net PnL of the part already closed (OPEN entries too); null before the first exit. */
+  realizedPnl: DecimalString.nullable(),
+  /** USDT after every fee (and funding for futures) of the whole entry. Null until CLOSED. */
   netPnl: DecimalString.nullable(),
-  /** Fees in USDT (spot buy fees, taken in the coin, valued at their fill price). Already inside netPnl. */
+  /** Fees in USDT (spot buy fees, taken in the coin, valued at their fill price). Already inside the PnL. */
   fees: DecimalString.nullable(),
-  /** FUTURES: net funding (+ received, − paid), inside netPnl. SPOT: null (does not apply). */
+  /** FUTURES: net funding (+ received, − paid), inside the PnL. SPOT: null (does not apply). */
   funding: DecimalString.nullable(),
   /** |avgEntryPrice − initialStop| × entryQty (price risk only, fees not added); null without an initial stop. */
   riskUsdt: DecimalString.nullable(),
@@ -172,6 +193,12 @@ export const JournalResult = z.object({
   outcome: JournalOutcome.nullable(),
   /** closedAt − openedAt in ms; null while OPEN. */
   holdingMs: z.number().int().nonnegative().nullable(),
+  /** SPOT: quantity left below stepSize / minNotional when the entry closed (no PnL counted). FUTURES: null. */
+  dustQty: DecimalString.nullable(),
+  /** FUTURES: closed by liquidation. SPOT: null. */
+  liquidated: z.boolean().nullable(),
+  /** FUTURES: Σ OPEN legs − Σ CLOSE legs = the position's open quantity (false = legs missing; numbers still from the position). SPOT: null. */
+  legsConsistent: z.boolean().nullable(),
 });
 export type JournalResult = z.infer<typeof JournalResult>;
 
@@ -228,8 +255,6 @@ export const JournalEntry = z.object({
   origin: JournalOrigin,
   /** FUTURES: the position this entry follows. SPOT: null. */
   futuresPositionId: z.string().nullable(),
-  /** FUTURES position closed by liquidation. */
-  liquidated: z.boolean(),
   setup: z.string().nullable(),
   tags: z.array(z.string()),
   plan: JournalPlan,
@@ -249,10 +274,6 @@ export const JournalEntry = z.object({
   openQty: DecimalString,
   /** Σ allocated sell quantity / Σ CLOSE legs. */
   exitQty: DecimalString,
-  /** PnL already locked in by exits (partial while OPEN, = result.netPnl once CLOSED); null before the first exit. */
-  realizedPnl: DecimalString.nullable(),
-  /** SPOT: quantity left below stepSize / minNotional when the entry closed (no PnL counted). FUTURES: null. */
-  dustQty: DecimalString.nullable(),
   result: JournalResult,
   /** Legs allocated to this entry (detail in journalGet). */
   fillCount: z.number().int().nonnegative(),
@@ -299,9 +320,10 @@ export const JournalPlanInput = z
 
 /**
  * Annotate an entry (any status, AUTO or MANUAL). null clears a field. Server-computed fields cannot be written:
- * unknown keys → 400 (strict). `initialStop` after `initialStopLocked` → 409 STOP_LOCKED (omit it when locked).
+ * unknown keys → 400 (strict). `initialStop` after `initialStopLocked` → 409 STOP_LOCKED (omit it when locked);
+ * on the wrong side of the average entry → 409 STOP_WRONG_SIDE. Changing it recomputes riskUsdt / rMultiple.
  * `addOrderIds`: only for an OPEN MANUAL SPOT entry (409 ENTRY_NOT_EXTENDABLE / MARKET_MISMATCH otherwise); the entry
- * is rebuilt from all its fills in id order.
+ * is rebuilt from all its fills in id order. Order of the checks: see JournalConflictReason.
  */
 export const JournalUpdateRequest = z
   .strictObject({
@@ -346,45 +368,60 @@ export const JournalStatsQuery = z.object({
 export type JournalStatsQuery = z.input<typeof JournalStatsQuery>;
 
 /**
- * One group of a breakdown. Only groups with at least one entry are listed. Order: byWeekday by day ("1" … "7"),
- * byDirection LONG then SHORT, the others by count (largest first), then key (null last).
+ * One group of a breakdown (`computeJournalStats` of @cex/core, from `summarizeR` of the group's entries — same names).
+ * Only groups with at least one entry are listed, sorted by key ascending (null last; weekdays 1 … 7).
  */
-export const JournalStatsGroup = z.object({
-  /**
-   * bySetup: the setup (null = entries without a setup) · bySymbol: symbol · byDirection: LONG / SHORT ·
-   * byWeekday: "1" (Monday) … "7" (Sunday) of `closedAt` in GMT+7 · byMistake: a JournalMistake (an entry counts in each of its mistakes).
-   */
-  key: z.string().nullable(),
-  count: z.number().int().positive(),
-  wins: z.number().int().nonnegative(),
-  losses: z.number().int().nonnegative(),
-  winRate: DecimalString,
-  rCount: z.number().int().nonnegative(),
-  /** null when no entry of the group has an R. */
-  totalR: DecimalString.nullable(),
-  expectancyR: DecimalString.nullable(),
-  netPnl: DecimalString,
-});
-export type JournalStatsGroup = z.infer<typeof JournalStatsGroup>;
+const statsGroup = <K extends z.ZodType>(key: K) =>
+  z.object({
+    key,
+    count: z.number().int().positive(),
+    wins: z.number().int().nonnegative(),
+    losses: z.number().int().nonnegative(),
+    breakevens: z.number().int().nonnegative(),
+    winRate: DecimalString.nullable(),
+    /** entries of the group with an R */
+    countWithR: z.number().int().nonnegative(),
+    /** null when no entry of the group has an R */
+    totalR: DecimalString.nullable(),
+    expectancyR: DecimalString.nullable(),
+    /** null without a losing R */
+    profitFactorR: DecimalString.nullable(),
+    totalNetPnl: DecimalString.nullable(),
+  });
+/** Group of bySetup: key = the setup, null = entries without a setup. */
+export const JournalSetupGroup = statsGroup(z.string().nullable());
+export const JournalSymbolGroup = statsGroup(SymbolCode);
+export const JournalMarketGroup = statsGroup(JournalMarket);
+export const JournalDirectionGroup = statsGroup(JournalDirection);
+/** Group of byWeekday: key = ISO weekday of `closedAt` at GMT+7, 1 = Monday … 7 = Sunday. */
+export const JournalWeekdayGroup = statsGroup(z.number().int().min(1).max(7));
+/** Group of byMistake: an entry with several mistakes counts once in each ("FOMO cost you 3.4R"). */
+export const JournalMistakeGroup = statsGroup(JournalMistake);
+export type JournalStatsGroup = z.infer<typeof JournalSetupGroup>;
 
 export const JournalStats = z.object({
   /** Always ACTUAL_FILLS: the user's own fills, never signals or bots. */
   basis: StatsBasis.extract(['ACTUAL_FILLS']),
+  /** `R_METRICS_VERSION` of @cex/core (same as summary.rMetricsVersion). */
+  rMetricsVersion: z.number().int().positive(),
   range: JournalStatsRange,
   /** null for 'all'. */
   from: IsoDateTime.nullable(),
   to: IsoDateTime,
-  summary: RSummary,
-  /** Entries in the same range and filters left out of every number above (show "N entries not counted", link to the list with excluded=true). */
+  /** Offset of the weekday grouping in minutes east of UTC (420 = GMT+7). */
+  weekdayUtcOffsetMinutes: z.number().int(),
+  /** Entries in the same range and filters left out of every number below (show "N entries not counted", link to the list with excluded=true). */
   excluded: z.object({
     void: z.number().int().nonnegative(),
     needsReview: z.number().int().nonnegative(),
   }),
-  bySetup: z.array(JournalStatsGroup),
-  bySymbol: z.array(JournalStatsGroup),
-  byDirection: z.array(JournalStatsGroup),
-  byWeekday: z.array(JournalStatsGroup),
-  byMistake: z.array(JournalStatsGroup),
+  summary: RSummary,
+  bySetup: z.array(JournalSetupGroup),
+  bySymbol: z.array(JournalSymbolGroup),
+  byMarket: z.array(JournalMarketGroup),
+  byDirection: z.array(JournalDirectionGroup),
+  byWeekday: z.array(JournalWeekdayGroup),
+  byMistake: z.array(JournalMistakeGroup),
 });
 export type JournalStats = z.infer<typeof JournalStats>;
 
@@ -418,7 +455,8 @@ export type JournalUpdateSettingsRequest = z.input<typeof JournalUpdateSettingsR
  * < 4 images on the entry (409 TOO_MANY_ATTACHMENTS) → user quota 50 MB (413 ATTACHMENT_QUOTA).
  */
 export const JournalAttachmentUpload = z.strictObject({
-  contentType: JournalImageType,
+  /** Declared type. Anything but a JournalImageType (e.g. image/svg+xml, image/gif) → 415, not 400 (module A, A4). */
+  contentType: z.string().trim().min(1).max(100),
   dataBase64: z
     .string()
     .min(4)
