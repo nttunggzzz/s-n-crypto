@@ -16,6 +16,7 @@ from `docs/plans/` (e.g. "Đợt A1"). Do exactly that card.
 - Money/price/qty = `DecimalString` (inputs > 0: `PositiveDecimalString`); missing data in responses = `.nullable()` (NULL ≠ 0); optional request fields = `.optional()`.
 - Every new endpoint gets a mock resolver with the SAME validation and error codes as the server will have ("mock = server"); `createMockHandlers` must typecheck.
 - `auth: 'staff'` endpoints need a `permission` declared in `permissions.ts` and mapped to roles there.
+- Stats schemas carry `basis: StatsBasis` (`ACTUAL_FILLS | MODELED_CANDLES | BOT_FILLS`, one shared enum). The signal gate verdict enum is exactly `INSUFFICIENT_DATA | NOT_MET | ELIGIBLE_FOR_REVIEW`; never add a field/endpoint meaning "approved for release" or any user-facing signal endpoint (that is phase 6, separate approval).
 - Breaking changes (rename/remove/narrow, new required request field, meaning change) → STOP and report to the lead; do not do them.
 - Version: next minor (`0.x.0`) as the card says; CHANGELOG entry in Vietnamese with sections "Thêm" / "Thay đổi nhỏ có thể ảnh hưởng UI".
 

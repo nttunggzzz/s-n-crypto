@@ -5,7 +5,9 @@ Lập: 2026-10-13, kỹ sư chính (Claude Code). Chủ dự án chọn **A + C*
 | Module | Giai đoạn ROADMAP | Kết quả cuối | Kế hoạch chi tiết |
 |---|---|---|---|
 | **A — Nhật ký giao dịch & thống kê cá nhân** | GĐ5 | Mỗi giao dịch có ghi chú, setup, kế hoạch, ảnh. Thống kê thật: win rate, kỳ vọng R, drawdown, theo setup/coin | [module-A-nhat-ky-giao-dich.md](module-A-nhat-ky-giao-dich.md) |
-| **C — Engine tín hiệu** | GĐ4 → cổng M3 | Tín hiệu LONG/SHORT từ hệ phân tích đa tác tử, lưu theo phiên bản engine, chấm kết quả bằng dữ liệu chạy thật, trang Admin "Hiệu quả tín hiệu". Qua cổng M3 mới công bố | [module-C-engine-tin-hieu.md](module-C-engine-tin-hieu.md) |
+| **C — Engine tín hiệu** | GĐ4 → cổng M3 | Tín hiệu LONG/SHORT từ hệ phân tích đa tác tử, lưu theo phiên bản engine, chấm kết quả bằng dữ liệu chạy thật, trang Admin "Hiệu quả tín hiệu". Qua cổng M3 chỉ mở bước **xem xét** phát hành; bán tín hiệu cần phê duyệt riêng | [module-C-engine-tin-hieu.md](module-C-engine-tin-hieu.md) |
+
+Hai module dùng chung **[quy ước R và tách nguồn dữ liệu](quy-uoc-R-va-nguon-du-lieu.md)** — mọi sub-agent đọc trước khi làm.
 
 Mỗi module chia thành nhiều **đợt**. Mỗi đợt làm trọn trong 1–2 lượt làm việc, có đầu ra kiểm được và gộp vào `main` riêng.
 Có thể dừng giữa hai đợt bất kỳ mà không để dự án ở trạng thái hỏng.
@@ -72,26 +74,45 @@ Duyệt các quyết định (bảng mục 4), bật/tắt tính năng trên sà
   - không ai sửa `host/`, `host-data/` bằng tay.
 - Hợp đồng đổi theo thứ tự gộp. Số phiên bản `0.x.0` lấy theo thứ tự vào `main`, không đặt trước.
 - Không báo "xong" khi chưa chạy lệnh thật. Mọi báo cáo dán lệnh và con số.
+- Module A và C dùng chung **hàm** R (`@cex/core/rMetrics`, viết ở A1), không dùng chung **dữ liệu**: nhật ký không đọc `signals`, engine không đọc `journal_*`, mọi thống kê có `basis`.
+- Không có code nào tự mở tín hiệu cho người dùng khi đạt cổng M3.
 - Module C không bao giờ gọi `OrderService` từ `server/src/modules/analysis/`. Bot tín hiệu (nếu bật) ở `server/src/modules/signals/`, chỉ cho tài khoản `is_bot`, có cờ tắt/bật.
 
-## 4. Quyết định cần chủ dự án duyệt (trả lời theo mã)
+## 4. Quyết định (bản cuối 2026-10-13, trả lời theo mã)
 
-| Mã | Câu hỏi | Đề xuất của kỹ sư chính |
-|---|---|---|
-| A-D1 | Một mục nhật ký là gì | Một vòng giao dịch: Spot = nhóm lệnh cùng cặp (mua vào → bán ra), Futures = một vị thế |
-| A-D2 | Tự tạo mục cho mọi giao dịch | **Bật mặc định**, tắt được trong Cài đặt — để thống kê không bị chọn lọc |
-| A-D3 | Ảnh lưu ở đâu | Trong PostgreSQL: ≤ 1 MB/ảnh, ≤ 4 ảnh/mục, hạn mức 50 MB/người, PNG/JPEG/WebP |
-| A-D4 | R khi không có dừng lỗ | `null` — không tính R, vẫn tính lãi lỗ USDT |
-| A-D5 | Lệnh của bot (Grid/DCA) | Không đưa vào nhật ký |
-| A-D6 | Ghi chú | Chữ thuần ≤ 5.000 ký tự |
-| A-D7 | Lãi lỗ của một mục | Theo giá mua trung bình **của chính các lệnh trong mục**, có thể khác trang "Phân tích lãi lỗ" (giá vốn chung tài khoản) khi đang giữ coin từ trước — giao diện ghi chú rõ |
-| C-D1 | Phạm vi GĐ4 | Chỉ tạo + đo tín hiệu; người dùng **không** thấy tín hiệu tới khi qua M3 |
-| C-D2 | Dùng LLM | **Không** ở GĐ4 (bộ kể chuyện tất định có sẵn; không tốn phí, kết quả lặp lại được) |
-| C-D3 | Bot tín hiệu vào lệnh trên sàn ảo (tài khoản `is_bot`, tiền ảo, OCO) | **Có** — đúng P06, đợt C5, mặc định tắt |
-| C-D4 | Cặp và khung theo dõi | 10 cặp thanh khoản cao (BTC, ETH, SOL, BNB, XRP, DOGE, ADA, LINK, AVAX, SUI) × khung 1h và 4h; đổi được qua cấu hình engine |
-| C-D5 | Cổng M3 | ≥ 100 tín hiệu đã đóng **của cùng một phiên bản engine**; kỳ vọng R ròng > 0 với cận dưới khoảng tin cậy 95% > 0; drawdown ≤ 20R; không cặp nào > 40% lợi nhuận; chủ dự án quyết cuối |
-| C-D6 | Lưu trữ | Nến 1m giữ 60 ngày; nến ≥ 1h giữ mãi; báo cáo phân tích đầy đủ chỉ lưu cho tín hiệu; lần chạy không ra tín hiệu lưu bản rút gọn 90 ngày |
-| C-D0 | Hệ phân tích đang dở ở phiên khác | Phiên đó dừng, commit lên nhánh `be/analysis`, hoặc cho phép lead tiếp nhận nguyên trạng (đợt C0) |
+Mục tiêu sản phẩm đã được chủ dự án xác nhận ngày 2026-10-13:
+- **A** là tính năng cho người dùng sàn, không dùng AI.
+- **C** là công cụ nội bộ cho Admin.
+- Hai module dùng chung công thức R, tách riêng dữ liệu ([quy ước](quy-uoc-R-va-nguon-du-lieu.md)).
+- Cổng M3 chỉ là điều kiện để xem xét phát hành.
+
+Cột "Trạng thái" có ba giá trị:
+- **Đủ căn cứ**: suy ra từ bất biến của dự án hoặc từ mục tiêu đã xác nhận. Duyệt theo đề xuất là an toàn.
+- **Cần chủ dự án quyết**: lựa chọn sản phẩm hoặc chính sách, không có đáp án kỹ thuật đúng duy nhất.
+- **Đã xác nhận**: chủ dự án đã nói rõ.
+
+| Mã | Câu hỏi | Đề xuất | Căn cứ | Trạng thái |
+|---|---|---|---|---|
+| A-D1 | Một mục nhật ký là gì | Một **vòng giao dịch**, ghi nhận theo **từng lần khớp**. Spot: tối đa 1 mục tự động mở cho mỗi cặp; mua mở/cộng, bán phân bổ tới hết khối lượng còn mở, phần dư không thuộc mục nào, còn lẻ dưới bước khối lượng thì đóng. Futures: một mục = một vị thế (Module A mục 2.1) | Dữ liệu `trades`/`futures_trades` có sẵn; mỗi lần khớp chỉ thuộc một mục nên không ghi trùng | **Đủ căn cứ** |
+| A-D2 | Tự ghi nhật ký | **Bật mặc định**, tắt được trong Cài đặt. **Không ghi bù** giao dịch trước ngày phát hành. Mục tự động **không xóa được** (chỉ sửa ghi chú) | Thống kê không bị chọn lọc. Nhưng đây là trải nghiệm người dùng: có người không muốn bị ghi tự động, hoặc muốn xóa mục | **Cần chủ dự án quyết** |
+| A-D3 | Ảnh lưu ở đâu | Trong PostgreSQL: ≤ 1 MB/ảnh, ≤ 4 ảnh/mục, 50 MB/người, chỉ PNG/JPEG/WebP | Sao lưu một chỗ (logical backup đã có); không cần dịch vụ lưu trữ ngoài; số giới hạn đổi được sau | **Đủ căn cứ** |
+| A-D4 | R khi không có dừng lỗ | `null`. Vẫn tính lãi lỗ USDT. R dùng **dừng lỗ ban đầu**, khóa sau lần giảm vị thế đầu tiên | Bất biến 6 (không bịa dữ liệu); chặn R đẹp giả do dời dừng lỗ | **Đủ căn cứ** |
+| A-D5 | Lệnh bot (Grid/DCA/tín hiệu), tài khoản bot | Không vào nhật ký | Quy ước tách nguồn dữ liệu, luật 3 | **Đủ căn cứ** |
+| A-D6 | Ghi chú | Chữ thuần ≤ 5.000 ký tự | Chặn XSS; không cần trình soạn thảo định dạng | **Đủ căn cứ** |
+| A-D7 | Lãi lỗ của một mục | Theo giá vốn **của chính các lần mua trong mục**. Có thể khác trang "Phân tích lãi lỗ" (giá vốn chung tài khoản) khi đang giữ coin từ trước; giao diện ghi chú rõ | Một vòng giao dịch phải tự đủ để tính R. Giá vốn chung của tài khoản bị trộn lẫn coin từ trước | **Đủ căn cứ** (người dùng sẽ thấy hai con số khác nhau) |
+| C-D0 | Hệ phân tích đang dở, chưa commit, ở phiên khác | Phiên đó tự commit lên `be/analysis`. Nếu không, bạn cho lead tiếp nhận nguyên trạng (C0) | Code của phiên khác; lead không tự lấy | **Cần chủ dự án quyết** |
+| C-D1 | Ai thấy tín hiệu | Chỉ Admin trong GĐ4. Người dùng chỉ thấy sau **cổng M3 + phê duyệt phát hành riêng** (Module C mục 3.4) + kế hoạch GĐ6 | Chủ dự án đã nói 2026-10-13 | **Đã xác nhận** |
+| C-D2 | Dùng LLM | **Không** ở GĐ4 | Không tốn phí, kết quả lặp lại được (cần để đo). Đã có bộ kể chuyện tất định | **Đủ căn cứ** |
+| C-D3 | Bot tín hiệu vào lệnh trên sàn ảo | **Có**, đợt C5, cờ **mặc định tắt**, tài khoản `is_bot`, tiền ảo, chỉ qua `OrderService` | Kiểm tra chéo mô hình khớp bằng khớp thật (tiêu chí 6). Nhưng bot sẽ đặt lệnh thật trên sàn ảo đang có người dùng | **Cần chủ dự án quyết** |
+| C-D4 | Cặp và khung | 10 cặp (BTC, ETH, SOL, BNB, XRP, DOGE, ADA, LINK, AVAX, SUI) × 1h và 4h, đổi được qua cấu hình engine | Đủ tín hiệu để tới 100 trong 1–3 tháng. **Xác nhận lại sau C0**, khi đã đo một lần phân tích mất bao lâu | **Đủ căn cứ** (có điều kiện đo tải) |
+| C-D5 | Cổng M3 | ≥ 100 tín hiệu đã đóng của **một** phiên bản; kỳ vọng R ròng > 0; cận dưới khoảng tin cậy 95% > 0; drawdown ≤ 20R; một cặp ≤ 40%, một tháng ≤ 50% R dương; bot cùng dấu. Kết luận tốt nhất chỉ là `ELIGIBLE_FOR_REVIEW` | Các ngưỡng là mức chấp nhận rủi ro của sản phẩm | **Cần chủ dự án quyết** (ngưỡng) |
+| C-D6 | Lưu trữ | Nến 1m giữ 60 ngày (đủ chấm tín hiệu giữ tối đa 48 nến 4h = 8 ngày); nến ≥ 1h giữ mãi; báo cáo đầy đủ chỉ lưu cho tín hiệu; lần chạy không ra tín hiệu lưu 90 ngày | Kích thước DB và bản sao lưu | **Đủ căn cứ** |
+
+Quy tắc **không phải quyết định** (cố định trong kế hoạch, đổi phải có lý do và phiên bản mới):
+- mô hình khớp/phí/trượt giá (Module C mục 3.2);
+- bảo vệ holdout (C mục 3.5);
+- chống ghi trùng nhật ký (A mục 2.2);
+- tách nguồn dữ liệu (quy ước chung).
 
 ## 5. Thứ tự và làn song song
 

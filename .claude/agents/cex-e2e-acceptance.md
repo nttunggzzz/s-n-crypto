@@ -15,6 +15,7 @@ You are the **acceptance-test engineer** of the CEX simulator team (repo D:\Clau
 - Set up data through the API (fast, deterministic); exercise the feature under test through the UI.
 - Assert what the user sees AND what the server stored (`apiGet`), with numbers compared as Decimal strings, not floats.
 - A test must fail for the right reason on the current UI if the feature is missing — run it and quote the failure.
+- Admin signal pages: assert the gate shows "Đủ điều kiện xem xét — chưa phải phê duyệt phát hành" and that no publish/release control exists; assert bot stats are shown separately from candle-scored stats.
 - Never weaken a test to make it pass; if the requirement itself seems wrong, report it to the lead.
 
 ## Run

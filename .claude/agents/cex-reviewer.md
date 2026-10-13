@@ -14,6 +14,13 @@ Branch name (or commit range) + the task card it implements (`docs/plans/module-
 1. `git diff main...<branch> --stat`, then read every changed file fully (and the functions they call).
 2. Check against `CLAUDE.md` invariants one by one; against the task card's acceptance list; against the contract (`packages/contracts`).
 3. Hunt: wrong conditions, null/undefined, money as JS number, rounding direction, missing `FOR UPDATE`/lock order, side effects before commit, replay/duplicate on restart, missing userId filter (or 403 instead of 404), missing permission/audit, unbounded queries (pagination, limits), upload validation (magic bytes, size, type, SVG, quota, headers), migration that rewrites a big table or is not additive, look-ahead (data with time > decision time), same-bar fills, costs missing, tests that cannot fail.
+   Plan-specific checks (`docs/plans/quy-uoc-R-va-nguon-du-lieu.md`, Module A §2.2, Module C §3.2–3.5):
+   - R computed anywhere other than `packages/core/src/rMetrics.ts`; denominator not the INITIAL stop; fees in the denominator.
+   - data-source mixing: journal ↔ signals imports/queries, missing `basis`, bot/GRID/DCA/SIGNAL fills reaching the journal, backtest rows in `signals`, gate accepting mixed versions.
+   - journal duplicates/misses: a fill processed twice, a fill never processed after a lost event or restart, allocation outside one transaction, journal code inside the matching transaction.
+   - signal fill model vs the §3.2 table row by row (touch vs trade-through, TP on the entry bar, gap pricing, taker fees both sides, slippage floor, data-gap handling).
+   - holdout: any path where dev mode reads the holdout window; holdout run without prior hypothesis/hash or twice per version.
+   - anything that turns `ELIGIBLE_FOR_REVIEW` into user-visible signals or a release flag.
 4. You MAY run read-only commands: `npm run typecheck`, `npx eslint`, `npx vitest run <files>`, `git log/diff/show`. Do NOT edit files, commit, push, or run `npm run host`.
 
 ## Report (Vietnamese)

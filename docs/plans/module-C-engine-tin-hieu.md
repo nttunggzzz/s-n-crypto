@@ -2,13 +2,17 @@
 
 Đọc trước:
 - [README](README.md) (đội ngũ, quy trình, quyết định C-D0…C-D6);
+- **[Quy ước R và tách nguồn dữ liệu](quy-uoc-R-va-nguon-du-lieu.md)** (bắt buộc);
 - `docs/parts/P06-engine-tin-hieu.md`, `P09-ui-admin.md` ("Giai đoạn 4");
 - `docs/architecture/crypto-trading-agents.md`;
 - skill `crypto-multi-agent-analysis`.
 
 ## 1. Mục tiêu và nguyên tắc
 Tạo tín hiệu **LONG/SHORT có giá vào, dừng lỗ, chốt lời** từ hệ phân tích đa tác tử. Lưu **từng tín hiệu kèm phiên bản engine và toàn bộ đầu vào**.
-**Chấm kết quả bằng dữ liệu chạy thật** (thêm bot vào lệnh trên sàn ảo), báo cáo trong Admin. Người dùng **chưa thấy gì** tới khi qua **cổng M3** (C-D1).
+**Chấm kết quả bằng dữ liệu chạy thật** (thêm bot vào lệnh trên sàn ảo), báo cáo trong Admin. Đây là công cụ **nội bộ cho Admin**.
+Người dùng **chưa thấy gì** cho tới khi đủ cả hai điều kiện (C-D1):
+1. qua **cổng M3** (mục 3.3);
+2. có **phê duyệt phát hành riêng** (mục 3.4).
 
 Nguyên tắc không đổi:
 1. **Không nhìn trước tương lai:** quyết định lúc nến đóng `t` chỉ dùng dữ liệu có thời điểm ≤ `t`. Vào lệnh từ nến **sau**. Nến chạm cả TP lẫn SL → tính **SL**.
@@ -17,6 +21,11 @@ Nguyên tắc không đổi:
 4. **Không giấu tín hiệu thua**, không xóa tín hiệu. Hết hạn, vô hiệu đều được đếm và hiển thị.
 5. **Hệ phân tích chỉ tư vấn:** `server/src/modules/analysis/` không bao giờ gọi `OrderService` / đổi số dư. Bot (C5) nằm ở `server/src/modules/signals/`, chỉ cho tài khoản `is_bot`, có cờ.
 6. **Không LLM, không dữ liệu trả phí** ở GĐ4 (C-D2). Bộ kể chuyện tất định có sẵn.
+7. **Không trộn nguồn dữ liệu:**
+   - Chấm điểm theo nến (`MODELED_CANDLES`), bot trên sàn ảo (`BOT_FILLS`) và nhật ký người dùng (`ACTUAL_FILLS`) là ba nguồn riêng.
+   - Dùng chung **công thức** R (`@cex/core/rMetrics`), không dùng chung **dữ liệu** hay **giả định thực thi**.
+   - Xem [quy ước chung](quy-uoc-R-va-nguon-du-lieu.md) mục 2.
+8. **Cổng M3 không phải phê duyệt phát hành.** Không có code nào tự mở tín hiệu cho người dùng (mục 3.4).
 
 ## 2. Hiện trạng (2026-10-13, đã kiểm)
 | Có | Ở đâu | Ghi chú |
@@ -47,24 +56,54 @@ Không đủ → lần chạy vẫn được ghi (bản rút gọn) **kèm lý d
 - `watchlist`, `intervals`;
 - `minConfidence`, `maxUncertainty`, `minRewardRisk`;
 - `entryValidityBars` (mặc định 3), `maxHoldingBars` (mặc định 48);
-- `slippageBps` (tối thiểu 5);
+- `slippageBps` (tối thiểu 5), `feeModel` (mặc định `TAKER_BOTH_SIDES`), `fillRule` (mặc định `PESSIMISTIC_V1` = bảng mục 3.2);
 - `departmentsEnabled`;
 - `notes` (giả thuyết của phiên bản).
 
-**Vòng đời và chấm kết quả** (trên nến **1m đã đóng**, bắt đầu từ nến sau lúc ra tín hiệu):
+### 3.1 Vòng đời
+
+Chấm trên nến **1m đã đóng**, bắt đầu từ nến **sau** lúc ra tín hiệu.
 ```
-PENDING ──giá chạm vùng vào──▶ ACTIVE ──▶ TP_HIT | SL_HIT | TIME_EXIT (hết maxHoldingBars → thoát giá đóng)
-   │                              
+PENDING ──khớp giá vào──▶ ACTIVE ──▶ TP_HIT | SL_HIT | TIME_EXIT (hết maxHoldingBars) | DATA_GAP_EXIT
+   │
    ├─ quá entryValidityBars ──▶ EXPIRED      (không vào lệnh; đếm riêng, không tính win rate)
    └─ điều kiện vô hiệu xảy ra ▶ INVALIDATED (trước khi vào)
 ```
-- Nến chạm cả TP và SL → SL. Giá nhảy qua SL (gap) → thoát ở giá mở nến đó (xấu hơn).
-- **R ròng:**
-  - LONG: `(giá ra − giá vào) ÷ |giá vào − SL|`; SHORT đảo dấu.
-  - Trừ phí 2 chiều (phí sàn lúc ra tín hiệu) và trượt giá (`slippageBps` hoặc mức ước tính của phòng rủi ro, lấy số lớn hơn), quy ra R.
-- Ghi thêm **MAE/MFE** (sụt tối đa / lời tối đa trong lệnh, theo R) và thời gian giữ.
 
-**Cổng M3** (C-D5) — chỉ tính tín hiệu chạy thật, đã đóng (TP_HIT, SL_HIT, TIME_EXIT) của **cùng một phiên bản**:
+### 3.2 Mô hình khớp và chi phí (cố định, lưu cùng mỗi tín hiệu)
+
+Mọi giả định là tham số của **phiên bản engine** và được chép vào từng tín hiệu (`fee_rate`, `slippage_bps`, `fill_rule`).
+Đổi giả định = phiên bản mới. Luôn chọn cách **bất lợi hơn** khi dữ liệu nến không đủ để biết thứ tự giá.
+
+| Tình huống | Quy tắc |
+|---|---|
+| **Vào lệnh** (LONG; SHORT đối xứng) | Lệnh giới hạn tại `entry`. Khớp khi nến 1m có `low < entry` (**xuyên qua** ít nhất 1 tick, chạm đúng bằng chưa tính). Giá vào = `entry`, kể cả khi nến mở thấp hơn: không tính phần giá tốt hơn |
+| Nến mở đã vượt quá `entry` về phía có lợi lúc ra tín hiệu | Không đuổi giá. Chờ giá quay về `entry`; quá `entryValidityBars` → `EXPIRED` |
+| **Nến vào lệnh** cũng chạm SL | Tính **SL_HIT** ngay trong nến đó |
+| **Nến vào lệnh** chạm TP (không chạm SL) | **Không** tính TP trong nến vào lệnh (không biết TP xảy ra trước hay sau khi vào). Xét TP từ nến kế tiếp |
+| Một nến chạm **cả TP và SL** | **SL_HIT** |
+| **TP** | Lệnh giới hạn tại `target`. Khớp khi `high > target` (xuyên qua 1 tick). Giá ra = `target`; nến mở vượt TP vẫn chỉ tính `target` |
+| **SL** | Lệnh dừng. Khớp khi `low ≤ stop`. Giá ra = `stop`, trừ thêm trượt giá. Nến **mở dưới SL** (gap) → giá ra = giá **mở** nến đó, trừ thêm trượt giá |
+| **TIME_EXIT** | Hết `maxHoldingBars` (theo khung tín hiệu) → thoát ở giá **đóng** nến 1m cuối, trừ trượt giá |
+| **Phí** | Phí **taker** của biểu phí lúc ra tín hiệu, tính **cả hai chiều**, trên giá trị vào và giá trị ra (không giả định được hưởng phí maker) |
+| **Trượt giá** | `max(slippageBps của phiên bản, ước tính của phòng rủi ro trong báo cáo)`, tối thiểu 5 bps. Áp cho SL, TIME_EXIT, thoát do lỗ hổng dữ liệu. Không áp cho TP và giá vào giới hạn |
+| **Futures/SHORT** | Thêm funding ước tính theo số mốc funding đi qua trong thời gian giữ, lấy theo lịch sử funding đã lưu; không có dữ liệu → dùng 0,01%/8h bất lợi |
+
+**R ròng** theo [quy ước chung](quy-uoc-R-va-nguon-du-lieu.md):
+`R = [(giá ra − giá vào) × hướng − phí vào − phí ra − funding] ÷ |giá vào − SL|`, tính trên 1 đơn vị khối lượng.
+Ghi thêm **MAE/MFE** (theo R, giá xấu nhất và tốt nhất trong lúc giữ) và thời gian giữ.
+
+**Lỗ hổng dữ liệu nến 1m** (sàn tắt, mất kết nối):
+1. Tải bù đúng khoảng thiếu từ Binance REST. Đây là giá **đã xảy ra**, chỉ dùng để chấm kết quả, không dùng để ra quyết định mới nên không nhìn trước tương lai.
+2. Không tải được → tín hiệu đứng chờ, không đoán.
+3. Quá 24 giờ vẫn thiếu, và tín hiệu đang `ACTIVE` → `DATA_GAP_EXIT`: thoát bi quan ở **SL** (−1R trừ chi phí).
+   Kết quả này **được tính vào thống kê và cổng như một lần thua**. Không được loại bỏ, nếu loại sẽ thành chọn lọc.
+   Tín hiệu đang `PENDING` → `EXPIRED`.
+
+### 3.3 Cổng M3 (C-D5): điều kiện để **xem xét** phát hành, không phải giấy phép bán
+
+Chỉ tính tín hiệu chạy thật (`basis = MODELED_CANDLES`), đã đóng (TP_HIT, SL_HIT, TIME_EXIT, DATA_GAP_EXIT), của **cùng một phiên bản**. Không dùng số backtest.
+
 | # | Tiêu chí | Ngưỡng |
 |---|---|---|
 | 1 | Số tín hiệu đã đóng | ≥ 100 |
@@ -72,16 +111,56 @@ PENDING ──giá chạm vùng vào──▶ ACTIVE ──▶ TP_HIT | SL_HIT |
 | 3 | Cận dưới khoảng tin cậy 95% của kỳ vọng R (bootstrap 10.000 lần, hạt giống cố định) | > 0 |
 | 4 | Drawdown tối đa của đường R lũy kế | ≤ 20R |
 | 5 | Tỷ trọng R dương lớn nhất của một cặp / một tháng | ≤ 40% / ≤ 50% |
-| 6 | Bot trên sàn ảo (nếu bật) | cùng dấu với chấm điểm theo nến |
+| 6 | Bot trên sàn ảo (nếu bật), `basis = BOT_FILLS` | cùng dấu kỳ vọng với chấm điểm theo nến (chỉ so, không gộp) |
 
-Đạt → báo cáo, **chủ dự án quyết** sang GĐ6. Không đạt → sửa engine = phiên bản mới, đo lại.
+- Kết luận của cổng chỉ có ba giá trị: `INSUFFICIENT_DATA` (chưa đủ 100), `NOT_MET` (đủ số nhưng trượt tiêu chí), `ELIGIBLE_FOR_REVIEW` (đạt cả 6).
+  **Không có** giá trị "approved" hay "passed", và **không có code nào** tự bật hoặc mở thứ gì khi cổng đạt.
+- Không đạt → sửa engine = phiên bản mới, đếm lại từ 0.
+
+### 3.4 Phát hành cần phê duyệt riêng (sau cổng M3, trước GĐ6)
+
+`ELIGIBLE_FOR_REVIEW` chỉ mở **bước xem xét**. Bước này nằm ngoài GĐ4 và không có trong Module C.
+1. **Xem xét lại số liệu** (lead + `cex-reviewer`, chế độ chỉ đọc), viết `docs/reports/<ngày>-xem-xet-phat-hanh-v<N>.md`:
+   - chạy lại cổng trên dữ liệu mới nhất;
+   - kiểm 30 ngày gần nhất riêng: kỳ vọng không âm;
+   - so với backtest và holdout;
+   - liệt kê khoảng trống dữ liệu, rủi ro đã biết.
+2. **Hồ sơ phê duyệt** `docs/plans/phe-duyet-phat-hanh-tin-hieu.md` (lead lập mẫu khi có phiên bản đầu tiên đạt cổng). Chủ dự án ghi rõ:
+   - phiên bản engine, mã băm báo cáo cổng;
+   - phạm vi (cặp, khung, ai được xem);
+   - nội dung cảnh báo rủi ro cho người dùng, giá, điều kiện dừng phát hành;
+   - người duyệt, ngày.
+3. **Kế hoạch GĐ6 riêng** (API cho người dùng, quyền `signalsAccess`, giao diện, công tắc tắt khẩn cấp). Chỉ bắt đầu khi hồ sơ ở bước 2 đã ký.
+   Sau này, nếu phê duyệt được lưu trong hệ thống, đó là một bảng riêng có audit. Kết luận của cổng không bao giờ được dùng thay cho phê duyệt.
+
+### 3.5 Bảo vệ dữ liệu holdout (C4)
+
+Holdout là khoảng dữ liệu để riêng, **không nhìn** khi xây dựng và chỉnh engine. Chỉ dùng **một lần** cho mỗi phiên bản, để kiểm cuối.
+1. **Chốt trước:** trước khi chạy backtest đầu tiên, lead ghi `docs/plans/holdout.json` gồm:
+   - `{ from, to }`: 3 tháng cuối của dữ liệu đã tải;
+   - ngày chốt;
+   - commit.
+
+   File này được commit. Không ai sửa, trừ khi chủ dự án đồng ý và ghi lý do.
+2. **Mặc định loại trừ:** `signalsBacktest` tự cắt bỏ khoảng holdout. Mọi báo cáo phát triển (`--mode dev`) chỉ dùng dữ liệu trước `from`.
+3. **Mở holdout một lần cho mỗi phiên bản**, bằng `--mode holdout`. Script chỉ chạy khi đủ cả ba điều kiện:
+   - phiên bản đã có dòng giả thuyết trong `docs/plans/nhat-ky-gia-thuyet.md`, commit **trước** lần chạy;
+   - cấu hình của phiên bản khớp mã băm đã ghi trong giả thuyết;
+   - phiên bản **chưa có** trong `docs/reports/backtests/holdout-ledger.json`.
+
+   Chạy xong, script ghi vào sổ: phiên bản, mã băm cấu hình, thời điểm, kết quả.
+   Chạy lần hai cho cùng phiên bản → từ chối.
+4. **Không chỉnh sau khi nhìn:** phiên bản mới tạo **sau** khi holdout đã mở cho phiên bản trước thì báo cáo holdout của nó ghi rõ "holdout đã bị nhìn N lần".
+   Mở quá 3 lần thì holdout coi như hết giá trị. Phải chốt holdout mới (dữ liệu mới hơn) hoặc chỉ dựa vào đo thật (C7).
+5. **Đếm số cấu hình đã thử** cho mỗi lần tìm tham số trên dữ liệu dev, ghi vào báo cáo. DSR/PBO dùng số này. Không giấu các lần thử thất bại.
+6. Đo thật (C7) mới là kiểm tra ngoài mẫu thực sự. Holdout chỉ để loại cấu hình tệ sớm, không thay được cổng M3.
 
 ### Bảng mới (một migration, chỉ thêm)
 | Bảng | Nội dung | Ràng buộc |
 |---|---|---|
 | `signal_engine_versions` | `id`, `version` (số tăng dần), `config jsonb`, `notes`, `code_commit`, `created_by`, `created_at`, `active bool` | đúng một bản `active` |
 | `signal_runs` | `id`, `version_id`, `symbol`, `interval`, `candle_open_time`, `as_of`, `rating`, `confidence`, `outcome` (`SIGNAL` hoặc lý do), `snapshot_hash`, `duration_ms` | **unique** `(version_id, symbol, interval, candle_open_time)`; xóa sau 90 ngày |
-| `signals` | `id`, `run_id`, `version_id`, `symbol`, `interval`, `direction`, `entry/stop/target numeric`, `reward_risk`, `confidence`, `rating`, `summary`, `invalidation jsonb`, `report jsonb` (báo cáo đầy đủ), `fee_rate`, `slippage_bps`, `status`, `entered_at/price`, `exited_at/price`, `exit_reason`, `r_multiple`, `mae_r`, `mfe_r`, `last_evaluated_candle`, `created_at` | index `(version_id, status)`, `(symbol, created_at)` |
+| `signals` | `id`, `run_id`, `version_id`, `symbol`, `interval`, `direction`, `entry/stop/target numeric`, `reward_risk`, `confidence`, `rating`, `summary`, `invalidation jsonb`, `report jsonb` (báo cáo đầy đủ), `fee_rate`, `slippage_bps`, `fill_rule`, `status` (gồm `DATA_GAP_EXIT`), `gap_backfilled bool`, `entered_at/price`, `exited_at/price`, `exit_reason`, `r_multiple`, `mae_r`, `mfe_r`, `last_evaluated_candle`, `created_at` | index `(version_id, status)`, `(symbol, created_at)` |
 
 ### API (một phiên bản hợp đồng mới — chỉ Admin, chưa có API cho người dùng)
 | Endpoint | Quyền | Nội dung |
@@ -89,8 +168,8 @@ PENDING ──giá chạm vùng vào──▶ ACTIVE ──▶ TP_HIT | SL_HIT |
 | `adminSignals` GET `/api/v1/admin/signals` | `signals.view` | lọc phiên bản, cặp, chiều, trạng thái, khoảng ngày; phân trang |
 | `adminSignal` GET `/api/v1/admin/signals/:signalId` | `signals.view` | chi tiết + báo cáo phân tích + diễn biến chấm điểm |
 | `adminSignalRuns` GET `/api/v1/admin/signals/runs` | `signals.view` | các lần chạy (kể cả không ra tín hiệu) + lý do — để thấy engine có chạy đều không |
-| `adminSignalStats` GET `/api/v1/admin/signals/stats` | `signals.view` | win rate, kỳ vọng R, PF (R), drawdown R, đường R; theo cặp / chiều / rating / nhóm confidence (bảng **hiệu chỉnh**: confidence dự báo ↔ tỷ lệ thắng thật); số EXPIRED/INVALIDATED |
-| `adminSignalGate` GET `/api/v1/admin/signals/gate?versionId=` | `signals.view` | 6 tiêu chí M3: giá trị, ngưỡng, đạt/chưa |
+| `adminSignalStats` GET `/api/v1/admin/signals/stats` | `signals.view` | win rate, kỳ vọng R, PF (R), drawdown R, đường R; theo cặp / chiều / rating / nhóm confidence (bảng **hiệu chỉnh**: confidence dự báo ↔ tỷ lệ thắng thật); số EXPIRED/INVALIDATED/DATA_GAP_EXIT; `basis` = `MODELED_CANDLES` hoặc `BOT_FILLS` (tham số, mỗi phản hồi một basis) |
+| `adminSignalGate` GET `/api/v1/admin/signals/gate?versionId=` | `signals.view` | 6 tiêu chí M3: giá trị, ngưỡng, đạt/chưa; `verdict` ∈ `INSUFFICIENT_DATA` / `NOT_MET` / `ELIGIBLE_FOR_REVIEW`; dòng chữ cố định "Đạt cổng chưa phải phê duyệt phát hành" |
 | `adminSignalEngineVersions` GET | `signals.view` | danh sách phiên bản |
 | `adminCreateSignalEngineVersion` POST | `signals.manage` | tạo phiên bản (kiểm cấu hình), `reason` bắt buộc, ghi audit |
 | `adminActivateSignalEngineVersion` POST `/:versionId/activate` | `signals.manage` | đổi phiên bản đang chạy, `reason`, audit |
@@ -161,10 +240,15 @@ Thêm:
 
 **Việc**
 1. `packages/contracts/src/signals.ts`:
-   - `SignalDirection`, `SignalStatus` (PENDING, ACTIVE, TP_HIT, SL_HIT, TIME_EXIT, EXPIRED, INVALIDATED), `SignalRunOutcome` (SIGNAL + các lý do);
-   - `SignalEngineConfig` (giới hạn hợp lệ: watchlist 1–20 cặp đang bật; intervals ⊂ {15m, 1h, 4h, 1d}; 0 < minConfidence ≤ 1…);
-   - `SignalEngineVersion`, `Signal`, `SignalDetail` (+ `report: CryptoMarketAnalysisReport`), `SignalRun`;
-   - `SignalStats`, `SignalGateReport` (6 tiêu chí: `value`, `threshold`, `passed`, `verdict`).
+   - `SignalDirection`, `SignalStatus` (PENDING, ACTIVE, TP_HIT, SL_HIT, TIME_EXIT, DATA_GAP_EXIT, EXPIRED, INVALIDATED), `SignalRunOutcome` (SIGNAL + các lý do);
+   - `SignalEngineConfig`:
+     - giới hạn hợp lệ: watchlist 1–20 cặp đang bật; intervals ⊂ {15m, 1h, 4h, 1d}; 0 < minConfidence ≤ 1…;
+     - `slippageBps` ≥ 5;
+     - `feeModel` và `fillRule` là enum, hiện mỗi enum chỉ có một giá trị;
+   - `SignalEngineVersion`, `Signal` (có `feeRate`, `slippageBps`, `fillRule`), `SignalDetail` (+ `report: CryptoMarketAnalysisReport`), `SignalRun`;
+   - `SignalStats` (có `basis`, dùng `StatsBasis` của A1; A1 chưa gộp thì contract-designer tạo `StatsBasis` ở đợt này);
+   - `SignalGateReport`: 6 tiêu chí (`value`, `threshold`, `passed`), `verdict: SignalGateVerdict` (`INSUFFICIENT_DATA | NOT_MET | ELIGIBLE_FOR_REVIEW`).
+     **Không** có trường hay endpoint nào mang nghĩa "đã duyệt phát hành".
 2. 8 endpoint Admin ở mục 3; quyền mới; `OrderSource` thêm `SIGNAL`; `AuditAction` mới.
 3. Mock: kho tín hiệu mẫu (đủ mọi trạng thái, 2 phiên bản). Thống kê/cổng dùng **cùng hàm thuần ở `@cex/core`**.
    - Hàm đó viết ở C3. Đợt này mock trả fixture tĩnh và ghi TODO kèm tên hàm.
@@ -241,11 +325,35 @@ Thêm:
 | Thời lượng | 1–2 lượt |
 
 **Việc — quant-engineer** (`packages/core/src/signalOutcome.ts`, `signalStats.ts` — thuần, `Dec`)
-1. `advanceSignal(signal, candles1m[])`: máy trạng thái mục 3.
-   - Test vàng ≥ 20 ca: chạm TP; chạm SL; cả hai trong 1 nến → SL; gap qua SL → giá mở; không vào kịp → EXPIRED; hết giờ → TIME_EXIT; SHORT đối xứng; phí + trượt giá quy ra R; MAE/MFE; nến thiếu (lỗ hổng dữ liệu) → chờ, không đoán.
-2. `computeSignalStats(closed[])` + `evaluateM3Gate(closed[], opts)`:
+1. `advanceSignal(signal, candles1m[])`: máy trạng thái mục 3.1, khớp và chi phí **đúng từng dòng bảng mục 3.2**. R tính bằng `rMultiple` của `@cex/core/rMetrics`, không viết lại.
+   Test vàng ≥ 26 ca, mỗi dòng của bảng 3.2 ít nhất một ca:
+   - Vào lệnh:
+     - chạm đúng `entry` → chưa vào;
+     - xuyên 1 tick → vào ở `entry`;
+     - nến mở tốt hơn `entry` → vẫn tính `entry`;
+     - quá `entryValidityBars` → EXPIRED.
+   - Nến vào lệnh: chạm SL → SL_HIT; chạm TP → chưa tính TP.
+   - Thoát:
+     - TP chạm đúng → chưa; TP xuyên → giá `target`;
+     - cả TP và SL trong 1 nến → SL;
+     - gap qua SL → giá mở trừ trượt giá;
+     - hết giờ → TIME_EXIT ở giá đóng trừ trượt giá.
+   - Chi phí:
+     - phí taker hai chiều;
+     - trượt giá lấy `max`, tối thiểu 5 bps;
+     - funding SHORT; không có dữ liệu funding → 0,01%/8h bất lợi.
+   - SHORT đối xứng mọi ca trên. MAE/MFE.
+   - Lỗ hổng dữ liệu:
+     - tải bù được → chấm bình thường, `gap_backfilled = true`;
+     - không tải được → đứng chờ;
+     - quá 24 giờ khi ACTIVE → DATA_GAP_EXIT ở SL, tính là thua;
+     - quá 24 giờ khi PENDING → EXPIRED.
+2. `computeSignalStats(closed[], basis)` + `evaluateM3Gate(closed[], opts)`:
+   - dùng `summarizeR` + `bootstrapMeanCI` (thêm vào `rMetrics.ts`);
    - bootstrap 10.000 lần với **hạt giống cố định** (kết quả lặp lại được);
-   - bảng hiệu chỉnh theo nhóm confidence (0,6–0,7 / 0,7–0,8 / 0,8–0,9 / ≥ 0,9).
+   - bảng hiệu chỉnh theo nhóm confidence (0,6–0,7 / 0,7–0,8 / 0,8–0,9 / ≥ 0,9);
+   - `evaluateM3Gate` từ chối dữ liệu trộn phiên bản hoặc trộn basis (ném lỗi), và chỉ trả 3 giá trị `verdict` ở mục 3.3;
+   - test: thêm mục nhật ký hoặc lệnh bot → thống kê tín hiệu không đổi.
 3. Nối mock của hợp đồng (C1) vào 2 hàm này (sửa `packages/contracts/src/mocks/…` — lead cho phép trong đợt này).
 
 **Việc — backend-builder**
@@ -254,6 +362,7 @@ Thêm:
    - ghi trạng thái trong transaction có khóa dòng tín hiệu;
    - `last_evaluated_candle` giúp phát lại an toàn.
 2. Khởi động lại → **chấm bù** từ nến 1m đã lưu kể từ `last_evaluated_candle`. Làm được vì chấm điểm chỉ dùng giá đã xảy ra, không ra quyết định mới.
+   Thiếu nến 1m → tải bù đúng khoảng thiếu từ Binance REST (`fetchKlines`, trong giới hạn trọng số), rồi theo luật lỗ hổng dữ liệu ở mục 3.2.
 3. Route `adminSignalStats`, `adminSignalGate`.
 4. Script chỉ dùng cho dev/e2e: `server/scripts/e2eSeedSignals.ts` (từ chối khi `NODE_ENV=production`) tạo tín hiệu mẫu cho test giao diện.
 
@@ -282,23 +391,33 @@ Thêm:
    - tải nến Binance REST cho `watchlist × {1h, 4h} × 12 tháng` vào `candles` (`source = 'binance-rest'`, `onConflictDoNothing`);
    - tôn trọng giới hạn trọng số Binance (bất biến 15: tổng IP 6000/phút — tự giới hạn ≤ 1200/phút);
    - mặc định chạy vào **DB dev**. Chạy vào DB sàn thật chỉ khi chủ dự án đồng ý.
-2. `server/scripts/signalsBacktest.ts --version <id> [--from --to]`:
+2. **Trước khi chạy backtest đầu tiên**, lead chốt và commit:
+   - `docs/plans/holdout.json` (mục 3.5 bước 1);
+   - `docs/plans/nhat-ky-gia-thuyet.md` với giả thuyết của phiên bản 1 và mã băm cấu hình.
+3. `server/scripts/signalsBacktest.ts --version <id> --mode dev|holdout [--from --to]`:
    - phát lại nến đã đóng qua hệ phân tích ở **chế độ lịch sử**: phòng ban không có dữ liệu lịch sử (sổ lệnh, phái sinh) → `ABSTAIN`, ghi rõ;
    - rút tín hiệu bằng **cùng `extractSignal`**;
-   - chấm bằng **cùng `advanceSignal`** trên nến 1h, luật bi quan;
-   - walk-forward + **3 tháng cuối để riêng, không nhìn khi chỉnh** (holdout);
-   - DSR/PBO từ `backtester.ts`.
-3. Kết quả:
-   - `docs/reports/<ngày>-backtest-engine-v<N>.md` (bảng số, đường R, theo cặp/chiều, câu cảnh báo "backtest không chứng minh lợi thế khi chạy thật", liệt kê giới hạn dữ liệu);
+   - chấm bằng **cùng `advanceSignal`**, cùng bảng khớp/chi phí mục 3.2.
+     Nến 1h thay cho 1m: nhiều nến "chạm cả TP và SL" hơn nên kết quả **bi quan hơn** chạy thật. Ghi rõ trong báo cáo;
+   - `--mode dev` (mặc định): **tự cắt bỏ** khoảng holdout; walk-forward; ghi số cấu hình đã thử;
+   - `--mode holdout`: chỉ chạy khi đủ 3 điều kiện ở mục 3.5 bước 3, rồi ghi `docs/reports/backtests/holdout-ledger.json`. Lần hai cho cùng phiên bản → từ chối, thoát mã lỗi;
+   - DSR/PBO từ `backtester.ts`, dùng số cấu hình đã thử thật.
+4. Kết quả **chỉ** nằm trong báo cáo và file JSON. **Không** ghi vào bảng `signals`, không vào thống kê Admin ([quy ước](quy-uoc-R-va-nguon-du-lieu.md) mục 2, luật 5):
+   - `docs/reports/<ngày>-backtest-engine-v<N>.md`: bảng số, đường R, theo cặp/chiều, kết quả dev và holdout **tách riêng**;
+   - câu cảnh báo "backtest không chứng minh lợi thế khi chạy thật" và danh sách giới hạn dữ liệu;
    - JSON tóm tắt kèm theo.
-4. `docs/plans/nhat-ky-gia-thuyet.md`: mỗi phiên bản engine ghi giả thuyết **trước** khi chạy backtest/đo thật.
 
 **Nghiệm thu**
 - [ ] Báo cáo backtest cho phiên bản 1 (đạt hay không đều ghi thật).
-- [ ] Test: script backtest trên 200 nến tổng hợp cho kết quả xác định (chạy 2 lần giống nhau).
+- [ ] Test:
+  - script backtest trên 200 nến tổng hợp cho kết quả xác định (chạy 2 lần giống nhau);
+  - `--mode dev` không đọc nến nào trong khoảng holdout (đếm nến);
+  - `--mode holdout` chạy lần hai cho cùng phiên bản → từ chối;
+  - thiếu dòng giả thuyết hoặc mã băm lệch → từ chối.
+- [ ] Reviewer kiểm riêng: không có đường nào đọc được khoảng holdout ở chế độ dev.
 
 **Lệnh giao việc**
-> Làm **Đợt C4** theo `docs/plans/module-C-engine-tin-hieu.md`. Nhánh `be/signals-c4-backtest`. Gọi skill `walk-forward-validation`, `trading-strategy-review`, `ohlcv-processing`. Không chỉnh cấu hình để kết quả đẹp hơn — chỉ báo cáo.
+> Làm **Đợt C4** theo `docs/plans/module-C-engine-tin-hieu.md` (mục 3.2, 3.5 và "Đợt C4"). Nhánh `be/signals-c4-backtest`. Gọi skill `walk-forward-validation`, `trading-strategy-review`, `ohlcv-processing`. Không chỉnh cấu hình để kết quả đẹp hơn — chỉ báo cáo. **Không** chạy `--mode holdout`: chỉ lead chạy, sau khi chủ dự án xem kết quả dev.
 
 ---
 
@@ -331,6 +450,7 @@ Thêm:
    - sàn dừng → không lệnh;
    - lệnh `source = 'SIGNAL'` không hủy được qua API người dùng (như Grid/DCA);
    - admin không sửa/reset được tài khoản bot (`BOT_ACCOUNT_PROTECTED` vẫn đúng); dừng bot = tắt cờ, executor hủy lệnh chờ của bot;
+   - lệnh bot khớp → **không** tạo mục nhật ký (nếu Module A đã gộp); thống kê `BOT_FILLS` tách khỏi `MODELED_CANDLES`;
    - **đối soát sổ cái sạch** sau mọi test.
 
 **Nghiệm thu**
@@ -359,8 +479,10 @@ Thêm:
   - đường R lũy kế;
   - theo cặp/chiều/rating;
   - bảng hiệu chỉnh confidence;
-  - số EXPIRED/INVALIDATED;
-  - **bảng cổng M3**: thanh tiến độ tới 100, từng tiêu chí đạt/chưa.
+  - số EXPIRED/INVALIDATED/DATA_GAP_EXIT;
+  - giả định chi phí của phiên bản (phí, trượt giá, luật khớp) hiện cạnh số liệu;
+  - **bảng cổng M3**: thanh tiến độ tới 100, từng tiêu chí đạt/chưa. Kết luận hiện đúng chữ `ELIGIBLE_FOR_REVIEW` = "Đủ điều kiện xem xét — chưa phải phê duyệt phát hành". **Không** có nút "phát hành";
+  - số liệu bot (`BOT_FILLS`) ở thẻ riêng, không cộng vào số chấm theo nến.
 - **Trang "Cấu hình engine":**
   - danh sách phiên bản;
   - tạo phiên bản mới (form có kiểm giới hạn);
@@ -394,13 +516,19 @@ Thêm:
    - khoảng trống dữ liệu (sàn tắt);
    - so với backtest.
 3. **Kiểm soát thay đổi:** trong lúc đo không đổi cấu hình. Muốn đổi → ghi giả thuyết (`nhat-ky-gia-thuyet.md`) → phiên bản mới → đếm lại.
-4. Khi một phiên bản có ≥ 100 tín hiệu đã đóng → báo cáo cổng M3 → **chủ dự án quyết** (sang GĐ6 hoặc sửa engine).
+4. Khi một phiên bản có ≥ 100 tín hiệu đã đóng → báo cáo cổng M3:
+   - `NOT_MET` → sửa engine = phiên bản mới (qua nhật ký giả thuyết), đo lại;
+   - `ELIGIBLE_FOR_REVIEW` → **chỉ** mở bước xem xét phát hành (mục 3.4). Module C dừng ở đây.
+     Bán tín hiệu cần hồ sơ phê duyệt có chữ ký của chủ dự án, cùng một kế hoạch GĐ6 riêng.
 
 ## 5. Rủi ro và cách chặn
 | Rủi ro | Chặn bằng |
 |---|---|
 | Nhìn trước tương lai (dùng nến chưa đóng, chạy bù bằng dữ liệu hiện tại) | Chỉ chạy trên sự kiện nến đã đóng; không chạy bù; test riêng; reviewer kiểm |
-| Chỉnh tham số tới khi "đẹp" | Phiên bản engine bất biến, đếm lại khi đổi; nhật ký giả thuyết; holdout trong backtest |
+| Chỉnh tham số tới khi "đẹp" | Phiên bản engine bất biến, đếm lại khi đổi; nhật ký giả thuyết commit trước; holdout chốt trước, mở một lần/phiên bản, có sổ ghi (mục 3.5); đếm số cấu hình đã thử cho DSR |
+| Kết quả đẹp giả do mô hình khớp lạc quan | Bảng 3.2: xuyên giá mới khớp, không tính TP ở nến vào lệnh, SL trước, phí taker hai chiều, trượt giá tối thiểu 5 bps, lỗ hổng dữ liệu tính là thua |
+| Trộn số liệu engine / bot / nhật ký | `basis` trong mọi thống kê; `evaluateM3Gate` từ chối dữ liệu trộn; [quy ước chung](quy-uoc-R-va-nguon-du-lieu.md) |
+| Đạt cổng bị hiểu là được bán | `verdict` chỉ có `ELIGIBLE_FOR_REVIEW`; không code nào tự mở; phát hành cần hồ sơ phê duyệt + kế hoạch GĐ6 riêng (mục 3.4) |
 | Backtest khác chạy thật (thiếu sổ lệnh/phái sinh lịch sử) | Ghi rõ giới hạn; cổng M3 chỉ dùng số liệu chạy thật |
 | Sàn thật tắt/ngủ → mất nến, tín hiệu thiếu | Ghi khoảng trống; báo cáo tuần nêu tỷ lệ thời gian chạy; không chạy bù |
 | Bot làm sai số dư | Chỉ qua `OrderService`, một lệnh/tín hiệu, cờ tắt mặc định, đối soát sau test |

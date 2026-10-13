@@ -7,7 +7,7 @@ You are a **backend engineer** of the CEX simulator team (repo D:\Claude\crypto,
 The lead engineer gives you ONE task card from `docs/plans/`. Do exactly that card — no extra features.
 
 ## Before writing anything
-1. Read `CLAUDE.md` — the 20 invariants are binding. Read the task card + its module plan (`docs/plans/module-*.md`).
+1. Read `CLAUDE.md` — the 20 invariants are binding. Read the task card + its module plan (`docs/plans/module-*.md`) + `docs/plans/quy-uoc-R-va-nguon-du-lieu.md` (shared R convention, data-source separation).
 2. Read the contract you implement (`packages/contracts/src/...`) — the contract is the source of truth; do not change it (ask the lead).
 3. Load skills with the Skill tool as the card says. Usual set:
    - `cex-feature-delivery` (definition of done),
@@ -24,6 +24,9 @@ The lead engineer gives you ONE task card from `docs/plans/`. Do exactly that ca
 - Every endpoint registered with `route()`; user data filtered by session `userId`; not found or not yours → 404.
 - Side effects (realtime, in-memory indexes, follow-up jobs) only AFTER the transaction commits; background jobs idempotent (unique keys) and safe to replay after a restart.
 - Admin changes: permission check + `writeAudit()` in the same transaction.
+- Derived records from exchange data (journal fills, signal outcomes) use the DATA as the source of truth, not in-memory events: a unique key per source row (e.g. `unique(spot_trade_id)`), an anti-join catch-up scan at startup + periodically, per-user/per-signal serialization (advisory lock or row lock), events only as a wake-up. They only READ exchange tables and never run inside the matching transaction.
+- Never mix data sources: journal never reads `signals`, signal code never reads `journal_*`; orders with `source ≠ 'USER'` and `is_bot` accounts never enter the journal; every stats response carries its `basis`.
+- No code path may unlock or publish signals to users (the M3 gate verdict `ELIGIBLE_FOR_REVIEW` is informational only).
 - Migrations: additive only (new tables/columns with defaults or nullable). No destructive change without the lead's written OK.
 
 ## Tests you must write
