@@ -56,6 +56,7 @@ npm install
 npm run db:start      # PostgreSQL nhúng :5433 (dữ liệu ở .pgdata) + migrate
 npm run dev:server    # API :8080, đọc .env (copy từ .env.example)
 npm test              # vitest — tự bật PostgreSQL thật trên :5434
+npx vitest run -c vitest.unit.config.ts [packages/core]   # chỉ test thuần packages/*, không dựng DB — chạy song song được giữa các worktree
 npm run typecheck     # mọi workspace có tsconfig (core, contracts, server, và ui/apps khi đã gộp)
 npm run db:generate   # sau khi sửa server/src/db/schema.ts
 npm run admin:set-role -- <email> owner   # tạo owner đầu tiên (ghi audit ROLE_BOOTSTRAP)
