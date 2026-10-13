@@ -476,7 +476,12 @@ Git không cho một nhánh mở ở hai worktree cùng lúc, nên sub-agent kh�
 2. `server/src/modules/signals/`:
    - `scheduler.ts`:
      - nghe `'candle'` có `closed = true` của các cặp/khung trong phiên bản đang chạy;
-     - **chờ 3 giây** rồi gọi `CexMarketDataAdapter.analyzeSymbol(symbol, interval, asOf = closeTime)`;
+     - **chờ 3 giây** rồi gọi `CexMarketDataAdapter.analyzeSymbol`, với hai mốc thời gian riêng (phát hiện ở bước rà soát C0):
+       - `asOf` = **lúc chụp** dữ liệu;
+       - nến được cắt theo `candleCutoff = closeTime` của nến vừa đóng.
+
+       Nếu dùng `asOf = closeTime`, sổ lệnh (cập nhật mỗi 100 ms) và ticker (mỗi 1 s) đều có thời điểm sau `asOf`, nên bị giữ lại (`WITHHELD_LOOKAHEAD`). Dữ liệu Spot thành STALE và **100% lần chạy ra REVIEW**, không bao giờ có tín hiệu. Cách cắt nến theo `candleCutoff` vẫn chặn nến đang hình thành.
+       Test: nến đóng, chạy sau 3 giây, feed LIVE → rating khác REVIEW, và không có nến nào có `closeTime > candleCutoff`;
      - **một hàng đợi**, tối đa 2 lần chạy song song;
      - sàn dừng hoặc dữ liệu STALE → ghi lần chạy với lý do, không phân tích.
    - `repo.ts`: ghi lần chạy + tín hiệu trong **một transaction**. Ràng buộc unique chặn trùng khi phát lại/khởi động lại.
@@ -588,6 +593,10 @@ Git không cho một nhánh mở ở hai worktree cùng lúc, nên sub-agent kh�
    - DSR tính bằng float.
 
    Backtest của C4 **không** dùng cách chấm của file này: chấm bằng `advanceSignal`, chỉ lấy DSR/PBO. Phần DSR/PBO dùng lại thì sửa cách quy năm theo khung nến và WFE trước.
+   Còn hai điểm, từ lần rà C0:
+   - mỗi nến truyền **toàn bộ** lịch sử (`bars.slice(0, i+1)`), trong khi chạy thật chỉ dùng `defaultCandleLimit` = 100 nến. Chỉ báo vì thế khác bản chạy thật, và chi phí là O(n²). C4 phải cắt cửa sổ đúng bằng số nến chạy thật (test: nến thứ i nhận đúng min(i+1, 100) nến);
+   - giới hạn khối lượng bằng volume của nến i+1 là nhìn trước nhẹ. C4 dùng volume đã biết lúc quyết định.
+   Các số bịa khi thiếu dữ liệu (funding, OI, spread, dataStatus) và DSR = 0 khi N ≤ 2 đã sửa ở C0.
 1. `server/scripts/signalsBackfill.ts`:
    - tải nến Binance REST cho `watchlist × {1h, 4h} × 12 tháng` vào `candles` (`source = 'binance-rest'`, `onConflictDoNothing`);
    - tôn trọng giới hạn trọng số Binance (bất biến 15: tổng IP 6000/phút — tự giới hạn ≤ 1200/phút);
