@@ -1,3 +1,7 @@
+// Adapted from TauricResearch/TradingAgents v0.6.0 (commit 1394a3f72aa4393e1a98f51b382434c4b4c2d972, Apache-2.0):
+// tradingagents/agents/risk_mgmt/{aggressive,conservative,neutral}_debator.py (3-persona risk committee).
+// Sizing ladder / circuit breakers come from @cex/core quant.ts (formulas adapted from MIT skills
+// agiprolabs/claude-trading-skills risk-management + position-sizing). Modified. See THIRD_PARTY_NOTICES.md.
 import {
   ceilToStep,
   computePositionSizingLadder,
@@ -71,13 +75,19 @@ export async function runRiskExecutionReviewAgent(params: {
     }
   }
 
-  // 3. Evaluate portfolio circuit breakers (`risk-management` skill)
+  // 3. Evaluate portfolio circuit breakers (`risk-management` skill).
+  // Account figures the caller did not provide are null in the snapshot. A breaker cannot fire on a figure
+  // nobody supplied, so a missing drawdown is evaluated as no drawdown and listed in `missingData` below.
+  const portfolio = snapshot.portfolio;
   const cb = evaluateCircuitBreakersDec({
-    currentDrawdownPct: dec(snapshot.portfolio.currentDrawdownPct),
-    dailyLossPct: dec(snapshot.portfolio.dailyLossPct),
-    weeklyLossPct: dec(snapshot.portfolio.weeklyLossPct),
-    consecutiveLosses: snapshot.portfolio.consecutiveLosses,
+    currentDrawdownPct: portfolio.currentDrawdownPct !== null ? dec(portfolio.currentDrawdownPct) : ZERO,
+    dailyLossPct: portfolio.dailyLossPct !== null ? dec(portfolio.dailyLossPct) : null,
+    weeklyLossPct: portfolio.weeklyLossPct !== null ? dec(portfolio.weeklyLossPct) : null,
+    consecutiveLosses: portfolio.consecutiveLosses ?? undefined,
   });
+  const missingPortfolioFields = (
+    ['equityUsdt', 'currentDrawdownPct', 'dailyLossPct', 'weeklyLossPct', 'consecutiveLosses'] as const
+  ).filter((k) => portfolio[k] === null);
   if (cb.halted) {
     for (const r of cb.reasons) {
       vetoReasons.push(`Circuit Breaker (${cb.status}): ${r}`);
@@ -147,9 +157,9 @@ export async function runRiskExecutionReviewAgent(params: {
     takeProfitPriceStr = tpDec.toFixed(tickSize.decimalPlaces());
 
     const equityDec =
-      snapshot.portfolio.status !== 'NOT_PROVIDED' && dec(snapshot.portfolio.equityUsdt).gt(ZERO)
-        ? dec(snapshot.portfolio.equityUsdt)
-        : dec('10000'); // Reference $10,000 paper sizing baseline when portfolio is NOT_PROVIDED
+      portfolio.status !== 'NOT_PROVIDED' && portfolio.equityUsdt !== null && dec(portfolio.equityUsdt).gt(ZERO)
+        ? dec(portfolio.equityUsdt)
+        : dec('10000'); // Reference $10,000 paper sizing baseline when no account equity is provided
 
     const visibleDepthUsdt =
       microFinding?.metrics.depthWithin2PctUsdt && dec(microFinding.metrics.depthWithin2PctUsdt).gt(ZERO)
@@ -300,7 +310,7 @@ export async function runRiskExecutionReviewAgent(params: {
         source: 'quant.evaluateCircuitBreakersDec',
         observedAt: snapshot.asOf,
         dataStatus: snapshot.spotDataStatus,
-        note: `Portfolio drawdown=${snapshot.portfolio.currentDrawdownPct}%, dailyLoss=${snapshot.portfolio.dailyLossPct}%.`,
+        note: `Portfolio drawdown=${portfolio.currentDrawdownPct !== null ? `${portfolio.currentDrawdownPct}%` : 'N/A'}, dailyLoss=${portfolio.dailyLossPct !== null ? `${portfolio.dailyLossPct}%` : 'N/A'}.`,
       },
     ],
     riskFlags: vetoReasons.map((reason, idx) => ({
@@ -311,7 +321,11 @@ export async function runRiskExecutionReviewAgent(params: {
       detail: reason,
       blocksExecution: true,
     })),
-    missingData: snapshot.portfolio.status === 'NOT_PROVIDED' ? ['portfolio.equityUsdt (using $10,000 reference baseline)'] : [],
+    missingData: missingPortfolioFields.map((k) =>
+      k === 'equityUsdt'
+        ? 'portfolio.equityUsdt (using $10,000 reference baseline)'
+        : `portfolio.${k} (not provided; circuit breaker cannot use it)`,
+    ),
     durationMs: Math.max(0, Date.now() - startMs),
   };
 

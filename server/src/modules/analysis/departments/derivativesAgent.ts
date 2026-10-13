@@ -96,13 +96,28 @@ export async function runDerivativesPositioningAgent(
   let minLiqBufferBps = null as ReturnType<typeof dec> | null;
   for (const pos of snapshot.portfolio.activePositions) {
     if (pos.symbol === snapshot.symbol && pos.marketType === 'FUTURES_PERP' && pos.marginUsdt) {
+      const mmr = pos.maintenanceMarginRate ?? deriv.maintenanceMarginRate;
+      if (mmr === null) {
+        // No maintenance margin rate from the position or the contract config: the buffer cannot be computed,
+        // so fail closed instead of assuming a rate.
+        missingData.push(`maintenanceMarginRate for active ${pos.side} position (liquidation buffer not computed)`);
+        riskFlags.push({
+          code: 'DERIV_LIQUIDATION_BUFFER_UNKNOWN',
+          severity: 'BLOCKER',
+          department,
+          title: 'Liquidation buffer of an active futures position is unknown',
+          detail: `Active ${pos.side} position has no maintenance margin rate (position or contract config); liquidation proximity cannot be checked.`,
+          blocksExecution: true,
+        });
+        continue;
+      }
       const buf = liquidationBufferBpsDec(
         pos.side,
         dec(pos.entryPrice),
         markPrice,
         dec(pos.qty),
         dec(pos.marginUsdt),
-        dec(pos.maintenanceMarginRate ?? deriv.maintenanceMarginRate),
+        dec(mmr),
       );
       if (buf.bufferBps !== null) {
         minLiqBufferBps = minLiqBufferBps === null ? buf.bufferBps : minDec(minLiqBufferBps, buf.bufferBps);

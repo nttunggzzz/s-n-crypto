@@ -1,5 +1,8 @@
+// Adapted from TauricResearch/TradingAgents v0.6.0 (commit 1394a3f72aa4393e1a98f51b382434c4b4c2d972, Apache-2.0):
+// tradingagents/dataflows/date_window.py, tradingagents/dataflows/vendors/yahoo/snapshot.py, tradingagents/portfolio.py.
+// Modified (ported to TypeScript, crypto 24/7 epoch-ms clamp, Dec math). See THIRD_PARTY_NOTICES.md.
 import { createHash } from 'node:crypto';
-import { dec, roundDown, toFixedStr, ZERO } from '@cex/core';
+import { dec, roundDown, toFixedStr } from '@cex/core';
 import {
   CryptoMarketSnapshot,
   type CandleInterval,
@@ -310,11 +313,13 @@ export function buildCryptoMarketSnapshot(input: BuildCryptoMarketSnapshotInput)
         markPrice: input.derivatives.markPrice,
         indexPrice: input.derivatives.indexPrice,
         lastFundingRate: input.derivatives.lastFundingRate,
-        nextFundingTime: input.derivatives.nextFundingTime,
+        nextFundingTime:
+          input.derivatives.nextFundingTime !== null ? new Date(input.derivatives.nextFundingTime).toISOString() : null,
         openInterestSeries: input.derivatives.openInterestSeries,
-        maxLeverage: input.derivatives.maxLeverage ?? 20,
-        maintenanceMarginRate: input.derivatives.maintenanceMarginRate ?? '0.0050',
-        takerFeeRate: input.derivatives.takerFeeRate ?? '0.0004',
+        // Contract parameters come from the futures config; when the caller has none they stay null (no guessed defaults).
+        maxLeverage: input.derivatives.maxLeverage ?? null,
+        maintenanceMarginRate: input.derivatives.maintenanceMarginRate ?? null,
+        takerFeeRate: input.derivatives.takerFeeRate ?? null,
         updatedAt:
           input.derivatives.updatedAtMs !== undefined && input.derivatives.updatedAtMs !== null
             ? new Date(input.derivatives.updatedAtMs).toISOString()
@@ -322,19 +327,21 @@ export function buildCryptoMarketSnapshot(input: BuildCryptoMarketSnapshotInput)
       }
     : null;
 
-  // 6. Portfolio context & SHA-256 fingerprint (upstream `portfolio.py`)
-  const activePositions = input.portfolio?.activePositions ?? [];
-  const portfolioStatus: SnapshotPortfolioContext['status'] = !input.portfolio?.provided
+  // 6. Portfolio context & SHA-256 fingerprint (upstream `portfolio.py`).
+  // "Not provided" is not a flat, zero-drawdown account: every figure the caller did not give stays null.
+  const provided = input.portfolio?.provided === true ? input.portfolio : null;
+  const activePositions = provided?.activePositions ?? [];
+  const portfolioStatus: SnapshotPortfolioContext['status'] = !provided
     ? 'NOT_PROVIDED'
     : activePositions.length === 0
       ? 'FLAT'
       : 'ACTIVE_POSITIONS';
-  const equityUsdt = input.portfolio?.equityUsdt ?? toFixedStr(ZERO);
-  const availableUsdt = input.portfolio?.availableUsdt ?? equityUsdt;
-  const currentDrawdownPct = input.portfolio?.currentDrawdownPct ?? '0.0000';
-  const dailyLossPct = input.portfolio?.dailyLossPct ?? '0.0000';
-  const weeklyLossPct = input.portfolio?.weeklyLossPct ?? '0.0000';
-  const consecutiveLosses = input.portfolio?.consecutiveLosses ?? 0;
+  const equityUsdt = provided?.equityUsdt ?? null;
+  const availableUsdt = provided?.availableUsdt ?? null;
+  const currentDrawdownPct = provided?.currentDrawdownPct ?? null;
+  const dailyLossPct = provided?.dailyLossPct ?? null;
+  const weeklyLossPct = provided?.weeklyLossPct ?? null;
+  const consecutiveLosses = provided?.consecutiveLosses ?? null;
 
   const portfolioPayloadForHash = {
     status: portfolioStatus,

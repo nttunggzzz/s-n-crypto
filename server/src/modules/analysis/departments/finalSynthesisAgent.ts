@@ -1,3 +1,6 @@
+// Adapted from TauricResearch/TradingAgents v0.6.0 (commit 1394a3f72aa4393e1a98f51b382434c4b4c2d972, Apache-2.0):
+// tradingagents/agents/managers/portfolio_manager.py, tradingagents/agents/rating.py (5-tier rating + REVIEW).
+// Modified (deterministic rating from Dec conviction, invalidation conditions, advisory-only proposal). See THIRD_PARTY_NOTICES.md.
 import { dec, floorSigned, maxDec, minDec, ZERO } from '@cex/core';
 import type {
   AdvisoryTradeProposal,

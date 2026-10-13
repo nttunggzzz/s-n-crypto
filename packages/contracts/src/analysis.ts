@@ -1,9 +1,15 @@
+// Adapted from TauricResearch/TradingAgents v0.6.0 (commit 1394a3f72aa4393e1a98f51b382434c4b4c2d972, Apache-2.0):
+// tradingagents/agents/rating.py, tradingagents/portfolio.py. Modified (ported to zod, crypto fields). See THIRD_PARTY_NOTICES.md.
 import { z } from 'zod';
 import { CandleInterval, DataStatus, DecimalString, EpochMs, IsoDateTime, OrderSide, SymbolCode } from './common.ts';
 
 /**
  * Seven specialized departments in the Crypto-Native Multi-Agent Analysis Subsystem
  * adapted from TauricResearch/TradingAgents (`v0.6.0`, commit `1394a3f72aa4393e1a98f51b382434c4b4c2d972`).
+ *
+ * Time fields: `EpochMs` only where the value lives on the candle/trade time axis (candle bounds, trade time,
+ * the `asOfMs` cut-off compared against candle `closeTime`); every other instant is `IsoDateTime`.
+ * Missing data is `null`, never `"0"`.
  */
 export const AnalysisDepartmentId = z.enum([
   'technical_quant',
@@ -106,11 +112,13 @@ export const SnapshotDerivativesState = z.object({
   markPrice: DecimalString.nullable(),
   indexPrice: DecimalString.nullable(),
   lastFundingRate: DecimalString.nullable(),
-  nextFundingTime: EpochMs.nullable(),
+  /** Same type as `FuturesMarkPrice.nextFundingTime` (futures.ts). */
+  nextFundingTime: IsoDateTime.nullable(),
   openInterestSeries: z.array(DecimalString),
-  maxLeverage: z.number().int().positive(),
-  maintenanceMarginRate: DecimalString,
-  takerFeeRate: DecimalString,
+  /** Contract parameters from the futures config; `null` when the caller did not supply them (never a guessed default). */
+  maxLeverage: z.number().int().positive().nullable(),
+  maintenanceMarginRate: DecimalString.nullable(),
+  takerFeeRate: DecimalString.nullable(),
   updatedAt: IsoDateTime.nullable(),
 });
 export type SnapshotDerivativesState = z.infer<typeof SnapshotDerivativesState>;
@@ -166,14 +174,18 @@ export const SnapshotActivePosition = z.object({
 });
 export type SnapshotActivePosition = z.infer<typeof SnapshotActivePosition>;
 
+/**
+ * Account figures are `null` when not provided (always so for `NOT_PROVIDED`): "not provided" is not a flat,
+ * zero-drawdown account (upstream `portfolio.py`: treating it as flat would invent a fact about the account).
+ */
 export const SnapshotPortfolioContext = z.object({
   status: SnapshotPortfolioStatus,
-  equityUsdt: DecimalString,
-  availableUsdt: DecimalString,
-  currentDrawdownPct: DecimalString,
-  dailyLossPct: DecimalString,
-  weeklyLossPct: DecimalString,
-  consecutiveLosses: z.number().int().nonnegative(),
+  equityUsdt: DecimalString.nullable(),
+  availableUsdt: DecimalString.nullable(),
+  currentDrawdownPct: DecimalString.nullable(),
+  dailyLossPct: DecimalString.nullable(),
+  weeklyLossPct: DecimalString.nullable(),
+  consecutiveLosses: z.number().int().nonnegative().nullable(),
   activePositions: z.array(SnapshotActivePosition),
   fingerprint: z.string().min(16),
 });
@@ -354,7 +366,7 @@ export const AnalysisAuditMetadata = z.object({
   snapshotHash: z.string().min(16),
   runSignature: z.string().min(16),
   degradedDepartments: z.array(AnalysisDepartmentId),
-  PriorLessonsUsed: z.number().int().nonnegative(),
+  priorLessonsUsed: z.number().int().nonnegative(),
   totalDurationMs: z.number().nonnegative(),
 });
 export type AnalysisAuditMetadata = z.infer<typeof AnalysisAuditMetadata>;
@@ -384,14 +396,15 @@ export type CryptoMarketAnalysisReport = z.infer<typeof CryptoMarketAnalysisRepo
 
 // ───────────────────────────── Walk-Forward & Backtest Evaluation Schemas
 
+/** Fold bounds are candle `openTime`/`closeTime` (EpochMs). A Sharpe ratio is `null` when undefined (< 2 returns or zero variance). */
 export const WalkForwardFoldMetrics = z.object({
   foldIndex: z.number().int().nonnegative(),
   trainStartMs: EpochMs,
   trainEndMs: EpochMs,
   testStartMs: EpochMs,
   testEndMs: EpochMs,
-  inSampleSharpe: DecimalString,
-  outOfSampleSharpe: DecimalString,
+  inSampleSharpe: DecimalString.nullable(),
+  outOfSampleSharpe: DecimalString.nullable(),
   outOfSampleReturnPct: DecimalString,
   outOfSampleMaxDrawdownPct: DecimalString,
   tradeCount: z.number().int().nonnegative(),
@@ -409,15 +422,19 @@ export const BacktestEvaluationSummary = z.object({
   benchmarkBuyHoldReturnPct: DecimalString,
   excessReturnPct: DecimalString,
   maxDrawdownPct: DecimalString,
-  sharpeRatio: DecimalString,
-  sortinoRatio: DecimalString,
-  calmarRatio: DecimalString,
+  /**
+   * Ratio statistics are `null` when they are undefined for the sample (too few returns, zero variance,
+   * no downside, no drawdown, no trades, no losing trade) — never a placeholder such as `0`, `0.5` or `9.99`.
+   */
+  sharpeRatio: DecimalString.nullable(),
+  sortinoRatio: DecimalString.nullable(),
+  calmarRatio: DecimalString.nullable(),
   /** Deflated Sharpe Ratio (Bailey & López de Prado, 2014) adjusted for multiple testing & non-normal returns. */
-  deflatedSharpeRatio: DecimalString,
+  deflatedSharpeRatio: DecimalString.nullable(),
   /** Probability of Backtest Overfitting (PBO, 0..1) estimated across combinatorial partitions. */
-  probabilityOfBacktestOverfitting: DecimalString,
-  winRatePct: DecimalString,
-  profitFactor: DecimalString,
+  probabilityOfBacktestOverfitting: DecimalString.nullable(),
+  winRatePct: DecimalString.nullable(),
+  profitFactor: DecimalString.nullable(),
   totalTrades: z.number().int().nonnegative(),
   turnoverMultiple: DecimalString,
   totalFeesPaidUsdt: DecimalString,
@@ -425,7 +442,7 @@ export const BacktestEvaluationSummary = z.object({
   totalFundingPaidUsdt: DecimalString,
   liquidityCappedTrades: z.number().int().nonnegative(),
   staleOrHaltedSkips: z.number().int().nonnegative(),
-  walkForwardEfficiencyRatio: DecimalString,
+  walkForwardEfficiencyRatio: DecimalString.nullable(),
   walkForwardFolds: z.array(WalkForwardFoldMetrics),
   verdict: z.enum(['PASS_RESEARCH_GATE', 'CAUTIOUS_INCONCLUSIVE', 'FAIL_OVERFIT_OR_NEGATIVE']),
   profitabilityDisclaimer: z.string().min(20),

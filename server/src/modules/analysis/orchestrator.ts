@@ -1,3 +1,6 @@
+// Adapted from TauricResearch/TradingAgents v0.6.0 (commit 1394a3f72aa4393e1a98f51b382434c4b4c2d972, Apache-2.0):
+// tradingagents/graph/trading_graph.py, tradingagents/graph/setup.py (staged analysts -> debate -> risk -> decision).
+// Modified (TypeScript, crypto departments, deterministic narrator, fault isolation). See THIRD_PARTY_NOTICES.md.
 import {
   CryptoMarketAnalysisReport,
   type AnalysisDepartmentId,
@@ -201,7 +204,7 @@ export class CryptoTradingAgentsOrchestrator {
         snapshotHash,
         runSignature,
         degradedDepartments,
-        PriorLessonsUsed: priorLessons.length,
+        priorLessonsUsed: priorLessons.length,
         totalDurationMs: Math.max(0, Date.now() - startMs),
       },
     };

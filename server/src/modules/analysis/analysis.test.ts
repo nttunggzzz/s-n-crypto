@@ -520,4 +520,106 @@ describe('Phase 5 Validation: Crypto-Native Multi-Agent Market Analysis Subsyste
     expect(summary.walkForwardFolds.length).toBe(2);
     expect(summary.profitabilityDisclaimer).toContain('never guarantee future live trading profitability');
   });
+
+  it('8. Missing account and contract data stay null in the snapshot (no invented zeros or default rates)', async () => {
+    const base = createBaseSnapshotInput();
+    const input: BuildCryptoMarketSnapshotInput = { ...base, portfolio: { provided: false } };
+    const { snapshot } = buildCryptoMarketSnapshot(input);
+
+    expect(snapshot.portfolio.status).toBe('NOT_PROVIDED');
+    expect(snapshot.portfolio.equityUsdt).toBeNull();
+    expect(snapshot.portfolio.currentDrawdownPct).toBeNull();
+    expect(snapshot.portfolio.consecutiveLosses).toBeNull();
+    // The caller gave no contract parameters: no guessed 20x / 0.0050 / 0.0004.
+    expect(snapshot.derivatives?.maxLeverage).toBeNull();
+    expect(snapshot.derivatives?.maintenanceMarginRate).toBeNull();
+    expect(snapshot.derivatives?.takerFeeRate).toBeNull();
+    // nextFundingTime uses the same ISO type as FuturesMarkPrice.nextFundingTime.
+    expect(snapshot.derivatives?.nextFundingTime).toBe(new Date(base.asOfMs + 8 * 3_600_000).toISOString());
+
+    const report = await new CryptoTradingAgentsOrchestrator().analyzeFromRawInput(input);
+    expect(report.audit.priorLessonsUsed).toBe(0);
+    expect(report.riskReview.circuitBreakerStatus).toBe('NORMAL');
+    const risk = report.departmentFindings.find((d) => d.department === 'risk_execution_review')!;
+    expect(risk.missingData).toContain('portfolio.equityUsdt (using $10,000 reference baseline)');
+    expect(risk.missingData).toContain('portfolio.currentDrawdownPct (not provided; circuit breaker cannot use it)');
+
+    // An active futures position whose maintenance margin rate is unknown everywhere fails closed.
+    const unknownMmr = await new CryptoTradingAgentsOrchestrator().analyzeFromRawInput({
+      ...base,
+      portfolio: {
+        ...base.portfolio!,
+        activePositions: [
+          {
+            symbol: 'BTCUSDT',
+            marketType: 'FUTURES_PERP',
+            side: 'LONG',
+            qty: '0.10000',
+            entryPrice: base.spot.lastPrice!,
+            markPrice: base.spot.lastPrice!,
+            marginUsdt: '5000.00000000',
+            maintenanceMarginRate: null,
+            unrealizedPnlUsdt: '0.00000000',
+          },
+        ],
+      },
+    });
+    expect(unknownMmr.riskFlags.some((f) => f.code === 'DERIV_LIQUIDATION_BUFFER_UNKNOWN' && f.blocksExecution)).toBe(true);
+    expect(unknownMmr.riskReview.approved).toBe(false);
+  });
+
+  it('9. Backtest ratios that are undefined for the sample are null, and an inestimable PBO/DSR cannot pass', async () => {
+    const baseTime = Date.parse('2026-10-01T00:00:00.000Z');
+    const bars: HistoricalBacktestBar[] = [];
+    for (let i = 0; i < 25; i++) {
+      bars.push({
+        openTime: baseTime + i * 3_600_000,
+        closeTime: baseTime + (i + 1) * 3_600_000 - 1,
+        open: '60000.00',
+        high: '60100.00',
+        low: '59900.00',
+        close: '60000.00',
+        volume: '100.00000',
+        closed: true,
+        // Every decision bar is STALE -> no trade can be taken, every bar return is exactly 0.
+        dataStatus: 'STALE',
+      });
+    }
+    const { summary, trades } = await runWalkForwardBacktest({
+      symbol: 'BTCUSDT',
+      interval: '1h',
+      initialEquityUsdt: '100000.00000000',
+      rules: {
+        symbol: 'BTCUSDT',
+        baseAsset: 'BTC',
+        quoteAsset: 'USDT',
+        tickSize: '0.01',
+        stepSize: '0.00001',
+        minQty: '0.00010',
+        maxQty: '100.00000',
+        minNotional: '10.00',
+        feeRate: '0.0010',
+      },
+      bars,
+      warmupBars: 20,
+    });
+
+    // Decisions at bars 20..23 (the last bar has no next bar to fill on): 4 zero returns, 0 trades.
+    expect(trades).toHaveLength(0);
+    expect(summary.totalTrades).toBe(0);
+    expect(summary.staleOrHaltedSkips).toBe(4);
+    expect(summary.winRatePct).toBeNull(); // no trades
+    expect(summary.profitFactor).toBeNull(); // no losing trade (was a capped 9.99 / 0 before)
+    expect(summary.sharpeRatio).toBeNull(); // zero variance
+    expect(summary.sortinoRatio).toBeNull(); // no downside
+    expect(summary.calmarRatio).toBeNull(); // no drawdown
+    expect(summary.deflatedSharpeRatio).toBeNull(); // < 5 returns
+    expect(summary.probabilityOfBacktestOverfitting).toBeNull(); // < 8 returns (was a placeholder 0.5)
+    expect(summary.walkForwardEfficiencyRatio).toBeNull(); // fold size floor(4/2) = 2 < 4 -> no folds
+    expect(summary.walkForwardFolds).toHaveLength(0);
+    expect(summary.maxDrawdownPct).toBe('0.0000'); // a real zero stays zero
+    expect(summary.totalReturnPct).toBe('0.0000');
+    // totalReturn 0 > -5 and drawdown 0 < 15, but PBO/DSR are null -> never PASS_RESEARCH_GATE.
+    expect(summary.verdict).toBe('CAUTIOUS_INCONCLUSIVE');
+  });
 });

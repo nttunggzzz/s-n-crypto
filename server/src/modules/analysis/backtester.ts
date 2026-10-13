@@ -65,6 +65,11 @@ export interface SimulatedTradeRecord {
 const PROFITABILITY_DISCLAIMER =
   'DISCLAIMER: Historical simulation results, walk-forward metrics, and multi-agent confidence scores are for research evaluation only and never guarantee future live trading profitability. Live order execution is permanently disabled.';
 
+/** Signed ratio floored to 4 decimals as a string, or `null` when the ratio is undefined. */
+function fixed4OrNull(value: Dec | null): string | null {
+  return value === null ? null : floorSigned(value, 4).toFixed(4);
+}
+
 /** Standard normal CDF approximation (Abramowitz & Stegun 26.2.17) for Deflated Sharpe Ratio. */
 function normalCdf(x: number): number {
   if (!Number.isFinite(x)) return x > 0 ? 1 : 0;
@@ -80,11 +85,15 @@ function normalCdf(x: number): number {
   return 0.5 * (1 + sign * erf);
 }
 
+/**
+ * Annualized Sharpe and Sortino of per-bar returns. Each is `null` when undefined for the sample:
+ * fewer than 2 returns, zero variance (Sharpe) or no negative return (Sortino). Never a placeholder 0.
+ */
 function computeSharpeAndSortinoDec(barReturns: readonly Dec[], barsPerYear = 365): {
-  sharpe: Dec;
-  sortino: Dec;
+  sharpe: Dec | null;
+  sortino: Dec | null;
 } {
-  if (barReturns.length < 2) return { sharpe: ZERO, sortino: ZERO };
+  if (barReturns.length < 2) return { sharpe: null, sortino: null };
   const mean = smaDec(barReturns, barReturns.length) ?? ZERO;
   let sqSum = ZERO;
   let downSqSum = ZERO;
@@ -99,20 +108,21 @@ function computeSharpeAndSortinoDec(barReturns: readonly Dec[], barsPerYear = 36
   const downStd = downSqSum.div(barReturns.length).sqrt();
   const annFactor = dec(String(barsPerYear)).sqrt();
 
-  const sharpe = std.gt(ZERO) ? mean.div(std).mul(annFactor) : ZERO;
-  const sortino = downStd.gt(ZERO) ? mean.div(downStd).mul(annFactor) : sharpe;
+  const sharpe = std.gt(ZERO) ? mean.div(std).mul(annFactor) : null;
+  const sortino = downStd.gt(ZERO) ? mean.div(downStd).mul(annFactor) : null;
   return { sharpe, sortino };
 }
 
 /**
  * Computes Deflated Sharpe Ratio (Bailey & López de Prado, 2014) to penalize multiple testing and fat tails.
+ * `null` when the observed Sharpe is undefined or there are fewer than 5 returns.
  */
 function computeDeflatedSharpeRatioDec(
-  observedSharpe: Dec,
+  observedSharpe: Dec | null,
   barReturns: readonly Dec[],
   numTrials = 10,
-): Dec {
-  if (barReturns.length < 5) return ZERO;
+): Dec | null {
+  if (observedSharpe === null || barReturns.length < 5) return null;
   const n = barReturns.length;
   const trials = Math.max(2, numTrials);
   // Expected maximum Sharpe under null hypothesis of N independent trials
@@ -131,16 +141,19 @@ function computeDeflatedSharpeRatioDec(
 /**
  * Estimates Probability of Backtest Overfitting (PBO) across 4 sub-period partitions
  * by comparing in-sample vs out-of-sample return rank consistency.
+ * `null` (not estimable) when there are fewer than 8 returns or any partition's Sharpe is undefined —
+ * never a placeholder such as 0.5.
  */
-function estimatePboDec(barReturns: readonly Dec[]): Dec {
-  if (barReturns.length < 8) return dec('0.5000');
+function estimatePboDec(barReturns: readonly Dec[]): Dec | null {
+  if (barReturns.length < 8) return null;
   const chunkSize = Math.floor(barReturns.length / 4);
-  if (chunkSize < 2) return dec('0.5000');
+  if (chunkSize < 2) return null;
 
   const chunkScores: Dec[] = [];
   for (let c = 0; c < 4; c++) {
     const slice = barReturns.slice(c * chunkSize, (c + 1) * chunkSize);
     const { sharpe } = computeSharpeAndSortinoDec(slice, 365);
+    if (sharpe === null) return null;
     chunkScores.push(sharpe);
   }
 
@@ -426,7 +439,7 @@ export async function runWalkForwardBacktest(input: WalkForwardBacktestInput): P
 
   const mddPct = maxDrawdownPctDec(equityCurve);
   const { sharpe, sortino } = computeSharpeAndSortinoDec(barReturns, 365);
-  const calmar = mddPct.gt(ZERO) ? totalReturnPct.div(mddPct) : ZERO;
+  const calmar = mddPct.gt(ZERO) ? totalReturnPct.div(mddPct) : null;
   const dsr = computeDeflatedSharpeRatioDec(sharpe, barReturns, input.numTrialStrategiesAssumed ?? 10);
   const pbo = estimatePboDec(barReturns);
 
@@ -442,12 +455,9 @@ export async function runWalkForwardBacktest(input: WalkForwardBacktestInput): P
       grossLosses = grossLosses.add(net.abs());
     }
   }
-  const winRatePct = trades.length > 0 ? dec(String(wins)).div(trades.length).mul(100) : ZERO;
-  const profitFactor = grossLosses.gt(ZERO)
-    ? grossWins.div(grossLosses)
-    : grossWins.gt(ZERO)
-      ? dec('9.9900')
-      : ZERO;
+  // No trades -> no win rate; no losing trade -> profit factor undefined (never a capped 9.99 or 0).
+  const winRatePct = trades.length > 0 ? dec(String(wins)).div(trades.length).mul(100) : null;
+  const profitFactor = grossLosses.gt(ZERO) ? grossWins.div(grossLosses) : null;
   const turnoverMultiple = initialEquity.gt(ZERO) ? totalNotionalTraded.div(initialEquity) : ZERO;
 
   // Compute Walk-Forward Folds (Out-of-Sample validation)
@@ -456,8 +466,9 @@ export async function runWalkForwardBacktest(input: WalkForwardBacktestInput): P
   const activeBars = bars.slice(warmup);
   const foldSize = Math.floor(barReturns.length / foldCount);
 
-  let isSharpeSum = ZERO;
-  let oosSharpeSum = ZERO;
+  // Walk-forward efficiency needs every fold's in-sample and out-of-sample Sharpe; one undefined -> null.
+  let isSharpeSum: Dec | null = ZERO;
+  let oosSharpeSum: Dec | null = ZERO;
 
   if (foldSize >= 4) {
     for (let f = 0; f < foldCount; f++) {
@@ -470,8 +481,8 @@ export async function runWalkForwardBacktest(input: WalkForwardBacktestInput): P
 
       const isMetrics = computeSharpeAndSortinoDec(trainRets, 365);
       const oosMetrics = computeSharpeAndSortinoDec(testRets, 365);
-      isSharpeSum = isSharpeSum.add(isMetrics.sharpe);
-      oosSharpeSum = oosSharpeSum.add(oosMetrics.sharpe);
+      isSharpeSum = isSharpeSum !== null && isMetrics.sharpe !== null ? isSharpeSum.add(isMetrics.sharpe) : null;
+      oosSharpeSum = oosSharpeSum !== null && oosMetrics.sharpe !== null ? oosSharpeSum.add(oosMetrics.sharpe) : null;
 
       let foldEq = dec('100');
       const foldEqCurve: Dec[] = [foldEq];
@@ -497,8 +508,8 @@ export async function runWalkForwardBacktest(input: WalkForwardBacktestInput): P
         trainEndMs: trainEndBar.closeTime,
         testStartMs: testStartBar.openTime,
         testEndMs: testEndBar.closeTime,
-        inSampleSharpe: floorSigned(isMetrics.sharpe, 4).toFixed(4),
-        outOfSampleSharpe: floorSigned(oosMetrics.sharpe, 4).toFixed(4),
+        inSampleSharpe: fixed4OrNull(isMetrics.sharpe),
+        outOfSampleSharpe: fixed4OrNull(oosMetrics.sharpe),
         outOfSampleReturnPct: floorSigned(oosRetPct, 4).toFixed(4),
         outOfSampleMaxDrawdownPct: oosMddPct.toFixed(4),
         tradeCount: foldTrades,
@@ -507,10 +518,13 @@ export async function runWalkForwardBacktest(input: WalkForwardBacktestInput): P
   }
 
   const wfEfficiency =
-    isSharpeSum.abs().gt('0.01') ? oosSharpeSum.div(isSharpeSum) : ZERO;
+    walkForwardFolds.length > 0 && isSharpeSum !== null && oosSharpeSum !== null && isSharpeSum.abs().gt('0.01')
+      ? oosSharpeSum.div(isSharpeSum)
+      : null;
 
+  // PASS needs both overfitting diagnostics to be defined; an inestimable PBO/DSR can never pass.
   const verdict =
-    pbo.lt('0.50') && dsr.gte('0.50') && totalReturnPct.gt(ZERO)
+    pbo !== null && dsr !== null && pbo.lt('0.50') && dsr.gte('0.50') && totalReturnPct.gt(ZERO)
       ? 'PASS_RESEARCH_GATE'
       : totalReturnPct.gt('-5.0') && mddPct.lt('15.0')
         ? 'CAUTIOUS_INCONCLUSIVE'
@@ -527,13 +541,13 @@ export async function runWalkForwardBacktest(input: WalkForwardBacktestInput): P
     benchmarkBuyHoldReturnPct: floorSigned(benchmarkReturnPct, 4).toFixed(4),
     excessReturnPct: floorSigned(excessReturnPct, 4).toFixed(4),
     maxDrawdownPct: mddPct.toFixed(4),
-    sharpeRatio: floorSigned(sharpe, 4).toFixed(4),
-    sortinoRatio: floorSigned(sortino, 4).toFixed(4),
-    calmarRatio: floorSigned(calmar, 4).toFixed(4),
-    deflatedSharpeRatio: dsr.toFixed(4),
-    probabilityOfBacktestOverfitting: pbo.toFixed(4),
-    winRatePct: roundDown(winRatePct, 4).toFixed(4),
-    profitFactor: roundDown(profitFactor, 4).toFixed(4),
+    sharpeRatio: fixed4OrNull(sharpe),
+    sortinoRatio: fixed4OrNull(sortino),
+    calmarRatio: fixed4OrNull(calmar),
+    deflatedSharpeRatio: dsr !== null ? dsr.toFixed(4) : null,
+    probabilityOfBacktestOverfitting: pbo !== null ? pbo.toFixed(4) : null,
+    winRatePct: winRatePct !== null ? roundDown(winRatePct, 4).toFixed(4) : null,
+    profitFactor: profitFactor !== null ? roundDown(profitFactor, 4).toFixed(4) : null,
     totalTrades: trades.length,
     turnoverMultiple: roundDown(turnoverMultiple, 4).toFixed(4),
     totalFeesPaidUsdt: toFixedStr(totalFeesPaid),
@@ -541,7 +555,7 @@ export async function runWalkForwardBacktest(input: WalkForwardBacktestInput): P
     totalFundingPaidUsdt: totalFundingPaid.toFixed(AMOUNT_SCALE),
     liquidityCappedTrades,
     staleOrHaltedSkips,
-    walkForwardEfficiencyRatio: floorSigned(wfEfficiency, 4).toFixed(4),
+    walkForwardEfficiencyRatio: fixed4OrNull(wfEfficiency),
     walkForwardFolds,
     verdict,
     profitabilityDisclaimer: PROFITABILITY_DISCLAIMER,

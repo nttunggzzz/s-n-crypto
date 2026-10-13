@@ -1,3 +1,7 @@
+// Adapted from TauricResearch/TradingAgents v0.6.0 (commit 1394a3f72aa4393e1a98f51b382434c4b4c2d972, Apache-2.0):
+// role of tradingagents/agents/analysts/{fundamentals,news,sentiment}_analyst.py, stock tools replaced by crypto metrics.
+// Metric formulas come from @cex/core quant.ts (adapted from MIT skills agiprolabs/claude-trading-skills custom-indicators
+// and tradermonty/claude-trading-skills crypto-regime-analyzer). Modified. See THIRD_PARTY_NOTICES.md.
 import {
   computeCryptoRegimeCompositeDec,
   dec,

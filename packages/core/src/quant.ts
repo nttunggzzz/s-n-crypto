@@ -1,3 +1,9 @@
+// Formulas adapted from MIT-licensed skills (see THIRD_PARTY_NOTICES.md for the full license texts):
+// - agiprolabs/claude-trading-skills (c) 2026 AGIPro: custom-indicators (NVT, MVRV, exchange flow, OI momentum,
+//   liquidity score, smart money flow, token velocity), risk-management (circuit breakers), position-sizing (fractional Kelly).
+// - tradermonty/claude-trading-skills (c) 2026 TraderMonty: crypto-regime-analyzer (6-component regime composite).
+// Modified: ported from Python to TypeScript on Dec (decimal.js); differences from the source are noted at
+// liquidityScoreDec (weights) and computeCryptoRegimeCompositeDec (fail-closed rule).
 import { AMOUNT_SCALE, Dec, ZERO, dec, floorToStep, maxDec, minDec, roundDown, roundUp } from './decimal.ts';
 import { walkBook, type BookLevel, type Side } from './book.ts';
 import { floorSigned, isLiquidatable, liquidationPrice, type PositionSide } from './futures.ts';
@@ -332,6 +338,7 @@ export function takerFlowImbalanceDec(trades: readonly { price: Dec; qty: Dec; i
 /**
  * Composite Liquidity Score (0..100) adapted from `custom-indicators` Indicator 7:
  * Combines orderbook depth within 2% of mid, bid-ask spread score, and slippage score.
+ * Modified: weights 0.45 / 0.35 / 0.20 (source: 0.4 / 0.3 / 0.3, or 0.5 / 0.3 / 0.2 for CEX-dominant tokens).
  */
 export function liquidityScoreDec(params: {
   depthWithin2PctUsdt: Dec;
@@ -506,6 +513,8 @@ const REGIME_WEIGHTS: ReadonlyArray<{ key: keyof CryptoRegimeComponentsInput; we
 /**
  * 6-component Crypto Regime Composite (0..100) from `crypto-regime-analyzer`.
  * Missing components have their weight proportionally redistributed; fails closed (`UNAVAILABLE`) if 0 components exist.
+ * Modified: the source (`scripts/scorer.py`) fails closed unless >= 4 components and >= 65% of the model weight remain;
+ * this port redistributes from a single component upward.
  */
 export function computeCryptoRegimeCompositeDec(input: CryptoRegimeComponentsInput): CryptoRegimeCompositeResult {
   let weightedSum = ZERO;

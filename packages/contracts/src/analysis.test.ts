@@ -7,6 +7,8 @@ import {
   DepartmentFinding,
   EvidenceItem,
   SnapshotCandle,
+  SnapshotDerivativesState,
+  SnapshotPortfolioContext,
 } from './analysis.ts';
 
 describe('@cex/contracts analysis schemas', () => {
@@ -262,10 +264,98 @@ describe('@cex/contracts analysis schemas', () => {
         snapshotHash: 'abcdef0123456789abcdef0123456789',
         runSignature: 'fedcba9876543210fedcba9876543210',
         degradedDepartments: [],
-        PriorLessonsUsed: 0,
+        priorLessonsUsed: 0,
         totalDurationMs: 5,
       },
     });
     expect(report.rating).toBe('REVIEW');
+
+    // The pre-0.13.0 PascalCase key is not accepted in place of `priorLessonsUsed`.
+    const { priorLessonsUsed: _drop, ...auditWithoutKey } = report.audit;
+    expect(
+      CryptoMarketAnalysisReport.safeParse({ ...report, audit: { ...auditWithoutKey, PriorLessonsUsed: 0 } }).success,
+    ).toBe(false);
+  });
+
+  it('keeps missing data as null: NOT_PROVIDED portfolio, unknown contract parameters, ISO nextFundingTime', () => {
+    const portfolio = SnapshotPortfolioContext.parse({
+      status: 'NOT_PROVIDED',
+      equityUsdt: null,
+      availableUsdt: null,
+      currentDrawdownPct: null,
+      dailyLossPct: null,
+      weeklyLossPct: null,
+      consecutiveLosses: null,
+      activePositions: [],
+      fingerprint: '0123456789abcdef0123456789abcdef',
+    });
+    expect(portfolio.equityUsdt).toBeNull();
+
+    const derivatives = {
+      status: 'UNAVAILABLE' as const,
+      markPrice: null,
+      indexPrice: null,
+      lastFundingRate: null,
+      nextFundingTime: null,
+      openInterestSeries: [],
+      maxLeverage: null,
+      maintenanceMarginRate: null,
+      takerFeeRate: null,
+      updatedAt: null,
+    };
+    expect(SnapshotDerivativesState.safeParse(derivatives).success).toBe(true);
+    expect(
+      SnapshotDerivativesState.safeParse({ ...derivatives, nextFundingTime: '2026-10-12T16:00:00.000Z' }).success,
+    ).toBe(true);
+    // Same type as FuturesMarkPrice.nextFundingTime: an epoch number is rejected.
+    expect(SnapshotDerivativesState.safeParse({ ...derivatives, nextFundingTime: 1_791_820_800_000 }).success).toBe(false);
+  });
+
+  it('reports undefined backtest ratios as null, never as a placeholder number', () => {
+    const noTrades = BacktestEvaluationSummary.safeParse({
+      symbol: 'BTCUSDT',
+      interval: '1h',
+      mode: 'HISTORICAL_SIMULATION',
+      liveExecutionEnabled: false,
+      initialEquityUsdt: '100000.00000000',
+      finalEquityUsdt: '100000.00000000',
+      totalReturnPct: '0.0000',
+      benchmarkBuyHoldReturnPct: '1.2000',
+      excessReturnPct: '-1.2000',
+      maxDrawdownPct: '0.0000',
+      sharpeRatio: null,
+      sortinoRatio: null,
+      calmarRatio: null,
+      deflatedSharpeRatio: null,
+      probabilityOfBacktestOverfitting: null,
+      winRatePct: null,
+      profitFactor: null,
+      totalTrades: 0,
+      turnoverMultiple: '0.0000',
+      totalFeesPaidUsdt: '0.00000000',
+      totalSlippageCostUsdt: '0.00000000',
+      totalFundingPaidUsdt: '0.00000000',
+      liquidityCappedTrades: 0,
+      staleOrHaltedSkips: 0,
+      walkForwardEfficiencyRatio: null,
+      walkForwardFolds: [
+        {
+          foldIndex: 0,
+          trainStartMs: 1_791_806_400_000,
+          trainEndMs: 1_791_809_999_999,
+          testStartMs: 1_791_810_000_000,
+          testEndMs: 1_791_813_599_999,
+          inSampleSharpe: null,
+          outOfSampleSharpe: null,
+          outOfSampleReturnPct: '0.0000',
+          outOfSampleMaxDrawdownPct: '0.0000',
+          tradeCount: 0,
+        },
+      ],
+      verdict: 'CAUTIOUS_INCONCLUSIVE',
+      profitabilityDisclaimer:
+        'Historical simulation with fees, slippage, and funding does not guarantee future live profitability.',
+    });
+    expect(noTrades.success).toBe(true);
   });
 });

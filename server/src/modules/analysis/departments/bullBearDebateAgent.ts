@@ -1,3 +1,7 @@
+// Adapted from TauricResearch/TradingAgents v0.6.0 (commit 1394a3f72aa4393e1a98f51b382434c4b4c2d972, Apache-2.0):
+// tradingagents/agents/researchers/{bull,bear}_researcher.py, tradingagents/agents/managers/research_manager.py,
+// tradingagents/agents/context.py (report_or_absent, opponent_argument_or_opening). Modified (deterministic Dec scoring,
+// independent challenger). See THIRD_PARTY_NOTICES.md.
 import { dec, floorSigned, maxDec, minDec, ZERO } from '@cex/core';
 import type {
   BullBearDebateResult,
@@ -19,7 +23,7 @@ function reportOrAbsent(finding: DepartmentFinding | undefined, label: string): 
  * Department 5: Bull/Bear Debate & Independent Challenge Agent
  *
  * Adapted from upstream `bull_researcher.py`, `bear_researcher.py`, `research_manager.py`,
- * and `prompt_fallbacks.py` (#1176 `report_or_absent` / `opponent_argument_or_opening`).
+ * and `agents/context.py` (#1176 `report_or_absent` / `opponent_argument_or_opening`).
  *
  * Adds an explicit Independent Challenger that penalizes cross-department divergence
  * (e.g., bullish candles vs. negative taker order flow or overcrowded perp funding).

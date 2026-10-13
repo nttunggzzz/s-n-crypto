@@ -1,3 +1,6 @@
+// Adapted from TauricResearch/TradingAgents v0.6.0 (commit 1394a3f72aa4393e1a98f51b382434c4b4c2d972, Apache-2.0):
+// tradingagents/memory/log.py (get_past_context as_of filter), tradingagents/memory/settlement.py (resolution date).
+// Modified (in-memory, 24/7 UTC millisecond settlement, Dec returns). See THIRD_PARTY_NOTICES.md.
 import { dec, floorSigned, type Dec } from '@cex/core';
 import type { CryptoAnalysisRating } from '@cex/contracts';
 
@@ -16,7 +19,7 @@ export interface DecisionMemoryEpisode {
 }
 
 /**
- * Crypto 24/7 Point-in-Time Decision Memory Log (adapted from upstream `memory_log/settlement.py` #1251).
+ * Crypto 24/7 Point-in-Time Decision Memory Log (adapted from upstream `memory/log.py` + `memory/settlement.py` #1251).
  *
  * Key crypto adaptations:
  * 1. Exact 24/7 UTC millisecond settlement windows (`decisionAtMs + horizonMs`) instead of 5/7 equity business days.
