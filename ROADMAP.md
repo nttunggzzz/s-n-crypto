@@ -1,7 +1,7 @@
 # ROADMAP — Sàn giao dịch ảo + Web tín hiệu
 
-> Trạng thái: **ĐANG LÀM** — backend GĐ 0–3 + 2.5 + F (Futures) + 2.6 xong; **sẵn sàng chạy kín trên cloud** (Docker, CI, sao lưu + diễn tập khôi phục, mã mời, cảnh báo Telegram — chờ tài khoản của chủ dự án, xem [docs/deploy/railway.md](docs/deploy/railway.md)); hợp đồng 0.10.0, 201 test + test trình duyệt; giao diện sàn đang làm GĐ2 + Futures + 2.6 (review mới nhất: [REVIEW-03](docs/antigravity/REVIEW-03-doi-chieu-giao-dien-tinh-nang.md)). Cập nhật: 2026-10-10
-> Báo cáo mới nhất: [docs/reports/2026-10-10-ha-tang-va-ho-tro-ui.md](docs/reports/2026-10-10-ha-tang-va-ho-tro-ui.md) · trước đó: [GĐ2.6](docs/reports/2026-10-10-backend-gd26.md), [Futures](docs/reports/2026-10-09-backend-futures.md), [GĐ2.5](docs/reports/2026-10-09-backend-gd25.md), [GĐ3](docs/reports/2026-10-09-backend-gd3.md), [GĐ2](docs/reports/2026-10-09-backend-gd2.md), [GĐ0–1](docs/reports/2026-10-09-backend-gd0-gd1.md)
+> Trạng thái (2026-10-13): **M1 + M2 + Admin xong** (backend + giao diện, verify 232/232, e2e 39/39), chạy trên máy chủ dự án (`npm run host`) thay cho staging cloud. Đang làm: engine tín hiệu (GĐ4). Email tạm tắt (chưa có tên miền) — PROMPT-13.
+> Báo cáo mới nhất: [tổng quan 2026-10-13](docs/reports/2026-10-13-tong-quan-tien-do.md) · [rà soát giao diện lần 4](docs/reports/2026-10-13-ra-soat-ui-lan-4.md)
 > Dự án thử nghiệm cá nhân. Phần kinh doanh (thu phí, thanh toán…) để sau — xem [Backlog](#backlog-để-sau).
 > Chi tiết từng phần: [docs/parts/README.md](docs/parts/README.md)
 
@@ -58,7 +58,7 @@
 - [x] P01: typecheck + test chạy local (41 test, PostgreSQL thật)
 - [ ] P01: CI GitHub Actions; quản lý secrets; backup DB hằng ngày + **đã thử khôi phục**; Sentry; cảnh báo về Telegram — *sẵn: ci.yml, backup.yml (khôi phục + đối soát mỗi đêm), cảnh báo Telegram; chờ repo/secrets; Sentry chưa làm*
 - [x] P02: Quy ước API, khung `packages/contracts`, cơ chế mock cho UI (MSW + realtime giả lập)
-- [ ] P07: Design tokens (màu, chữ, khoảng cách, sáng/tối), component cơ bản
+- [x] P07: Design tokens (màu, chữ, khoảng cách, sáng/tối), component cơ bản — `packages/ui` (nhánh UI)
 
 **Xong khi:** push code → staging tự cập nhật; CI xanh; UI chạy được với dữ liệu mock.
 
@@ -68,14 +68,14 @@
 - [x] P04: Giá realtime 10 cặp (WebSocket Binance), sổ lệnh, giao dịch gần đây, nến; **phát hiện giá cũ → dừng khớp**; quy tắc lô (`exchangeInfo`)
 - [x] P05: Sổ cái số dư (số thập phân chính xác), nạp tiền ảo, lệnh Market/Limit (+IOC), hủy lệnh/hủy tất cả, khớp mô phỏng (trượt giá theo độ sâu, Limit khớp khi giá vượt qua), phí 0,1%, đối soát
 - [x] P02: Hợp đồng API cho các mục trên + realtime events
-- [ ] P08: Đăng nhập/đăng ký, trang giao dịch (danh sách cặp, biểu đồ, sổ lệnh, form lệnh, lệnh mở, lịch sử), trang ví
+- [x] P08: Đăng nhập/đăng ký, trang giao dịch (danh sách cặp, biểu đồ, sổ lệnh, form lệnh, lệnh mở, lịch sử), trang ví — xong, e2e `spot.spec`, `trade-form.spec` (2026-10-13)
 
 **Xong khi:** đăng ký → nạp tiền → mua Market → đặt Limit → tự khớp; số dư đúng tuyệt đối; test tranh chấp (hủy đúng lúc khớp) không trừ tiền 2 lần.
 
 ### Giai đoạn 2 — Sàn ảo đầy đủ → **M2**
 - [x] P05: Stop-Limit, Stop-Market, **OCO**, **TP/SL gắn kèm lệnh**, trailing stop, GTC/IOC; giá vốn trung bình, lãi/lỗ chưa chốt/đã chốt, giá trị tài sản theo thời gian; xuất CSV; cảnh báo giá; thông báo trong app (+ cài đặt người dùng, máy tính khối lượng trong `@cex/core`)
 - [x] P02: Hợp đồng 0.2.0 cho toàn bộ mục trên + mock
-- [ ] P08: Form lệnh nâng cao, đường entry/TP/SL trên biểu đồ, chỉ báo (MA, EMA, RSI, Volume), nhiều khung thời gian, danh mục, lịch sử khớp, máy tính khối lượng theo % rủi ro, yêu thích, tìm kiếm, cài đặt
+- [x] P08: Form lệnh nâng cao, đường entry/TP/SL trên biểu đồ, chỉ báo (MA, EMA, RSI, Volume), nhiều khung thời gian, danh mục, lịch sử khớp, máy tính khối lượng theo % rủi ro, yêu thích, tìm kiếm, cài đặt — xong (EMA/RSI, đường lệnh + điểm khớp B/S PROMPT-12), e2e `chart-orders.spec`
 
 **Xong khi:** mua kèm TP/SL → chạm TP → SL tự hủy → lãi/lỗ và giá vốn đúng.
 
@@ -83,13 +83,13 @@
 - [x] P03: Vai trò & quyền, 2FA bắt buộc cho admin (+ 2FA tùy chọn cho người dùng), **nhật ký quản trị không xóa được**, cờ quyền dùng tín hiệu
 - [x] P05: API admin — cộng/trừ số dư **bắt buộc lý do**, reset tài khoản, bật/tắt cặp, phí, cấu hình nạp, **dừng giao dịch khẩn cấp**, đối soát sổ cái; tài khoản bot khóa không cho chỉnh
 - [x] P02: Hợp đồng 0.3.0 + mock (giả lập vai trò)
-- [ ] P09: Giao diện Admin cho tất cả mục trên + tình trạng hệ thống + thống kê cơ bản
+- [x] P09: Giao diện Admin cho tất cả mục trên + tình trạng hệ thống + thống kê cơ bản — xong, 13 trang, e2e `admin.spec`
 
 ### Giai đoạn 2.5 — Giao diện v2 phong cách OKX + mở rộng thị trường (chủ dự án yêu cầu 2026-10-09)
 - [x] P04: 50 cặp USDT, luồng Binance chia nhiều kết nối; thông tin coin (tên, nhóm ngành, mô tả); sparkline 24h/7 ngày; sổ lệnh sâu tới 500 mức (chỉ hiển thị); realtime `exchange:status`
 - [x] P05: Thông báo của sàn (Admin đăng/ghim/ẩn, có nhật ký); Admin sửa thông tin coin
 - [x] P02: Hợp đồng 0.4.0 + mock (mock giờ kiểm tra đầu vào như server)
-- [ ] P07/P08: Giao diện v2 — [PROMPT-04](docs/antigravity/PROMPT-04-giao-dien-v2-phong-cach-okx.md)
+- [x] P07/P08: Giao diện v2 — [PROMPT-04](docs/antigravity/PROMPT-04-giao-dien-v2-phong-cach-okx.md) — xong
 - Đề xuất & lựa chọn: [docs/proposals/2026-10-09-tinh-nang-nhu-san-lon.md](docs/proposals/2026-10-09-tinh-nang-nhu-san-lon.md)
 
 ### Giai đoạn 2.6 — Tính năng kiểu sàn lớn (đã chọn 2026-10-09)
@@ -98,14 +98,14 @@
 - [x] P05: **Phân tích lãi lỗ** — lịch PnL theo ngày, lũy kế, tỷ lệ thắng, theo coin, sụt giảm tối đa (gộp phần thống kê của Giai đoạn 5)
 - [x] P03: **Hồ sơ + bảo mật kiểu OKX** — biệt danh, ảnh đại diện, UID; mã chống lừa đảo trong email, lịch sử đăng nhập, cảnh báo thiết bị mới
 - [x] P02: Hợp đồng 0.6.0 + mock (16 endpoint, tổng 119)
-- [ ] P08: Giao diện cho các mục trên — [PROMPT-06](docs/antigravity/PROMPT-06-giao-dien-bot-lai-lo-bao-mat.md)
+- [x] P08: Giao diện cho các mục trên — [PROMPT-06](docs/antigravity/PROMPT-06-giao-dien-bot-lai-lo-bao-mat.md) — xong (Bot, PnL, Bảo mật), e2e `bots.spec`
 
 ### Giai đoạn F — Futures mô phỏng (đã duyệt 2026-10-09: tối đa 20×, ký quỹ cô lập trước; **làm trước GĐ 2.6**)
 - [x] P04: 50 hợp đồng vĩnh cửu USDT-M (Binance USDⓈ-M: sổ lệnh, giao dịch, nến, mark/index, funding) — luồng `/public` + `/market`
 - [x] P05: Ví Futures + chuyển Spot↔Futures (sổ cái chung, cột `account`), đòn bẩy 1–20×, lệnh Market/Limit/reduce-only, vị thế cô lập một chiều (đảo chiều), TP/SL theo mark, thêm/bớt ký quỹ, **thanh lý**, **funding**, đối soát cả 2 ví, Admin (hợp đồng, phí, reset)
 - [x] P02: Hợp đồng 0.5.0 + mock đầy đủ
 - [ ] P05 v2: ký quỹ chéo (cross), hedge mode, lệnh Stop-Market/Trailing riêng cho Futures
-- [ ] P08: Giao diện Futures — [PROMPT-05](docs/antigravity/PROMPT-05-giao-dien-futures.md)
+- [x] P08: Giao diện Futures — [PROMPT-05](docs/antigravity/PROMPT-05-giao-dien-futures.md) — xong, e2e `futures.spec`
 - Thiết kế: [docs/proposals/2026-10-09-futures-mo-phong.md](docs/proposals/2026-10-09-futures-mo-phong.md)
 
 ### Giai đoạn 4 — Engine tín hiệu (chạy ngầm)

@@ -25,6 +25,7 @@ Rà soát: **2026-10-11** (Claude Code). Cập nhật lần cuối: 2026-10-11 t
 | 2026-10-12 | **Có rồi:** CSP của server cho phép script / iframe / kết nối của Cloudflare Turnstile khi có `TURNSTILE_SITE_KEY` — R-04 | Không đổi code UI; kiểm widget captcha hiện trên bản build khi bật captcha | **Có rồi** |
 | 2026-10-12 | **Test nghiệm thu mới** (`e2e/tests/trade-form.spec.ts`, `email-gate.spec.ts`) — N-04, K-03, N-05, N-06, K-01, N-03 | Cần `data-testid` cho form lệnh: `order-price`, `order-quantity`, `order-total` (test đang tìm theo thứ tự ô `inputmode="decimal"`). Ghi vào `docs/antigravity/TESTIDS.md` | Chờ Antigravity |
 | 2026-10-13 | **Có rồi:** server giữ kết nối keep-alive 120 s (trước 5 s) — L-06, `bbe2a53`. Hết `ECONNRESET` trong e2e và lỗi 502 ngẫu nhiên sau cloudflared | Không đổi code UI | **Có rồi** — sàn thật cần `host update` |
+| 2026-10-13 | **Chủ dự án quyết: tạm tắt mọi tính năng cần email** (chưa có tên miền gửi mail). Không đổi backend: công tắc là `publicConfig.emailDelivery` (`'log'` hiện nay) | [PROMPT-13](antigravity/PROMPT-13-tam-an-tinh-nang-email.md): ẩn "Quên mật khẩu", Mã chống lừa đảo, nút gửi lại email khi `emailDelivery !== 'sent'`; test `e2e/tests/email-features.spec.ts` (đỏ tới khi xong) | Chờ Antigravity |
 | (không đổi) | Hợp đồng hiện tại: **0.12.0**. Không có endpoint nào bị xóa/đổi tên gần đây | — | — |
 
 ## 0. Bức tranh tổng thể
