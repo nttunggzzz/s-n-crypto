@@ -78,7 +78,7 @@ Duyệt các quyết định (bảng mục 4), bật/tắt tính năng trên sà
 - Không có code nào tự mở tín hiệu cho người dùng khi đạt cổng M3.
 - Module C không bao giờ gọi `OrderService` từ `server/src/modules/analysis/`. Bot tín hiệu (nếu bật) ở `server/src/modules/signals/`, chỉ cho tài khoản `is_bot`, có cờ tắt/bật.
 
-## 4. Quyết định (bản cuối 2026-10-13, trả lời theo mã)
+## 4. Quyết định — **đã duyệt hết** (chủ dự án, 2026-10-13)
 
 Mục tiêu sản phẩm đã được chủ dự án xác nhận ngày 2026-10-13:
 - **A** là tính năng cho người dùng sàn, không dùng AI.
@@ -86,32 +86,33 @@ Mục tiêu sản phẩm đã được chủ dự án xác nhận ngày 2026-10-
 - Hai module dùng chung công thức R, tách riêng dữ liệu ([quy ước](quy-uoc-R-va-nguon-du-lieu.md)).
 - Cổng M3 chỉ là điều kiện để xem xét phát hành.
 
-Cột "Trạng thái" có ba giá trị:
-- **Đủ căn cứ**: suy ra từ bất biến của dự án hoặc từ mục tiêu đã xác nhận. Duyệt theo đề xuất là an toàn.
-- **Cần chủ dự án quyết**: lựa chọn sản phẩm hoặc chính sách, không có đáp án kỹ thuật đúng duy nhất.
-- **Đã xác nhận**: chủ dự án đã nói rõ.
+Bốn mục được duyệt **có điều kiện**. Điều kiện của chủ dự án là yêu cầu bắt buộc, đã đưa vào thẻ đợt tương ứng.
 
-| Mã | Câu hỏi | Đề xuất | Căn cứ | Trạng thái |
-|---|---|---|---|---|
-| A-D1 | Một mục nhật ký là gì | Một **vòng giao dịch**, ghi nhận theo **từng lần khớp**. Spot: tối đa 1 mục tự động mở cho mỗi cặp; mua mở/cộng, bán phân bổ tới hết khối lượng còn mở, phần dư không thuộc mục nào, còn lẻ dưới bước khối lượng thì đóng. Futures: một mục = một vị thế (Module A mục 2.1) | Dữ liệu `trades`/`futures_trades` có sẵn; mỗi lần khớp chỉ thuộc một mục nên không ghi trùng | **Đủ căn cứ** |
-| A-D2 | Tự ghi nhật ký | **Bật mặc định**, tắt được trong Cài đặt. **Không ghi bù** giao dịch trước ngày phát hành. Mục tự động **không xóa được** (chỉ sửa ghi chú) | Thống kê không bị chọn lọc. Nhưng đây là trải nghiệm người dùng: có người không muốn bị ghi tự động, hoặc muốn xóa mục | **Cần chủ dự án quyết** |
-| A-D3 | Ảnh lưu ở đâu | Trong PostgreSQL: ≤ 1 MB/ảnh, ≤ 4 ảnh/mục, 50 MB/người, chỉ PNG/JPEG/WebP | Sao lưu một chỗ (logical backup đã có); không cần dịch vụ lưu trữ ngoài; số giới hạn đổi được sau | **Đủ căn cứ** |
-| A-D4 | R khi không có dừng lỗ | `null`. Vẫn tính lãi lỗ USDT. R dùng **dừng lỗ ban đầu**, khóa sau lần giảm vị thế đầu tiên | Bất biến 6 (không bịa dữ liệu); chặn R đẹp giả do dời dừng lỗ | **Đủ căn cứ** |
-| A-D5 | Lệnh bot (Grid/DCA/tín hiệu), tài khoản bot | Không vào nhật ký | Quy ước tách nguồn dữ liệu, luật 3 | **Đủ căn cứ** |
-| A-D6 | Ghi chú | Chữ thuần ≤ 5.000 ký tự | Chặn XSS; không cần trình soạn thảo định dạng | **Đủ căn cứ** |
-| A-D7 | Lãi lỗ của một mục | Theo giá vốn **của chính các lần mua trong mục**. Có thể khác trang "Phân tích lãi lỗ" (giá vốn chung tài khoản) khi đang giữ coin từ trước; giao diện ghi chú rõ | Một vòng giao dịch phải tự đủ để tính R. Giá vốn chung của tài khoản bị trộn lẫn coin từ trước | **Đủ căn cứ** (người dùng sẽ thấy hai con số khác nhau) |
-| C-D0 | Hệ phân tích đang dở, chưa commit, ở phiên khác | Phiên đó tự commit lên `be/analysis`. Nếu không, bạn cho lead tiếp nhận nguyên trạng (C0) | Code của phiên khác; lead không tự lấy | **Cần chủ dự án quyết** |
-| C-D1 | Ai thấy tín hiệu | Chỉ Admin trong GĐ4. Người dùng chỉ thấy sau **cổng M3 + phê duyệt phát hành riêng** (Module C mục 3.4) + kế hoạch GĐ6 | Chủ dự án đã nói 2026-10-13 | **Đã xác nhận** |
-| C-D2 | Dùng LLM | **Không** ở GĐ4 | Không tốn phí, kết quả lặp lại được (cần để đo). Đã có bộ kể chuyện tất định | **Đủ căn cứ** |
-| C-D3 | Bot tín hiệu vào lệnh trên sàn ảo | **Có**, đợt C5, cờ **mặc định tắt**, tài khoản `is_bot`, tiền ảo, chỉ qua `OrderService` | Kiểm tra chéo mô hình khớp bằng khớp thật (tiêu chí 6). Nhưng bot sẽ đặt lệnh thật trên sàn ảo đang có người dùng | **Cần chủ dự án quyết** |
-| C-D4 | Cặp và khung | 10 cặp (BTC, ETH, SOL, BNB, XRP, DOGE, ADA, LINK, AVAX, SUI) × 1h và 4h, đổi được qua cấu hình engine | Đủ tín hiệu để tới 100 trong 1–3 tháng. **Xác nhận lại sau C0**, khi đã đo một lần phân tích mất bao lâu | **Đủ căn cứ** (có điều kiện đo tải) |
-| C-D5 | Cổng M3 | ≥ 100 tín hiệu đã đóng của **một** phiên bản; kỳ vọng R ròng > 0; cận dưới khoảng tin cậy 95% > 0; drawdown ≤ 20R; một cặp ≤ 40%, một tháng ≤ 50% R dương; bot cùng dấu. Kết luận tốt nhất chỉ là `ELIGIBLE_FOR_REVIEW` | Các ngưỡng là mức chấp nhận rủi ro của sản phẩm | **Cần chủ dự án quyết** (ngưỡng) |
-| C-D6 | Lưu trữ | Nến 1m giữ 60 ngày (đủ chấm tín hiệu giữ tối đa 48 nến 4h = 8 ngày); nến ≥ 1h giữ mãi; báo cáo đầy đủ chỉ lưu cho tín hiệu; lần chạy không ra tín hiệu lưu 90 ngày | Kích thước DB và bản sao lưu | **Đủ căn cứ** |
+| Mã | Đã duyệt | Điều kiện của chủ dự án → nằm ở đâu |
+|---|---|---|
+| A-D1 | Một **vòng giao dịch**, ghi nhận theo **từng lần khớp**. Spot: tối đa 1 mục tự động mở/cặp; mua mở hoặc cộng; bán phân bổ tới hết khối lượng còn mở, phần dư không thuộc mục nào; lẻ dưới bước khối lượng thì đóng. Futures: một mục = một vị thế | — (Module A mục 2.1) |
+| A-D2 | Tự ghi **bật mặc định**, tắt được; **không** nhập dữ liệu trước thời điểm kích hoạt; mục tự động người dùng **không xóa được**, chỉ bổ sung ghi chú | **Có cơ chế đối soát** khi dữ liệu giao dịch bị điều chỉnh, đảo ngược hoặc phát hiện thiếu → Module A mục 2.3 + **đợt A3R** (bảng/cột có sẵn từ A2) |
+| A-D3 | Ảnh trong PostgreSQL: ≤ 1 MB/ảnh, ≤ 4 ảnh/mục, 50 MB/người, PNG/JPEG/WebP | — (A4) |
+| A-D4 | Không có dừng lỗ → R `null`; R theo **dừng lỗ ban đầu**, khóa sau lần giảm vị thế đầu tiên | — |
+| A-D5 | Lệnh bot (Grid/DCA/tín hiệu) và tài khoản bot không vào nhật ký | — |
+| A-D6 | Ghi chú chữ thuần ≤ 5.000 ký tự | — |
+| A-D7 | Lãi lỗ theo giá vốn của chính mục; giao diện ghi chú khác trang Lãi lỗ | — |
+| C-D0 | Tiếp nhận hệ phân tích bằng **phương án cô lập an toàn** | Kiểm `git status`, diff, file chưa theo dõi, trạng thái các phiên trước **trước**; rồi mới chọn nhánh/worktree riêng; **không** làm mất, ghi đè hay tự ý commit thay đổi của phiên khác; **xác minh nguồn gốc + giấy phép** trước khi tích hợp → **đợt C0** bước 0–4 (có điểm dừng ở bước 2) |
+| C-D1 | Chỉ Admin thấy tín hiệu trong GĐ4; người dùng chỉ sau cổng M3 + phê duyệt phát hành riêng + kế hoạch GĐ6 | — (Module C mục 3.4) |
+| C-D2 | Không dùng LLM ở GĐ4 | — |
+| C-D3 | Có bot tín hiệu trên sàn ảo, **mặc định tắt** | **Ranh giới kỹ thuật ngăn đặt lệnh thật** + **test chứng minh** bot không thể gửi lệnh tới hệ thống giao dịch thật → **đợt C5**: bốn lớp chặn (kiến trúc, lint, cấu hình từ chối khóa API sàn, test tĩnh toàn server) + test chạy với mạng bị chặn |
+| C-D4 | 10 cặp × 1h và 4h | Xác nhận lại sau C0 khi đã đo thời gian một lần phân tích |
+| C-D5 | Ngưỡng cổng M3 là **ngưỡng kiểm định ban đầu**: ≥ 100 tín hiệu đã đóng của một phiên bản; kỳ vọng R > 0; cận dưới CI 95% > 0; drawdown ≤ 20R; một cặp ≤ 40%, một tháng ≤ 50% R dương; bot cùng dấu | **Định nghĩa phương pháp tính** kỳ vọng R, CI 95%, drawdown, tỷ trọng cặp/tháng, phí/trượt giá, **tín hiệu tương quan** → Module C **mục 3.3.1**. Đạt chỉ là `ELIGIBLE_FOR_REVIEW`, **không** tự cho phép bán (mục 3.4) |
+| C-D6 | Nến 1m giữ 60 ngày, lần chạy không ra tín hiệu giữ 90 ngày, báo cáo đầy đủ chỉ cho tín hiệu | — |
+
+Hai điểm phương pháp mới ở mục 3.3.1 cần chủ dự án biết (không phải ngưỡng hiệu quả mới):
+1. Cần **≥ 30 ngày có tín hiệu đóng** thì khoảng tin cậy mới có nghĩa; chưa đủ thì cổng ghi `INSUFFICIENT_DATA`.
+2. Mỗi phiên bản chỉ có **một tín hiệu mở cho mỗi cặp**, bất kể chiều và khung, để giảm tín hiệu tương quan.
 
 Quy tắc **không phải quyết định** (cố định trong kế hoạch, đổi phải có lý do và phiên bản mới):
 - mô hình khớp/phí/trượt giá (Module C mục 3.2);
 - bảo vệ holdout (C mục 3.5);
-- chống ghi trùng nhật ký (A mục 2.2);
+- chống ghi trùng và đối soát nhật ký (A mục 2.2–2.3);
 - tách nguồn dữ liệu (quy ước chung).
 
 ## 5. Thứ tự và làn song song
@@ -119,7 +120,7 @@ Quy tắc **không phải quyết định** (cố định trong kế hoạch, đ
 Hai làn chạy song song (thư mục khác nhau). Chỗ đụng nhau (hợp đồng, migration) gộp lần lượt.
 
 ```
-Làn A:  A1 hợp đồng+công thức ─ A2 lõi ─ A3 tự ghi+thống kê ─ A4 ảnh ─ A5 giao diện (Antigravity)+e2e ─ A6 phát hành
+Làn A:  A1 hợp đồng+công thức ─ A2 lõi ─ A3 tự ghi+thống kê ─ A3R đối soát ∥ A4 ảnh ─ A5 giao diện (Antigravity)+e2e ─ A6 phát hành
 Làn C:  C0 tiếp nhận ─ C1 hợp đồng ─ C2 chạy ngầm+lưu ─ C3 chấm điểm+thống kê+cổng ─┬─ C5 bot sàn ảo
                                                                     └─ C4 backtest      ─ C6 giao diện Admin+e2e ─ C7 đo thật 1–3 tháng
 ```
@@ -127,11 +128,11 @@ Làn C:  C0 tiếp nhận ─ C1 hợp đồng ─ C2 chạy ngầm+lưu ─ C3 
 
 | Lượt | Làn A | Làn C | Ghi chú |
 |---|---|---|---|
-| 1 | A1 | C0 | A1 đổi hợp đồng, C0 chỉ đổi `analysis.ts` → gộp C0 trước |
+| 1 | A1 | C0 (bước 0–2: kiểm kê, giấy phép, điểm dừng) | A1 đổi hợp đồng. C0 dừng ở bước 2 chờ xác nhận; sau đó bước 3–4 + sửa lỗi, gộp trước A1 nếu kịp |
 | 2 | A2 | C1 | A2 có migration 0008; C1 chỉ hợp đồng |
 | 3 | A3 | C2 | C2 có migration → rebase sau A2 |
-| 4 | A4 | C3 | |
-| 5 | A5 (Antigravity bắt đầu từ lượt 2 trên mock) | C4 ∥ C5 | |
+| 4 | A3R ∥ A4 | C3 | A3R và A4 khác file, không migration mới |
+| 5 | A5 (Antigravity bắt đầu từ lượt 2 trên mock) | C4 ∥ C5 | C5 cần hợp đồng `FuturesOrder.source` + migration cột nguồn lệnh Futures |
 | 6 | A6 phát hành | C6 (Antigravity) | |
 | 7+ | — | C7: bật trên sàn thật, báo cáo hằng tuần | Cổng M3 khi đủ 100 tín hiệu |
 

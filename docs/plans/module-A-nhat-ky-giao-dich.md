@@ -83,12 +83,47 @@ Một lệnh khớp làm nhiều lần sẽ có nhiều dòng; mỗi dòng đư�
    - Spot: Σ khối lượng phân bổ của mục = Σ khối lượng ròng đã mua − khối lượng còn mở − `dust_qty`.
    - Mọi lần khớp của người dùng (từ mốc trở đi) đều có đúng một dòng `journal_fills`.
 
-### 2.3 Mục do người dùng tạo (`MANUAL`)
+### 2.3 Đối soát nhật ký (điều kiện của A-D2)
+
+Điều kiện chủ dự án đặt cho A-D2: dữ liệu giao dịch bị **điều chỉnh, đảo ngược hoặc phát hiện thiếu** thì nhật ký phải tự phát hiện và sửa theo, có dấu vết.
+
+**Hiện trạng đã kiểm (2026-10-13):**
+- Sàn **không** sửa hay xóa dòng `trades` / `futures_trades`; trong `server/src` không có `update`/`delete` trên hai bảng này.
+- Các thay đổi làm nhật ký lệch dữ liệu thật chỉ có:
+  - (a) **Admin reset tài khoản** (`adminService.ts:442`): số dư về 0 bằng `ACCOUNT_RESET` mà không có lần khớp; xóa `positions`; vị thế Futures đóng với `closeReason = 'ADMIN'`, không có lần khớp đóng (`futures/service.ts:867`).
+  - (b) **Coin rời ví không qua khớp lệnh**: điều chỉnh số dư của admin, hoặc bot lưới dùng chung ví.
+  - (c) **Lần khớp chưa được ghi nhận**: mất sự kiện, server tắt, lỗi bộ ghi.
+  - (d) Sau này có tính năng hủy/sửa lần khớp (hiện chưa có): dòng khớp đổi giá trị hoặc biến mất.
+
+| Loại lệch | Phát hiện bằng | Xử lý | Tự sửa? |
+|---|---|---|---|
+| (c) Lần khớp chưa ghi nhận | Anti-join: lần khớp từ mốc trở đi chưa có dòng `journal_fills` | Gọi `processFills` | **Có** |
+| (a) Reset tài khoản | Dòng sổ cái `ACCOUNT_RESET` sau `opened_at` của mục đang mở; vị thế `closeReason = 'ADMIN'` | Mục chuyển `VOID`, `close_reason = 'ACCOUNT_RESET'` / `'ADMIN_CLOSE'`. Phần đã chốt trước đó vẫn giữ để xem, **không** tính vào thống kê | **Có** |
+| (b) Ví ít coin hơn khối lượng còn mở của mục | So `available + locked` của coin gốc trong ví Spot với Σ khối lượng còn mở các mục OPEN của cặp | Mục chuyển cờ `NEEDS_REVIEW`; không tự đóng. Giao diện hiện "Số coin trong ví ít hơn nhật ký — có thể đã chuyển hoặc điều chỉnh" | **Không**: chỉ đánh dấu, ghi vào lần đối soát |
+| (d) Lần khớp đổi hoặc mất | `journal_fills.fill_fingerprint` (sha256 của giá, khối lượng, phí, phía, mã lệnh) khác dòng khớp hiện tại; hoặc dòng khớp không còn | **Dựng lại** phân bổ của (người dùng, cặp) từ lần khớp sớm nhất bị ảnh hưởng. Phân bổ là hàm thuần chạy theo thứ tự `id`, nên dựng lại cho kết quả xác định | **Có**, ghi dấu vết |
+| Kết quả lưu sẵn lệch kết quả tính lại | Tính lại `computeEntryResult` từ `journal_fills` | Ghi đè kết quả lưu sẵn | **Có** |
+
+**Luật dựng lại:**
+- Không bao giờ xóa ghi chú, setup, kế hoạch, ảnh của người dùng.
+- Mục được nhận diện bằng **lần khớp mở mục**. Mục nào sau khi dựng lại không còn lần khớp mở thì chuyển `VOID` với `adjustment_reason`, ghi chú vẫn giữ nguyên.
+- Mỗi lần điều chỉnh mục ghi `adjusted_at` + `adjustment_reason`, và hiện huy hiệu "Đã điều chỉnh do đối soát" trên giao diện.
+- Thống kê **loại trừ** mục `VOID` và mục `NEEDS_REVIEW`. Số mục bị loại hiện riêng, không giấu.
+
+**Lịch chạy:**
+- Ngay sau reset tài khoản: `adminService.resetAccount` gọi `journal.onAccountReset(userId)` **sau commit**. Lỗi ở đây không làm hỏng việc reset.
+- Mỗi ngày một lần cho mọi người dùng, cùng giờ với đối soát sổ cái.
+- Chạy tay: `npm run journal:reconcile -- [--user <id>] [--dry-run]`.
+
+**Kết quả:**
+- Mỗi lần chạy ghi một dòng `journal_reconcile_runs`: thời điểm, số người, số lần khớp đã kiểm, danh sách lệch theo loại, đã sửa gì.
+- Có lệch loại (b) hoặc (d) → cảnh báo Telegram qua `ops/alerts`, giống đối soát sổ cái.
+
+### 2.4 Mục do người dùng tạo (`MANUAL`)
 - Người dùng có thể tạo mục cho giao dịch khi **đang tắt** tự ghi: chọn các lệnh Spot đã khớp (cùng cặp) hoặc một vị thế Futures.
 - Server dùng **cùng bộ phân bổ** theo lần khớp. Lần khớp đã thuộc mục khác → 409 `FILL_ALREADY_JOURNALED`. Không có mục "trống" (phải có ít nhất 1 lệnh hoặc vị thế).
 - Lệnh của người khác → 404. Lệnh bot → 409 `BOT_ORDER`. Khác cặp → 409 `SYMBOL_MISMATCH`. Khác thị trường → 409 `MARKET_MISMATCH`.
 
-### 2.4 Kết quả (server tính, giao diện **không** tự tính)
+### 2.5 Kết quả (server tính, giao diện **không** tự tính)
 
 R theo [quy ước chung](quy-uoc-R-va-nguon-du-lieu.md), hàm `@cex/core/rMetrics`. Tất cả là `Dec`/chuỗi.
 
@@ -111,20 +146,21 @@ Giá vào = `entry_price`. Khối lượng vào = `max_quantity`.
 
 **Danh sách lỗi cố định** (`JournalMistake`): `FOMO`, `REVENGE`, `OVERSIZE`, `NO_STOP`, `MOVED_STOP`, `EARLY_EXIT`, `LATE_ENTRY`, `IGNORED_PLAN`, `OTHER`.
 
-### 2.5 Bảng mới (một migration, chỉ thêm — an toàn với sàn thật)
+### 2.6 Bảng mới (một migration, chỉ thêm — an toàn với sàn thật)
 | Bảng | Cột chính | Ràng buộc |
 |---|---|---|
-| `journal_entries` | `id uuid`, `user_id`, `market` (SPOT/FUTURES), `symbol`, `direction` (LONG/SHORT), `status`, `origin` (AUTO/MANUAL), `futures_position_id null`, `setup text null` (≤ 40), `tags text[]` (≤ 10 × 24), `initial_stop`, `initial_stop_locked bool`, `plan_entry/plan_stop/plan_target numeric(38,18) null`, `notes text` (≤ 5.000), `mistakes text[]`, `execution_score smallint null` (1–5), `liquidated bool`, `dust_qty`, `opened_at`, `closed_at null`, `created_at`, `updated_at` | unique một phần `(user_id, market, symbol) where status='OPEN' and origin='AUTO'`; `unique(futures_position_id)`; index `(user_id, status, closed_at desc)`, `(user_id, setup)` |
-| `journal_fills` | `id`, `user_id`, `entry_id null` (FK, `on delete set null`), `spot_trade_id null`, `futures_trade_id null`, `side`, `allocated_qty`, `unattributed_qty`, `allocated_quote`, `allocated_fee`, `skip_reason null`, `created_at` | `unique(spot_trade_id)`, `unique(futures_trade_id)`, check đúng một trong hai; index `(entry_id)` |
+| `journal_entries` | `id uuid`, `user_id`, `market` (SPOT/FUTURES), `symbol`, `direction` (LONG/SHORT), `status` (OPEN/CLOSED/VOID), `close_reason null` (FILLS/LIQUIDATED/ACCOUNT_RESET/ADMIN_CLOSE/MANUAL), `needs_review bool`, `adjusted_at null`, `adjustment_reason null`, `origin` (AUTO/MANUAL), `futures_position_id null`, `setup text null` (≤ 40), `tags text[]` (≤ 10 × 24), `initial_stop`, `initial_stop_locked bool`, `plan_entry/plan_stop/plan_target numeric(38,18) null`, `notes text` (≤ 5.000), `mistakes text[]`, `execution_score smallint null` (1–5), `liquidated bool`, `dust_qty`, `opened_at`, `closed_at null`, `created_at`, `updated_at` | unique một phần `(user_id, market, symbol) where status='OPEN' and origin='AUTO'`; `unique(futures_position_id)`; index `(user_id, status, closed_at desc)`, `(user_id, setup)` |
+| `journal_fills` | `id`, `user_id`, `entry_id null` (FK, `on delete set null`), `spot_trade_id null`, `futures_trade_id null`, `side`, `allocated_qty`, `unattributed_qty`, `allocated_quote`, `allocated_fee`, `skip_reason null`, `fill_fingerprint` (sha256 giá/khối lượng/phí/phía/mã lệnh), `created_at` | `unique(spot_trade_id)`, `unique(futures_trade_id)`, check đúng một trong hai; index `(entry_id)` |
+| `journal_reconcile_runs` | `id`, `started_at`, `finished_at`, `users_checked`, `fills_checked`, `issues jsonb` (theo loại a–d), `fixed jsonb`, `dry_run bool` | index `(started_at desc)` |
 | `journal_attachments` | `id uuid`, `entry_id` (FK, cascade), `user_id`, `content_type`, `bytes int`, `sha256`, `data bytea`, `created_at` | index `(user_id)` (tính hạn mức) |
 
 Tùy chọn người dùng nằm trong `user_preferences.data` (jsonb, không thêm cột):
 - `autoJournal: boolean`, mặc định theo A-D2;
 - `autoJournalSince: IsoDateTime`: đặt lúc phát hành tính năng, và đặt lại mỗi lần người dùng bật lại.
 
-Xóa mục (chỉ mục `MANUAL`, theo A-D2): các dòng `journal_fills` của mục chuyển `entry_id = null`, `skip_reason = 'ENTRY_DELETED'`. Không xử lý lại.
+Xóa mục (chỉ mục `MANUAL`; mục `AUTO` người dùng không xóa được, chỉ bổ sung ghi chú — A-D2): các dòng `journal_fills` của mục chuyển `entry_id = null`, `skip_reason = 'ENTRY_DELETED'`. Không xử lý lại.
 
-### 2.6 API (một phiên bản hợp đồng mới — số lấy theo thứ tự gộp)
+### 2.7 API (một phiên bản hợp đồng mới — số lấy theo thứ tự gộp)
 | Endpoint | Method + path | Ghi chú |
 |---|---|---|
 | `journalList` | GET `/api/v1/journal` | lọc `status, market, symbol, setup, tag, origin, from, to`; phân trang |
@@ -162,10 +198,10 @@ Mã lỗi:
 
 **Việc — contract-designer**
 1. `packages/contracts/src/journal.ts`:
-   - enum: `JournalMarket`, `JournalDirection`, `JournalStatus`, `JournalOrigin`, `JournalMistake`, `JournalOutcome`, `JournalStatsRange`, `JournalFillSkipReason`, `StatsBasis` (`ACTUAL_FILLS | MODELED_CANDLES | BOT_FILLS`, dùng chung với Module C);
-   - schema: `JournalPlan`, `JournalResult` (`entryQty, avgEntryPrice, avgExitPrice, netPnl, fees, funding, riskUsdt, rMultiple, outcome, holdingMs` — đều nullable khi chưa có), `JournalFill`, `JournalEntry`, `JournalEntryDetail` (+ `fills`, `attachments`), `JournalCreateRequest`, `JournalUpdateRequest`, `JournalListQuery`, `JournalStatsQuery`, `JournalStats` (có `basis`), `JournalSetupList`, `JournalAttachment`, `JournalAttachmentUpload` (`dataBase64` ≤ 1.400.000 ký tự);
+   - enum: `JournalMarket`, `JournalDirection`, `JournalStatus`, `JournalOrigin`, `JournalMistake`, `JournalOutcome`, `JournalStatsRange`, `JournalFillSkipReason`, `JournalCloseReason`, `JournalReconcileIssueType` (`MISSING_FILL`, `ACCOUNT_RESET`, `WALLET_SHORTFALL`, `FILL_CHANGED`, `FILL_MISSING_SOURCE`, `RESULT_DRIFT`), `StatsBasis` (`ACTUAL_FILLS | MODELED_CANDLES | BOT_FILLS`, dùng chung với Module C);
+   - schema: `JournalPlan`, `JournalResult` (`entryQty, avgEntryPrice, avgExitPrice, netPnl, fees, funding, riskUsdt, rMultiple, outcome, holdingMs` — đều nullable khi chưa có), `JournalFill`, `JournalEntry` (có `status` OPEN/CLOSED/VOID, `closeReason`, `needsReview`, `adjustedAt`, `adjustmentReason`), `JournalEntryDetail` (+ `fills`, `attachments`), `JournalCreateRequest`, `JournalUpdateRequest`, `JournalListQuery`, `JournalStatsQuery`, `JournalStats` (có `basis`, và `excluded: { void, needsReview }` — số mục bị loại khỏi thống kê), `JournalSetupList`, `JournalAttachment`, `JournalAttachmentUpload` (`dataBase64` ≤ 1.400.000 ký tự);
    - hằng số dùng chung: `JOURNAL_LIMITS = { notes: 5000, tags: 10, tagLength: 24, setupLength: 40, attachmentsPerEntry: 4, attachmentBytes: 1_048_576, userQuotaBytes: 52_428_800 }`.
-2. `endpoints.ts`: 10 endpoint ở mục 2.6. `Preferences.autoJournal`, `Preferences.autoJournalSince` (chỉ đọc).
+2. `endpoints.ts`: 10 endpoint ở mục 2.7. `Preferences.autoJournal`, `Preferences.autoJournalSince` (chỉ đọc).
 3. Khung hợp đồng: thêm `format: 'binary'` cho phản hồi nhị phân.
    - `server/src/lib/http.ts`: gửi `Buffer` + `Content-Type`, **không** kiểm schema phản hồi;
    - client: không gọi `fetch` cho endpoint này, chỉ có hàm `journalAttachmentUrl(id)` giống `exportUrl`;
@@ -175,7 +211,7 @@ Mã lỗi:
    - kho nhật ký trong bộ nhớ, đúng các luật và mã lỗi ở mục 2;
    - phân bổ lần khớp và thống kê mock **gọi cùng hàm** `allocateSpotFill`, `computeEntryResult`, `computeJournalStats` của `@cex/core` (do quant làm song song);
    - lead gộp nhánh quant trước, rồi mới gộp nhánh contract.
-6. Fixture: 7 mục mẫu (thắng, thua, hòa, đang mở, không có dừng lỗ, futures bị thanh lý, mục có phần bán `unattributed`).
+6. Fixture: 9 mục mẫu (thắng, thua, hòa, đang mở, không có dừng lỗ, futures bị thanh lý, mục có phần bán `unattributed`, mục `VOID` do reset, mục `needsReview`).
 7. README hợp đồng (mục mới "Nhật ký"), CHANGELOG, version.
 
 **Việc — quant-engineer** (hàm thuần, chỉ `Dec`)
@@ -183,7 +219,9 @@ Mã lỗi:
    Module C dùng lại ở C3; không có chỗ nào khác tính R.
 2. `packages/core/src/journalFills.ts`, máy trạng thái của mục 2.1:
    - `allocateSpotFill(entryState | null, fill, lotRules)` trả về `{ action: OPEN | ADD | REDUCE | CLOSE | UNATTRIBUTED, allocatedQty, unattributedQty, allocatedQuote, allocatedFee, newState }`;
-   - `computeEntryResult(state, plan)` cho Spot (mục 2.4); `futuresEntryResult(position, plan)` cho Futures.
+   - `computeEntryResult(state, plan)` cho Spot (mục 2.5); `futuresEntryResult(position, plan)` cho Futures;
+   - `replayAllocations(fills[], lotRules)`: dựng lại toàn bộ phân bổ của một (người dùng, cặp) từ danh sách lần khớp theo `id` — dùng cho đối soát loại (d) ở mục 2.3;
+   - `fillFingerprint(fill)`: sha256 ổn định của giá, khối lượng, phí, phía, mã lệnh.
 3. `packages/core/src/journalStats.ts`: `computeJournalStats(closedEntries, opts)` gồm:
    - `summarizeR`;
    - nhóm theo setup / symbol / direction / ngày trong tuần GMT+7 / lỗi (số lần + tổng R + tổng USDT);
@@ -201,6 +239,8 @@ Mã lỗi:
      - mua sau khi đóng → mục mới.
    - Futures: vị thế thường; bị thanh lý; có funding âm/dương.
    - Ngày trong tuần lệch múi giờ: 23:30 UTC là ngày khác ở GMT+7.
+   - Dựng lại: `replayAllocations` của cả chuỗi = áp `allocateSpotFill` từng lần (so từng mục); bỏ một lần khớp giữa chuỗi → kết quả xác định, mục mất lần khớp mở bị báo.
+   - Thống kê loại trừ mục `VOID` và `needsReview`, đếm đúng vào `excluded`.
 
 **Không làm:** route server, bảng DB, giao diện.
 
@@ -230,7 +270,7 @@ Mã lỗi:
 | Thời lượng | 1–2 lượt |
 
 **Việc**
-1. `server/src/db/schema.ts`: 3 bảng (mục 2.5) → `npm run db:generate` → migration mới.
+1. `server/src/db/schema.ts`: 4 bảng (mục 2.6) → `npm run db:generate` → migration mới.
    - Kiểm migration chỉ thêm, không khóa bảng lớn. Không thêm trigger.
 2. `server/src/modules/journal/`:
    - `allocator.ts`: **một** hàm `processFills(tx, userId, fills)` dùng chung cho mục AUTO (A3) và MANUAL.
@@ -240,7 +280,7 @@ Mã lỗi:
    - `routes.ts`: 7 endpoint (trừ 3 endpoint ảnh — A4 — và `journalStats` — A3).
 3. Đăng ký route trong `server/src/app.ts`.
 4. Test (`server/src/modules/journal/journal.test.ts`, qua `apiHarness`):
-   - CRUD + mọi mã lỗi ở mục 2.6;
+   - CRUD + mọi mã lỗi ở mục 2.7;
    - mục MANUAL từ lệnh mua + bán → kết quả đúng số tính tay;
    - lệnh khớp làm 3 lần → 3 dòng `journal_fills`;
    - lệnh của người khác → 404; lệnh bot → 409;
@@ -248,9 +288,10 @@ Mã lỗi:
    - gọi `processFills` hai lần cùng dữ liệu → không đổi gì;
    - giới hạn độ dài → 400; mục của người khác → 404;
    - xóa mục MANUAL không đụng lệnh; xóa AUTO → 409;
-   - `initialStop` khóa sau lần bán đầu tiên.
+   - `initialStop` khóa sau lần bán đầu tiên;
+   - mỗi dòng `journal_fills` có `fill_fingerprint` đúng.
 
-**Không làm:** tự ghi nhật ký (A3), thống kê (A3), ảnh (A4).
+**Không làm:** tự ghi nhật ký (A3), thống kê (A3), đối soát (A3R), ảnh (A4). Nhưng migration của đợt này **đã có đủ cột và bảng cho đối soát** (mục 2.6) để A3R không cần migration riêng.
 
 **Nghiệm thu**
 - [ ] `npm test` toàn bộ đạt (ghi N/N); typecheck, lint, drift check (còn 4 endpoint chưa route: stats + 3 ảnh).
@@ -309,6 +350,44 @@ Mã lỗi:
 
 ---
 
+### Đợt A3R — Đối soát nhật ký (điều kiện của A-D2)
+| | |
+|---|---|
+| Người làm | `cex-backend-builder` → `cex-reviewer` |
+| Nhánh | `be/journal-a3r-reconcile` |
+| Cần trước | A3 đã gộp. Làm **song song với A4** được (khác file, không migration) |
+| Skill | `ledger-order-concurrency`, `db-migration-host-safety` (không tạo migration — chỉ kiểm) |
+| Thời lượng | 1 lượt |
+
+**Việc**
+1. `server/src/modules/journal/reconcile.ts`: `reconcileJournal({ userId?, dryRun })` kiểm đủ 5 loại lệch ở bảng mục 2.3.
+   - Tự sửa các loại được phép; loại (b) chỉ đánh dấu `needs_review`.
+   - Mỗi người dùng một transaction có khóa advisory, dùng chung khóa với bộ tự ghi.
+   - Ghi `journal_reconcile_runs`.
+   - Không bao giờ xóa ghi chú, setup, kế hoạch, ảnh.
+2. Móc sau reset: `adminService.resetAccount` gọi `journal.onAccountReset(userId)` **sau commit**, lỗi chỉ ghi log. Đây là sửa nhỏ duy nhất ngoài `modules/journal` được phép.
+3. Lịch hằng ngày, chạy cùng đối soát sổ cái. Có lệch loại (b) hoặc (d) → `ops/alerts` gửi Telegram.
+4. Script `npm run journal:reconcile -- [--user <id>] [--dry-run]`.
+5. Test:
+   - reset tài khoản khi có mục Spot và Futures đang mở → mục `VOID` đúng `close_reason`; thống kê loại trừ; ghi chú còn nguyên;
+   - xóa dòng `journal_fills` bằng tay (giả lập thiếu) → đối soát ghi bù, kết quả giống ban đầu;
+   - sửa giá một dòng `trades` bằng tay (giả lập điều chỉnh) → phát hiện `FILL_CHANGED`, dựng lại, kết quả đúng số tính tay, `adjusted_at` có giá trị;
+   - xóa dòng `trades` có lần khớp mở mục → mục `VOID` với lý do, ghi chú còn;
+   - rút coin khỏi ví bằng điều chỉnh admin → `needs_review`, không tự đóng;
+   - `--dry-run` không đổi gì trong DB;
+   - chạy đối soát hai lần liền → lần hai không tìm thấy lệch nào;
+   - chạy đối soát cùng lúc với bộ tự ghi → không trùng, không mất;
+   - đối soát sổ cái sàn vẫn sạch (nhật ký không đụng số dư).
+
+**Nghiệm thu**
+- [ ] `npm test` toàn bộ đạt; reviewer không P0/P1 (kiểm riêng: không mất ghi chú, dựng lại xác định, không chạm số dư/lệnh).
+- [ ] Báo cáo ghi số liệu một lần chạy thử trên DB dev có dữ liệu thật.
+
+**Lệnh giao việc**
+> Làm **Đợt A3R** theo `docs/plans/module-A-nhat-ky-giao-dich.md` mục 2.3 và "Đợt A3R". Nhánh `be/journal-a3r-reconcile`. Không tạo migration (bảng/cột đã có từ A2). Ngoài `server/src/modules/journal/**` chỉ được sửa `adminService.resetAccount` (một lời gọi sau commit) và nơi đăng ký lịch chạy.
+
+---
+
 ### Đợt A4 — Ảnh đính kèm
 | | |
 |---|---|
@@ -352,7 +431,7 @@ Mã lỗi:
 |---|---|
 | Người làm | **Antigravity** theo `PROMPT-14` (viết ở cuối A1) ∥ `cex-e2e-acceptance` |
 | Nhánh | UI: `ui/gd2-exchange`; test: `be/journal-a5-e2e` |
-| Cần trước | A1 (giao diện trên mock); test chạy được khi A2–A4 đã gộp |
+| Cần trước | A1 (giao diện trên mock); test chạy được khi A2, A3, A3R, A4 đã gộp |
 | Thời lượng | Antigravity 2–3 lượt; e2e 1 lượt |
 
 **PROMPT-14 sẽ yêu cầu** (lead viết chi tiết, file:dòng, sau A1):
@@ -364,13 +443,16 @@ Mã lỗi:
   - kế hoạch (giá vào, dừng lỗ, chốt lời, rủi ro): R, kết quả, rủi ro **hiển thị số server trả**, không tự tính;
   - setup có gợi ý (`journalSetups`), tags, lỗi, điểm 1–5, ghi chú (chữ thuần);
   - các lệnh/vị thế đã gắn;
-  - ảnh: kéo-thả; **thu nhỏ ở trình duyệt** còn ≤ 1600 px và nén WebP/JPEG ≤ 1 MB trước khi gửi.
+  - ảnh: kéo-thả; **thu nhỏ ở trình duyệt** còn ≤ 1600 px và nén WebP/JPEG ≤ 1 MB trước khi gửi;
+  - mục `AUTO`: **không có nút xóa**, chỉ sửa ghi chú/kế hoạch; mục `MANUAL` có nút xóa kèm hộp xác nhận;
+  - huy hiệu theo đối soát: "Đã điều chỉnh do đối soát" (kèm lý do), "Không tính vào thống kê" (mục `VOID`), "Cần kiểm tra — số coin trong ví ít hơn nhật ký" (`needsReview`).
 - **Thống kê:**
   - thẻ win rate, kỳ vọng R, profit factor, drawdown;
   - đường R lũy kế;
   - theo setup / coin / ngày trong tuần;
   - "lỗi tốn bao nhiêu";
-  - ghi chú A-D7 (khác trang Lãi lỗ khi đang giữ coin từ trước).
+  - ghi chú A-D7 (khác trang Lãi lỗ khi đang giữ coin từ trước);
+  - dòng "N mục không tính vào thống kê" (số `excluded`), bấm vào ra danh sách đã lọc.
 - **Lối vào:**
   - nút "Ghi nhật ký" ở dòng lệnh đã khớp (bảng lệnh), ở hộp đóng vị thế Futures;
   - toast sau khi khớp: "Thêm ghi chú?";
@@ -385,6 +467,8 @@ Mã lỗi:
 4. Thống kê đổi sau khi có mục mới (win rate, số mục).
 5. Tắt tự ghi → giao dịch mới không tạo mục.
 6. @mobile: danh sách + chi tiết dùng được ở 390 px.
+7. Mục `AUTO` không có nút xóa. Gọi thẳng API xóa → 409 `AUTO_ENTRY_NOT_DELETABLE`.
+8. Admin reset tài khoản khi có mục đang mở → mục hiện huy hiệu "Không tính vào thống kê", ghi chú cũ còn nguyên, thống kê không đếm mục đó.
 
 **Nghiệm thu**
 - [ ] `npm run ui-check -- --e2e` xanh (cả bộ, không chỉ `journal.spec`).
@@ -400,7 +484,7 @@ Mã lỗi:
 
 1. `npm run verify` + `npm run ui-check -- --e2e` trên `main` sau khi gộp nhánh UI.
 2. Chủ dự án đồng ý → `npm run host -- backup` → `npm run host -- update` → `start`. Migration 0008 tự chạy; đã sao lưu ngay trước.
-3. Chủ dự án nghiệm thu bằng mắt theo danh sách 6 bước của `journal.spec`.
+3. Chủ dự án nghiệm thu bằng mắt theo danh sách 8 bước của `journal.spec`.
 4. Cập nhật `ROADMAP.md` GĐ5, báo cáo `docs/reports/<ngày>-module-A.md`.
 
 ## 4. Rủi ro và cách chặn

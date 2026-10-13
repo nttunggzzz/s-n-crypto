@@ -19,7 +19,7 @@ Nguyên tắc không đổi:
 2. **Chỉ tin số liệu chạy thật** cho cổng M3. Backtest chỉ để loại cấu hình tệ.
 3. **Đổi tham số = phiên bản engine mới**, đếm lại từ 0. Không chỉnh tham số theo kết quả đang đo.
 4. **Không giấu tín hiệu thua**, không xóa tín hiệu. Hết hạn, vô hiệu đều được đếm và hiển thị.
-5. **Hệ phân tích chỉ tư vấn:** `server/src/modules/analysis/` không bao giờ gọi `OrderService` / đổi số dư. Bot (C5) nằm ở `server/src/modules/signals/`, chỉ cho tài khoản `is_bot`, có cờ.
+5. **Hệ phân tích chỉ tư vấn:** `server/src/modules/analysis/` không bao giờ gọi `OrderService` / đổi số dư. Bot (C5) nằm ở `server/src/modules/signals/`, chỉ cho tài khoản `is_bot`, có cờ, và **không thể gửi lệnh ra sàn thật** (bốn lớp ranh giới ở đợt C5).
 6. **Không LLM, không dữ liệu trả phí** ở GĐ4 (C-D2). Bộ kể chuyện tất định có sẵn.
 7. **Không trộn nguồn dữ liệu:**
    - Chấm điểm theo nến (`MODELED_CANDLES`), bot trên sàn ảo (`BOT_FILLS`) và nhật ký người dùng (`ACTUAL_FILLS`) là ba nguồn riêng.
@@ -47,7 +47,7 @@ Nguyên tắc không đổi:
 - có đủ `entryPrice`, `stopLossPrice`, `takeProfitPrice`, đúng phía (LONG: SL < vào < TP);
 - `R:R = |TP − vào| ÷ |vào − SL|` ≥ `minRewardRisk` (mặc định 1,5);
 - `confidence` ≥ `minConfidence` (0,60), `uncertaintyScore` ≤ `maxUncertainty` (0,50);
-- cặp đó **chưa có tín hiệu cùng chiều đang chờ/đang chạy** của cùng phiên bản;
+- cặp đó **chưa có tín hiệu nào đang chờ/đang chạy** của cùng phiên bản, **bất kể chiều và khung** (giảm tín hiệu tương quan — mục 3.3.1);
 - sàn không dừng, dữ liệu LIVE.
 
 Không đủ → lần chạy vẫn được ghi (bản rút gọn) **kèm lý do** (`REVIEW`, `LOW_CONFIDENCE`, `RR_TOO_LOW`, `DUPLICATE`, `HALTED`, `STALE`…).
@@ -106,16 +106,78 @@ Chỉ tính tín hiệu chạy thật (`basis = MODELED_CANDLES`), đã đóng (
 
 | # | Tiêu chí | Ngưỡng |
 |---|---|---|
-| 1 | Số tín hiệu đã đóng | ≥ 100 |
+| 1 | Số tín hiệu đã đóng | ≥ 100 (và ≥ 30 ngày có tín hiệu đóng — điều kiện phương pháp, mục 3.3.1 bước 3) |
 | 2 | Kỳ vọng R ròng (trung bình) | > 0 |
-| 3 | Cận dưới khoảng tin cậy 95% của kỳ vọng R (bootstrap 10.000 lần, hạt giống cố định) | > 0 |
+| 3 | Cận dưới khoảng tin cậy 95% của kỳ vọng R (bootstrap **khối theo ngày**, 10.000 lần, hạt giống cố định — mục 3.3.1) | > 0 |
 | 4 | Drawdown tối đa của đường R lũy kế | ≤ 20R |
 | 5 | Tỷ trọng R dương lớn nhất của một cặp / một tháng | ≤ 40% / ≤ 50% |
 | 6 | Bot trên sàn ảo (nếu bật), `basis = BOT_FILLS` | cùng dấu kỳ vọng với chấm điểm theo nến (chỉ so, không gộp) |
 
-- Kết luận của cổng chỉ có ba giá trị: `INSUFFICIENT_DATA` (chưa đủ 100), `NOT_MET` (đủ số nhưng trượt tiêu chí), `ELIGIBLE_FOR_REVIEW` (đạt cả 6).
+- Kết luận của cổng chỉ có ba giá trị: `INSUFFICIENT_DATA` (chưa đủ 100 tín hiệu hoặc chưa đủ 30 ngày có tín hiệu đóng), `NOT_MET` (đủ dữ liệu nhưng trượt tiêu chí), `ELIGIBLE_FOR_REVIEW` (đạt mọi tiêu chí áp dụng được).
   **Không có** giá trị "approved" hay "passed", và **không có code nào** tự bật hoặc mở thứ gì khi cổng đạt.
 - Không đạt → sửa engine = phiên bản mới, đếm lại từ 0.
+
+#### 3.3.1 Phương pháp tính (điều kiện của C-D5)
+
+Các ngưỡng ở bảng trên là **ngưỡng kiểm định ban đầu**. Phương pháp tính dưới đây cố định cùng các ngưỡng; đổi phương pháp cũng như đổi ngưỡng, phải có chủ dự án duyệt và ghi vào nhật ký giả thuyết.
+Hàm `evaluateM3Gate` ở `packages/core/src/signalStats.ts` làm đúng các bước sau; báo cáo cổng in ra cả số trung gian.
+
+**Bước 0: Tập dữ liệu kiểm định.**
+- Chỉ tín hiệu của **một** phiên bản `V`, `basis = MODELED_CANDLES`, tạo ra khi `V` đang chạy thật.
+- Chỉ trạng thái đã đóng: `TP_HIT`, `SL_HIT`, `TIME_EXIT`, `DATA_GAP_EXIT`. `EXPIRED`/`INVALIDATED` không có vị thế nên không vào chuỗi R, nhưng in số lượng.
+- Mốc cắt `T` = lúc lập báo cáo. Tín hiệu còn mở lúc `T` không tính. Chúng bị giới hạn bởi `maxHoldingBars` nên không thể treo mãi.
+- Sắp xếp theo `(exited_at, id)`.
+- Báo cáo in **mã băm của tập** (sha256 của danh sách `(id, r)`), để chạy lại ra đúng số.
+
+**Bước 1: R ròng của từng tín hiệu.**
+- Đúng mô hình khớp và chi phí ở mục 3.2, qua `rMultiple` của `@cex/core/rMetrics`. Mỗi tín hiệu coi như rủi ro **1R**, không lãi kép.
+- Phí: phí taker của biểu phí sàn **lúc ra tín hiệu**, lưu ở `fee_rate`.
+- Trượt giá: `max(slippageBps của phiên bản, ước tính của phòng rủi ro, 5 bps)`, lưu ở `slippage_bps`.
+- Funding cho SHORT theo mục 3.2.
+
+**Bước 2: Kỳ vọng R** (tiêu chí 2) = trung bình cộng `r_i` trên `n` tín hiệu. Mỗi tín hiệu trọng số như nhau.
+
+**Bước 3: Khoảng tin cậy 95%** (tiêu chí 3). Các tín hiệu crypto **tương quan** (cùng lúc, cùng chiều thị trường), nên không bootstrap từng tín hiệu độc lập.
+- Gom theo **ngày đóng (UTC)**. Mỗi ngày `d` có tổng `S_d = Σ r` và số tín hiệu `N_d`. Ngày không có tín hiệu đóng vẫn có mặt với `S_d = 0, N_d = 0`, để giữ chuỗi ngày liên tục.
+- **Bootstrap khối trượt vòng** (circular moving block bootstrap) trên chuỗi ngày:
+  - khối dài **7 ngày**;
+  - **10.000 lần**, bộ sinh số ngẫu nhiên tất định viết trong `@cex/core`, hạt giống cố định `20261013`;
+  - mỗi lần ghép các khối thành chuỗi dài bằng chuỗi gốc, tính `Σ S / Σ N`.
+- Cận dưới = phân vị **2,5%** của 10.000 giá trị.
+- Kèm theo (chỉ để so, **không** dùng cho cổng): bootstrap từng tín hiệu độc lập. Thường hẹp hơn, nên báo cáo in cả hai để thấy mức ảnh hưởng của tương quan.
+- **Điều kiện để khoảng tin cậy có nghĩa:** ít nhất **30 ngày** có tín hiệu đóng. Chưa đủ thì `INSUFFICIENT_DATA`, kể cả khi đã có ≥ 100 tín hiệu.
+  Đây là điều kiện phương pháp, không phải ngưỡng hiệu quả mới. Nó tránh trường hợp 100 tín hiệu dồn vào vài ngày biến động.
+
+**Bước 4: Drawdown** (tiêu chí 4).
+- Đường R lũy kế `C_0 = 0`, `C_k = Σ_{i≤k} r_i` theo thứ tự bước 0.
+- `DD = max_k (max_{j≤k} C_j − C_k)`, tính bằng R.
+- Tín hiệu mở chồng nhau đều tính đủ 1R mỗi cái, nên DD **bi quan hơn** một danh mục chia nhỏ rủi ro.
+
+**Bước 5: Tỷ trọng lợi nhuận** (tiêu chí 5).
+- `P = Σ r_i` của các tín hiệu có `r_i > 0`.
+- Theo cặp: `max_s (Σ_{r_i>0, cặp = s} r_i) ÷ P` ≤ 40%.
+- Theo tháng (tháng của ngày đóng, UTC): `max_m (Σ_{r_i>0, tháng = m} r_i) ÷ P` ≤ 50%.
+- `P = 0` → tiêu chí không đạt.
+- Kèm theo (chỉ để so): kỳ vọng R khi **bỏ cặp tốt nhất** và khi **bỏ tháng tốt nhất**.
+
+**Bước 6: Bot** (tiêu chí 6, `basis = BOT_FILLS`, chỉ so).
+- R của bot cho mỗi tín hiệu = lãi/lỗ ròng thật của các lệnh bot có `sourceId = signalId` ÷ (`|entry − SL|` × khối lượng đã khớp).
+- Đạt khi trung bình R của bot **cùng dấu** với bước 2.
+- Bot tắt, hoặc dưới 30 tín hiệu bot đã khớp → "Không áp dụng". Không chặn cổng, nhưng in rõ.
+
+**Bước 7: Độ nhạy chi phí** (chỉ để so, không phải tiêu chí). Tính lại kỳ vọng R với **phí × 2** và **trượt giá × 2**. Âm thì báo cáo ghi "nhạy với chi phí", để người xem xét ở mục 3.4 cân nhắc.
+
+**Xử lý tín hiệu tương quan, tổng hợp:**
+1. **Ở nguồn:** mỗi phiên bản chỉ có **một tín hiệu đang chờ hoặc đang chạy cho mỗi cặp**, bất kể chiều và khung (lý do từ chối `DUPLICATE`). Không có chuyện 1h và 4h của cùng cặp cùng mở, đếm đôi một biến động.
+2. **Ở khoảng tin cậy:** bootstrap khối theo ngày (bước 3) giữ nguyên tương quan cùng ngày và giữa các ngày gần nhau.
+3. **Ở tập trung:** tiêu chí 5 chặn lợi nhuận dồn vào một cặp hay một tháng.
+4. **Báo cáo kèm** (chỉ để so):
+   - số tín hiệu mở đồng thời tối đa;
+   - tỷ lệ ngày có ≥ 3 tín hiệu cùng chiều;
+   - số "ngày hiệu dụng" (số ngày có tín hiệu đóng);
+   - kỳ vọng R khi mỗi ngày trọng số như nhau (trung bình của trung bình ngày).
+
+**Tính lặp lại:** cùng tập dữ liệu và cùng hạt giống → báo cáo giống từng chữ số. Có test chứng minh.
 
 ### 3.4 Phát hành cần phê duyệt riêng (sau cổng M3, trước GĐ6)
 
@@ -183,26 +245,69 @@ Thêm:
 
 ## 4. Các đợt
 
-### Đợt C0 — Tiếp nhận hệ phân tích
+### Đợt C0 — Tiếp nhận hệ phân tích (cô lập an toàn — C-D0)
 | | |
 |---|---|
-| Người làm | Lead → `cex-quant-engineer` → `cex-reviewer` |
-| Nhánh | `be/analysis` |
-| Cần trước | **C-D0**: phiên đang viết hệ phân tích dừng và commit lên `be/analysis`, **hoặc** chủ dự án cho lead tiếp nhận nguyên trạng |
-| Thời lượng | 1 lượt |
+| Người làm | Lead (bước 0–4) → `cex-quant-engineer` → `cex-reviewer` |
+| Nhánh | `be/analysis`, trong worktree riêng **ngoài** cây làm việc `main` |
+| Cần trước | C-D0 đã duyệt (2026-10-13) |
+| Thời lượng | 1–2 lượt (có một điểm dừng chờ chủ dự án) |
 
-**Việc — lead**
-1. Kiểm phiên kia đã dừng (file không còn thay đổi trong 10 phút; công cụ ListAgents/SendMessage để hỏi nếu được chủ dự án cho phép).
-2. Tạo nhánh `be/analysis` từ `main`. Commit **đúng** các đường dẫn của hệ phân tích:
-   - `packages/core/src/quant*.ts`, `packages/core/src/index.ts`;
-   - `packages/contracts/src/analysis*.ts`, `packages/contracts/src/index.ts`;
-   - `server/src/modules/analysis/**`, `docs/architecture/**`;
-   - dòng `/vendor/` trong `.gitignore`;
-   - `.claude/skills/crypto-multi-agent-analysis/`.
-   
-   Sau đó `main` sạch.
+**Ranh giới (điều kiện của C-D0):**
+- **Không** sửa, xóa, di chuyển, stage hay commit bất kỳ file nào của phiên khác **trong `main`**.
+- **Không** commit thay đổi của phiên khác khi chưa qua điểm dừng ở bước 2.
+- **Không** dùng `git stash`, `git clean`, `git checkout -- <file>` hay `git reset` trên `main` khi các file đó chưa được sao lưu và đối chiếu mã băm.
+- **Không** tích hợp vào `main` trước khi xác minh xong nguồn gốc và giấy phép (bước 1).
 
-**Việc — quant-engineer**
+**Bước 0 — Kiểm kê (chỉ đọc).** Lead tạo `docs/reports/<ngày>-c0-kiem-ke.md` gồm:
+1. `git status --porcelain=v1 -uall`, `git diff` của các file đang theo dõi bị sửa, `git log -1`.
+   Hôm 2026-10-13 có ba file như vậy: `.gitignore`, `packages/contracts/src/index.ts`, `packages/core/src/index.ts`.
+2. Danh sách **mọi** file chưa theo dõi: đường dẫn, kích thước, thời điểm sửa cuối, **sha256**. Đây là bản kê (manifest).
+3. Phân nhóm:
+   - **(1) Hệ phân tích**, phạm vi C0:
+     - `server/src/modules/analysis/**`;
+     - `packages/core/src/quant*.ts`;
+     - `packages/contracts/src/analysis*.ts`;
+     - `docs/architecture/**`;
+     - các dòng export trong hai `index.ts`, dòng `/vendor/` trong `.gitignore`;
+     - `.claude/skills/crypto-multi-agent-analysis/`.
+   - **(2) `AGENT-HANDOFF/`**: tài liệu bàn giao của phiên khác. Chỉ đọc để hiểu trạng thái, **không** thuộc C0, để nguyên.
+   - **(3) Các skill khác trong `.claude/skills/`**: skill của dự án và skill bên thứ ba. **Không** thuộc C0; nguồn gốc kiểm riêng ở một việc khác.
+   - **(4) `vendor/TradingAgents`**: git bỏ qua. Chỉ dùng để xác minh nguồn gốc, **không** commit.
+4. **Trạng thái các phiên trước:**
+   - `ListAgents` → các phiên "CEX project audit và Skills/Subagents planning" và "CEX platform engineering skills";
+   - hỏi bằng `SendMessage`: phiên đó còn sửa không, các file nhóm (1) đã xong chưa, có đồng ý bàn giao không;
+   - đọc `AGENT-HANDOFF/PHASE_STATUS.md`;
+   - xác nhận không file nhóm (1) nào đổi trong **30 phút** gần nhất. Còn đổi thì dừng, chờ.
+
+**Bước 1 — Nguồn gốc và giấy phép (chỉ đọc), ghi vào cùng báo cáo:**
+- `vendor/TradingAgents`: URL remote, commit đang dùng (ghi chép cũ là `1394a3f`), file `LICENSE` (kỳ vọng Apache-2.0). Có `NOTICE` thì Apache-2.0 bắt buộc giữ nội dung đó.
+- Với từng file nhóm (1): **chuyển thể** từ TradingAgents (cần dòng ghi nguồn + ghi chú "đã sửa đổi") hay **viết mới**.
+  Tìm trong file các URL, tiêu đề giấy phép, đoạn chép từ nguồn khác (`grep -i "license\|copyright\|http"`).
+- Không có khóa API, dữ liệu trả phí, gọi LLM thật. `cli.ts` chạy được không cần mạng ngoài dữ liệu Binance công khai.
+- Kết luận: **được tích hợp / cần sửa trước / không được tích hợp** (kèm lý do).
+
+**Bước 2 — Điểm dừng.** Lead gửi chủ dự án tóm tắt báo cáo kiểm kê: số file, nhóm, trạng thái phiên kia, kết luận giấy phép.
+Chỉ đi tiếp khi có **một** trong hai: phiên kia xác nhận đã xong và đồng ý bàn giao, **hoặc** chủ dự án nói tiếp tục.
+
+**Bước 3 — Cô lập.**
+1. Tạo worktree riêng **ngoài** thư mục `main`: `git worktree add <thư mục tạm>/be-analysis -b be/analysis main`.
+2. **Chép** (không di chuyển) đúng các file nhóm (1) sang worktree, rồi so sha256 với bản kê; lệch là dừng. Áp các dòng thay đổi của ba file đang theo dõi.
+3. Commit trong worktree, message ghi rõ:
+   - "snapshot of uncommitted analysis subsystem from session <tên>, taken over per C-D0";
+   - đường dẫn bản kê;
+   - người đồng ý ở bước 2.
+
+   Bản gốc trong `main` giữ nguyên.
+
+**Bước 4 — Trả `main` về sạch** (chỉ khi gộp ở cuối đợt):
+1. So lại sha256 bản gốc trong `main` với bản kê. Có file đổi sau khi kê → **dừng**, báo chủ dự án, không gộp.
+2. Sao lưu bản gốc nhóm (1) + `git diff` của ba file đang theo dõi vào `D:\Claude\crypto-backup\c0-<ngày>\`. Kiểm bản sao lưu đủ file, đúng mã băm.
+3. Gỡ **chỉ** các file nhóm (1) khỏi cây làm việc `main`. Cần vì git từ chối gộp khi file chưa theo dõi trùng đường dẫn.
+4. Gộp `be/analysis`, rồi so nội dung sau gộp với bản sao lưu (phải giống, trừ phần sửa ở đợt này).
+5. Nhóm (2), (3), (4) không đụng tới.
+
+**Việc — quant-engineer** (trên `be/analysis`, sau bước 3)
 1. Sửa hết lỗi typecheck/lint, ví dụ ở `cexMarketAdapter.test.ts`:
    - thiếu `quoteVolume` trong nến test;
    - đọc trường không tồn tại `executionAllowed`, `findings`, `bullBearDebate`;
@@ -210,23 +315,29 @@ Thêm:
    - `no-useless-assignment` ở `cexMarketAdapter.ts:441`.
 2. Chuẩn hóa hợp đồng `analysis.ts` theo quy ước dự án: tên trường camelCase (`PriorLessonsUsed` → `priorLessonsUsed`), tiền là `DecimalString`, thời điểm `EpochMs`/`IsoDateTime`, thiếu dữ liệu là `nullable`.
 3. Chạy `npx tsx server/src/modules/analysis/cli.ts` và toàn bộ test. Ghi số.
-4. Giấy phép Apache-2.0 của TradingAgents: thêm `THIRD_PARTY_NOTICES.md` ở gốc repo (tên dự án, URL, commit `1394a3f`, giấy phép) và dòng ghi nguồn ở đầu các file chuyển thể.
+4. Giấy phép theo kết luận bước 1:
+   - `THIRD_PARTY_NOTICES.md` ở gốc repo: tên dự án, URL, commit, toàn văn hoặc đường dẫn giấy phép, nội dung `NOTICE` nếu có;
+   - đầu mỗi file chuyển thể ghi nguồn + "đã sửa đổi";
+   - không có file nào ghi nguồn sai.
 
 **Việc — reviewer:** rà toàn bộ nhánh theo skill `crypto-multi-agent-analysis` mục 5–6:
 - nhìn trước tương lai;
 - `Dec`;
 - không bịa số khi thiếu dữ liệu;
-- tách biệt khỏi `OrderService`;
+- tách biệt khỏi `OrderService` và không có kết nối mạng ngoài dữ liệu công khai;
 - test không thể đỏ;
-- thời gian chạy một lần phân tích (đo).
+- thời gian chạy một lần phân tích (đo);
+- **đối chiếu bản kê**: mọi file trong nhánh có trong bản kê hoặc là sửa của đợt này; không có file nhóm (2)–(4).
 
 **Nghiệm thu**
+- [ ] Báo cáo kiểm kê + giấy phép có trước mọi commit. Điểm dừng bước 2 có ghi người đồng ý.
 - [ ] `npm run verify` đạt trên nhánh và sau khi gộp; test hệ phân tích N/N.
+- [ ] Bản sao lưu `D:\Claude\crypto-backup\c0-<ngày>\` khớp bản kê. `git status` của `main` sau gộp không còn file nhóm (1). Nhóm (2)–(4) còn nguyên.
 - [ ] Hợp đồng lên phiên bản mới (chỉ thêm export kiểu phân tích), CHANGELOG ghi rõ.
-- [ ] Đo: một lần `analyzeSymbol` mất bao nhiêu ms (để tính tải cho C2).
+- [ ] Đo: một lần `analyzeSymbol` mất bao nhiêu ms, để xác nhận lại C-D4 và tính tải cho C2.
 
 **Lệnh giao việc**
-> (quant-engineer) Làm **Đợt C0** theo `docs/plans/module-C-engine-tin-hieu.md`. Nhánh `be/analysis` (lead đã commit nguyên trạng). Gọi skill `crypto-multi-agent-analysis` trước. Không thêm tính năng mới — chỉ làm cho nhánh sạch lỗi, đúng quy ước, có ghi nguồn giấy phép.
+> (quant-engineer) Làm **Đợt C0 phần sửa lỗi** theo `docs/plans/module-C-engine-tin-hieu.md`. Nhánh `be/analysis` (lead đã tạo bản chép theo bước 3; bản kê ở `docs/reports/<ngày>-c0-kiem-ke.md`). Gọi skill `crypto-multi-agent-analysis` trước. Không thêm tính năng mới — chỉ làm cho nhánh sạch lỗi, đúng quy ước, ghi nguồn giấy phép đúng kết luận bước 1. Không đụng thư mục `main`, `AGENT-HANDOFF/`, `vendor/`, skill khác.
 
 ---
 
@@ -276,7 +387,7 @@ Thêm:
 
 **Việc — quant-engineer**
 1. `server/src/modules/signals/extract.ts`: hàm thuần `extractSignal(report, config, openSignals) → { signal } | { reason }` đúng mục 3.
-2. Test vàng: mỗi lý do từ chối một ca; LONG/SHORT; sai phía SL/TP; R:R đúng ngưỡng (≥, không >); trùng chiều đang mở; `REVIEW`.
+2. Test vàng: mỗi lý do từ chối một ca; LONG/SHORT; sai phía SL/TP; R:R đúng ngưỡng (≥, không >); cặp đang có tín hiệu mở (cùng chiều, ngược chiều, khác khung đều từ chối `DUPLICATE`); `REVIEW`.
 
 **Việc — backend-builder**
 1. Bảng `signal_engine_versions`, `signal_runs`, `signals` (mục 3) → migration.
@@ -348,9 +459,10 @@ Thêm:
      - không tải được → đứng chờ;
      - quá 24 giờ khi ACTIVE → DATA_GAP_EXIT ở SL, tính là thua;
      - quá 24 giờ khi PENDING → EXPIRED.
-2. `computeSignalStats(closed[], basis)` + `evaluateM3Gate(closed[], opts)`:
-   - dùng `summarizeR` + `bootstrapMeanCI` (thêm vào `rMetrics.ts`);
-   - bootstrap 10.000 lần với **hạt giống cố định** (kết quả lặp lại được);
+2. `computeSignalStats(closed[], basis)` + `evaluateM3Gate(closed[], opts)` **đúng từng bước của mục 3.3.1**:
+   - dùng `summarizeR` + `blockBootstrapRatioCI` (thêm vào `rMetrics.ts`: bootstrap khối trượt vòng theo ngày, khối 7 ngày, 10.000 lần, bộ sinh số tất định, hạt giống `20261013`);
+   - in đủ số trung gian: mã băm tập dữ liệu, n, số ngày, CI khối và CI độc lập (để so), DD, tỷ trọng theo cặp/tháng, kỳ vọng khi bỏ cặp/tháng tốt nhất, độ nhạy chi phí ×2, các chỉ số tương quan;
+   - test vàng: tập nhỏ tính tay cho từng bước 2, 4, 5; bootstrap lặp lại giống hệt với cùng hạt giống; 100 tín hiệu dồn vào 5 ngày → `INSUFFICIENT_DATA`; `P = 0` → tiêu chí 5 không đạt; bot dưới 30 → "Không áp dụng"; dữ liệu tương quan giả lập (cùng ngày cùng dấu) → CI khối rộng hơn CI độc lập;
    - bảng hiệu chỉnh theo nhóm confidence (0,6–0,7 / 0,7–0,8 / 0,8–0,9 / ≥ 0,9);
    - `evaluateM3Gate` từ chối dữ liệu trộn phiên bản hoặc trộn basis (ném lỗi), và chỉ trả 3 giá trị `verdict` ở mục 3.3;
    - test: thêm mục nhật ký hoặc lệnh bot → thống kê tín hiệu không đổi.
@@ -426,10 +538,38 @@ Thêm:
 |---|---|
 | Người làm | `cex-backend-builder` (bắt buộc skill `ledger-order-concurrency`) → `cex-reviewer` |
 | Nhánh | `be/signals-c5-bot` |
-| Cần trước | C3 đã gộp; chủ dự án duyệt C-D3 |
+| Cần trước | C3 đã gộp; C-D3 đã duyệt (2026-10-13) |
 | Thời lượng | 1–2 lượt |
 
+**Ranh giới kỹ thuật: bot không thể gửi lệnh đến hệ thống giao dịch thật** (điều kiện của C-D3)
+
+"Lệnh thật" là lệnh gửi ra một sàn bên ngoài (Binance hay bất kỳ sàn nào) bằng tiền thật.
+Hiện trạng đã kiểm 2026-10-13:
+- Server **không có** đường gửi lệnh ra ngoài nào. Binance chỉ được dùng để lấy dữ liệu công khai (WebSocket + REST GET không ký, `config.ts:15–20`).
+- Không có biến cấu hình khóa API sàn nào; khóa API duy nhất là của dịch vụ email.
+
+Bốn lớp chặn, mỗi lớp có test riêng:
+| Lớp | Cách chặn | Test chứng minh |
+|---|---|---|
+| 1. Kiến trúc | Executor chỉ nhận một giao diện `SimOrderGateway`, gồm `OrderService.placeOrder/cancel` (Spot) và `FuturesService.placeOrder/cancel` (Futures), đều ghi vào PostgreSQL của sàn ảo. Không có tham số URL, khóa, máy chủ | Kiểm kiểu: giao diện không có thành phần mạng. Test executor dùng gateway thật trên DB test |
+| 2. Lint | `no-restricted-imports` / `no-restricted-globals` cho `server/src/modules/signals/**` và `server/src/modules/analysis/**`: cấm `node:http`, `node:https`, `node:net`, `node:tls`, `undici`, `ws`, `fetch`, và import `modules/market/binance*` | `npx eslint` đỏ khi thêm một import cấm (test chạy ESLint trên file mẫu vi phạm) |
+| 3. Cấu hình | `config.ts` **từ chối khởi động** khi có biến môi trường giống khóa API sàn: tên chứa `BINANCE`, `BYBIT`, `OKX`, `KUCOIN`, `GATE`, `MEXC`, `BITGET` kèm `KEY` hoặc `SECRET` | Test: đặt `BINANCE_API_KEY=x` → `loadConfig` ném lỗi rõ ràng |
+| 4. Mã nguồn toàn server | Test tĩnh `server/src/ops/noRealTrading.test.ts` quét `server/src` và `packages`: không có endpoint đặt/hủy lệnh của sàn ngoài (`/api/v3/order`, `/api/v3/order/oco`, `/fapi/v1/order`, `/sapi/`, `/v5/order`), không có header `X-MBX-APIKEY`, không có ký HMAC cho request sàn; mọi lời gọi trong `modules/market/binance*.ts` là GET | Test đỏ ngay khi ai đó thêm đường đặt lệnh thật |
+
+Thêm **test chạy thật với mạng bị chặn** (`executor.test.ts`):
+- chặn mọi kết nối ra ngoài: `undici` `MockAgent` + `disableNetConnect()`, và bọc `net.connect`/`tls.connect` để ghi lại rồi từ chối mọi host không phải localhost;
+- cho bot xử lý 20 tín hiệu LONG + SHORT, gồm vào lệnh, TP/SL, hết hạn, hủy;
+- khẳng định:
+  - **0** lần thử kết nối ra ngoài;
+  - mọi lệnh nằm trong `orders` / `futures_orders` của tài khoản `is_bot` với `source = 'SIGNAL'`;
+  - đối soát sổ cái sạch.
+
+Executor kiểm tài khoản trước mỗi lệnh: tài khoản không phải `is_bot` (cấu hình sai `SIGNAL_BOT_USER_ID`) → từ chối, ghi log lỗi, không đặt lệnh. Có test.
+
 **Việc**
+0. Migration (chỉ thêm): `futures_orders` thêm `source text not null default 'USER'` + `source_id bigint null`. Hiện bảng này chưa có nguồn lệnh như `orders`.
+   - Hủy lệnh qua API người dùng từ chối lệnh `source ≠ 'USER'`, giống Grid/DCA bên Spot.
+   - Hợp đồng: `FuturesOrder.source`, kèm CHANGELOG. Lead giao contract-designer làm trước đợt này.
 1. Script `npm run signals:bot-setup`:
    - tạo tài khoản hệ thống (`is_bot = true`, không mật khẩu, email `signal-bot@system.local`);
    - nạp tiền ảo qua **faucet** (đi đúng `applyBalanceChanges`, loại `FAUCET`) và chuyển một phần sang ví Futures cho lệnh SHORT;
@@ -438,7 +578,7 @@ Thêm:
    - LONG: Spot Limit tại giá vào, kèm TP/SL;
    - SHORT: Futures Limit (đòn bẩy 1–2×) kèm TP/SL;
    - khối lượng = `positionSizeForRisk(vốn bot, 1%, giá vào, SL, stepSize, phí)`;
-   - **đặt qua `OrderService.placeOrder(botId, …, { source: 'SIGNAL', sourceId: signalId })`** — không có đường tắt số dư;
+   - **chỉ đặt qua `SimOrderGateway`**: Spot `OrderService.placeOrder(botId, …, { source: 'SIGNAL', sourceId: signalId })`, Futures `FuturesService.placeOrder` với `source: 'SIGNAL'`. Không có đường tắt số dư;
    - mỗi tín hiệu **đúng một** lệnh (kiểm `sourceId` đã có lệnh chưa, trong transaction);
    - tín hiệu `EXPIRED`/`INVALIDATED` → hủy lệnh chờ;
    - sàn dừng → không đặt.
@@ -451,14 +591,15 @@ Thêm:
    - lệnh `source = 'SIGNAL'` không hủy được qua API người dùng (như Grid/DCA);
    - admin không sửa/reset được tài khoản bot (`BOT_ACCOUNT_PROTECTED` vẫn đúng); dừng bot = tắt cờ, executor hủy lệnh chờ của bot;
    - lệnh bot khớp → **không** tạo mục nhật ký (nếu Module A đã gộp); thống kê `BOT_FILLS` tách khỏi `MODELED_CANDLES`;
-   - **đối soát sổ cái sạch** sau mọi test.
+   - **đối soát sổ cái sạch** sau mọi test;
+   - đủ các test của bốn lớp ranh giới và test mạng bị chặn ở trên.
 
 **Nghiệm thu**
-- [ ] `npm test` toàn bộ đạt; reviewer không P0/P1 (kiểm riêng tranh chấp và trùng lệnh).
+- [ ] `npm test` toàn bộ đạt; reviewer không P0/P1 (kiểm riêng tranh chấp, trùng lệnh, **và bốn lớp ranh giới** — reviewer thử thêm một import cấm và một biến `BINANCE_API_KEY` để thấy test đỏ).
 - [ ] Cờ mặc định tắt; tài liệu bật/tắt trong `docs/deploy/may-ca-nhan.md`.
 
 **Lệnh giao việc**
-> Làm **Đợt C5** theo `docs/plans/module-C-engine-tin-hieu.md`. Nhánh `be/signals-c5-bot`. Gọi skill `ledger-order-concurrency` trước khi viết executor. Bot chỉ được gọi `OrderService.placeOrder` với `source: 'SIGNAL'`; không import gì từ `server/src/modules/analysis/` ngoài kiểu dữ liệu.
+> Làm **Đợt C5** theo `docs/plans/module-C-engine-tin-hieu.md`. Nhánh `be/signals-c5-bot`. Gọi skill `ledger-order-concurrency` trước khi viết executor. Bot chỉ được đặt lệnh qua `SimOrderGateway` (Spot `OrderService`, Futures `FuturesService`) với `source: 'SIGNAL'`; không import gì từ `server/src/modules/analysis/` ngoài kiểu dữ liệu. Làm đủ bốn lớp ranh giới "không thể gửi lệnh thật" và test mạng bị chặn — đây là điều kiện duyệt C-D3.
 
 ---
 
@@ -531,7 +672,10 @@ Thêm:
 | Đạt cổng bị hiểu là được bán | `verdict` chỉ có `ELIGIBLE_FOR_REVIEW`; không code nào tự mở; phát hành cần hồ sơ phê duyệt + kế hoạch GĐ6 riêng (mục 3.4) |
 | Backtest khác chạy thật (thiếu sổ lệnh/phái sinh lịch sử) | Ghi rõ giới hạn; cổng M3 chỉ dùng số liệu chạy thật |
 | Sàn thật tắt/ngủ → mất nến, tín hiệu thiếu | Ghi khoảng trống; báo cáo tuần nêu tỷ lệ thời gian chạy; không chạy bù |
-| Bot làm sai số dư | Chỉ qua `OrderService`, một lệnh/tín hiệu, cờ tắt mặc định, đối soát sau test |
+| Bot làm sai số dư | Chỉ qua `OrderService`/`FuturesService`, một lệnh/tín hiệu, cờ tắt mặc định, đối soát sau test |
+| Bot gửi lệnh ra sàn thật | Bốn lớp ranh giới (kiến trúc, lint, cấu hình từ chối khóa API sàn, test tĩnh toàn server) + test chạy với mạng bị chặn (C5) |
+| Đụng thay đổi chưa commit của phiên khác | C0: kiểm kê chỉ đọc + mã băm, điểm dừng chờ xác nhận, chép sang worktree riêng, sao lưu trước khi gỡ khỏi `main` |
+| Cổng M3 đạt nhờ tín hiệu tương quan | Một tín hiệu mở/cặp; bootstrap khối theo ngày; ≥ 30 ngày; giới hạn tỷ trọng cặp/tháng (mục 3.3.1) |
 | DB phình (báo cáo jsonb, nến 1m) | Báo cáo đầy đủ chỉ cho tín hiệu; dọn lần chạy > 90 ngày, nến 1m > 60 ngày; theo dõi kích thước bản sao lưu |
 | Phiên khác vẫn sửa hệ phân tích trong `main` | C0: commit lên `be/analysis` trước; quy tắc README mục 3 |
 | Giấy phép Apache-2.0 | `THIRD_PARTY_NOTICES.md` + ghi nguồn ở file chuyển thể (C0) |

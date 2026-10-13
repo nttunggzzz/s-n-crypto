@@ -26,7 +26,7 @@ lãi/lỗ ròng    = lãi/lỗ theo giá − mọi phí − trượt giá − fu
   - các chỉ số chính: count, win rate, avg/expectancy R, profit factor (R và USDT), max drawdown (R và USDT);
   - chuỗi thắng/thua dài nhất và đường R lũy kế;
   - với n = 0, mọi chỉ số là `null`.
-- `bootstrapMeanCI(rs, { iterations, seed, level })`: thêm ở đợt **C3**, chỉ Module C dùng.
+- `blockBootstrapRatioCI(days, { blockDays, iterations, seed, level })`: thêm ở đợt **C3**, chỉ Module C dùng (phương pháp ở Module C mục 3.3.1).
 
 Module A (`journalStats.ts`) và Module C (`signalStats.ts`) **gọi** các hàm này, **không** tự viết lại công thức.
 Test vàng của `rMetrics` là chuẩn chung. Sửa công thức R thì phải sửa ở đây, đồng thời đổi phiên bản hợp đồng và ghi CHANGELOG.

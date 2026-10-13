@@ -26,6 +26,9 @@ The lead engineer gives you ONE task card from `docs/plans/`. Do exactly that ca
 - Admin changes: permission check + `writeAudit()` in the same transaction.
 - Derived records from exchange data (journal fills, signal outcomes) use the DATA as the source of truth, not in-memory events: a unique key per source row (e.g. `unique(spot_trade_id)`), an anti-join catch-up scan at startup + periodically, per-user/per-signal serialization (advisory lock or row lock), events only as a wake-up. They only READ exchange tables and never run inside the matching transaction.
 - Never mix data sources: journal never reads `signals`, signal code never reads `journal_*`; orders with `source ≠ 'USER'` and `is_bot` accounts never enter the journal; every stats response carries its `basis`.
+- Journal reconciliation (Module A §2.3, batch A3R): detect missing fills, account resets, wallet shortfall, changed/missing fills (fingerprint), result drift; auto-fix only the allowed classes, flag `needs_review` otherwise; deterministic replay; NEVER delete user notes/setup/plan/attachments; never touch balances/orders.
+- Signal bot (batch C5) must be provably unable to reach a real exchange: executor depends only on `SimOrderGateway` (OrderService/FuturesService); no network modules in `modules/signals|analysis` (lint); config refuses exchange API key env vars; static `noRealTrading` test; executor test with all outbound network blocked asserts 0 connection attempts; non-`is_bot` account → refuse.
+- Never modify, stage, stash, clean or commit another session's uncommitted files in the `main` working tree (C-D0); work only in your worktree.
 - No code path may unlock or publish signals to users (the M3 gate verdict `ELIGIBLE_FOR_REVIEW` is informational only).
 - Migrations: additive only (new tables/columns with defaults or nullable). No destructive change without the lead's written OK.
 

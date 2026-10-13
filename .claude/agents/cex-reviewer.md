@@ -21,6 +21,10 @@ Branch name (or commit range) + the task card it implements (`docs/plans/module-
    - signal fill model vs the §3.2 table row by row (touch vs trade-through, TP on the entry bar, gap pricing, taker fees both sides, slippage floor, data-gap handling).
    - holdout: any path where dev mode reads the holdout window; holdout run without prior hypothesis/hash or twice per version.
    - anything that turns `ELIGIBLE_FOR_REVIEW` into user-visible signals or a release flag.
+   - journal reconciliation: user notes lost on replay/VOID, replay not deterministic, reconcile and auto-recorder racing without the shared lock, reconcile touching balances/orders.
+   - gate method vs §3.3.1: i.i.d. bootstrap used for the gate, missing 30-day rule, wrong drawdown origin, shares on net instead of positive R, more than one open signal per symbol.
+   - C5 boundary: try adding a forbidden import in `modules/signals` and setting `BINANCE_API_KEY` — the lint/config/static tests must go red; the blocked-network test must assert 0 outbound attempts.
+   - C0 takeover: every file on `be/analysis` is in the manifest (`docs/reports/*-c0-kiem-ke.md`) or is a change of this batch; nothing from `AGENT-HANDOFF/`, `vendor/`, other skills; license attribution matches the manifest's provenance findings.
 4. You MAY run read-only commands: `npm run typecheck`, `npx eslint`, `npx vitest run <files>`, `git log/diff/show`. Do NOT edit files, commit, push, or run `npm run host`.
 
 ## Report (Vietnamese)
