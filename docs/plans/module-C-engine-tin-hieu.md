@@ -376,7 +376,11 @@ Git không cho một nhánh mở ở hai worktree cùng lúc, nên sub-agent kh�
 2. Chuẩn hóa hợp đồng `analysis.ts` theo quy ước dự án: tên trường camelCase (`PriorLessonsUsed` → `priorLessonsUsed`), tiền là `DecimalString`, thời điểm `EpochMs`/`IsoDateTime`, thiếu dữ liệu là `nullable`.
 3. Chạy `npx tsx server/src/modules/analysis/cli.ts`; đo thời gian một lần `analyzeSymbol` (dùng để xác nhận lại C-D4 và tính tải cho C2).
 4. Giấy phép theo kết luận bước 1:
-   - `THIRD_PARTY_NOTICES.md` ở gốc repo: tên dự án, URL, commit `1394a3f72aa4393e1a98f51b382434c4b4c2d972`, toàn văn hoặc đường dẫn giấy phép Apache-2.0 (upstream không có `NOTICE`);
+   - `THIRD_PARTY_NOTICES.md` ở gốc repo, gồm **ba** nguồn (báo cáo `docs/reports/2026-10-13-c0-kiem-ke.md`):
+     - TradingAgents: URL, commit `1394a3f72aa4393e1a98f51b382434c4b4c2d972`, giấy phép Apache-2.0 (upstream không có `NOTICE`);
+     - `agiprolabs/claude-trading-skills` (MIT, © 2026 AGIPro): nguồn công thức trong `quant.ts` lấy từ `custom-indicators`, `risk-management`, `position-sizing`;
+     - `tradermonty/claude-trading-skills` (MIT, © 2026 TraderMonty): nguồn công thức lấy từ `crypto-regime-analyzer`;
+     - toàn văn hai giấy phép MIT (bắt buộc theo MIT);
    - đầu mỗi file chuyển thể ghi nguồn + "đã sửa đổi";
    - không có file nào ghi nguồn sai.
 
