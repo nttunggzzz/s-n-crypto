@@ -1,6 +1,10 @@
 # Module N — Tin tức real-time và sự kiện vĩ mô cho hệ phân tích
 
-Lập: 2026-10-14, kỹ sư chính (Claude Code). **Trạng thái: đề xuất, chờ chủ dự án duyệt N-D1…N-D6 (mục 7).**
+Lập: 2026-10-14, kỹ sư chính (Claude Code).
+
+**Trạng thái:** chủ dự án duyệt 2026-10-14 ("bắt đầu").
+- Kèm yêu cầu: **hệ AI phải kết hợp cập nhật tin real-time với dữ liệu giao dịch để đưa ra lời khuyên** (mục 4.1).
+- N-D3 (khóa FRED) chờ chủ dự án đăng ký.
 
 Đọc cùng:
 - [README](README.md): đội ngũ, quy trình một đợt, quy tắc phối hợp;
@@ -97,6 +101,33 @@ Backfill (N3): script đọc file GKG lịch sử → news_items (nguồn GDELT,
 
 Các ngưỡng 30/60 phút và 2 giờ là **giả định đặt trước**. Chúng được ghi vào `docs/plans/nhat-ky-gia-thuyet.md` trước khi đo. N3 đo lại và báo cáo, không tự sửa ngưỡng.
 
+### 4.1 Lời khuyên kết hợp tin tức và dữ liệu giao dịch (yêu cầu của chủ dự án, 2026-10-14)
+
+Mỗi lời khuyên (báo cáo phân tích của một cặp tại asOf) dựng từ **cùng một snapshot** và luôn có ba phần:
+
+1. **Thị trường:** kết luận của các phòng ban giá, chỉ báo, order flow, phái sinh: hướng, vùng vào, dừng lỗ, chốt lời, R:R. Ở v0, đây là nguồn quyết định **hướng**.
+2. **Tin tức và sự kiện** (trường mới `newsContext` của báo cáo):
+   - các tin liên quan tới cặp trong 24 giờ: tiêu đề, nguồn, `firstSeenAt`, loại sự kiện, tone;
+   - tin vĩ mô chung;
+   - sự kiện vĩ mô trong 24 giờ tới;
+   - độ tươi của từng nguồn.
+3. **Tổng hợp:** tin tác động lên lời khuyên ngay từ v0, theo ba cách, với ngưỡng đặt trước:
+   - **chặn** (luật 1 và 2 ở trên);
+   - **tăng bất định:**
+     - điều kiện: có sự kiện vĩ mô `HIGH` trong 24 giờ tới, hoặc cặp có tin loại nóng nhưng chưa tới ngưỡng chặn;
+     - khi đó thêm lý do vào `uncertaintyReasons` và giới hạn `confidence` ≤ 0.60. Trần 0.60 là con số đặt trước, ghi vào nhật ký giả thuyết;
+   - **giải thích:** một câu "Tin tức: …" nói rõ tin có làm thay đổi lời khuyên hay không, và vì sao.
+   
+   `newsContext.impact` nhận các giá trị `BLOCKED` | `UNCERTAINTY_RAISED` | `CONTEXT_ONLY` | `UNAVAILABLE`.
+
+**Độ nghiêng của tin** (số tin tích cực/tiêu cực, tone trung bình):
+- luôn được tính và hiển thị, kèm nhãn `validated: false` — "chưa kiểm chứng, chưa tính vào hướng";
+- chỉ được **tính vào hướng** khi N3 và N5 chứng minh có tác dụng, và khi đó là một phiên bản engine mới.
+
+**Không lời khuyên nào bỏ qua một trong hai nguồn:**
+- nguồn tin không có (`UNAVAILABLE`) thì phần 2 ghi "thiếu tin tức" và thêm lý do vào `uncertaintyReasons`, nhưng không đổi rating;
+- dữ liệu giao dịch không `LIVE` thì lời khuyên là `REVIEW` như hiện nay. Tin tức một mình không bao giờ tạo ra lời khuyên vào lệnh.
+
 **Độ trễ và độ tươi:**
 - Mỗi nguồn ghi độ trễ `firstSeenAt − publishedAt` và thời điểm thu thập thành công gần nhất.
 - Quá 3 chu kỳ không thành công thì nguồn chuyển `STALE`. Mọi nguồn tin đều `STALE` hoặc hỏng thì lát `news` là `UNAVAILABLE`.
@@ -167,7 +198,14 @@ N1 đã gộp → N6 giao diện Admin (Antigravity làm trên mock)
    - thêm `SnapshotNews`, `SnapshotMacroEvent`;
    - thêm trường `news` và `macroEvents` (nullable) vào `CryptoMarketSnapshot`;
    - thêm `news_event_risk` vào `AnalysisDepartmentId`;
-   - giữ `SnapshotHeadline`, ghi chú là cũ.
+   - giữ `SnapshotHeadline`, ghi chú là cũ;
+   - thêm `AnalysisNewsContext` và trường `newsContext` (nullable) vào `CryptoMarketAnalysisReport`, theo mục 4.1:
+     - `status`;
+     - `itemsUsed[]`: id, tiêu đề, nguồn, `firstSeenAt`, loại sự kiện, tone;
+     - `upcomingEvents[]`;
+     - `tilt`: positive, negative, neutral, `meanTone` (chuỗi hoặc null), `validated: false`;
+     - `impact[]`;
+     - `summaryLine`.
 2. Tạo `packages/contracts/src/news.ts`:
    - `NewsEventType` (danh sách đóng, có `OTHER`), `NewsSourceHealth`, `NewsItemAdmin`;
    - endpoint Admin `adminNewsItems`: lọc theo cặp, loại, nguồn, khoảng thời gian; có phân trang;
@@ -273,7 +311,10 @@ N1 đã gộp → N6 giao diện Admin (Antigravity làm trên mock)
    - áp dụng luật v0 ở mục 4;
    - mỗi tin/sự kiện được dùng tạo một bằng chứng `OBSERVED`;
    - không bao giờ đưa ra hướng ở v0.
-4. `orchestrator.ts` và `finalSynthesisAgent.ts`: thêm phòng ban này (không phải phòng ban lõi); có cờ chặn thì rating là `REVIEW`.
+4. `orchestrator.ts` và `finalSynthesisAgent.ts`:
+   - thêm phòng ban này (không phải phòng ban lõi); có cờ chặn thì rating là `REVIEW`;
+   - dựng `newsContext` theo mục 4.1, gồm tăng bất định và trần `confidence`;
+   - đặt câu "Tin tức: …" vào `executiveSummary`.
 5. Phòng ban 4 thôi đọc `headlines`.
 6. Cập nhật skill `crypto-multi-agent-analysis`: bước 2 đổi sang lọc theo `firstSeenAt`; cập nhật danh sách phòng ban.
 
@@ -282,7 +323,9 @@ N1 đã gộp → N6 giao diện Admin (Antigravity làm trên mock)
   - trong cửa sổ sự kiện HIGH → `REVIEW`;
   - ngoài cửa sổ → không ảnh hưởng;
   - nguồn tin chết → phòng ban `ABSTAIN`, và rating không đổi chỉ vì thiếu tin;
-  - tin hack gắn đúng cặp thì chặn cặp đó, không chặn cặp khác.
+  - tin hack gắn đúng cặp thì chặn cặp đó, không chặn cặp khác;
+  - có sự kiện HIGH trong 24 giờ tới → `confidence` ≤ 0.60, `impact` có `UNCERTAINTY_RAISED`, hướng không đổi;
+  - độ nghiêng của tin đổi dấu → hướng và rating không đổi (v0), `tilt.validated = false`.
 - [ ] `node infra/test-all.mjs quant.test.ts analysis.test.ts` và `npm run verify` đều xanh.
 
 ### Đợt N5 — Giá trị tăng thêm trong backtest
@@ -317,7 +360,12 @@ Chỉ làm khi chủ dự án đổi C-D2. Khi đó phải có đủ:
 - trần ngân sách theo tháng;
 - khi LLM lỗi thì quay về bộ phân loại bằng luật.
 
-## 7. Quyết định cần chủ dự án duyệt
+## 7. Quyết định
+
+**Đã duyệt 2026-10-14** (chủ dự án: "bắt đầu"):
+- N-D1, N-D2, N-D4, N-D5 như bảng dưới.
+- N-D6 duyệt kèm yêu cầu: lời khuyên luôn kết hợp tin và dữ liệu giao dịch, xem mục 4.1.
+- N-D3 chờ chủ dự án đăng ký khóa FRED.
 
 | Mã | Đề xuất | Vì sao |
 |---|---|---|
