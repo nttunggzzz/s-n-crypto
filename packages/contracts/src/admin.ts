@@ -161,6 +161,8 @@ export const AuditAction = z.enum([
   // closed staging (0.10.0)
   'INVITE_CREATE',
   'INVITE_REVOKE',
+  // Vietnam tax (0.15.0): taxMode / taxRate / taxVndRate changed
+  'TAX_SETTINGS_UPDATE',
 ]);
 export type AuditAction = z.infer<typeof AuditAction>;
 

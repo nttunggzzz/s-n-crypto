@@ -24,8 +24,9 @@ export const FIXTURE_WEBP_BASE64 = 'UklGRhoAAABXRUJQVlA4TA0AAAAvAAAAEAcQERGIiP4H
 const Z = '0.00000000';
 const NO_PLAN = { entry: null, stop: null, target: null };
 
-type FillInput = Omit<JournalFill, 'unattributedQty'> & { unattributedQty?: string };
-const fill = (f: FillInput): JournalFill => ({ ...f, unattributedQty: f.unattributedQty ?? Z });
+/** The journal fixtures predate the Vietnam tax (0.15.0): their fills were not withheld (tax "0"). */
+type FillInput = Omit<JournalFill, 'unattributedQty' | 'tax' | 'allocatedTax'> & { unattributedQty?: string; tax?: string; allocatedTax?: string };
+const fill = (f: FillInput): JournalFill => ({ ...f, unattributedQty: f.unattributedQty ?? Z, tax: f.tax ?? Z, allocatedTax: f.allocatedTax ?? Z });
 
 type ResultInput = Omit<JournalResult, 'rMetricsVersion' | 'dustQty' | 'liquidated' | 'legsConsistent'>;
 /** Spot result as computeEntryResult returns it (dust 0 in every fixture). */

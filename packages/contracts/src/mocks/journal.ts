@@ -30,6 +30,7 @@ import { mockStore } from './store.ts';
 import type { MockPosition } from './futuresState.ts';
 import { fromBase64, mockLotRules, type MockJournalEntry } from './journalState.ts';
 import { sha256Hex } from './sha256.ts';
+import { dec, roundUp } from '@cex/core';
 import {
   allocateSpot,
   futuresLegsOf,
@@ -139,6 +140,17 @@ function newEntry(p: Pick<JournalEntryDetail, 'market' | 'symbol' | 'direction' 
   return { owner: 'me', detail, lot: null, spotState: null, spotFills: [] };
 }
 
+/**
+ * Tax of the allocated part of a spot fill (0.15.0), split like allocatedFee: the whole fill → its tax, a part →
+ * roundUp8(tax × allocatedQty / quantity). The entry's PnL does not subtract it yet (@cex/core journalFills: batch T2).
+ */
+function allocatedTaxOf(f: { tax: string; quantity: string }, allocatedQty: string): string {
+  const tax = dec(f.tax);
+  const alloc = dec(allocatedQty);
+  if (tax.isZero() || alloc.isZero()) return Z;
+  return alloc.eq(dec(f.quantity)) ? tax.toFixed(8) : roundUp(tax.mul(alloc).div(dec(f.quantity))).toFixed(8);
+}
+
 function spotJournalFill(t: Trade, a: { allocatedQty: string; unattributedQty: string; allocatedQuote: string; allocatedFee: string }): JournalFill {
   return {
     id: String(js().nextFill++),
@@ -154,6 +166,8 @@ function spotJournalFill(t: Trade, a: { allocatedQty: string; unattributedQty: s
     unattributedQty: a.unattributedQty,
     allocatedQuote: a.allocatedQuote,
     allocatedFee: a.allocatedFee,
+    tax: t.tax,
+    allocatedTax: allocatedTaxOf(t, a.allocatedQty),
     executedAt: t.createdAt,
   };
 }
@@ -173,6 +187,9 @@ function futuresJournalFill(t: FuturesTrade, l: FuturesLeg): JournalFill {
     unattributedQty: Z,
     allocatedQuote: l.quote,
     allocatedFee: l.fee,
+    // futures are never withheld (module T §0)
+    tax: Z,
+    allocatedTax: Z,
     executedAt: t.createdAt,
   };
 }
@@ -352,7 +369,7 @@ function rebuildSpot(e: MockJournalEntry, fills: SpotFillInput[], trades: Trade[
   e.detail.fills = e.spotFills.map((fi) => {
     const a = replay.allocations.get(String(fi.id))!;
     const prev = old.get(String(fi.id));
-    if (prev) return { ...prev, allocatedQty: a.allocatedQty, unattributedQty: a.unattributedQty, allocatedQuote: a.allocatedQuote, allocatedFee: a.allocatedFee };
+    if (prev) return { ...prev, allocatedQty: a.allocatedQty, unattributedQty: a.unattributedQty, allocatedQuote: a.allocatedQuote, allocatedFee: a.allocatedFee, allocatedTax: allocatedTaxOf(prev, a.allocatedQty) };
     return spotJournalFill(trades.find((x) => x.id === String(fi.id))!, a);
   });
   for (const f of e.detail.fills) setRow(spotKey(f.tradeId), e.detail.id);

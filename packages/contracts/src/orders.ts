@@ -200,8 +200,17 @@ export const Trade = z.object({
   /** Fee is taken from the received asset: base on BUY, quote on SELL. */
   fee: DecimalString,
   feeAsset: z.string(),
+  /**
+   * Vietnam tax withheld from this fill (0.15.0), in the quote asset (= feeAsset of a SELL): roundUp8(quoteQty × taxRate)
+   * on the gross value. Always present: "0.00000000" for BUY, with tax OFF, for DOMESTIC_ORG sellers and before 0.15.0.
+   * USDT received by a SELL = quoteQty − fee − tax.
+   */
+  tax: DecimalString,
   liquidity: z.enum(['MAKER', 'TAKER']),
-  /** USDT profit/loss realized by this SELL against the average cost (after fees); null for BUY. */
+  /**
+   * USDT profit/loss realized by this SELL against the average cost, after fee AND tax:
+   * (quoteQty − fee − tax) − quantity × average cost. null for BUY, and for a SELL without a cost basis.
+   */
   realizedPnl: DecimalString.nullable(),
   createdAt: IsoDateTime,
 });

@@ -291,7 +291,7 @@ describe('journal mock: decisions after the A1 review (module A §2.1, §2.2, §
     const e = await api.journalCreate({ body: { orderIds: [order] } });
     expect(e.fillCount).toBe(1);
     // the same order fills a second time (the mock engine fills orders at once: add the fill by hand)
-    mockStore.trades.unshift({ id: nextId(), orderId: order, symbol: 'BNBUSDT', side: 'BUY', price: '740.00000000', quantity: '0.50000000', quoteQty: '370.00000000', fee: '0.00050000', feeAsset: 'BNB', liquidity: 'MAKER', realizedPnl: null, createdAt: new Date().toISOString() });
+    mockStore.trades.unshift({ id: nextId(), orderId: order, symbol: 'BNBUSDT', side: 'BUY', price: '740.00000000', quantity: '0.50000000', quoteQty: '370.00000000', fee: '0.00050000', feeAsset: 'BNB', tax: '0.00000000', liquidity: 'MAKER', realizedPnl: null, createdAt: new Date().toISOString() });
     const more = await api.journalUpdate({ params: { entryId: e.id }, body: { addOrderIds: [order] } });
     expect(more).toMatchObject({ fillCount: 2, result: { entryQty: '1.50000000' } });
     expect((await api.journalUpdate({ params: { entryId: e.id }, body: { addOrderIds: [order] } })).fillCount).toBe(2); // nothing new: no-op

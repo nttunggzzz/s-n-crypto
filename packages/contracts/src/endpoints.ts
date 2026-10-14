@@ -115,6 +115,22 @@ import {
   JournalUpdateRequest,
   JournalUpdateSettingsRequest,
 } from './journal.ts';
+import {
+  AdminTaxSummary,
+  AdminTaxSummaryQuery,
+  AdminTaxWithholding,
+  AdminTaxWithholdingListQuery,
+  AdminTaxWithholdingQuery,
+  TaxProfile,
+  TaxSettings,
+  TaxSummary,
+  TaxSummaryQuery,
+  TaxWithholding,
+  TaxWithholdingListQuery,
+  TaxWithholdingQuery,
+  UpdateTaxProfileRequest,
+  UpdateTaxSettingsRequest,
+} from './tax.ts';
 
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 /**
@@ -261,6 +277,18 @@ export const endpoints = {
   unreadNotifications: ep({ method: 'GET', path: '/api/v1/notifications/unread-count', auth: 'user', response: UnreadCount }),
   markNotificationsRead: ep({ method: 'POST', path: '/api/v1/notifications/read', auth: 'user', body: MarkReadRequest, response: UnreadCount }),
 
+  // ---- Vietnam tax (0.15.0, test exchange) — the user's own data only; see tax.ts
+  /** Self-declared category (default INDIVIDUAL). No identity document. */
+  taxProfile: ep({ method: 'GET', path: '/api/v1/account/tax/profile', auth: 'user', response: TaxProfile }),
+  /** Only { category }; applies to fills from now on. */
+  taxUpdateProfile: ep({ method: 'PUT', path: '/api/v1/account/tax/profile', auth: 'user', body: UpdateTaxProfileRequest, response: TaxProfile }),
+  /** Year totals + 12 months (UTC+7): sales, withholdings, VND (null without a rate). */
+  taxSummary: ep({ method: 'GET', path: '/api/v1/account/tax/summary', auth: 'user', query: TaxSummaryQuery, response: TaxSummary }),
+  /** The user's withholding records, newest first. */
+  taxWithholdings: ep({ method: 'GET', path: '/api/v1/account/tax/withholdings', auth: 'user', query: TaxWithholdingListQuery, response: paginated(TaxWithholding) }),
+  /** "Bảng tổng hợp thuế đã khấu trừ (thử nghiệm)" CSV (TAX_EXPORT_COLUMNS), ≤ 10,000 rows newest first. Not a tax document. */
+  taxExport: ep({ method: 'GET', path: '/api/v1/account/tax/export.csv', auth: 'user', query: TaxWithholdingQuery, response: Csv, format: 'csv' }),
+
   // ---- admin (P03/P05, phase 3) — staff + 2FA + permission; every change writes the audit log
   adminOverview: ep({ method: 'GET', path: '/api/v1/admin/overview', auth: 'staff', permission: 'exchange.read', response: AdminOverview }),
   adminListUsers: ep({ method: 'GET', path: '/api/v1/admin/users', auth: 'staff', permission: 'users.read', query: AdminUserListQuery.extend(PaginationQuery.shape), response: paginated(AdminUserSummary) }),
@@ -302,6 +330,16 @@ export const endpoints = {
   adminStopGridBot: ep({ method: 'POST', path: '/api/v1/admin/users/:userId/bots/grid/:botId/stop', auth: 'staff', permission: 'bots.manage', params: UserBotParam, body: AdminStopGridBotRequest, response: GridBot }),
   adminCancelDcaPlan: ep({ method: 'POST', path: '/api/v1/admin/users/:userId/bots/dca/:planId/cancel', auth: 'staff', permission: 'bots.manage', params: UserDcaParam, body: ReasonBody, response: DcaPlan }),
   adminUserLoginHistory: ep({ method: 'GET', path: '/api/v1/admin/users/:userId/login-history', auth: 'staff', permission: 'users.read', params: UserIdParam, query: PaginationQuery, response: paginated(LoginEvent) }),
+  // Vietnam tax (0.15.0, test exchange) — see tax.ts
+  adminTaxSettings: ep({ method: 'GET', path: '/api/v1/admin/tax/settings', auth: 'staff', permission: 'tax.read', response: TaxSettings }),
+  /** taxMode / taxRate (0 < r ≤ 0.01) / taxVndRate (> 0, null clears); audited TAX_SETTINGS_UPDATE in the same transaction. */
+  adminUpdateTaxSettings: ep({ method: 'PATCH', path: '/api/v1/admin/tax/settings', auth: 'staff', permission: 'tax.manage', body: UpdateTaxSettingsRequest, response: TaxSettings }),
+  /** Totals of a month (YYYY-MM) or quarter (YYYY-Qn), UTC+7: overall, by category, by pair. */
+  adminTaxSummary: ep({ method: 'GET', path: '/api/v1/admin/tax/summary', auth: 'staff', permission: 'tax.read', query: AdminTaxSummaryQuery, response: AdminTaxSummary }),
+  /** Every user's withholding records, newest first; filter userId / symbol / from / to. */
+  adminTaxWithholdings: ep({ method: 'GET', path: '/api/v1/admin/tax/withholdings', auth: 'staff', permission: 'tax.read', query: AdminTaxWithholdingListQuery, response: paginated(AdminTaxWithholding) }),
+  /** Statement CSV (ADMIN_TAX_EXPORT_COLUMNS), same filters, ≤ 10,000 rows newest first. */
+  adminTaxExport: ep({ method: 'GET', path: '/api/v1/admin/tax/export.csv', auth: 'staff', permission: 'tax.read', query: AdminTaxWithholdingQuery, response: Csv, format: 'csv' }),
 
   // ---- futures (phase F) — simulated USDT-M perpetuals, isolated margin, ≤ 20×
   futuresExchangeInfo: ep({ method: 'GET', path: '/api/v1/futures/exchange-info', auth: 'public', response: FuturesExchangeInfo }),
