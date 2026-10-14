@@ -435,3 +435,156 @@ describe('an error after the withholding rolls everything back', () => {
     await expectBooksBalanced();
   });
 });
+
+describe('T3 step 0: seller category stored on every SELL trade', () => {
+  it('DOMESTIC_ORG sells under WITHHOLD, then switches to INDIVIDUAL: the trade keeps DOMESTIC_ORG and has no record', async () => {
+    await setTax('WITHHOLD');
+    const tax = new TaxService(env.database.db, env.ex.config);
+    const u = await userWithBtc();
+    await tax.updateProfile(u, 'DOMESTIC_ORG');
+    const r = await place(u, { symbol: 'BTCUSDT', side: 'SELL', type: 'MARKET', quantity: '0.1' });
+    await tax.updateProfile(u, 'INDIVIDUAL');
+    const ts = await tradesOf(r.order.id);
+    expect(ts.map((t) => [t.taxCategory, strip(t.tax)])).toEqual([['DOMESTIC_ORG', '0']]);
+    expect(await recordsOf(r.order.id)).toEqual([]);
+    // the next sale is the new category
+    const r2 = await place(u, { symbol: 'BTCUSDT', side: 'SELL', type: 'MARKET', quantity: '0.1' });
+    expect((await tradesOf(r2.order.id)).map((t) => t.taxCategory)).toEqual(['INDIVIDUAL']);
+    expect((await recordsOf(r2.order.id)).map((w) => w.category)).toEqual(['INDIVIDUAL']);
+    await expectBooksBalanced();
+  });
+
+  it('taxMode OFF still stores the category; BUY stores null; FOREIGN_ORG matches its record', async () => {
+    const tax = new TaxService(env.database.db, env.ex.config);
+    const u = await createUser(env);
+    await env.ex.faucet.claim(u);
+    const buy = await place(u, { symbol: 'BTCUSDT', side: 'BUY', type: 'MARKET', quantity: '1' });
+    expect((await tradesOf(buy.order.id)).map((t) => t.taxCategory)).toEqual([null, null]); // two levels, both BUY fills
+    defaultBook();
+    await tax.updateProfile(u, 'FOREIGN_ORG');
+    const off = await place(u, { symbol: 'BTCUSDT', side: 'SELL', type: 'MARKET', quantity: '0.1' });
+    expect((await tradesOf(off.order.id)).map((t) => [t.taxCategory, strip(t.tax)])).toEqual([['FOREIGN_ORG', '0']]);
+    expect(await recordsOf(off.order.id)).toEqual([]);
+    await setTax('WITHHOLD');
+    const on = await place(u, { symbol: 'BTCUSDT', side: 'SELL', type: 'MARKET', quantity: '0.1' });
+    expect((await tradesOf(on.order.id)).map((t) => t.taxCategory)).toEqual(['FOREIGN_ORG']);
+    expect((await recordsOf(on.order.id)).map((w) => w.category)).toEqual(['FOREIGN_ORG']);
+    await expectBooksBalanced();
+  });
+});
+
+describe('T3 step 0: CHECK constraints on exchange_settings', () => {
+  it('a mode or rate the contract would refuse is refused by the database too', async () => {
+    const set = (v: Record<string, unknown>) => env.database.db.update(exchangeSettings).set(v).where(eq(exchangeSettings.id, 1));
+    await expect(set({ taxMode: 'ON' })).rejects.toThrow();
+    await expect(set({ taxRate: '0' })).rejects.toThrow();
+    await expect(set({ taxRate: '0.0100001' })).rejects.toThrow();
+    await expect(set({ taxRate: '-0.001' })).rejects.toThrow();
+    await set({ taxRate: '0.01' }); // the boundary is allowed
+    await set({ taxRate: '0.001' });
+    expect(env.ex.config.settings.taxMode).toBe('OFF');
+  });
+});
+
+describe('T3 step 0: partial LIMIT SELL fills with tax on', () => {
+  it('four partial fills: each rounds up on its own, the sum equals the ledger, locked funds shrink by each fill', async () => {
+    const u = await userWithBtc();
+    await setTax('WITHHOLD');
+    const lockedOf = async (id: number) => strip((await env.database.db.select().from(orders).where(eq(orders.id, id)))[0]!.lockedAmount);
+    // taker part: three book levels in one go (3 trades); the rest (0.82017) rests as a maker and is filled at 98 later (4th trade)
+    setBook(env, 'BTCUSDT', [['99.01', '0.05053'], ['98.99', '0.05053'], ['98.50', '0.07777']], [['102.00', '5.00000']]);
+    const p = await place(u, { symbol: 'BTCUSDT', side: 'SELL', type: 'LIMIT', quantity: '0.999', price: '98' });
+    expect(p.order.status).toBe('PARTIALLY_FILLED');
+    expect(p.trades).toHaveLength(3);
+    expect(await lockedOf(p.order.id)).toBe('0.82017'); // 0.999 - 0.05053 - 0.05053 - 0.07777
+    defaultBook();
+    await tradeAt('100.00');
+    expect(await lockedOf(p.order.id)).toBe('0');
+    // 0.05053 x 99.01 = 5.0029753 -> tax 0.0050029753 -> 0.00500298
+    // 0.05053 x 98.99 = 5.0019647 -> 0.0050019647 -> 0.00500197
+    // 0.07777 x 98.5  = 7.660345  -> 0.007660345  -> 0.00766035
+    // 0.82017 x 98    = 80.37666  -> 0.08037666 (exact)
+    const ts = await tradesOf(p.order.id);
+    expect(ts.map((t) => [strip(t.quantity), strip(t.quoteQty), strip(t.fee), strip(t.tax)])).toEqual([
+      ['0.05053', '5.0029753', '0.00500298', '0.00500298'],
+      ['0.05053', '5.0019647', '0.00500197', '0.00500197'],
+      ['0.07777', '7.660345', '0.00766035', '0.00766035'],
+      ['0.82017', '80.37666', '0.08037666', '0.08037666'],
+    ]);
+    expect((await recordsOf(p.order.id)).map((w) => strip(w.taxAmount))).toEqual(['0.00500298', '0.00500197', '0.00766035', '0.08037666']);
+    // one ledger line per settlement: 0.00500298 + 0.00500197 + 0.00766035 = 0.0176653, then 0.08037666 - together 0.09804196
+    expect((await taxLedger(u)).map((l) => strip(l.deltaAvailable))).toEqual(['-0.0176653', '-0.08037666']);
+    // USDT: 9899.5 + 98.041945 - fee 0.09804196 - tax 0.09804196 = 9997.34586108
+    expect(await balanceOf(env, u, 'USDT')).toEqual({ available: '9997.34586108', locked: '0' });
+    await expectBooksBalanced();
+  });
+});
+
+describe('T3 step 0: ExchangeConfig reload', () => {
+  type Loader = { load: () => Promise<void> };
+  it('reloads run one after another and a failed one does not break the chain', async () => {
+    const cfg = env.ex.config as unknown as Loader;
+    const real = cfg.load.bind(env.ex.config);
+    let active = 0;
+    let maxActive = 0;
+    let fail = true;
+    cfg.load = async () => {
+      active++;
+      maxActive = Math.max(maxActive, active);
+      try {
+        await new Promise((r) => setTimeout(r, 15));
+        if (fail) {
+          fail = false;
+          throw new Error('boom');
+        }
+        await real();
+      } finally {
+        active--;
+      }
+    };
+    try {
+      const a = env.ex.config.reload();
+      const b = env.ex.config.reload();
+      const c = env.ex.config.reload();
+      await expect(a).rejects.toThrow('boom');
+      await b;
+      await c;
+      expect(maxActive).toBe(1);
+    } finally {
+      cfg.load = real;
+    }
+  });
+
+  it('two reloads in parallel with a DB change between them: the cache follows the NEW value', async () => {
+    const first = env.ex.config.reload();
+    await env.database.db.update(exchangeSettings).set({ taxRate: '0.005', taxMode: 'WITHHOLD' }).where(eq(exchangeSettings.id, 1));
+    const second = env.ex.config.reload();
+    await Promise.all([first, second]);
+    expect([env.ex.config.tax.mode, env.ex.config.tax.rate.toFixed()]).toEqual(['WITHHOLD', '0.005']);
+    await setTax('OFF');
+  });
+
+  it('reloadAfterCommit retries once, and never throws after a failed retry', async () => {
+    const cfg = env.ex.config as unknown as Loader;
+    const real = cfg.load.bind(env.ex.config);
+    let calls = 0;
+    cfg.load = async () => {
+      calls++;
+      if (calls <= 1) throw new Error('db hiccup');
+      await real();
+    };
+    try {
+      await env.ex.config.reloadAfterCommit();
+      expect(calls).toBe(2); // the first failed, the retry worked
+      calls = 0;
+      cfg.load = async () => {
+        calls++;
+        throw new Error('db down');
+      };
+      await expect(env.ex.config.reloadAfterCommit()).resolves.toBeUndefined();
+      expect(calls).toBe(2); // exactly two attempts, then give up quietly (logged)
+    } finally {
+      cfg.load = real;
+    }
+  });
+});

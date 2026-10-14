@@ -5,6 +5,7 @@ import type { AssetInfo, AssetTag, ExchangeStatus, SymbolInfo, TaxMode, TaxSetti
 import { assets, exchangeSettings, symbols } from '../../db/schema.ts';
 import type { Db } from '../../db/client.ts';
 import { AppError } from '../../lib/errors.ts';
+import { logger } from '../../logger.ts';
 
 export type SymbolRow = typeof symbols.$inferSelect;
 export type SettingsRow = typeof exchangeSettings.$inferSelect;
@@ -39,7 +40,34 @@ export class ExchangeConfig extends EventEmitter<{ changed: [] }> {
     super();
   }
 
-  async reload(): Promise<void> {
+  /** Tail of the reload chain: reloads run one after another, so an older read can never overwrite a newer one. */
+  private reloading: Promise<unknown> = Promise.resolve();
+
+  reload(): Promise<void> {
+    const run = this.reloading.then(
+      () => this.load(),
+      () => this.load(),
+    );
+    this.reloading = run.catch(() => undefined);
+    return run;
+  }
+
+  /**
+   * Reload after a transaction that already COMMITTED (admin changes). The request must not fail because the cache refresh
+   * failed: log, retry once, and if it still fails log again (the next reload fixes the cache) - never throw.
+   */
+  async reloadAfterCommit(): Promise<void> {
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      try {
+        await this.reload();
+        return;
+      } catch (err) {
+        logger.error({ err, attempt }, 'exchange config reload after commit failed');
+      }
+    }
+  }
+
+  private async load(): Promise<void> {
     const [s] = await this.db.select().from(exchangeSettings).where(eq(exchangeSettings.id, 1));
     if (!s) throw new Error('exchange_settings row missing — run migrations');
     this.settingsRow = s;
