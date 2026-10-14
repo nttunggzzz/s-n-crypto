@@ -240,6 +240,16 @@ N1 đã gộp → N6 giao diện Admin (Antigravity làm trên mock)
 | Skill | `db-migration-host-safety`, `cex-feature-delivery`, `realtime-market-data-qa` (cách đo độ tươi), `crypto-multi-agent-analysis` |
 | Thời lượng | 1–2 lượt |
 
+**Lead tách N2 làm ba thẻ (2026-10-14).** Lý do: bộ thu tin import bộ phân loại, nên không thể làm song song nguyên thẻ.
+
+| Thẻ | Người làm | Nhánh | Làm khi | Nội dung |
+|---|---|---|---|---|
+| **N2a** | `cex-quant-engineer` | `be/news-n2a-classify` | ngay | việc 1–5 của quant-engineer dưới đây |
+| **N2b** | `cex-backend-builder` | `be/news-n2b-store` | song song N2a | việc 1, 4 (route), 5 của backend-builder; nạp tệp lịch vĩ mô; danh mục nguồn. **Chưa** có job tải tin |
+| **N2c** | `cex-backend-builder` | `be/news-n2c-ingest` | sau khi N2a và N2b đã gộp | việc 2, 3 và 6 của backend-builder: job RSS và GDELT dùng bộ phân loại, cờ, cảnh báo, chạy thử 1 giờ |
+
+Trong mỗi worktree, trước khi typecheck/test phải tạo junction `node_modules/@cex/{contracts,core,server}` trỏ vào thư mục của chính worktree; nếu không, typecheck "xanh giả" vì nó kiểm trên code của `main`.
+
 **Việc của quant-engineer** — file `packages/core/src/newsClassify.ts`, chỉ hàm thuần, không I/O:
 1. `canonicalUrl` và `titleFingerprint` (để khử các tin trùng gần giống nhau).
 2. `tagSymbols(title, aliases)`:
