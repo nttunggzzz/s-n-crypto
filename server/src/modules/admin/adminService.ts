@@ -536,7 +536,7 @@ export class AdminService {
       const { reason: _r, ...changes } = p;
       await writeAudit(tx, { actorId: actor.user.id, action: 'SETTINGS_UPDATE', targetType: 'EXCHANGE', before, after: changes, reason: p.reason, ip: actor.ip });
     });
-    await this.ex.config.reload();
+    await this.ex.config.reloadAfterCommit();
     return this.settings();
   }
 
@@ -547,7 +547,7 @@ export class AdminService {
         await tx.update(exchangeSettings).set({ tradingHalted: halted, updatedAt: new Date() }).where(eq(exchangeSettings.id, 1));
         await writeAudit(tx, { actorId: actor.user.id, action: halted ? 'TRADING_HALT' : 'TRADING_RESUME', targetType: 'EXCHANGE', before: { tradingHalted: !halted }, after: { tradingHalted: halted }, reason, ip: actor.ip });
       });
-      await this.ex.config.reload();
+      await this.ex.config.reloadAfterCommit();
     }
     return this.settings();
   }
@@ -584,7 +584,7 @@ export class AdminService {
         ip: actor.ip,
       });
     });
-    await this.ex.config.reload();
+    await this.ex.config.reloadAfterCommit();
     if (!enabled && cancelOpenOrders) {
       const open = await this.db
         .select({ id: orders.id, userId: orders.userId })
@@ -663,7 +663,7 @@ export class AdminService {
       await tx.insert(assets).values({ asset, ...next, updatedAt: t }).onConflictDoUpdate({ target: assets.asset, set: { ...next, updatedAt: t } });
       await writeAudit(tx, { actorId: actor.user.id, action: 'ASSET_UPDATE', targetType: 'ASSET', targetId: asset, before, after: next, reason, ip: actor.ip });
     });
-    await this.ex.config.reload();
+    await this.ex.config.reloadAfterCommit();
     return this.ex.config.assetInfo(asset);
   }
 

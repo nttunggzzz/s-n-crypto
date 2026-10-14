@@ -27,6 +27,9 @@ const FROZEN = new Set(['LINKUSDT', 'AVAXUSDT']); // UNAVAILABLE / STALE in the 
 const exchangeStatus = () => ({
   tradingHalted: mockStore.settings.tradingHalted || mockStore.scenario === 'halted',
   disabledSymbols: mockStore.adminSymbols.filter((s) => !s.enabled).map((s) => s.symbol),
+  taxMode: mockStore.tax.settings.taxMode,
+  taxRate: mockStore.tax.settings.taxRate,
+  taxVndRate: mockStore.tax.settings.taxVndRate,
   updatedAt: new Date().toISOString(),
 });
 

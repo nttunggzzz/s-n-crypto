@@ -1,10 +1,10 @@
 import { eq } from 'drizzle-orm';
 import { TAX_LIMITS, type TaxCategory, type TaxProfile, type TaxSettings, type UpdateTaxSettingsRequest } from '@cex/contracts';
 import { AMOUNT_SCALE, dec, hasAtMostScale } from '@cex/core';
-import { exchangeSettings, userTaxProfiles } from '../../db/schema.ts';
+import { exchangeSettings, symbols, userTaxProfiles } from '../../db/schema.ts';
 import type { Db } from '../../db/client.ts';
 import { AppError } from '../../lib/errors.ts';
-import type { ExchangeConfig } from '../exchange/exchangeConfig.ts';
+import { isExactPair, type ExchangeConfig } from '../exchange/exchangeConfig.ts';
 import { writeAudit } from '../admin/audit.ts';
 import type { Actor } from '../admin/adminService.ts';
 
@@ -41,6 +41,17 @@ export class TaxService {
     await this.db.transaction(async (tx) => {
       const [row] = await tx.select().from(exchangeSettings).where(eq(exchangeSettings.id, 1)).for('update');
       if (!row) throw new Error('exchange_settings row missing — run migrations');
+      if (p.taxMode === 'WITHHOLD') {
+        // The tax reports add up ONE currency (USDT). A SELL on a pair quoted in another asset would withhold in that asset and the
+        // report would add up different currencies - so refuse to turn the tax on while such a pair is tradable (module T 4F item 7).
+        const pairs = await tx.select().from(symbols);
+        const otherQuote = pairs
+          .filter((r) => r.quoteAsset !== 'USDT' && r.enabled && r.sourceStatus === 'TRADING' && isExactPair({ tick: dec(r.tickSize), step: dec(r.stepSize) }))
+          .map((r) => r.symbol);
+        if (otherQuote.length > 0) {
+          throw new AppError('VALIDATION_ERROR', `taxMode WITHHOLD needs every enabled pair quoted in USDT; disable first: ${otherQuote.join(', ')}`, { field: 'taxMode', symbols: otherQuote });
+        }
+      }
       const t = this.now();
       const before = { taxMode: row.taxMode, taxRate: dec(row.taxRate).toFixed(), taxVndRate: row.taxVndRate === null ? null : dec(row.taxVndRate).toFixed() };
       const set: Partial<typeof exchangeSettings.$inferInsert> = { taxUpdatedAt: t };

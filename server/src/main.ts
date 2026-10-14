@@ -65,7 +65,7 @@ if (feedOn) {
   }
 }
 
-const exchangeConfig = new ExchangeConfig(database.db);
+const exchangeConfig = new ExchangeConfig(database.db, { alerter });
 await exchangeConfig.reload();
 const market = new MarketDataService(
   exchangeConfig.allSymbols().map((s) => s.row.symbol),
@@ -163,6 +163,7 @@ async function shutdown(signal: string) {
   bots.stop();
   exchange.matcher.stop();
   exchange.portfolio.stop();
+  exchangeConfig.stop();
   stopMemoryLog();
   hub.close();
   server.close();

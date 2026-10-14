@@ -4,6 +4,7 @@ import { dec, roundDown, roundUp } from '@cex/core';
 import {
   ADMIN_TAX_EXPORT_COLUMNS,
   ApiError,
+  ExchangeStatus,
   createApiClient,
   endpoints,
   hasPermission,
@@ -16,8 +17,8 @@ import {
   VndRateInput,
   type EndpointDef,
 } from '../index.ts';
-import { fixtureTaxedTrades, fixtureTaxWithholdings } from '../fixtures/index.ts';
-import { createMockHandlers, mockStore, resetMockStore, setMockRole, setMockTax } from './index.ts';
+import { fixtureExchangeStatus, fixtureTaxedTrades, fixtureTaxWithholdings } from '../fixtures/index.ts';
+import { createMockHandlers, createMockRealtimeClient, mockStore, resetMockStore, setMockRole, setMockTax } from './index.ts';
 import { mockTaxOfFill, taxPeriodRange } from './tax.ts';
 
 const BASE = 'http://mock.local';
@@ -221,5 +222,31 @@ describe('tax reports are consistent with the records', () => {
     expect(lines[0]).toBe(ADMIN_TAX_EXPORT_COLUMNS.join(','));
     expect(lines).toHaveLength(3);
     expect(lines[2]).toContain('FOREIGN_ORG');
+  });
+});
+
+describe('exchange:status carries the tax settings (0.16.0)', () => {
+  it('the fixture and the mock snapshot match the schema; setMockTax and the admin PATCH are pushed', async () => {
+    expect(ExchangeStatus.safeParse(fixtureExchangeStatus).success).toBe(true);
+    const { taxMode: _m, ...noMode } = fixtureExchangeStatus;
+    expect(ExchangeStatus.safeParse(noMode).success).toBe(false);
+
+    const rt = createMockRealtimeClient({ intervalMs: 10 });
+    const seen: ExchangeStatus[] = [];
+    rt.subscribe('exchange:status', (st) => seen.push(st));
+    await new Promise((r) => setTimeout(r, 40));
+    expect(ExchangeStatus.safeParse(seen[0]).success).toBe(true);
+    expect(seen[0]).toMatchObject({ taxMode: 'WITHHOLD', taxRate: '0.001', taxVndRate: '26350' });
+
+    setMockTax({ taxMode: 'OFF' });
+    await new Promise((r) => setTimeout(r, 40));
+    expect(seen.at(-1)).toMatchObject({ taxMode: 'OFF', taxRate: '0.001' });
+
+    setMockRole('admin');
+    await api.adminUpdateTaxSettings({ body: { taxMode: 'WITHHOLD', taxRate: '0.002', taxVndRate: null, reason: 'đổi thuế để thử' } });
+    await new Promise((r) => setTimeout(r, 40));
+    rt.close();
+    expect(seen.at(-1)).toMatchObject({ taxMode: 'WITHHOLD', taxRate: '0.002', taxVndRate: null });
+    expect((await api.exchangeInfo()).taxRate).toBe('0.002');
   });
 });

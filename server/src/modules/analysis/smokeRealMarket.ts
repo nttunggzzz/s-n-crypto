@@ -120,6 +120,9 @@ function createSmokeCatalog() {
     exchangeStatus: () => ({
       tradingHalted: false,
       disabledSymbols: [],
+      taxMode: 'OFF',
+      taxRate: '0.001',
+      taxVndRate: null,
       updatedAt: new Date().toISOString(),
     }),
   } as unknown as ExchangeConfig;

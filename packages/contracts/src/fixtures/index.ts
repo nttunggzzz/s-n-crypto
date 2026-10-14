@@ -20,6 +20,7 @@ import type {
   CandleInterval,
   Depth,
   ExchangeInfo,
+  ExchangeStatus,
   FaucetStatus,
   LedgerEntry,
   MarketStatus,
@@ -304,6 +305,16 @@ export function fixtureCandles(symbol: string, interval: CandleInterval, n = 200
     };
   });
 }
+
+/** `exchange:status` as the mock starts: open, one disabled pair (SUIUSDT), the tax settings of `fixtureExchangeInfo`. */
+export const fixtureExchangeStatus: ExchangeStatus = {
+  tradingHalted: false,
+  disabledSymbols: ['SUIUSDT'],
+  taxMode: fixtureTaxSettings.taxMode,
+  taxRate: fixtureTaxSettings.taxRate,
+  taxVndRate: fixtureTaxSettings.taxVndRate,
+  updatedAt: T0,
+};
 
 export const fixtureMarketStatus: MarketStatus = {
   connection: 'CONNECTED',

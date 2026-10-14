@@ -6,6 +6,7 @@ import { assets, exchangeSettings, symbols } from '../../db/schema.ts';
 import type { Db } from '../../db/client.ts';
 import { AppError } from '../../lib/errors.ts';
 import { logger } from '../../logger.ts';
+import type { Alerter } from '../../ops/alerts.ts';
 
 export type SymbolRow = typeof symbols.$inferSelect;
 export type SettingsRow = typeof exchangeSettings.$inferSelect;
@@ -16,6 +17,18 @@ export interface TaxSettingsState {
   vndRate: Dec | null;
   vndRateUpdatedAt: Date | null;
   updatedAt: Date;
+}
+
+/** Wait before retry number `attempt` (0-based) of a stuck cache reload: 1 s, 2 s, 4 s ... capped at 30 s. */
+export function reloadBackoffMs(attempt: number): number {
+  return Math.min(1000 * 2 ** attempt, 30_000);
+}
+
+export interface ExchangeConfigOptions {
+  /** Operator alerts: one when the cache gets stuck on old values, one when it recovers. Omitted in tests that do not care. */
+  alerter?: Pick<Alerter, 'send'>;
+  /** Delay before background retry `attempt` (0-based). Default `reloadBackoffMs`; tests shorten it. */
+  retryDelayMs?: (attempt: number) => number;
 }
 
 export interface LoadedSymbol {
@@ -36,25 +49,50 @@ export class ExchangeConfig extends EventEmitter<{ changed: [] }> {
   private lastStatusKey = '';
   private statusChangedAt = new Date();
 
-  constructor(private readonly db: Db) {
+  /** True while a reload after a committed change failed and the cache may still hold OLD settings (tax, fee, halt ...). */
+  private staleSince: Date | null = null;
+  private retryTimer: NodeJS.Timeout | undefined;
+  private retryAttempt = 0;
+  private stopped = false;
+
+  constructor(
+    private readonly db: Db,
+    private readonly opts: ExchangeConfigOptions = {},
+  ) {
     super();
+  }
+
+  /** The cache could not be refreshed after a committed change and a background retry is running. */
+  get stale(): boolean {
+    return this.staleSince !== null;
+  }
+
+  /** Stops the background retry (server shutdown). */
+  stop(): void {
+    this.stopped = true;
+    clearTimeout(this.retryTimer);
+    this.retryTimer = undefined;
   }
 
   /** Tail of the reload chain: reloads run one after another, so an older read can never overwrite a newer one. */
   private reloading: Promise<unknown> = Promise.resolve();
 
   reload(): Promise<void> {
-    const run = this.reloading.then(
-      () => this.load(),
-      () => this.load(),
-    );
+    const run = this.reloading
+      .then(
+        () => this.load(),
+        () => this.load(),
+      )
+      .then(() => this.markFresh());
     this.reloading = run.catch(() => undefined);
     return run;
   }
 
   /**
    * Reload after a transaction that already COMMITTED (admin changes). The request must not fail because the cache refresh
-   * failed: log, retry once, and if it still fails log again (the next reload fixes the cache) - never throw.
+   * failed: log, retry once, and if it still fails mark the cache `stale`, alert the operator once and keep retrying in the
+   * background (1 s, 2 s, 4 s ... up to 30 s) until a reload works - never throw. Until then the cache holds the OLD values
+   * (for tax that means the old rate/mode decides the next fills), so the stuck state must be loud and must heal itself.
    */
   async reloadAfterCommit(): Promise<void> {
     for (let attempt = 1; attempt <= 2; attempt++) {
@@ -65,6 +103,52 @@ export class ExchangeConfig extends EventEmitter<{ changed: [] }> {
         logger.error({ err, attempt }, 'exchange config reload after commit failed');
       }
     }
+    this.markStale();
+  }
+
+  private markStale(): void {
+    if (this.stopped) return;
+    if (this.staleSince === null) {
+      this.staleSince = new Date();
+      this.retryAttempt = 0;
+      logger.error('exchange config cache is STALE: retrying in the background');
+      void this.opts.alerter?.send(
+        'config-stale',
+        'critical',
+        'Cache cài đặt sàn (thuế, phí, dừng giao dịch) KẸT giá trị cũ: lưu DB đã xong nhưng nạp lại thất bại 2 lần. Server đang tự thử lại (1 s, 2 s, 4 s ... tối đa 30 s).',
+        true,
+      );
+    }
+    this.scheduleRetry();
+  }
+
+  private scheduleRetry(): void {
+    if (this.stopped || this.retryTimer) return;
+    const delay = (this.opts.retryDelayMs ?? reloadBackoffMs)(this.retryAttempt);
+    this.retryTimer = setTimeout(() => {
+      this.retryTimer = undefined;
+      this.reload().then(
+        () => undefined, // reload() itself cleared the stale flag
+        (err) => {
+          logger.error({ err, attempt: this.retryAttempt + 1 }, 'exchange config background reload failed');
+          this.retryAttempt++;
+          if (this.staleSince !== null) this.scheduleRetry();
+        },
+      );
+    }, delay);
+    this.retryTimer.unref();
+  }
+
+  /** A load just succeeded (from any path): the cache is current again. */
+  private markFresh(): void {
+    if (this.staleSince === null) return;
+    const since = this.staleSince;
+    this.staleSince = null;
+    this.retryAttempt = 0;
+    clearTimeout(this.retryTimer);
+    this.retryTimer = undefined;
+    logger.warn({ staleForMs: Date.now() - since.getTime() }, 'exchange config cache recovered');
+    void this.opts.alerter?.send('config-stale', 'info', 'Cache cài đặt sàn đã nạp lại được: giá trị mới đang áp dụng.', true);
   }
 
   private async load(): Promise<void> {
@@ -173,12 +257,21 @@ export class ExchangeConfig extends EventEmitter<{ changed: [] }> {
   }
 
   exchangeStatus(): ExchangeStatus {
-    return { tradingHalted: this.tradingHalted, disabledSymbols: this.disabledSymbols(), updatedAt: this.statusChangedAt.toISOString() };
+    const t = this.tax;
+    return {
+      tradingHalted: this.tradingHalted,
+      disabledSymbols: this.disabledSymbols(),
+      taxMode: t.mode,
+      taxRate: t.rate.toFixed(),
+      taxVndRate: t.vndRate === null ? null : t.vndRate.toFixed(),
+      updatedAt: this.statusChangedAt.toISOString(),
+    };
   }
 
-  /** Changes only when the halt switch or the set of disabled pairs changes. */
+  /** Changes only when the halt switch, the set of disabled pairs or the tax mode / rate / VND rate changes. */
   statusKey(): string {
-    return JSON.stringify([this.tradingHalted, this.disabledSymbols()]);
+    const t = this.tax;
+    return JSON.stringify([this.tradingHalted, this.disabledSymbols(), t.mode, t.rate.toFixed(), t.vndRate === null ? null : t.vndRate.toFixed()]);
   }
 
   private disabledSymbols(): string[] {

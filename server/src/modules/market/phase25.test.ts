@@ -250,7 +250,7 @@ describe('realtime exchange:status', () => {
     ws.send(JSON.stringify({ type: 'subscribe', channel: 'exchange:status' }));
     const settle = () => new Promise((r) => setTimeout(r, 150));
     await settle();
-    expect(events).toEqual([{ tradingHalted: false, disabledSymbols: [], updatedAt: expect.any(String) }]);
+    expect(events).toEqual([{ tradingHalted: false, disabledSymbols: [], taxMode: 'OFF', taxRate: expect.any(String), taxVndRate: null, updatedAt: expect.any(String) }]);
 
     await admin.b.adminUpdateSettings({ body: { feeRate: '0.002', reason: 'thử mức phí mới' } });
     await settle();
@@ -269,8 +269,28 @@ describe('realtime exchange:status', () => {
     await admin.b.adminUpdateSymbol({ params: { symbol: 'ETHUSDT' }, body: { enabled: true, cancelOpenOrders: false, reason: 'mở lại cặp' } });
     await admin.b.adminUpdateSettings({ body: { feeRate: '0.001', reason: 'trả lại mức phí' } });
     await settle();
+    expect(events.at(-1)).toMatchObject({ tradingHalted: false, disabledSymbols: [], taxMode: 'OFF' });
+
+    // T3F: the tax settings travel on the same channel; only a change of taxMode / taxRate / taxVndRate is pushed
+    const before = events.length;
+    await admin.b.adminUpdateTaxSettings({ body: { taxMode: 'WITHHOLD', taxRate: '0.002', taxVndRate: '26350', reason: 'bật thuế thử nghiệm' } });
+    await settle();
+    expect(events).toHaveLength(before + 1);
+    expect(events.at(-1)).toMatchObject({ taxMode: 'WITHHOLD', taxRate: '0.002', taxVndRate: '26350' });
+
+    await admin.b.adminUpdateTaxSettings({ body: { taxVndRate: '26350', reason: 'đặt lại cùng tỷ giá' } }); // same values: nothing to push
+    await settle();
+    expect(events).toHaveLength(before + 1);
+
+    await admin.b.adminUpdateTaxSettings({ body: { taxVndRate: null, reason: 'xóa tỷ giá tham khảo' } });
+    await settle();
+    expect(events.at(-1)).toMatchObject({ taxMode: 'WITHHOLD', taxRate: '0.002', taxVndRate: null });
+
+    await admin.b.adminUpdateTaxSettings({ body: { taxMode: 'OFF', reason: 'tắt thuế thử nghiệm' } });
+    await settle();
     ws.close();
-    expect(events.at(-1)).toMatchObject({ tradingHalted: false, disabledSymbols: [] });
+    expect(events.at(-1)).toMatchObject({ taxMode: 'OFF', taxRate: '0.002', taxVndRate: null });
+    expect(events).toHaveLength(before + 3);
   });
 });
 

@@ -206,6 +206,13 @@ export const ExchangeStatus = z.object({
   tradingHalted: z.boolean(),
   /** Pairs that do not accept orders right now (admin-disabled or not trading on Binance). */
   disabledSymbols: z.array(SymbolCode),
+  /**
+   * Vietnam tax settings in force (0.16.0), the same values as `exchangeInfo.taxMode/taxRate/taxVndRate`: pushed when an admin
+   * changes them so an open SELL form updates without a reload.
+   */
+  taxMode: TaxMode,
+  taxRate: DecimalString,
+  taxVndRate: DecimalString.nullable(),
   updatedAt: IsoDateTime,
 });
 export type ExchangeStatus = z.infer<typeof ExchangeStatus>;
