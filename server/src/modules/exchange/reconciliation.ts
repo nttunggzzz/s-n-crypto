@@ -2,9 +2,13 @@ import { sql } from 'drizzle-orm';
 import type { Db } from '../../db/client.ts';
 import { reconciliationRuns } from '../../db/schema.ts';
 import { logger } from '../../logger.ts';
+import { dec } from '@cex/core';
+
+/** Numeric strings from PostgreSQL may differ in trailing zeros ("1.5" vs "1.500"); compare exactly as decimals. */
+const eqNum = (a: string | number, b: string | number) => dec(String(a)).eq(dec(String(b)));
 
 export interface Mismatch {
-  kind: 'LEDGER_VS_BALANCE' | 'LOCKED_VS_OPEN_ORDERS' | 'LOCKED_VS_FUTURES';
+  kind: 'LEDGER_VS_BALANCE' | 'LOCKED_VS_OPEN_ORDERS' | 'LOCKED_VS_FUTURES' | 'TAX_LEDGER_VS_WITHHOLDINGS' | 'TAX_TRADES_VS_WITHHOLDINGS';
   account: 'SPOT' | 'FUTURES';
   userId: string;
   asset: string;
@@ -26,6 +30,8 @@ export interface ReconciliationResult {
  *  1. for every (user, account, asset): sum of ledger deltas == balance row (available and locked)
  *  2. SPOT: balance.locked == sum of lockedAmount of that user's open spot orders
  *  3. FUTURES USDT: balance.locked == open futures orders' (marginLocked + feeLocked) + open positions' margin
+ *  4. Vietnam tax (module T §3.2), per (user, asset): −Σ ledger TAX_WITHHOLDING == Σ tax_withholdings.tax_amount
+ *     == Σ trades.tax of the SELL fills; a BUY fill never carries tax. Account resets keep all three (they stay equal).
  */
 export async function reconcile(db: Db, persist = true): Promise<ReconciliationResult> {
   const startedAt = new Date();
@@ -83,6 +89,25 @@ export async function reconcile(db: Db, persist = true): Promise<ReconciliationR
     WHERE NOT EXISTS (SELECT 1 FROM balances b WHERE b.user_id = x.user_id AND b.account = 'FUTURES' AND b.asset = 'USDT')
     GROUP BY x.user_id HAVING sum(x.v) <> 0
   `);
+  // tax money taken (ledger) = tax records = tax on the trades, per (user, quote asset)
+  const taxRows = await db.execute<{ user_id: string; asset: string; ledger: string; withheld: string; traded: string }>(sql`
+    SELECT coalesce(l.user_id, w.user_id, t.user_id) AS user_id, coalesce(l.asset, w.asset, t.asset) AS asset,
+           coalesce(l.v, 0) AS ledger, coalesce(w.v, 0) AS withheld, coalesce(t.v, 0) AS traded
+    FROM (
+      SELECT user_id, asset, -sum(delta_available) AS v FROM ledger_entries
+      WHERE type = 'TAX_WITHHOLDING' AND account = 'SPOT' GROUP BY user_id, asset
+    ) l
+    FULL OUTER JOIN (
+      SELECT user_id, asset, sum(tax_amount) AS v FROM tax_withholdings GROUP BY user_id, asset
+    ) w ON w.user_id = l.user_id AND w.asset = l.asset
+    FULL OUTER JOIN (
+      SELECT user_id, fee_asset AS asset, sum(tax) AS v FROM trades WHERE side = 'SELL' AND tax <> 0 GROUP BY user_id, fee_asset
+    ) t ON t.user_id = coalesce(l.user_id, w.user_id) AND t.asset = coalesce(l.asset, w.asset)
+    WHERE coalesce(l.v, 0) <> coalesce(w.v, 0) OR coalesce(t.v, 0) <> coalesce(w.v, 0)
+  `);
+  const buyTaxRows = await db.execute<{ user_id: string; asset: string; v: string }>(sql`
+    SELECT user_id, fee_asset AS asset, sum(tax) AS v FROM trades WHERE side = 'BUY' AND tax <> 0 GROUP BY user_id, fee_asset
+  `);
   const [{ n }] = (await db.execute<{ n: number }>(sql`SELECT count(*)::int AS n FROM balances`)).rows as [{ n: number }];
 
   const mismatches: Mismatch[] = [];
@@ -98,6 +123,14 @@ export async function reconcile(db: Db, persist = true): Promise<ReconciliationR
   }
   for (const r of orphanRows.rows) {
     mismatches.push({ kind: 'LOCKED_VS_FUTURES', account: 'FUTURES', userId: r.user_id, asset: 'USDT', field: 'locked', expected: String(r.expected), actual: 'missing' });
+  }
+  for (const r of taxRows.rows) {
+    const base = { account: 'SPOT' as const, userId: r.user_id, asset: r.asset, field: 'available' as const, expected: String(r.withheld) };
+    if (!eqNum(r.ledger, r.withheld)) mismatches.push({ kind: 'TAX_LEDGER_VS_WITHHOLDINGS', ...base, actual: String(r.ledger) });
+    if (!eqNum(r.traded, r.withheld)) mismatches.push({ kind: 'TAX_TRADES_VS_WITHHOLDINGS', ...base, actual: String(r.traded) });
+  }
+  for (const r of buyTaxRows.rows) {
+    mismatches.push({ kind: 'TAX_TRADES_VS_WITHHOLDINGS', account: 'SPOT', userId: r.user_id, asset: r.asset, field: 'available', expected: '0', actual: String(r.v) });
   }
   const result: ReconciliationResult = { ok: mismatches.length === 0, checkedBalances: n, mismatches };
   if (persist) {

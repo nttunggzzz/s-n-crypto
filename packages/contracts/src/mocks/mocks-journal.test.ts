@@ -126,8 +126,10 @@ describe('journal mock: auto-journal window and MANUAL entries', () => {
     await marketSell('ETHUSDT', '0.0999');
     const closed = await api.journalGet({ params: { entryId: open[0]!.id } });
     expect(closed).toMatchObject({ status: 'CLOSED', closeReason: 'FILLS', initialStopLocked: true, openQty: '0.00000000', exitQty: '0.09990000' });
-    // bought 0.1 @ 2500 = 250 (fee 0.0001 ETH → 0.0999 net), sold 0.0999 @ 2500 = 249.75 (fee 0.24975) → 249.50025 − 250 = −0.49975
-    expect(closed.result).toMatchObject({ netPnl: '-0.49975000', outcome: 'LOSS', rMultiple: null, fees: '0.49975000' });
+    // bought 0.1 @ 2500 = 250 (fee 0.0001 ETH → 0.0999 net), sold 0.0999 @ 2500 = 249.75 (fee 0.24975, the mock withholds
+    // the Vietnam tax 0.1% = 0.24975 too) → 249.75 − 0.24975 − 0.24975 − 250 = −0.7495; the tax is not a fee
+    expect(closed.result).toMatchObject({ netPnl: '-0.74950000', outcome: 'LOSS', rMultiple: null, fees: '0.49975000' });
+    expect(closed.fills.map((f) => f.allocatedTax)).toEqual(['0.00000000', '0.24975000']);
     expect(closed.fills.map((f) => f.leg)).toEqual(['SPOT', 'SPOT']);
   });
 

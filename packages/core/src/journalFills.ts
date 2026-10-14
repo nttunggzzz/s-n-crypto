@@ -29,6 +29,8 @@ import {
  *                            (the left-over is dust, no PnL)
  *   SELL, no open entry  → UNATTRIBUTED (spot cannot go short; no entry is opened)
  * On this exchange a BUY fee is taken in the base asset and a SELL fee in the quote asset (contract `Trade.fee`).
+ * A SELL may also carry the Vietnam tax withheld from it (contract `Trade.tax`, quote asset, module T): it is split like
+ * the fee and lowers the entry's PnL (realized = proceeds − fee − tax − cost). A BUY never carries tax.
  *
  * Futures — one entry = one position; a fill has at most two legs: CLOSE (close_qty, closed_position_id) and
  * OPEN (open_qty, position_id). Legs come from the futures_trades columns added in A2, never from position_id alone.
@@ -51,6 +53,8 @@ export interface SpotFillInput {
   quoteQty: DecLike;
   /** BUY: in base asset; SELL: in quote asset. ≤ 8 decimals */
   fee: DecLike;
+  /** Vietnam tax withheld (SELL only, quote asset, ≤ 8 decimals) = `Trade.tax`; omitted = 0 (fills before module T). */
+  tax?: DecLike;
   createdAt: TimeLike;
 }
 
@@ -87,6 +91,11 @@ export interface SpotEntryState {
   sellQuote: string;
   /** Σ allocated SELL fee, quote asset */
   sellFee: string;
+  /**
+   * Σ allocated SELL tax (Vietnam tax, quote asset). Optional only so a state stored before module T still reads
+   * (absent = 0); every state built here has it.
+   */
+  sellTax?: string;
   /** net base quantity still open */
   openQty: string;
   /** left-over below the lot rules when the entry closed (no PnL) */
@@ -100,6 +109,8 @@ export interface SpotAllocationResult {
   unattributedQty: string;
   allocatedQuote: string;
   allocatedFee: string;
+  /** tax of the allocated part (SELL; quote asset); "0.00000000" for BUY and UNATTRIBUTED */
+  allocatedTax: string;
   /** the entry after this fill; null for UNATTRIBUTED (no entry touched) */
   newState: SpotEntryState | null;
   /**
@@ -117,6 +128,7 @@ interface SpotFillN {
   qty: Dec;
   quote: Dec;
   fee: Dec;
+  tax: Dec;
   at: string;
 }
 
@@ -131,10 +143,12 @@ function normSpotFill(f: SpotFillInput): SpotFillN {
   const qty = scale8(toDec(f.quantity, 'fill.quantity'), 'fill.quantity');
   const quote = scale8(toDec(f.quoteQty, 'fill.quoteQty'), 'fill.quoteQty');
   const fee = scale8(toDec(f.fee, 'fill.fee'), 'fill.fee');
+  const tax = f.tax === undefined ? ZERO : scale8(toDec(f.tax, 'fill.tax'), 'fill.tax');
   if (price.lte(0) || qty.lte(0)) throw new Error(`spot fill ${String(f.id)}: price and quantity must be > 0`);
-  if (quote.lt(0) || fee.lt(0)) throw new Error(`spot fill ${String(f.id)}: quoteQty and fee must be >= 0`);
+  if (quote.lt(0) || fee.lt(0) || tax.lt(0)) throw new Error(`spot fill ${String(f.id)}: quoteQty, fee and tax must be >= 0`);
   if (f.side === 'BUY' && fee.gte(qty)) throw new Error(`spot fill ${String(f.id)}: BUY fee (base) must be < quantity`);
-  return { id: recordIdText(f.id), side: f.side, price, qty, quote, fee, at: isoTime(f.createdAt, 'fill.createdAt') };
+  if (f.side === 'BUY' && !tax.isZero()) throw new Error(`spot fill ${String(f.id)}: a BUY is never withheld (tax must be 0)`);
+  return { id: recordIdText(f.id), side: f.side, price, qty, quote, fee, tax, at: isoTime(f.createdAt, 'fill.createdAt') };
 }
 
 function normLotRules(r: JournalLotRules): { stepSize: Dec; minNotional: Dec } {
@@ -155,8 +169,8 @@ const d = (v: string) => new Dec(v);
  * - afterFillId (REQUIRED from the caller): the largest fill id of this (user, pair) that already has a journal_fills
  *   row — UNATTRIBUTED rows included, any entry — or null when there is none. A fill at or below it is flagged
  *   `outOfOrder` (the open entry alone cannot tell: e.g. a late BUY after the entry closed, or a late SELL with no open entry).
- * A SELL split between the entry and the unattributed part splits proceeds and fee pro rata by quantity, at 8 dp:
- * the entry's proceeds round DOWN, its fee rounds UP; the unattributed part gets the exact remainder.
+ * A SELL split between the entry and the unattributed part splits proceeds, fee and tax pro rata by quantity, at 8 dp:
+ * the entry's proceeds round DOWN, its fee and tax round UP; the unattributed part gets the exact remainder.
  */
 export function allocateSpotFill(
   entryState: SpotEntryState | null,
@@ -190,10 +204,11 @@ export function allocateSpotFill(
         soldQty: s8(ZERO),
         sellQuote: s8(ZERO),
         sellFee: s8(ZERO),
+        sellTax: s8(ZERO),
         openQty: s8(net),
         dustQty: s8(ZERO),
       };
-      return { action: 'OPEN', allocatedQty: s8(f.qty), unattributedQty: s8(ZERO), allocatedQuote: s8(f.quote), allocatedFee: s8(f.fee), newState, outOfOrder };
+      return { action: 'OPEN', allocatedQty: s8(f.qty), unattributedQty: s8(ZERO), allocatedQuote: s8(f.quote), allocatedFee: s8(f.fee), allocatedTax: s8(ZERO), newState, outOfOrder };
     }
     const newState: SpotEntryState = {
       ...open,
@@ -205,18 +220,19 @@ export function allocateSpotFill(
       buyFeeQuote: d(open.buyFeeQuote).add(feeQuote).toFixed(),
       openQty: s8(d(open.openQty).add(net)),
     };
-    return { action: 'ADD', allocatedQty: s8(f.qty), unattributedQty: s8(ZERO), allocatedQuote: s8(f.quote), allocatedFee: s8(f.fee), newState, outOfOrder };
+    return { action: 'ADD', allocatedQty: s8(f.qty), unattributedQty: s8(ZERO), allocatedQuote: s8(f.quote), allocatedFee: s8(f.fee), allocatedTax: s8(ZERO), newState, outOfOrder };
   }
 
   // SELL
   if (open === null) {
-    return { action: 'UNATTRIBUTED', allocatedQty: s8(ZERO), unattributedQty: s8(f.qty), allocatedQuote: s8(ZERO), allocatedFee: s8(ZERO), newState: null, outOfOrder };
+    return { action: 'UNATTRIBUTED', allocatedQty: s8(ZERO), unattributedQty: s8(f.qty), allocatedQuote: s8(ZERO), allocatedFee: s8(ZERO), allocatedTax: s8(ZERO), newState: null, outOfOrder };
   }
   const openQty = d(open.openQty);
   const alloc = f.qty.lte(openQty) ? f.qty : openQty;
   const whole = alloc.eq(f.qty);
   const allocQuote = whole ? f.quote : roundDown(f.quote.mul(alloc).div(f.qty));
   const allocFee = whole ? f.fee : roundUp(f.fee.mul(alloc).div(f.qty));
+  const allocTax = whole ? f.tax : roundUp(f.tax.mul(alloc).div(f.qty));
   const left = openQty.sub(alloc);
   const rules = { stepSize: d(open.lotRules.stepSize), minNotional: d(open.lotRules.minNotional) };
   const closes = left.lt(rules.stepSize) || left.mul(f.price).lt(rules.minNotional);
@@ -230,6 +246,7 @@ export function allocateSpotFill(
     soldQty: s8(d(open.soldQty).add(alloc)),
     sellQuote: s8(d(open.sellQuote).add(allocQuote)),
     sellFee: s8(d(open.sellFee).add(allocFee)),
+    sellTax: s8(d(open.sellTax ?? '0').add(allocTax)),
     openQty: s8(closes ? ZERO : left),
     dustQty: s8(closes ? left : ZERO),
   };
@@ -239,6 +256,7 @@ export function allocateSpotFill(
     unattributedQty: s8(f.qty.sub(alloc)),
     allocatedQuote: s8(allocQuote),
     allocatedFee: s8(allocFee),
+    allocatedTax: s8(allocTax),
     newState,
     outOfOrder,
   };
@@ -325,7 +343,8 @@ function resultTail(status: 'OPEN' | 'CLOSED', net: Dec | null, risk: Dec | null
 /**
  * Result of a SPOT entry (Module A §2.5, A-D7: PnL against the entry's own cost):
  *   unit cost   = buyQuote ÷ (buyQty − buyFee)                       (buy fee in base is inside the cost)
- *   realized    = floorSigned(sellQuote − sellFee − unit cost × soldQty)   (8 dp, toward −∞; dust has no PnL)
+ *   realized    = floorSigned(sellQuote − sellFee − sellTax − unit cost × soldQty)   (8 dp, toward −∞; dust has no PnL;
+ *                 sellTax = Vietnam tax withheld from the sells, module T — not a fee, so not in `fees`)
  *   entry price = buyQuote ÷ buyQty (before fee); entry qty = buyQty
  *   fees        = roundUp(buyFee × fill price (Σ) + sellFee)
  *   risk        = riskAmount(LONG, entry price, initial stop, buyQty);  R = rMultiple(realized, risk) when CLOSED
@@ -338,7 +357,7 @@ export function computeEntryResult(state: SpotEntryState, plan: JournalPlanInput
   const sellQuote = d(state.sellQuote);
   if (buyQty.lte(0) || netQty.lte(0)) throw new Error('computeEntryResult: entry has no bought quantity');
   const avgEntry = buyQuote.div(buyQty);
-  const realized = soldQty.gt(0) ? floorSigned(sellQuote.sub(d(state.sellFee)).sub(buyQuote.mul(soldQty).div(netQty))) : null;
+  const realized = soldQty.gt(0) ? floorSigned(sellQuote.sub(d(state.sellFee)).sub(d(state.sellTax ?? '0')).sub(buyQuote.mul(soldQty).div(netQty))) : null;
   const risk = riskAmount({ direction: 'LONG', entryPrice: avgEntry, stopPrice: plan.initialStop, quantity: buyQty });
   return {
     rMetricsVersion: R_METRICS_VERSION,
@@ -526,6 +545,7 @@ export interface SpotAllocation {
   unattributedQty: string;
   allocatedQuote: string;
   allocatedFee: string;
+  allocatedTax: string;
 }
 
 export interface ReplayOptions {
@@ -585,6 +605,7 @@ export function replayAllocations(
       unattributedQty: res.unattributedQty,
       allocatedQuote: res.allocatedQuote,
       allocatedFee: res.allocatedFee,
+      allocatedTax: res.allocatedTax,
     });
     if (target) {
       entries.set(target.openFillId, target);

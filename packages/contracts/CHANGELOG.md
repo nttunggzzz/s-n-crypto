@@ -20,6 +20,9 @@ admin cộng/trừ, đặt lại tài khoản: không trích.
 - `Trade.tax: DecimalString` (luôn có, `"0.00000000"` khi không trích; tiền nhận về của lệnh bán = quoteQty − fee − tax).
 - `ExchangeInfo.taxMode`, `taxRate`, `taxVndRate` (nullable), `taxVndRateUpdatedAt` (nullable) — cho form bán ước tính thuế.
 - `LedgerEntryType` thêm `TAX_WITHHOLDING`; `AuditAction` thêm `TAX_SETTINGS_UPDATE`.
+- (T2) `ReconciliationMismatch.kind` thêm `TAX_LEDGER_VS_WITHHOLDINGS` (−Σ sổ cái `TAX_WITHHOLDING` ≠ Σ bản ghi khấu trừ) và
+  `TAX_TRADES_VS_WITHHOLDINGS` (Σ `Trade.tax` của lệnh bán ≠ Σ bản ghi), theo (người dùng, tài sản quote), `field: 'available'`.
+  Màn đối soát admin nên có nhãn cho hai loại này.
 - `JournalFill.tax`, `JournalFill.allocatedTax` (chia như `allocatedFee`: cả lần khớp → `tax`, một phần → roundUp8(tax × allocatedQty / quantity)).
 - `exportUrl()` nhận thêm `'taxExport' | 'adminTaxExport'`.
 - Mock: bắt đầu `WITHHOLD` 0.1%, tỷ giá 26350 (server thật bắt đầu `OFF`); lần khớp trong mock tính `quoteQty`, phí, thuế và `realizedPnl` bằng `@cex/core`

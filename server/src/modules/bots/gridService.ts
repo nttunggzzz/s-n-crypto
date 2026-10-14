@@ -126,6 +126,10 @@ export class GridService {
     const nSell = n - nBuy;
     const fee = this.ex.config.feeRate;
     const keep = ONE.sub(fee);
+    // Vietnam tax (module T): a SELL leg also pays taxRate of its gross value while withholding is on. Counted for every
+    // user (a DOMESTIC_ORG seller is not withheld, so the check is only stricter for them).
+    const tax = this.ex.config.tax;
+    const keepSell = keep.sub(tax.mode === 'WITHHOLD' ? tax.rate : ZERO);
     // base per cell q: BUY cells reserve q·buy quote, SELL cells need q base bought now at market
     // (paid at the ask, fee taken from the base) — so the bot never spends more than the investment
     const buyRef = maxDec(last, this.market.bestAsk(p.symbol) ?? last);
@@ -135,10 +139,11 @@ export class GridService {
     const minInvestment = minQ.mul(per).toDecimalPlaces(2, 0);
     if (q.lt(minQ)) throw invalid(`Investment too small: at least ${minInvestment.toFixed()} USDT for this grid`, { minInvestment: minInvestment.toFixed() });
     if (q.gt(dec(sym.row.maxQty))) throw invalid('Quantity per grid above the pair maximum');
-    const ratios = cells.map((c) => c.sell.div(c.buy).mul(keep).mul(keep).sub(1));
+    // one round: buy q at `buy` (fee in base) → sell q·keep at `sell`, minus fee and tax of the gross value
+    const ratios = cells.map((c) => c.sell.div(c.buy).mul(keep).mul(keepSell).sub(1));
     const profitMin = ratios.reduce((a, r) => minDec(a, r), ratios[0]!);
     const profitMax = ratios.reduce((a, r) => maxDec(a, r), ratios[0]!);
-    if (profitMin.lte(0)) throw invalid('The grid spacing is smaller than the fees: every round would lose money');
+    if (profitMin.lte(0)) throw invalid('The grid spacing is smaller than the fees (and tax): every round would lose money');
     const initialBuy = nSell > 0 ? ceilToStep(q.mul(nSell).div(keep), sym.step) : ZERO;
     return { sym, last, levels, cells, q, nBuy, nSell, initialBuy, profitMin, profitMax, minInvestment };
   }
@@ -277,8 +282,8 @@ export class GridService {
     if (qty.lt(dec(sym.row.minQty))) return none;
     try {
       const r = await this.ex.orders.placeOrder(b.userId, { symbol: b.symbol, side: 'SELL', type: 'MARKET', quantity: qty.toFixed(), clientOrderId: `g${b.id}-close` }, { source: 'GRID', sourceId: b.id });
-      const fee = r.trades.reduce((a, x) => a.add(dec(x.fee)), ZERO);
-      return { qty: dec(r.order.executedQty), net: dec(r.order.cumulativeQuoteQty).sub(fee) };
+      const paid = r.trades.reduce((a, x) => a.add(dec(x.fee)).add(dec(x.tax)), ZERO);
+      return { qty: dec(r.order.executedQty), net: dec(r.order.cumulativeQuoteQty).sub(paid) };
     } catch (err) {
       logger.warn({ err, botId: b.id }, 'grid stop: could not sell the base');
       return none;
@@ -326,8 +331,9 @@ export class GridService {
 
   /** A cell's order filled: switch the cell to the other side (and book a round on a SELL). */
   private async book(b: BotRow, cell: CellRow, o: OrderRow, sym: LoadedSymbol): Promise<void> {
-    const feeRows = await this.db.select({ fee: trades.fee }).from(trades).where(eq(trades.orderId, o.id));
+    const feeRows = await this.db.select({ fee: trades.fee, tax: trades.tax }).from(trades).where(eq(trades.orderId, o.id));
     const fee = feeRows.reduce((a, r) => a.add(dec(r.fee)), ZERO);
+    const tax = feeRows.reduce((a, r) => a.add(dec(r.tax)), ZERO); // SELL only (0 on a BUY)
     const q = dec(b.quantityPerGrid);
     await this.db.transaction(async (tx) => {
       const [bot] = await tx.select().from(gridBots).where(eq(gridBots.id, b.id)).for('update');
@@ -350,8 +356,8 @@ export class GridService {
           .set({ freeBase: toFixedStr(pool.sub(sellQty)), freeQuote: toFixedStr(dec(bot.freeQuote).add(unspent)), updatedAt: this.now() })
           .where(eq(gridBots.id, b.id));
       } else {
-        // received quote (fee is taken from it); keep q·buy for the next BUY, the rest is profit
-        const received = dec(o.cumulativeQuoteQty).sub(fee);
+        // received quote (fee and tax are taken from it); keep q·buy for the next BUY, the rest is profit
+        const received = dec(o.cumulativeQuoteQty).sub(fee).sub(tax);
         const profit = received.sub(dec(c.costQuote));
         const buy = dec(c.buyPrice);
         const pool = received.add(dec(bot.freeQuote));
@@ -439,7 +445,7 @@ export class GridService {
 
   /**
    * What the bot owns: each cell's quote (BUY) or base (SELL) — a linked order's fills already moved part of it
-   * to the other asset (net of the fee) — plus the spare base/quote.
+   * to the other asset (net of the fee, and of the tax on a SELL) — plus the spare base/quote.
    */
   private async holdings(botId: number, b: BotRow): Promise<{ base: Dec; quote: Dec }> {
     const cells = await this.db.select().from(gridBotCells).where(eq(gridBotCells.botId, botId));
@@ -447,13 +453,14 @@ export class GridService {
     const linked = ids.length ? await this.db.select().from(orders).where(inArray(orders.id, ids)) : [];
     const feeRows = ids.length
       ? await this.db
-          .select({ orderId: trades.orderId, fee: sql<string>`sum(${trades.fee})` })
+          .select({ orderId: trades.orderId, fee: sql<string>`sum(${trades.fee})`, tax: sql<string>`sum(${trades.tax})` })
           .from(trades)
           .where(inArray(trades.orderId, ids))
           .groupBy(trades.orderId)
       : [];
     const byId = new Map(linked.map((x) => [x.id, x]));
     const fees = new Map(feeRows.map((r) => [r.orderId, dec(r.fee)]));
+    const taxes = new Map(feeRows.map((r) => [r.orderId, dec(r.tax)]));
     let base = dec(b.freeBase);
     let quote = dec(b.freeQuote);
     for (const c of cells) {
@@ -461,12 +468,13 @@ export class GridService {
       const exec = ord ? dec(ord.executedQty) : ZERO;
       const cum = ord ? dec(ord.cumulativeQuoteQty) : ZERO;
       const fee = (ord && fees.get(ord.id)) ?? ZERO;
+      const tax = (ord && taxes.get(ord.id)) ?? ZERO;
       if (c.side === 'BUY') {
         quote = quote.add(dec(c.quantity).mul(dec(c.buyPrice))).sub(cum);
         base = base.add(exec).sub(fee); // a BUY pays its fee in base
       } else {
         base = base.add(dec(c.quantity)).sub(exec);
-        quote = quote.add(cum).sub(fee); // a SELL pays its fee in quote
+        quote = quote.add(cum).sub(fee).sub(tax); // a SELL pays its fee and its tax in quote
       }
     }
     return { base, quote };

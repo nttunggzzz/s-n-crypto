@@ -195,8 +195,13 @@ export const AuditLogQuery = z
   .extend(TimeRangeQuery.shape);
 
 export const ReconciliationMismatch = z.object({
-  /** LOCKED_VS_FUTURES: futures locked ≠ open futures orders' reservations + open positions' margin. */
-  kind: z.enum(['LEDGER_VS_BALANCE', 'LOCKED_VS_OPEN_ORDERS', 'LOCKED_VS_FUTURES']),
+  /**
+   * LOCKED_VS_FUTURES: futures locked ≠ open futures orders' reservations + open positions' margin.
+   * Vietnam tax (0.15.0), per (user, quote asset), field `available`, expected = Σ tax_withholdings.taxAmount:
+   * TAX_LEDGER_VS_WITHHOLDINGS: actual = −Σ ledger TAX_WITHHOLDING; TAX_TRADES_VS_WITHHOLDINGS: actual = Σ Trade.tax
+   * of the SELL fills (a BUY fill with tax ≠ 0 is reported here too, with its fee asset and expected "0").
+   */
+  kind: z.enum(['LEDGER_VS_BALANCE', 'LOCKED_VS_OPEN_ORDERS', 'LOCKED_VS_FUTURES', 'TAX_LEDGER_VS_WITHHOLDINGS', 'TAX_TRADES_VS_WITHHOLDINGS']),
   account: WalletAccount,
   userId: z.string(),
   asset: z.string(),

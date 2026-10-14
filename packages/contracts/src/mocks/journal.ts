@@ -142,7 +142,7 @@ function newEntry(p: Pick<JournalEntryDetail, 'market' | 'symbol' | 'direction' 
 
 /**
  * Tax of the allocated part of a spot fill (0.15.0), split like allocatedFee: the whole fill → its tax, a part →
- * roundUp8(tax × allocatedQty / quantity). The entry's PnL does not subtract it yet (@cex/core journalFills: batch T2).
+ * roundUp8(tax × allocatedQty / quantity) — the same split as @cex/core allocateSpotFill, whose entry PnL subtracts it.
  */
 function allocatedTaxOf(f: { tax: string; quantity: string }, allocatedQty: string): string {
   const tax = dec(f.tax);

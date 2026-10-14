@@ -1,13 +1,21 @@
 import { EventEmitter } from 'node:events';
 import { asc, eq } from 'drizzle-orm';
 import { dec, stepDecimals, type Dec, type SymbolRules, AMOUNT_SCALE } from '@cex/core';
-import type { AssetInfo, AssetTag, ExchangeStatus, SymbolInfo } from '@cex/contracts';
+import type { AssetInfo, AssetTag, ExchangeStatus, SymbolInfo, TaxMode, TaxSettings } from '@cex/contracts';
 import { assets, exchangeSettings, symbols } from '../../db/schema.ts';
 import type { Db } from '../../db/client.ts';
 import { AppError } from '../../lib/errors.ts';
 
 export type SymbolRow = typeof symbols.$inferSelect;
 export type SettingsRow = typeof exchangeSettings.$inferSelect;
+
+export interface TaxSettingsState {
+  mode: TaxMode;
+  rate: Dec;
+  vndRate: Dec | null;
+  vndRateUpdatedAt: Date | null;
+  updatedAt: Date;
+}
 
 export interface LoadedSymbol {
   row: SymbolRow;
@@ -71,6 +79,34 @@ export class ExchangeConfig extends EventEmitter<{ changed: [] }> {
 
   get tradingHalted(): boolean {
     return this.settingsRow.tradingHalted;
+  }
+
+  /**
+   * Vietnam tax settings in force (module T §3.1), cached like feeRate and refreshed by reload() after the admin's
+   * transaction commits. settleFills reads them at the fill (a fill in the same instant as a change may still use
+   * the previous value, exactly like feeRate).
+   */
+  get tax(): TaxSettingsState {
+    const s = this.settingsRow;
+    return {
+      mode: s.taxMode,
+      rate: dec(s.taxRate),
+      vndRate: s.taxVndRate === null ? null : dec(s.taxVndRate),
+      vndRateUpdatedAt: s.taxVndRateUpdatedAt,
+      updatedAt: s.taxUpdatedAt,
+    };
+  }
+
+  /** Contract `TaxSettings` (admin) — the same values exchangeInfo publishes. */
+  taxSettings(): TaxSettings {
+    const t = this.tax;
+    return {
+      taxMode: t.mode,
+      taxRate: t.rate.toFixed(),
+      taxVndRate: t.vndRate === null ? null : t.vndRate.toFixed(),
+      taxVndRateUpdatedAt: t.vndRateUpdatedAt?.toISOString() ?? null,
+      updatedAt: t.updatedAt.toISOString(),
+    };
   }
 
   allSymbols(): LoadedSymbol[] {
