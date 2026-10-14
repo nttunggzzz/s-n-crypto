@@ -2,7 +2,7 @@ import { and, desc, eq, gte, lte, notInArray, type SQL } from 'drizzle-orm';
 import { ledgerEntries, orders, trades } from '../../db/schema.ts';
 import type { Db } from '../../db/client.ts';
 import { ADMIN_TAX_EXPORT_COLUMNS, TAX_EXPORT_COLUMNS } from '@cex/contracts';
-import { serializeAdminWithholding, serializeWithholding, withholdingRows, type WithholdingFilter } from '../tax/reports.ts';
+import { adminWithholdingRows, serializeAdminWithholding, serializeWithholding, userWithholdingRows, type AdminWithholdingFilter, type UserWithholdingFilter } from '../tax/reports.ts';
 import { serializeLedger, serializeOrder, serializeTrade } from './serializers.ts';
 
 export const MAX_EXPORT_ROWS = 10_000;
@@ -102,8 +102,8 @@ export async function exportLedgerCsv(db: Db, userId: string, f: { asset?: strin
  * The user's own withholding records as CSV ("tax withheld statement - test"), newest first, at most MAX_EXPORT_ROWS.
  * Columns follow TAX_EXPORT_COLUMNS of the contract (imported, not retyped); an empty cell is null.
  */
-export async function exportTaxCsv(db: Db, userId: string, f: Omit<WithholdingFilter, 'userId'>): Promise<string> {
-  const rows = (await withholdingRows(db, { ...f, userId }, { take: MAX_EXPORT_ROWS })).map(serializeWithholding);
+export async function exportTaxCsv(db: Db, userId: string, f: Omit<UserWithholdingFilter, 'userId'>): Promise<string> {
+  const rows = (await userWithholdingRows(db, { ...f, userId }, { take: MAX_EXPORT_ROWS })).map(serializeWithholding);
   return csv(
     TAX_EXPORT_COLUMNS,
     rows.map((r) => {
@@ -131,8 +131,8 @@ export async function exportTaxCsv(db: Db, userId: string, f: Omit<WithholdingFi
 }
 
 /** Statement of every user's withholdings (admin, `tax.read`); same filters plus an optional userId. */
-export async function exportAdminTaxCsv(db: Db, f: WithholdingFilter): Promise<string> {
-  const rows = (await withholdingRows(db, f, { take: MAX_EXPORT_ROWS })).map(serializeAdminWithholding);
+export async function exportAdminTaxCsv(db: Db, f: AdminWithholdingFilter): Promise<string> {
+  const rows = (await adminWithholdingRows(db, f, { take: MAX_EXPORT_ROWS })).map(serializeAdminWithholding);
   return csv(
     ADMIN_TAX_EXPORT_COLUMNS,
     rows.map((r) => {

@@ -83,6 +83,7 @@ export async function createTestEnv(poolSize = 10): Promise<TestEnv> {
     futures,
     bots,
     close: async () => {
+      config.stop();
       ex.matcher.stop();
       futures.engine.stop();
       await database.close();

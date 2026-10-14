@@ -1,5 +1,20 @@
 # Changelog — @cex/contracts
 
+## 0.16.0 — 2026-10-14 (Thuế — đợt T3F: cài đặt thuế đi qua `exchange:status`)
+Chỉ thêm trường; không thêm endpoint (vẫn 150). Hướng dẫn: README mục 15.
+
+**Thêm**
+- `ExchangeStatus.taxMode`, `taxRate`, `taxVndRate` (nullable) — cùng giá trị với `exchangeInfo.taxMode/taxRate/taxVndRate`. Kênh realtime `exchange:status`
+  nay còn được đẩy khi admin đổi `taxMode`, `taxRate` hoặc `taxVndRate` (`adminUpdateTaxSettings`), nên form BÁN đang mở cập nhật thuế tạm tính ngay,
+  không cần tải lại `exchangeInfo`. Không đẩy khi chỉ `taxVndRateUpdatedAt` đổi (trường đó không nằm trong `ExchangeStatus`; đọc ở `exchangeInfo`).
+- Fixture `fixtureExchangeStatus`. Mock: `exchange:status` của realtime mock mang 3 trường thuế và được gửi khi `setMockTax()` hoặc
+  `adminUpdateTaxSettings` (mock) đổi chúng (kiểm tra theo nhịp của mock realtime, mặc định 1 giây).
+
+**Có thể ảnh hưởng UI**
+- Ai tự dựng đối tượng `ExchangeStatus` (test, story) phải thêm 3 trường mới (typecheck sẽ báo).
+- Server: `adminUpdateTaxSettings` từ chối bật `taxMode = 'WITHHOLD'` (400 `VALIDATION_ERROR`, field `taxMode`) khi đang bật cặp có quote khác USDT
+  (báo cáo thuế cộng số của một đồng quote). Giao diện admin nên hiện lỗi này ở ô `taxMode`. Chiều ngược lại: khi thuế đang `WITHHOLD`, `adminUpdateSymbol` bật cặp quote khác USDT bị 400 `VALIDATION_ERROR` (field `enabled`).
+
 ## 0.15.0 — 2026-10-14 (Thuế crypto Việt Nam, thử nghiệm — Module T, đợt T1)
 Chỉ thêm. 10 endpoint mới, tổng 150. Hướng dẫn: README mục 15.
 Trạng thái server (cập nhật sau T3): đã có route cho cả 10 endpoint. 4 endpoint cài đặt/hồ sơ (`taxProfile`, `taxUpdateProfile`, `adminTaxSettings`,

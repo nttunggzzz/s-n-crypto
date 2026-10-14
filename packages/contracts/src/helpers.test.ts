@@ -105,7 +105,7 @@ describe('countdown', () => {
 });
 
 describe('trade blocks', () => {
-  const open = { tradingHalted: false, disabledSymbols: [], updatedAt: '2026-10-10T00:00:00.000Z' };
+  const open = { tradingHalted: false, disabledSymbols: [], taxMode: 'OFF' as const, taxRate: '0.001', taxVndRate: null, updatedAt: '2026-10-10T00:00:00.000Z' };
   it('halt beats a disabled pair beats a stale price', () => {
     expect(spotTradeBlock('BTCUSDT', open, { status: 'LIVE' })).toBeNull();
     expect(spotTradeBlock('BTCUSDT', open, { status: 'STALE' })).toBe('PRICE_STALE');

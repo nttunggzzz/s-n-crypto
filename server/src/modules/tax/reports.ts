@@ -2,7 +2,8 @@ import { and, desc, eq, gte, lt, lte, sql, type SQL } from 'drizzle-orm';
 import { TaxCategory, type AdminTaxSummary, type AdminTaxWithholding, type TaxSales, type TaxSummary, type TaxTotals, type TaxWithholding } from '@cex/contracts';
 import { dec, toFixedStr, Dec } from '@cex/core';
 import { taxWithholdings, trades } from '../../db/schema.ts';
-import type { Db } from '../../db/client.ts';
+import type { Db, DbOrTx } from '../../db/client.ts';
+import { AppError } from '../../lib/errors.ts';
 import { taxCategoryOf } from '../exchange/tax.ts';
 import { periodRange, vnYearNow, yearRange } from './period.ts';
 
@@ -46,7 +47,7 @@ const aggColumns = {
 };
 
 /** One aggregate row per value of `group` (only groups that have records); `group = null` -> one row under the key "all". */
-async function aggregate(db: Db, where: SQL[], group: SQL | null): Promise<Map<string, Agg>> {
+async function aggregate(db: DbOrTx, where: SQL[], group: SQL | null): Promise<Map<string, Agg>> {
   const base = db
     .select({ g: group ?? sql<string>`'all'`, ...aggColumns })
     .from(taxWithholdings)
@@ -88,7 +89,7 @@ interface SalesAgg {
 
 const emptySales = (): SalesAgg => ({ count: 0, gross: ZERO, fees: ZERO, pnl: ZERO, noCost: 0 });
 
-async function salesByMonth(db: Db, userId: string, from: Date, to: Date): Promise<Map<string, SalesAgg>> {
+async function salesByMonth(db: DbOrTx, userId: string, from: Date, to: Date): Promise<Map<string, SalesAgg>> {
   const month = vnMonthOf(trades.createdAt);
   const rows = await db
     .select({
@@ -109,16 +110,26 @@ function toSales(s: SalesAgg): TaxSales {
   return { sellCount: s.count, sellGrossQuote: fx(s.gross), sellFees: fx(s.fees), realizedPnl: fx(s.pnl), sellsWithoutCostBasis: s.noCost };
 }
 
+/**
+ * Runs the reads of one summary in a single REPEATABLE READ, READ ONLY transaction: every query sees the same snapshot, so the
+ * totals, the per-group rows and the sales block always add up. The queries run one after another (one connection).
+ */
+function readSnapshot<T>(db: Db, fn: (tx: Parameters<Parameters<Db['transaction']>[0]>[0]) => Promise<T>): Promise<T> {
+  return db.transaction(fn, { isolationLevel: 'repeatable read', accessMode: 'read only' });
+}
+
 // ───────────────────────────── taxSummary (user)
 
 /** Calendar year in Vietnam time: always 12 months, a month without activity is all zeros. */
 export async function userTaxSummary(db: Db, userId: string, year: number = vnYearNow()): Promise<TaxSummary> {
   const { from, to } = yearRange(year);
-  const [withheld, sales, category] = await Promise.all([
-    aggregate(db, [eq(taxWithholdings.userId, userId), gte(taxWithholdings.createdAt, from), lte(taxWithholdings.createdAt, to)], vnMonthOf(taxWithholdings.createdAt)),
-    salesByMonth(db, userId, from, to),
-    taxCategoryOf(db, userId),
-  ]);
+  // one snapshot for all three reads, so a fill that commits in between cannot show up in one block and not in another
+  const [withheld, sales, category] = await readSnapshot(db, async (tx) => {
+    const withheld = await aggregate(tx, [eq(taxWithholdings.userId, userId), gte(taxWithholdings.createdAt, from), lte(taxWithholdings.createdAt, to)], vnMonthOf(taxWithholdings.createdAt));
+    const sales = await salesByMonth(tx, userId, from, to);
+    const category = await taxCategoryOf(tx, userId);
+    return [withheld, sales, category] as const;
+  });
   let totalW = emptyAgg();
   let totalS = emptySales();
   const months = Array.from({ length: 12 }, (_, i) => {
@@ -139,11 +150,12 @@ const byTaxDesc = (a: Dec, b: Dec) => (a.gt(b) ? -1 : a.lt(b) ? 1 : 0);
 export async function adminTaxSummary(db: Db, period: string): Promise<AdminTaxSummary> {
   const { from, to } = periodRange(period);
   const where = [gte(taxWithholdings.createdAt, from), lte(taxWithholdings.createdAt, to)];
-  const [all, byCategory, bySymbol] = await Promise.all([
-    aggregate(db, where, null),
-    aggregate(db, where, sql<string>`${taxWithholdings.category}`),
-    aggregate(db, where, sql<string>`${taxWithholdings.symbol}`),
-  ]);
+  const [all, byCategory, bySymbol] = await readSnapshot(db, async (tx) => {
+    const all = await aggregate(tx, where, null);
+    const byCategory = await aggregate(tx, where, sql<string>`${taxWithholdings.category}`);
+    const bySymbol = await aggregate(tx, where, sql<string>`${taxWithholdings.symbol}`);
+    return [all, byCategory, bySymbol] as const;
+  });
   const group = (a: Agg) => ({ ...toTotals(a), userCount: a.users });
   return {
     period,
@@ -162,19 +174,32 @@ export async function adminTaxSummary(db: Db, period: string): Promise<AdminTaxS
 
 // ───────────────────────────── records: list and CSV rows
 
-export interface WithholdingFilter {
-  /** Set for the user's endpoints (always the session user); optional filter for the admin ones. */
-  userId?: string;
+interface WithholdingFilterBase {
   symbol?: string;
   from?: string;
   to?: string;
 }
 
+/** The user's endpoints: `userId` is REQUIRED (the session user) - the type cannot be left out, and an empty string is refused at runtime. */
+export interface UserWithholdingFilter extends WithholdingFilterBase {
+  userId: string;
+}
+
+/** The admin endpoints: `userId` is an optional filter (undefined = every user); an empty string is refused, never read as "no filter". */
+export interface AdminWithholdingFilter extends WithholdingFilterBase {
+  userId?: string;
+}
+
 export type WithholdingRow = typeof taxWithholdings.$inferSelect;
 
-function filterWhere(f: WithholdingFilter): SQL[] {
+const emptyUserId = () => new AppError('VALIDATION_ERROR', 'userId must not be empty', { field: 'userId' });
+
+function filterWhere(f: WithholdingFilterBase & { userId?: string }): SQL[] {
   const w: SQL[] = [];
-  if (f.userId) w.push(eq(taxWithholdings.userId, f.userId));
+  if (f.userId !== undefined) {
+    if (f.userId === '') throw emptyUserId();
+    w.push(eq(taxWithholdings.userId, f.userId));
+  }
   if (f.symbol) w.push(eq(taxWithholdings.symbol, f.symbol));
   if (f.from) w.push(gte(taxWithholdings.createdAt, new Date(f.from)));
   if (f.to) w.push(lte(taxWithholdings.createdAt, new Date(f.to)));
@@ -182,8 +207,7 @@ function filterWhere(f: WithholdingFilter): SQL[] {
 }
 
 /** Newest first (id DESC). `rows` is the page + 1 (the extra row tells the caller whether there is a next page). */
-export async function withholdingRows(db: Db, f: WithholdingFilter, opts: { cursor?: number; take: number }): Promise<WithholdingRow[]> {
-  const where = filterWhere(f);
+function queryRows(db: Db, where: SQL[], opts: { cursor?: number; take: number }): Promise<WithholdingRow[]> {
   if (opts.cursor !== undefined) where.push(lt(taxWithholdings.id, opts.cursor));
   return db
     .select()
@@ -191,6 +215,18 @@ export async function withholdingRows(db: Db, f: WithholdingFilter, opts: { curs
     .where(and(...where))
     .orderBy(desc(taxWithholdings.id))
     .limit(opts.take);
+}
+
+/** The signed-in user's own records. */
+export async function userWithholdingRows(db: Db, f: UserWithholdingFilter, opts: { cursor?: number; take: number }): Promise<WithholdingRow[]> {
+  // the type already demands a string; a JS caller (or a cast) that passes nothing or '' must fail, never see every user's rows
+  if (typeof f.userId !== 'string' || f.userId === '') throw emptyUserId();
+  return queryRows(db, filterWhere(f), opts);
+}
+
+/** Staff view: every user's records, optionally narrowed to one user. */
+export async function adminWithholdingRows(db: Db, f: AdminWithholdingFilter, opts: { cursor?: number; take: number }): Promise<WithholdingRow[]> {
+  return queryRows(db, filterWhere(f), opts);
 }
 
 export function serializeWithholding(r: WithholdingRow): TaxWithholding {

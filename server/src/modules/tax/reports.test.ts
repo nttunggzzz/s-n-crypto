@@ -1,18 +1,24 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
-import { ADMIN_TAX_EXPORT_COLUMNS, ApiError, TAX_EXPORT_COLUMNS } from '@cex/contracts';
+import { ADMIN_TAX_EXPORT_COLUMNS, ApiError, TAX_EXPORT_COLUMNS, type AdminTaxSummary } from '@cex/contracts';
+import { dec } from '@cex/core';
 import { exchangeSettings, taxWithholdings, trades } from '../../db/schema.ts';
+import type { Db } from '../../db/client.ts';
+import { AppError } from '../../lib/errors.ts';
+import { exportAdminTaxCsv, exportTaxCsv } from '../exchange/exports.ts';
 import { marketTrade, setBook } from '../../../test/helpers.ts';
 import { ApiHarness } from '../../../test/apiHarness.ts';
 import { periodRange, vnMonthStart, vnYearNow, yearRange } from './period.ts';
+import { adminTaxSummary, adminWithholdingRows, userTaxSummary, userWithholdingRows } from './reports.ts';
 
 /**
  * Batch T3 (module T section 3.7): the tax reports - periods in Vietnam time, user summary, record list, CSV, admin summary.
  * Data is built with REAL orders (placeOrder through HTTP) except the time-boundary test, which inserts records with a
  * fixed created_at for trades that were really made. Expected values are computed by hand in the comments.
  *
- * ORDER MATTERS: the admin-summary block runs first on purpose - it sums the whole CURRENT month, so it must be the
- * first thing that creates withholding records in this file's database.
+ * Tests do not depend on each other or on the order: the period of a "live" test is taken from the createdAt of the records
+ * it just created (not from the clock), the admin block compares a summary BEFORE and AFTER its own data, and its lists
+ * and CSVs are filtered by the users it created.
  */
 const h = new ApiHarness();
 const db = () => h.env.database.db;
@@ -46,8 +52,23 @@ async function funded(): Promise<U> {
 const buy = (u: U, symbol: string, quantity: string) => u.b.placeOrder({ body: { symbol, side: 'BUY', type: 'MARKET', quantity } });
 const sell = (u: U, symbol: string, quantity: string) => u.b.placeOrder({ body: { symbol, side: 'SELL', type: 'MARKET', quantity } });
 const profile = (u: U, category: 'INDIVIDUAL' | 'FOREIGN_ORG' | 'DOMESTIC_ORG') => u.b.taxUpdateProfile({ body: { category } });
-/** Current month in Vietnam time, "YYYY-MM". */
-const vnNow = () => new Date(Date.now() + 7 * 3_600_000).toISOString().slice(0, 7);
+/** "YYYY-MM" in Vietnam time (UTC+7) of an instant - computed here with JS, not by the code under test. */
+const vnMonthOfDate = (d: Date) => new Date(d.getTime() + 7 * 3_600_000).toISOString().slice(0, 7);
+/** "YYYY-Qn" of a "YYYY-MM". */
+const quarterOf = (period: string) => `${period.slice(0, 4)}-Q${Math.ceil(Number(period.slice(5)) / 3)}`;
+/** createdAt of the newest withholding record of a user. */
+async function lastRecordAt(userId: string): Promise<Date> {
+  const rows = await db().select().from(taxWithholdings).where(eq(taxWithholdings.userId, userId));
+  return rows.map((r) => r.createdAt).sort((a, b) => b.getTime() - a.getTime())[0]!;
+}
+
+function prepMarket() {
+  h.env.clock.ms = Date.now();
+  setBook(h.env, 'BTCUSDT', [['99.00', '100.00000']], [['100.00', '100.00000']]);
+  setBook(h.env, 'ETHUSDT', [['2000.00', '100.0000']], [['2001.00', '100.0000']]);
+  marketTrade(h.env, 'BTCUSDT', '99.50');
+  marketTrade(h.env, 'ETHUSDT', '2000.50');
+}
 
 beforeAll(async () => {
   await h.start();
@@ -55,13 +76,7 @@ beforeAll(async () => {
 afterAll(async () => {
   await h.stop();
 });
-beforeEach(async () => {
-  h.env.clock.ms = Date.now();
-  setBook(h.env, 'BTCUSDT', [['99.00', '100.00000']], [['100.00', '100.00000']]);
-  setBook(h.env, 'ETHUSDT', [['2000.00', '100.0000']], [['2001.00', '100.0000']]);
-  marketTrade(h.env, 'BTCUSDT', '99.50');
-  marketTrade(h.env, 'ETHUSDT', '2000.50');
-});
+beforeEach(() => prepMarket());
 
 // ───────────────────────────── 1. periods (pure)
 
@@ -89,13 +104,47 @@ describe('period.ts - Vietnam time (UTC+7)', () => {
   });
 });
 
-// ───────────────────────────── 2. admin summary (FIRST data of the file, see the note on top)
+// ───────────────────────────── 2. admin summary / list / CSV
+
+type Group = AdminTaxSummary['totals'];
+const ZERO_GROUP: Group = { withholdingCount: 0, userCount: 0, withheldGrossQuote: '0.00000000', taxAmount: '0.00000000', withheldGrossVnd: '0', taxVnd: '0', vndMissingCount: 0 };
+/** after - before for one group; the VND fields are null when either side is null (a record without a rate makes the sum unknown). */
+function delta(after: Group, before: Group) {
+  const money = (x: string, y: string) => dec(x).minus(y).toFixed(8);
+  const whole = (x: string | null, y: string | null) => (x === null || y === null ? null : dec(x).minus(y).toFixed(0));
+  return {
+    count: after.withholdingCount - before.withholdingCount,
+    users: after.userCount - before.userCount,
+    gross: money(after.withheldGrossQuote, before.withheldGrossQuote),
+    tax: money(after.taxAmount, before.taxAmount),
+    missing: after.vndMissingCount - before.vndMissingCount,
+    grossVnd: whole(after.withheldGrossVnd, before.withheldGrossVnd),
+    taxVnd: whole(after.taxVnd, before.taxVnd),
+  };
+}
+const row = (rows: ({ category: string } | { symbol: string })[], key: string): Group =>
+  (rows.find((r) => ('category' in r ? r.category : r.symbol) === key) as unknown as Group | undefined) ?? ZERO_GROUP;
 
 describe('admin tax summary / list / CSV', () => {
   const ids: { u1: string; u2: string; u3: string } = { u1: '', u2: '', u3: '' };
+  let period = '';
+  let before!: AdminTaxSummary;
+  let after!: AdminTaxSummary;
+  let quarterBefore!: AdminTaxSummary;
+  let quarterAfter!: AdminTaxSummary;
 
-  it('byCategory has all 3 rows in enum order, bySymbol is sorted by tax NUMERICALLY, userCount and VND sums are exact', async () => {
+  beforeAll(async () => {
+    prepMarket();
     await setTax('WITHHOLD', '0.01', '25000');
+    const admin = await h.staff('admin');
+    // a probe sale: the record's own createdAt says which Vietnam-time month "now" is (BTC 0.06 @ 99 = 5.94 >= minNotional)
+    const probe = await funded();
+    await buy(probe, 'BTCUSDT', '0.1');
+    await sell(probe, 'BTCUSDT', '0.06');
+    period = vnMonthOfDate(await lastRecordAt(probe.id));
+    before = await admin.b.adminTaxSummary({ query: { period } });
+    quarterBefore = await admin.b.adminTaxSummary({ query: { period: quarterOf(period) } });
+
     // U1 INDIVIDUAL: BTC 5 @ 99 = 495 -> tax 4.95 ; ETH 0.25 @ 2000 = 500 -> tax 5
     // U2 FOREIGN_ORG: BTC 6 @ 99 = 594 -> tax 5.94 ; ETH 0.245 @ 2000 = 490 -> tax 4.9
     // U3 DOMESTIC_ORG sells too but is not withheld
@@ -114,70 +163,90 @@ describe('admin tax summary / list / CSV', () => {
     await sell(u2, 'BTCUSDT', '6');
     await sell(u2, 'ETHUSDT', '0.245');
     await sell(u3, 'BTCUSDT', '0.5');
+    await setTax('OFF');
 
-    const admin = await h.staff('admin');
-    const s = await admin.b.adminTaxSummary({ query: { period: vnNow() } });
-    const zero = { withholdingCount: 0, withheldGrossQuote: '0.00000000', taxAmount: '0.00000000', withheldGrossVnd: '0', taxVnd: '0', vndMissingCount: 0, userCount: 0 };
-    expect(s.asset).toBe('USDT');
+    // the new records must fall in the period taken above (fails loudly, instead of flaking, if the month rolled over meanwhile)
+    for (const id of [u1.id, u2.id]) expect(vnMonthOfDate(await lastRecordAt(id))).toBe(period);
+    after = await admin.b.adminTaxSummary({ query: { period } });
+    quarterAfter = await admin.b.adminTaxSummary({ query: { period: quarterOf(period) } });
+  });
+
+  it('what this file added to the period: totals, userCount and VND sums are exact (after minus before)', () => {
     // 4 records, 2 users: gross 495+500+594+490 = 2079 ; tax 4.95+5+5.94+4.9 = 20.79
-    // VND (rate 25000): gross 51,975,000 ; tax 123,750+125,000+148,500+122,500 = 519,750
-    expect(s.totals).toEqual({ withholdingCount: 4, userCount: 2, withheldGrossQuote: '2079.00000000', taxAmount: '20.79000000', withheldGrossVnd: '51975000', taxVnd: '519750', vndMissingCount: 0 });
-    expect(s.byCategory.map((c) => c.category)).toEqual(['INDIVIDUAL', 'FOREIGN_ORG', 'DOMESTIC_ORG']);
-    expect(s.byCategory[0]).toEqual({ category: 'INDIVIDUAL', withholdingCount: 2, userCount: 1, withheldGrossQuote: '995.00000000', taxAmount: '9.95000000', withheldGrossVnd: '24875000', taxVnd: '248750', vndMissingCount: 0 });
-    expect(s.byCategory[1]).toEqual({ category: 'FOREIGN_ORG', withholdingCount: 2, userCount: 1, withheldGrossQuote: '1084.00000000', taxAmount: '10.84000000', withheldGrossVnd: '27100000', taxVnd: '271000', vndMissingCount: 0 });
-    expect(s.byCategory[2]).toEqual({ category: 'DOMESTIC_ORG', ...zero }); // never withheld, the row is still there
-    // BTCUSDT 4.95 + 5.94 = 10.89 ; ETHUSDT 5 + 4.9 = 9.9 -> BTC first (as strings '10.89...' < '9.9...': a string sort would be wrong)
-    expect(s.bySymbol).toEqual([
-      { symbol: 'BTCUSDT', withholdingCount: 2, userCount: 2, withheldGrossQuote: '1089.00000000', taxAmount: '10.89000000', withheldGrossVnd: '27225000', taxVnd: '272250', vndMissingCount: 0 },
-      { symbol: 'ETHUSDT', withholdingCount: 2, userCount: 2, withheldGrossQuote: '990.00000000', taxAmount: '9.90000000', withheldGrossVnd: '24750000', taxVnd: '247500', vndMissingCount: 0 },
-    ]);
-    // the same month as a quarter holds the same records
-    const q = Math.ceil(Number(vnNow().slice(5)) / 3);
-    const quarter = await admin.b.adminTaxSummary({ query: { period: `${vnNow().slice(0, 4)}-Q${q}` } });
-    expect(quarter.totals).toEqual(s.totals);
+    const d = delta(after.totals, before.totals);
+    expect(d).toMatchObject({ count: 4, users: 2, gross: '2079.00000000', tax: '20.79000000', missing: 0 });
+    // VND (rate 25000): gross 51,975,000 ; tax 123,750+125,000+148,500+122,500 = 519,750 - compared whenever the period has no
+    // record without a rate from another test (then the summary VND is null and the records themselves are checked in the list test)
+    if (d.grossVnd !== null) expect([d.grossVnd, d.taxVnd]).toEqual(['51975000', '519750']);
+    expect([after.period, after.asset]).toEqual([period, 'USDT']);
+  });
+
+  it('byCategory has all 3 rows in enum order; per-category and per-symbol deltas are exact; bySymbol is sorted by tax NUMERICALLY', () => {
+    expect(after.byCategory.map((c) => c.category)).toEqual(['INDIVIDUAL', 'FOREIGN_ORG', 'DOMESTIC_ORG']);
+    const cat = (k: string) => delta(row(after.byCategory, k), row(before.byCategory, k));
+    expect(cat('INDIVIDUAL')).toMatchObject({ count: 2, users: 1, gross: '995.00000000', tax: '9.95000000' });
+    expect(cat('FOREIGN_ORG')).toMatchObject({ count: 2, users: 1, gross: '1084.00000000', tax: '10.84000000' });
+    expect(cat('DOMESTIC_ORG')).toMatchObject({ count: 0, users: 0, gross: '0.00000000', tax: '0.00000000' }); // never withheld, the row is still there
+    // BTCUSDT 4.95 + 5.94 = 10.89 ; ETHUSDT 5 + 4.9 = 9.9
+    const sym = (k: string) => delta(row(after.bySymbol, k), row(before.bySymbol, k));
+    expect(sym('BTCUSDT')).toMatchObject({ count: 2, users: 2, gross: '1089.00000000', tax: '10.89000000' });
+    expect(sym('ETHUSDT')).toMatchObject({ count: 2, users: 2, gross: '990.00000000', tax: '9.90000000' });
+    // whatever else is in the period, the rows are ordered by tax (as numbers) from high to low
+    const taxes = after.bySymbol.map((g) => dec(g.taxAmount));
+    for (let i = 1; i < taxes.length; i++) expect(taxes[i - 1]!.gte(taxes[i]!)).toBe(true);
+  });
+
+  it('the same month as a quarter holds the same new records; a period without records is all zeros with 3 category rows', async () => {
+    expect(delta(quarterAfter.totals, quarterBefore.totals)).toEqual(delta(after.totals, before.totals));
+    const admin = await h.staff('admin');
     // from / to of the contract example, independent of the data
     const oct = await admin.b.adminTaxSummary({ query: { period: '2026-10' } });
     expect([oct.period, oct.from, oct.to]).toEqual(['2026-10', '2026-09-30T17:00:00.000Z', '2026-10-31T16:59:59.999Z']);
-    // a period without records: zeros, 3 category rows, no symbol rows
     const empty = await admin.b.adminTaxSummary({ query: { period: '2020-02' } });
-    expect(empty.totals).toEqual({ ...zero });
+    expect(empty.totals).toEqual(ZERO_GROUP);
     expect(empty.byCategory).toHaveLength(3);
     expect(empty.bySymbol).toEqual([]);
   });
 
-  it('list: newest first, userId and symbol filters, pagination, every row carries userId', async () => {
+  it('list: filtered by the users of this test - newest first, symbol filter, pagination, every row carries userId; VND amounts add up', async () => {
     const admin = await h.staff('support'); // support has tax.read
-    const all = await admin.b.adminTaxWithholdings({ query: { limit: 50 } });
-    expect(all.items).toHaveLength(4);
-    expect(all.nextCursor).toBeNull();
-    const idsDesc = all.items.map((r) => Number(r.id));
-    expect(idsDesc).toEqual([...idsDesc].sort((a, b) => b - a));
-    expect(new Set(all.items.map((r) => r.userId))).toEqual(new Set([ids.u1, ids.u2])); // U3 (domestic) has none
     const mine = await admin.b.adminTaxWithholdings({ query: { userId: ids.u1, limit: 50 } });
+    expect(mine.nextCursor).toBeNull();
     expect(mine.items.map((r) => [r.userId, r.symbol, r.category, r.taxAmount])).toEqual([
       [ids.u1, 'ETHUSDT', 'INDIVIDUAL', '5.00000000'],
       [ids.u1, 'BTCUSDT', 'INDIVIDUAL', '4.95000000'],
     ]);
-    const eth = await admin.b.adminTaxWithholdings({ query: { symbol: 'ETHUSDT', limit: 50 } });
-    expect(eth.items.map((r) => r.symbol)).toEqual(['ETHUSDT', 'ETHUSDT']);
-    const p1 = await admin.b.adminTaxWithholdings({ query: { limit: 3 } });
-    expect(p1.items).toHaveLength(3);
-    const p2 = await admin.b.adminTaxWithholdings({ query: { limit: 3, cursor: p1.nextCursor! } });
-    expect([p2.items.length, p2.nextCursor]).toEqual([1, null]);
+    const other = await admin.b.adminTaxWithholdings({ query: { userId: ids.u2, limit: 50 } });
+    expect(other.items.map((r) => [r.userId, r.symbol, r.category, r.taxAmount])).toEqual([
+      [ids.u2, 'ETHUSDT', 'FOREIGN_ORG', '4.90000000'],
+      [ids.u2, 'BTCUSDT', 'FOREIGN_ORG', '5.94000000'],
+    ]);
+    const both = [...mine.items, ...other.items];
+    const idsDesc = mine.items.map((r) => Number(r.id));
+    expect(idsDesc).toEqual([...idsDesc].sort((x, y) => y - x));
+    // the four records' VND amounts add up to the hand-computed sums (rate 25000)
+    expect([both.reduce((t, r) => t.plus(r.grossVnd!), dec('0')).toFixed(0), both.reduce((t, r) => t.plus(r.taxVnd!), dec('0')).toFixed(0)]).toEqual(['51975000', '519750']);
+    const eth = await admin.b.adminTaxWithholdings({ query: { userId: ids.u1, symbol: 'ETHUSDT', limit: 50 } });
+    expect(eth.items.map((r) => r.symbol)).toEqual(['ETHUSDT']);
+    const p1 = await admin.b.adminTaxWithholdings({ query: { userId: ids.u1, limit: 1 } });
+    expect(p1.items).toHaveLength(1);
+    expect(p1.nextCursor).toBe(p1.items[0]!.id);
+    const p2 = await admin.b.adminTaxWithholdings({ query: { userId: ids.u1, limit: 1, cursor: p1.nextCursor! } });
+    expect([p2.items.map((r) => r.symbol), p2.nextCursor]).toEqual([['BTCUSDT'], null]);
     expect(await admin.b.adminTaxWithholdings({ query: { userId: ids.u3, limit: 50 } })).toEqual({ items: [], nextCursor: null });
   });
 
-  it('CSV: ADMIN_TAX_EXPORT_COLUMNS header after the BOM, one line per record, userId column filled', async () => {
+  it('CSV: ADMIN_TAX_EXPORT_COLUMNS header after the BOM, one line per record of the filtered user, userId column filled', async () => {
     const admin = await h.staff('admin');
-    const text = await admin.b.adminTaxExport({ query: {} });
-    const lines = text.split('\r\n');
-    expect(lines[0]).toBe('﻿' + ADMIN_TAX_EXPORT_COLUMNS.join(','));
-    expect(lines.filter((l) => l !== '')).toHaveLength(1 + 4);
     const userCol = ADMIN_TAX_EXPORT_COLUMNS.indexOf('userId');
-    expect([ids.u1, ids.u2]).toContain(lines[1]!.split(',')[userCol]);
-    const onlyU2 = (await admin.b.adminTaxExport({ query: { userId: ids.u2 } })).split('\r\n').filter((l) => l !== '');
-    expect(onlyU2).toHaveLength(1 + 2);
-    expect(onlyU2.slice(1).every((l) => l.split(',')[userCol] === ids.u2)).toBe(true);
+    for (const id of [ids.u1, ids.u2]) {
+      const text = await admin.b.adminTaxExport({ query: { userId: id } });
+      const lines = text.split('\r\n').filter((l) => l !== '');
+      expect(lines[0]).toBe('\ufeff' + ADMIN_TAX_EXPORT_COLUMNS.join(','));
+      expect(lines).toHaveLength(1 + 2);
+      expect(lines.slice(1).every((l) => l.split(',')[userCol] === id)).toBe(true);
+    }
+    expect((await admin.b.adminTaxExport({ query: { userId: ids.u3 } })).split('\r\n').filter((l) => l !== '')).toHaveLength(1);
   });
 
   it('permissions: a plain user gets 403, no session gets 401, bad periods / cursors get 400', async () => {
@@ -193,7 +262,7 @@ describe('admin tax summary / list / CSV', () => {
       await expectApiError(call(anon), 'UNAUTHENTICATED', 401);
       await call(support.b); // tax.read is enough
     }
-    for (const path of ['/api/v1/admin/tax/summary', '/api/v1/admin/tax/summary?period=2026-13', '/api/v1/admin/tax/summary?period=2026-Q5', '/api/v1/admin/tax/summary?period=2026', '/api/v1/admin/tax/withholdings?cursor=abc', '/api/v1/admin/tax/withholdings?userId=not-a-uuid']) {
+    for (const path of ['/api/v1/admin/tax/summary', '/api/v1/admin/tax/summary?period=2026-13', '/api/v1/admin/tax/summary?period=2026-Q5', '/api/v1/admin/tax/summary?period=2026', '/api/v1/admin/tax/withholdings?cursor=abc', '/api/v1/admin/tax/withholdings?userId=not-a-uuid', '/api/v1/admin/tax/withholdings?userId=', '/api/v1/admin/tax/export.csv?userId=']) {
       const r = await rawGet(support.b, path);
       expect([r.status, r.code], path).toEqual([400, 'VALIDATION_ERROR']);
     }
@@ -219,9 +288,10 @@ describe('taxSummary (user)', () => {
     await db().update(trades).set({ realizedPnl: null }).where(eq(trades.orderId, Number(a3.order.id)));
 
     const s = await a.b.taxSummary({ query: {} });
-    expect([s.year, s.asset, s.category]).toEqual([vnYearNow(), 'USDT', 'INDIVIDUAL']);
     expect(s.months.map((m) => m.month)).toEqual(Array.from({ length: 12 }, (_, i) => `${s.year}-${String(i + 1).padStart(2, '0')}`));
-    const now = s.months.find((m) => m.month === vnNow())!;
+    const month = vnMonthOfDate(await lastRecordAt(a.id));
+    expect([s.year, s.asset, s.category]).toEqual([Number(month.slice(0, 4)), 'USDT', 'INDIVIDUAL']);
+    const now = s.months.find((m) => m.month === month)!;
     // withheld: 2 records, gross 19.8 + 9.9 = 29.7, tax 0.0198 + 0.0099 = 0.0297 ; VND unknown for one -> null
     // sales: 3 sells, gross 9.9 + 19.8 + 9.9 = 39.6, fees 0.0099 + 0.0198 + 0.0099 = 0.0396, PnL 1.5 - 0.25 = 1.25, 1 without cost basis
     const expected = {
@@ -237,9 +307,9 @@ describe('taxSummary (user)', () => {
       realizedPnl: '1.25000000',
       sellsWithoutCostBasis: 1,
     };
-    expect(now).toEqual({ month: vnNow(), ...expected });
+    expect(now).toEqual({ month, ...expected });
     expect(s.totals).toEqual(expected);
-    const other = s.months.filter((m) => m.month !== vnNow());
+    const other = s.months.filter((m) => m.month !== month);
     expect(other).toHaveLength(11);
     for (const m of other) {
       expect(m).toEqual({ month: m.month, withholdingCount: 0, withheldGrossQuote: '0.00000000', taxAmount: '0.00000000', withheldGrossVnd: '0', taxVnd: '0', vndMissingCount: 0, sellCount: 0, sellGrossQuote: '0.00000000', sellFees: '0.00000000', realizedPnl: '0.00000000', sellsWithoutCostBasis: 0 });
@@ -450,5 +520,171 @@ describe('reports do not write', () => {
     await u.b.taxWithholdings({ query: { limit: 5 } });
     await u.b.taxExport({ query: {} });
     expect(await db().select().from(taxWithholdings)).toEqual(before);
+  });
+});
+
+// ───────────────────────────── 7. T3F: the userId filter, one snapshot per summary, numeric order
+
+const isValidationError = (e: unknown) => e instanceof AppError && e.code === 'VALIDATION_ERROR';
+
+describe('T3F: the userId filter can never be skipped', () => {
+  it('user rows REQUIRE a userId (type and runtime, "" refused); admin: undefined = every user, "" refused - never read as "no filter"', async () => {
+    await setTax('WITHHOLD', '0.001', '26350');
+    const x = await funded();
+    const y = await funded();
+    await buy(x, 'BTCUSDT', '1');
+    await sell(x, 'BTCUSDT', '0.3');
+    await buy(y, 'BTCUSDT', '1');
+    await sell(y, 'BTCUSDT', '0.2');
+    await setTax('OFF');
+
+    const own = await userWithholdingRows(db(), { userId: x.id }, { take: 50 });
+    expect(own.map((r) => r.userId)).toEqual([x.id]);
+    // @ts-expect-error userId is required: this call does not compile without it
+    const missing = userWithholdingRows(db(), { symbol: 'BTCUSDT' }, { take: 50 });
+    await expect(missing).rejects.toSatisfy(isValidationError);
+    await expect(userWithholdingRows(db(), { userId: '' }, { take: 50 })).rejects.toSatisfy(isValidationError);
+
+    const everyone = new Set((await adminWithholdingRows(db(), {}, { take: 500 })).map((r) => r.userId));
+    expect(everyone.has(x.id) && everyone.has(y.id)).toBe(true);
+    expect((await adminWithholdingRows(db(), { userId: y.id }, { take: 50 })).map((r) => r.userId)).toEqual([y.id]);
+    await expect(adminWithholdingRows(db(), { userId: '' }, { take: 50 })).rejects.toSatisfy(isValidationError);
+
+    // the CSV builders go through the same functions
+    await expect(exportTaxCsv(db(), '', {})).rejects.toSatisfy(isValidationError);
+    await expect(exportAdminTaxCsv(db(), { userId: '' })).rejects.toSatisfy(isValidationError);
+  });
+});
+
+/** The Db with every transaction paused after its FIRST select: `hook` runs then (another connection commits a new sale). */
+function pausingDb(real: Db, hook: () => Promise<void>) {
+  type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
+  const options: unknown[] = [];
+  const wrapQuery = <T extends object>(q: T): T =>
+    new Proxy(q, {
+      get(target, prop) {
+        if (prop === 'then') {
+          return (ok: (v: unknown) => unknown, bad: (e: unknown) => unknown) =>
+            (target as unknown as Promise<unknown>)
+              .then(async (rows) => {
+                await hook();
+                return rows;
+              })
+              .then(ok, bad);
+        }
+        const v = Reflect.get(target, prop, target) as unknown;
+        if (typeof v !== 'function') return v;
+        return (...args: unknown[]) => {
+          const r = (v as (...a: unknown[]) => unknown).apply(target, args);
+          return r !== null && typeof r === 'object' ? wrapQuery(r) : r;
+        };
+      },
+    });
+  const wrapTx = (tx: Tx): Tx => {
+    let first = true;
+    return new Proxy(tx, {
+      get(target, prop) {
+        const v = Reflect.get(target, prop, target) as unknown;
+        if (prop === 'select' && typeof v === 'function') {
+          return (...args: unknown[]) => {
+            const q = (v as (...a: unknown[]) => object).apply(target, args);
+            if (!first) return q;
+            first = false;
+            return wrapQuery(q);
+          };
+        }
+        return typeof v === 'function' ? (v as (...a: unknown[]) => unknown).bind(target) : v;
+      },
+    });
+  };
+  const pdb = new Proxy(real, {
+    get(target, prop) {
+      const v = Reflect.get(target, prop, target) as unknown;
+      if (prop === 'transaction') {
+        return (fn: (tx: Tx) => Promise<unknown>, cfg: unknown) => {
+          options.push(cfg);
+          return (target.transaction as unknown as (f: (tx: Tx) => Promise<unknown>, c: unknown) => Promise<unknown>).call(target, (tx) => fn(wrapTx(tx)), cfg);
+        };
+      }
+      return typeof v === 'function' ? (v as (...a: unknown[]) => unknown).bind(target) : v;
+    },
+  }) as Db;
+  return { db: pdb, options };
+}
+
+describe('T3F: the queries of one summary read ONE snapshot (REPEATABLE READ, READ ONLY)', () => {
+  const SNAPSHOT = { isolationLevel: 'repeatable read', accessMode: 'read only' };
+
+  it('user summary: a sale that commits while the summary runs is in NEITHER block (withheld and sales stay consistent)', async () => {
+    await setTax('WITHHOLD', '0.001', '26350');
+    const x = await funded();
+    await buy(x, 'BTCUSDT', '1');
+    await sell(x, 'BTCUSDT', '0.1');
+    const year = Number(vnMonthOfDate(await lastRecordAt(x.id)).slice(0, 4));
+    let fired = 0;
+    const { db: pdb, options } = pausingDb(db(), async () => {
+      if (fired++ === 0) await sell(x, 'BTCUSDT', '0.1'); // commits on another connection between the first and the second query
+    });
+    const s = await userTaxSummary(pdb, x.id, year);
+    expect(fired).toBeGreaterThan(0);
+    expect([s.totals.withholdingCount, s.totals.sellCount]).toEqual([1, 1]); // one snapshot: both blocks saw the same single sale
+    expect(options).toEqual([SNAPSHOT]);
+    // the second sale did commit: a fresh summary sees it in both blocks
+    expect((await x.b.taxSummary({ query: { year } })).totals).toMatchObject({ withholdingCount: 2, sellCount: 2 });
+    await setTax('OFF');
+  });
+
+  it('admin summary: totals equal the sum of the category rows and of the symbol rows even if a sale commits in between', async () => {
+    await setTax('WITHHOLD', '0.001', '26350');
+    const z = await funded();
+    await buy(z, 'BTCUSDT', '1');
+    await sell(z, 'BTCUSDT', '0.1');
+    const period = vnMonthOfDate(await lastRecordAt(z.id));
+    let fired = 0;
+    const { db: pdb, options } = pausingDb(db(), async () => {
+      if (fired++ === 0) await sell(z, 'BTCUSDT', '0.1');
+    });
+    const s = await adminTaxSummary(pdb, period);
+    const sum = (rows: { withholdingCount: number }[]) => rows.reduce((n, r) => n + r.withholdingCount, 0);
+    expect(fired).toBeGreaterThan(0);
+    expect(sum(s.byCategory)).toBe(s.totals.withholdingCount);
+    expect(sum(s.bySymbol)).toBe(s.totals.withholdingCount);
+    expect(options).toEqual([SNAPSHOT]);
+    await setTax('OFF');
+  });
+});
+
+describe('T3F: bySymbol order is numeric (isolated period 2031-06, records with a fixed created_at)', () => {
+  it('10.89 ranks above 9.9 (as strings "10.89..." < "9.9..."), and a tie is broken by symbol', async () => {
+    const t = await funded();
+    await buy(t, 'BTCUSDT', '1');
+    await buy(t, 'ETHUSDT', '0.3');
+    await setTax('OFF');
+    const orders = [await sell(t, 'BTCUSDT', '0.1'), await sell(t, 'ETHUSDT', '0.1'), await sell(t, 'ETHUSDT', '0.1')];
+    const tradeRows = await Promise.all(orders.map(async (o) => (await db().select().from(trades).where(eq(trades.orderId, Number(o.order.id))))[0]!));
+    const rec = (tr: (typeof tradeRows)[number], symbol: string, tax: string) => ({
+      tradeId: tr.id,
+      orderId: tr.orderId,
+      userId: t.id,
+      symbol,
+      asset: 'USDT',
+      quantity: '0.1',
+      price: '99',
+      grossQuote: '9.9',
+      taxRate: '0.001',
+      taxAmount: tax,
+      category: 'INDIVIDUAL' as const,
+      vndRate: null,
+      grossVnd: null,
+      taxVnd: null,
+      createdAt: new Date('2031-06-10T05:00:00.000Z'),
+    });
+    await db().insert(taxWithholdings).values([rec(tradeRows[0]!, 'BTCUSDT', '10.89'), rec(tradeRows[1]!, 'ETHUSDT', '9.9')]);
+    const s = await adminTaxSummary(db(), '2031-06');
+    expect(s.bySymbol.map((g) => [g.symbol, g.taxAmount])).toEqual([['BTCUSDT', '10.89000000'], ['ETHUSDT', '9.90000000']]);
+    // tie: ETHUSDT gets 0.99 more so it also has 10.89 in total -> BTCUSDT first by name
+    await db().insert(taxWithholdings).values([rec(tradeRows[2]!, 'ETHUSDT', '0.99')]);
+    const tie = await adminTaxSummary(db(), '2031-06');
+    expect(tie.bySymbol.map((g) => [g.symbol, g.taxAmount])).toEqual([['BTCUSDT', '10.89000000'], ['ETHUSDT', '10.89000000']]);
   });
 });

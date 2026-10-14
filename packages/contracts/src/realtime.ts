@@ -21,7 +21,7 @@ import { DcaPlan, GridBot } from './bots.ts';
  *   candles:<SYMBOL>:<interval>-> Candle            (forming + closed candles)
  *   market:status              -> MarketStatus      (on change)
  *   exchange:status            -> ExchangeStatus    (snapshot on subscribe, then on admin change:
- *                                                    trading halted/resumed, pair enabled/disabled)
+ *                                                    trading halted/resumed, pair enabled/disabled, tax settings changed)
  *   user                       -> UserEvent         (requires sign-in)
  *
  * Futures (phase F), SYMBOL = futures symbol (e.g. BTCUSDT, 1000PEPEUSDT):

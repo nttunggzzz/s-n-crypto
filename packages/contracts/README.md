@@ -296,7 +296,7 @@ Mã mới: `PAYLOAD_TOO_LARGE` (413; `details.reason`: `ATTACHMENT_TOO_LARGE` > 
 để thử tạo mục `MANUAL` (cặp đang có mục AUTO mở thì lần khớp vẫn vào mục đó). Lệnh của bot lưới không bao giờ vào nhật ký.
 Thử hạn mức 50 MB: `mockStore.journal.otherImageBytes = 52_428_700`. Ảnh tải lên được cả khi trang mở qua http không an toàn (mock tự băm sha256 bằng JS).
 
-## 15. Thuế crypto Việt Nam — thử nghiệm (v0.15.0)
+## 15. Thuế crypto Việt Nam — thử nghiệm (v0.15.0; `exchange:status` mang cài đặt thuế từ v0.16.0)
 Kế hoạch: `docs/plans/module-T-thue-viet-nam.md`. Sàn **thử nghiệm**: tính và ghi sổ như sàn được cấp phép phải làm (TT 32/2026, TT 41/2026),
 trên tiền ảo. Mọi màn hình thuế ghi nhãn "thử nghiệm"; **không** dùng tên/số hiệu mẫu chứng từ của cơ quan thuế, không gọi CSV là "chứng từ".
 
@@ -311,6 +311,10 @@ trên tiền ảo. Mọi màn hình thuế ghi nhãn "thử nghiệm"; **không*
 
 **Form đặt lệnh BÁN** (`exchangeInfo`): giá trị gộp · phí · thuế tạm tính (`taxRate`; ẩn khi `taxMode = 'OFF'` hoặc người dùng là `DOMESTIC_ORG`) · thực nhận ước tính.
 Dòng VND chỉ hiện khi `taxVndRate !== null`, ghi "tỷ giá tham khảo do sàn đặt" + `taxVndRateUpdatedAt`. Ước tính bằng `@cex/core`; số của server là số đúng.
+
+**Cập nhật thuế tức thì (v0.16.0):** `exchange:status` (`ExchangeStatus`) có thêm `taxMode`, `taxRate`, `taxVndRate` — cùng giá trị với `exchangeInfo`.
+Admin đổi một trong ba thì kênh đẩy sự kiện mới (như khi dừng/mở sàn), nên form BÁN lấy thuế tạm tính từ `exchange:status` (ảnh chụp khi subscribe + thay đổi sau đó)
+và dùng `exchangeInfo` chỉ để có `taxVndRateUpdatedAt`. Lần khớp đang diễn ra cùng lúc với thay đổi có thể còn dùng giá trị cũ (như `feeRate`); số của server là số đúng.
 
 **Người dùng** (chỉ dữ liệu của chính mình)
 ```ts
@@ -339,6 +343,8 @@ await api.adminTaxWithholdings({ query: { userId, symbol, from: sum.from, to: su
 ```
 - `taxRate`: > 0 và ≤ 0,01, tối đa 8 chữ số lẻ (sai → 400 `VALIDATION_ERROR`); tắt thuế bằng `taxMode: 'OFF'`, không bằng tỷ lệ 0.
   Đổi tỷ lệ/tỷ giá chỉ áp dụng cho lần khớp **sau**: mỗi bản ghi giữ tỷ lệ và tỷ giá của chính nó.
+- Ràng buộc bật thuế: `adminUpdateTaxSettings` từ chối `taxMode: 'WITHHOLD'` khi đang bật một cặp có quote khác USDT (400 `VALIDATION_ERROR`, field `taxMode`):
+  báo cáo thuế cộng số của một đồng quote (USDT), nên chỉ bật thuế khi mọi cặp đang bật đều quote USDT. Tắt cặp quote khác trước rồi mới bật thuế. Chiều ngược lại cũng bị chặn: khi `taxMode = 'WITHHOLD'`, `adminUpdateSymbol` từ chối bật (`enabled: true`) một cặp quote khác USDT (400 `VALIDATION_ERROR`, field `enabled`).
 - `byCategory` luôn 3 dòng theo thứ tự enum (`DOMESTIC_ORG` luôn 0); `bySymbol` xếp theo thuế giảm dần.
 
 **Mock:** bắt đầu ở `WITHHOLD` 0,1%, tỷ giá 26350 (server thật bắt đầu `OFF`); có 2 lần bán cũ của người dùng demo (tháng 8 chưa có tỷ giá,

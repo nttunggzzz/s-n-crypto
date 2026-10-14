@@ -4,7 +4,7 @@ import { clientIp, route, type RouteOptions } from '../../lib/http.ts';
 import { RateLimiter } from '../../lib/rateLimit.ts';
 import { exportAdminTaxCsv, exportTaxCsv } from '../exchange/exports.ts';
 import { cursorId, page } from '../exchange/routes.ts';
-import { adminTaxSummary, serializeAdminWithholding, serializeWithholding, userTaxSummary, withholdingRows } from './reports.ts';
+import { adminTaxSummary, adminWithholdingRows, serializeAdminWithholding, serializeWithholding, userTaxSummary, userWithholdingRows } from './reports.ts';
 import type { TaxService } from './taxService.ts';
 
 /**
@@ -15,6 +15,7 @@ import type { TaxService } from './taxService.ts';
 export function registerTaxRoutes(router: Router, opts: RouteOptions, tax: TaxService, db: Db, rateLimitScale = 1): void {
   const writeLimit = new RateLimiter(30 * rateLimitScale, 60_000);
   const exportLimit = new RateLimiter(10 * rateLimitScale, 60_000);
+  const summaryLimit = new RateLimiter(30 * rateLimitScale, 60_000);
 
   route(router, opts, 'taxProfile', async ({ auth }) => tax.profile(auth.user.id));
   route(router, opts, 'taxUpdateProfile', async ({ auth, body }) => {
@@ -30,9 +31,12 @@ export function registerTaxRoutes(router: Router, opts: RouteOptions, tax: TaxSe
 
   // ───── reports - user (own data only)
 
-  route(router, opts, 'taxSummary', async ({ auth, query }) => userTaxSummary(db, auth.user.id, query.year));
+  route(router, opts, 'taxSummary', async ({ auth, query }) => {
+    summaryLimit.consume(`tax-summary:${auth.user.id}`);
+    return userTaxSummary(db, auth.user.id, query.year);
+  });
   route(router, opts, 'taxWithholdings', async ({ auth, query }) => {
-    const rows = await withholdingRows(db, { userId: auth.user.id, symbol: query.symbol, from: query.from, to: query.to }, { cursor: cursorId(query.cursor), take: query.limit + 1 });
+    const rows = await userWithholdingRows(db, { userId: auth.user.id, symbol: query.symbol, from: query.from, to: query.to }, { cursor: cursorId(query.cursor), take: query.limit + 1 });
     const p = page(rows, query.limit);
     return { items: p.items.map(serializeWithholding), nextCursor: p.nextCursor };
   });
@@ -45,7 +49,7 @@ export function registerTaxRoutes(router: Router, opts: RouteOptions, tax: TaxSe
 
   route(router, opts, 'adminTaxSummary', async ({ query }) => adminTaxSummary(db, query.period));
   route(router, opts, 'adminTaxWithholdings', async ({ query }) => {
-    const rows = await withholdingRows(db, { userId: query.userId, symbol: query.symbol, from: query.from, to: query.to }, { cursor: cursorId(query.cursor), take: query.limit + 1 });
+    const rows = await adminWithholdingRows(db, { userId: query.userId, symbol: query.symbol, from: query.from, to: query.to }, { cursor: cursorId(query.cursor), take: query.limit + 1 });
     const p = page(rows, query.limit);
     return { items: p.items.map(serializeAdminWithholding), nextCursor: p.nextCursor };
   });
