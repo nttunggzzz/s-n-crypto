@@ -84,6 +84,16 @@ Nguồn: GDELT (15'), RSS (2–5'), lịch vĩ mô (tệp), FRED (tùy N-D3)
 Backfill (N3): script đọc file GKG lịch sử → news_items (nguồn GDELT, firstSeenAt = mốc của file 15')
 ```
 
+**Ghi chú từ N0** (đo thật, [báo cáo](../reports/2026-10-14-module-N-nguon.md)):
+- **GDELT khi backfill:** `firstSeenAt` = mốc trong tên file. File thực tế có mặt sớm hơn mốc tên 9–11 phút, nên dùng mốc tên là an toàn. `publishedAt` = `null`, vì GKG không có giờ đăng.
+- **GDELT khi chạy thật:**
+  - `firstSeenAt` = lúc hệ tải được file;
+  - `lastupdate.txt` có thể trỏ tới file chưa có (404) — gặp thì thử lại sau, không tính là nguồn hỏng;
+  - dùng cùng loại file GKG với backfill để dữ liệu lúc chạy thật và lúc backtest giống nhau. DOC API chỉ là dự phòng;
+  - mỗi tháng tải khoảng 18 GB; lọc ngay khi đọc, không lưu file thô.
+- **Tone GDELT:** điểm tích cực và tiêu cực cùng bằng 0 thì `tone = null` (4,8% số bài trong mẫu).
+- **Ghi nguồn:** dữ liệu GDELT bắt buộc ghi "GDELT Project" kèm link.
+
 **Đổi hợp đồng (chỉ thêm):**
 - `SnapshotNews` gồm:
   - `status`, `observedAt`, `sourcesLive`, `sourcesTotal`;

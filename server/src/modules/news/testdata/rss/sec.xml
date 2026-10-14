@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Test fixture: trimmed from sec RSS fetched 2026-10-14T16:23Z. Titles/links/dates only (no article text). -->
+<rss version="2.0" xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <title>Press Releases</title>
+    <item>
+      <title> SEC Small Business Advisory Committee to Discuss IPO Modernization and Regulation Crowdfunding </title>
+      <link>https://www.sec.gov/newsroom/press-releases/2026-105-sec-small-business-advisory-committee-discuss-ipo-modernization-regulation-crowdfunding</link>
+      <guid isPermaLink="false">24cedc35-40a2-45f1-a64e-40656c3ddcbf</guid>
+      <pubDate>Wed, 14 Oct 2026 10:30:47 -0400</pubDate>
+    </item>
+    <item>
+      <title> SEC Proposes Expanding Securities Eligible for Cross Trading by Registered Funds </title>
+      <link>https://www.sec.gov/newsroom/press-releases/2026-104-sec-proposes-expanding-securities-eligible-cross-trading-registered-funds</link>
+      <guid isPermaLink="false">d1fd3bfa-e932-4aa7-a7ee-8ca856f3e27a</guid>
+      <pubDate>Fri, 09 Oct 2026 10:59:00 -0400</pubDate>
+    </item>
+    <item>
+      <title> SEC Seeks Final Judgment Against Former Western Asset Co-CIO Ken Leech in Cherry Picking Case </title>
+      <link>https://www.sec.gov/newsroom/press-releases/2026-103-sec-seeks-final-judgment-against-former-western-asset-co-cio-ken-leech-cherry-picking-case</link>
+      <guid isPermaLink="false">82690e0c-d5c7-464f-8bc1-8c24a30d8c52</guid>
+      <pubDate>Tue, 06 Oct 2026 16:30:24 -0400</pubDate>
+    </item>
+    <item>
+      <title> SEC to Host Virtual National Compliance Outreach Seminar for Investment Companies and Investment Advisers </title>
+      <link>https://www.sec.gov/newsroom/press-releases/2026-102-sec-host-virtual-national-compliance-outreach-seminar-investment-companies-investment-advisers</link>
+      <guid isPermaLink="false">2ea8acb0-c6db-410b-b125-c594a5cf42fa</guid>
+      <pubDate>Tue, 06 Oct 2026 10:37:55 -0400</pubDate>
+    </item>
+    <item>
+      <title> SEC Coordinates with Global Financial Regulators to Raise Fraud Awareness During World Investor Week </title>
+      <link>https://www.sec.gov/newsroom/press-releases/2026-101-sec-coordinates-global-financial-regulators-raise-fraud-awareness-during-world-investor-week</link>
+      <guid isPermaLink="false">d98289b2-8878-4992-a095-78344cad2f75</guid>
+      <pubDate>Mon, 05 Oct 2026 08:47:36 -0400</pubDate>
+    </item>
+    <item>
+      <title> SEC Proposal Would Address How Investment Advisers and Funds Can Custody Crypto Assets Under the Federal Securities Laws </title>
+      <link>https://www.sec.gov/newsroom/press-releases/2026-100-sec-proposal-would-address-how-investment-advisers-funds-can-custody-crypto-assets-under-federal</link>
+      <guid isPermaLink="false">a6418b36-75ad-41ac-8303-10a13eb4073b</guid>
+      <pubDate>Thu, 01 Oct 2026 12:16:07 -0400</pubDate>
+    </item>
+    <item>
+      <title> SEC’s Division of Examinations Announces New Exam Handbook </title>
+      <link>https://www.sec.gov/newsroom/press-releases/2026-99-secs-division-examinations-announces-new-exam-handbook</link>
+      <guid isPermaLink="false">5f4d2a6f-0fff-43fc-af68-532921744f75</guid>
+      <pubDate>Thu, 01 Oct 2026 11:03:35 -0400</pubDate>
+    </item>
+    <item>
+      <title> SEC Charges Meyer Global Management and Its CEO With Defrauding Retail Investors in Private Funds That Held Interests in SpaceX and Other Pre-IPO Securities </title>
+      <link>https://www.sec.gov/newsroom/press-releases/2026-98-sec-charges-meyer-global-management-its-ceo-defrauding-retail-investors-private-funds-held-interests</link>
+      <guid isPermaLink="false">352af6f8-9b2e-45ee-aa90-0806c18d18e5</guid>
+      <pubDate>Wed, 30 Sep 2026 14:30:01 -0400</pubDate>
+    </item>
+    <item>
+      <title> SEC Charges Two Individuals With Orchestrating Fraud Scheme That Targeted Veterans </title>
+      <link>https://www.sec.gov/newsroom/press-releases/2026-97-sec-charges-two-individuals-orchestrating-fraud-scheme-targeted-veterans</link>
+      <guid isPermaLink="false">7842a15d-6b54-49f2-bd2a-043e63018972</guid>
+      <pubDate>Wed, 30 Sep 2026 12:42:15 -0400</pubDate>
+    </item>
+    <item>
+      <title> SEC Proposes Amendments to Expand Responsible Retailization of Private Markets </title>
+      <link>https://www.sec.gov/newsroom/press-releases/2026-96-sec-proposes-amendments-expand-responsible-retailization-private-markets</link>
+      <guid isPermaLink="false">8c473a64-7653-4e74-b264-a61f63a40439</guid>
+      <pubDate>Wed, 30 Sep 2026 11:45:00 -0400</pubDate>
+    </item>
+    <item>
+      <title> SEC Charges Multiple Entities in Fraud Schemes Totaling at Least $15 Million That Used WhatsApp and Other Platforms to Lure Investors </title>
+      <link>https://www.sec.gov/newsroom/press-releases/2026-95-sec-charges-multiple-entities-fraud-schemes-totaling-least-15-million-used-whatsapp-other-platforms</link>
+      <guid isPermaLink="false">24ecbd59-921b-4629-ad59-3274eba339e1</guid>
+      <pubDate>Tue, 29 Sep 2026 09:55:53 -0400</pubDate>
+    </item>
+    <item>
+      <title> SEC Charges Registered Investment Adviser Zoe Financial for Failure to Disclose Conflict of Interest </title>
+      <link>https://www.sec.gov/newsroom/press-releases/2026-94-sec-charges-registered-investment-adviser-zoe-financial-failure-disclose-conflict-interest</link>
+      <guid isPermaLink="false">054c4054-b2b9-48f6-b30d-dc6f219db7e1</guid>
+      <pubDate>Mon, 28 Sep 2026 13:46:30 -0400</pubDate>
+    </item>
+  </channel>
+</rss>
