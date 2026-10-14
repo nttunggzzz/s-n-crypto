@@ -34,10 +34,11 @@ export const TaxManagementPage: React.FC = () => {
   }, []);
 
   // Settings State
-  const [taxMode, setTaxMode] = useState<TaxMode>('OFF');
+  const [taxMode, setTaxMode] = useState<TaxMode | ''>('');
   const [taxRate, setTaxRate] = useState<string>('0.001');
   const [taxVndRate, setTaxVndRate] = useState<string>('');
   const [reason, setReason] = useState<string>('');
+  const userEditedRef = React.useRef(false);
   const [settingsLoading, setSettingsLoading] = useState(true);
   const [savingSettings, setSavingSettings] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
@@ -57,9 +58,11 @@ export const TaxManagementPage: React.FC = () => {
     setSettingsLoading(true);
     try {
       const s = await api.adminTaxSettings();
-      setTaxMode(s.taxMode);
-      setTaxRate(s.taxRate);
-      setTaxVndRate(s.taxVndRate || '');
+      if (!userEditedRef.current) {
+        setTaxMode(s.taxMode);
+        setTaxRate(s.taxRate);
+        setTaxVndRate(s.taxVndRate || '');
+      }
     } catch {
       // Ignore or set error
     } finally {
@@ -118,13 +121,14 @@ export const TaxManagementPage: React.FC = () => {
         taxVndRate: string | null;
         reason: string;
       } = {
-        taxMode,
+        taxMode: taxMode || 'OFF',
         taxRate,
         taxVndRate: taxVndRate.trim() === '' ? null : taxVndRate.trim(),
         reason: trimmedReason,
       };
 
       const updated = await api.adminUpdateTaxSettings({ body: payload });
+      userEditedRef.current = false;
       setTaxMode(updated.taxMode);
       setTaxRate(updated.taxRate);
       setTaxVndRate(updated.taxVndRate || '');
@@ -188,6 +192,7 @@ export const TaxManagementPage: React.FC = () => {
             variant="secondary"
             size="sm"
             onClick={() => {
+              userEditedRef.current = false;
               fetchSettings();
               fetchSummary(period);
               fetchWithholdings();
@@ -258,9 +263,17 @@ export const TaxManagementPage: React.FC = () => {
               <select
                 data-testid="admin-tax-mode"
                 value={taxMode}
-                onChange={(e) => setTaxMode(e.target.value as TaxMode)}
+                onChange={(e) => {
+                  userEditedRef.current = true;
+                  setTaxMode(e.target.value as TaxMode);
+                }}
+                onInput={(e) => {
+                  userEditedRef.current = true;
+                  setTaxMode((e.target as HTMLSelectElement).value as TaxMode);
+                }}
                 className="w-full bg-[var(--bg,#000000)] border border-[var(--line,#1d1e21)] rounded-lg px-3 py-2 text-[var(--text,#f4f4f5)] outline-none focus:border-indigo-500"
               >
+                <option value="" hidden>— Đang tải —</option>
                 <option value="OFF">OFF (Tắt khấu trừ thuế)</option>
                 <option value="WITHHOLD">WITHHOLD (Khấu trừ thuế 0,1% lệnh bán Spot)</option>
               </select>
@@ -278,7 +291,10 @@ export const TaxManagementPage: React.FC = () => {
                 type="text"
                 data-testid="admin-tax-rate"
                 value={taxRate}
-                onChange={(e) => setTaxRate(e.target.value)}
+                onChange={(e) => {
+                  userEditedRef.current = true;
+                  setTaxRate(e.target.value);
+                }}
                 placeholder="0.001"
                 className="w-full bg-[var(--bg,#000000)] border border-[var(--line,#1d1e21)] rounded-lg px-3 py-2 font-mono text-[var(--text,#f4f4f5)] outline-none focus:border-indigo-500"
               />
@@ -300,7 +316,10 @@ export const TaxManagementPage: React.FC = () => {
                 type="text"
                 data-testid="admin-tax-vnd-rate"
                 value={taxVndRate}
-                onChange={(e) => setTaxVndRate(e.target.value)}
+                onChange={(e) => {
+                  userEditedRef.current = true;
+                  setTaxVndRate(e.target.value);
+                }}
                 placeholder="Để trống để xóa tỷ giá (null)"
                 className="w-full bg-[var(--bg,#000000)] border border-[var(--line,#1d1e21)] rounded-lg px-3 py-2 font-mono text-[var(--text,#f4f4f5)] outline-none focus:border-indigo-500"
               />
@@ -318,7 +337,10 @@ export const TaxManagementPage: React.FC = () => {
                 type="text"
                 data-testid="admin-tax-reason"
                 value={reason}
-                onChange={(e) => setReason(e.target.value)}
+                onChange={(e) => {
+                  userEditedRef.current = true;
+                  setReason(e.target.value);
+                }}
                 placeholder="Nhập lý do thay đổi để ghi nhật ký audit (tối thiểu 5 ký tự)..."
                 className="w-full bg-[var(--bg,#000000)] border border-[var(--line,#1d1e21)] rounded-lg px-3 py-2 text-[var(--text,#f4f4f5)] outline-none focus:border-indigo-500"
               />
