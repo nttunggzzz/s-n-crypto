@@ -12,7 +12,8 @@ Mỗi thẻ viết đủ để model Sonnet làm **mà không phải tự quyế
   - prompt = toàn bộ khối **"Lệnh giao việc"** của thẻ.
 - Rà kết quả (`cex-reviewer`) và gộp `main` vẫn do lead làm (model mặc định). Sonnet chỉ code, test và commit trên nhánh của thẻ.
 - **Sau khi gộp, lead xóa worktree của thẻ.** Trước đó gỡ junction `node_modules/@cex/*` bằng `cmd /c rmdir`, rồi chạy `git worktree remove --force`.
-  Lý do (bài học 2026-10-14): worktree còn `node_modules` làm `npm run lint` trên main lỗi "multiple candidate TSConfigRootDirs" (738 lỗi giả).
+  Lý do (bài học 2026-10-14): worktree còn mở trong `.claude/worktrees` làm `npm run lint` trên main lỗi "multiple candidate TSConfigRootDirs" (738 lỗi giả).
+  Đã sửa gốc: `eslint.config.js` bỏ qua `.claude/**`. Vẫn xóa worktree sau khi gộp cho gọn.
 - Mỗi thẻ có 3 phần:
   - **Đầu vào** — phải có trước khi làm;
   - **Bước code** — theo thứ tự;
@@ -42,8 +43,9 @@ Quy tắc dự án bắt buộc (CLAUDE.md, mục Bất biến):
 | T1 hợp đồng | `be/tax-t1-contracts` | **Đã gộp** `ca59bc2` (cùng T2) |
 | T2 lõi backend | `be/tax-t2-core` (nền T1) | **Đã gộp** `ca59bc2`; verify 424/424; rà: 0 P0/P1, 1 P2 + 7 P3 → T3 mục 3.0 |
 | **T2R** rà + gộp T1+T2 | — | **Xong** 2026-10-14 (đã push) |
-| **T3** API báo cáo | `be/tax-t3-reports` | Sonnet, thẻ ở mục 3 |
-| **T4a** test e2e + testid | `be/tax-t4-e2e` | Sonnet, thẻ ở mục 4 |
+| **T3** API báo cáo | `be/tax-t3-reports` | **Đã gộp** `fdc0000` (Sonnet); verify 447/447; rà: 0 P0/P1, 1 P2 → T3F |
+| **T4a** test e2e + testid | `be/tax-t4-e2e` | **Đã gộp** `f7c8fe4` (Sonnet, effort medium); đỏ tới khi có UI |
+| **T3F** sửa theo rà T3 + realtime thuế | `be/tax-t3f` | Sonnet, effort high, thẻ ở mục 4F — **trước T5** |
 | **T4b** giao diện | `ui/gd2-exchange` | Antigravity (PROMPT-16, lead viết) |
 | **T5** lên sàn thật | — | Lead + chủ dự án |
 
@@ -264,6 +266,43 @@ Chỉ sửa e2e/** và docs/antigravity/TESTIDS.md. Nhánh be/tax-t4-e2e từ ma
 ```
 
 ---
+
+## 4F. Thẻ T3F — Sửa theo lần rà T3 + đẩy cài đặt thuế qua realtime (Sonnet, effort high)
+
+**Agent:** `cex-backend-builder`, `model: "sonnet"`, `effort: "high"` (đụng cache cài đặt quyết định trừ tiền).
+**Nhánh:** `be/tax-t3f` từ `main` (≥ `f7c8fe4`). **Phải xong trước T5.** Không có migration.
+
+1. **P2 — cache thuế kẹt giá trị cũ** (`server/src/modules/exchange/exchangeConfig.ts` `reloadAfterCommit`):
+   - Khi lần thử thứ 2 cũng lỗi, đặt cờ `stale = true` rồi lên lịch thử lại có backoff: 1 s, 2 s, 4 s … tối đa 30 s, lặp tới khi thành công. Thành công thì xóa cờ.
+   - Gửi cảnh báo qua `server/src/ops/alerts.ts`, theo cách các cảnh báo khác đang gửi (một lần khi bắt đầu kẹt, một lần khi hồi phục).
+   - Timer dùng `unref()` để không giữ tiến trình. Dừng timer khi server tắt (theo cách các job nền khác dừng).
+   - Test: `load` lỗi 3 lần rồi thành công → sau backoff, `config.tax.mode` khớp DB; có đúng 1 cảnh báo kẹt + 1 hồi phục.
+2. **P3 — reload sau commit trong admin:** các chỗ gọi `reload()` sau commit ở `server/src/modules/admin/adminService.ts` (~539, 550, 587, 666) chuyển sang `reloadAfterCommit()`. Request đã commit thì không bao giờ trả 500 vì reload.
+3. **Realtime — cài đặt thuế đổi là form BÁN cập nhật ngay** (spec e2e T4a ca 5 cần):
+   - Hợp đồng: `ExchangeStatus` (`packages/contracts/src/market.ts:205`) thêm `taxMode`, `taxRate`, `taxVndRate: DecimalString | null`. Chỉ thêm trường.
+   - Cập nhật fixture, mock (mock gửi `exchange:status` khi `setMockTax()` / PATCH mock), CHANGELOG **0.16.0**, README §15.
+   - Server: `ExchangeConfig.exchangeStatus()` trả thêm 3 trường. Sau khi PATCH thuế commit + reload, phát `exchange:status`, giống như khi admin dừng sàn (xem `realtime/hub.ts:55` đang nghe sự kiện nào thì phát đúng sự kiện đó).
+   - Test: client đăng ký `exchange:status`, admin PATCH `taxMode` → nhận sự kiện có `taxMode` mới.
+4. **P3 — lọc userId an toàn** (`server/src/modules/tax/reports.ts:177`):
+   - Tách thành hai hàm: hàm cho người dùng **bắt buộc** có `userId: string` (kiểu không optional), hàm cho admin nhận `userId?`.
+   - Chuỗi rỗng → `VALIDATION_ERROR`, không bao giờ bỏ qua bộ lọc.
+5. **P3 — test báo cáo độc lập** (`server/src/modules/tax/reports.test.ts`):
+   - Lấy kỳ từ `createdAt` của chính bản ghi vừa tạo (tính tháng UTC+7 bằng JS), không lấy từ đồng hồ.
+   - Khối admin kiểm bằng **hiệu số**: gọi `adminTaxSummary` trước và sau khi tạo dữ liệu; danh sách và CSV lọc theo `userId` của người dùng trong test.
+   - Bỏ ghi chú "ORDER MATTERS". Chạy `npx vitest run server/src/modules/tax --sequence.shuffle` 3 lần, cả 3 lần đều xanh.
+6. **P3 — test "two reloads in parallel"** (`exchange/tax.test.ts:~558`): giữ `load` của lần 1 lại sau khi nó SELECT xong, đợi lần 2 xong rồi mới thả lần 1 → cache phải mang giá trị mới. Kiểm chứng test này **đỏ** khi tạm bỏ việc nối tiếp, rồi trả code lại.
+7. **P3 — báo cáo cộng một đồng quote:** `adminUpdateTaxSettings` từ chối bật `WITHHOLD` (`VALIDATION_ERROR`, field `taxMode`) khi đang bật một cặp có quote ≠ USDT. Ghi ràng buộc này vào README §15.
+8. **P3 — số liệu nhất quán + tải:**
+   - Các truy vấn của một lần `taxSummary` / `adminTaxSummary` chạy trong `db.transaction(..., { isolationLevel: 'repeatable read', accessMode: 'read only' })`.
+   - Thêm rate limit cho `taxSummary` theo cách `taxExport` đang làm (thay cho index mới trên `trades`).
+
+Nghiệm thu: `npm run typecheck`, `npx vitest run server/src/modules/tax server/src/modules/exchange/tax.test.ts` (+ shuffle 3 lần), `npm test`, `npm run lint`, test contracts. Dán lệnh + số.
+
+Lệnh giao việc T3F:
+```
+Đợt T3F Module T: sửa theo lần rà T3 và đẩy cài đặt thuế qua exchange:status. Đọc docs/plans/module-T-huong-dan-code.md mục 4F, làm ĐÚNG theo đó;
+mục nào không rõ thì dừng và hỏi. Nhánh be/tax-t3f từ main. Được sửa server/** và packages/contracts/** (chỉ phần mục 3: ExchangeStatus, fixture, mock, CHANGELOG 0.16.0, README §15).
+```
 
 ## 5. Thẻ T4b — PROMPT-16 cho Antigravity (lead viết sau T4a)
 Nội dung lấy từ kế hoạch mục 3.6 + bảng testid mục 4.1, cùng các điểm sau:

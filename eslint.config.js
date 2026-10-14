@@ -42,7 +42,7 @@ function asWarnings(configs) {
 
 export default tseslint.config(
   {
-    ignores: ['**/node_modules/**', '**/dist/**', 'legacy/**', '.e2e/**', 'ui/**', 'host/**', 'host-data/**', '**/*.d.ts', 'server/drizzle/**', 'apps/*/public/**'],
+    ignores: ['**/node_modules/**', '**/dist/**', 'legacy/**', '.e2e/**', 'ui/**', 'host/**', 'host-data/**', '**/*.d.ts', 'server/drizzle/**', 'apps/*/public/**', '.claude/**'],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
