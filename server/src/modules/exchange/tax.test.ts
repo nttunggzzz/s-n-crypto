@@ -522,6 +522,54 @@ describe('T3 step 0: partial LIMIT SELL fills with tax on', () => {
   });
 });
 
+/**
+ * `db` whose FIRST select started after `arm()` returns its rows only after `release()`: the load that issued it has READ
+ * the old settings but cannot apply them yet - exactly the window in which a second reload could finish first.
+ */
+function heldDb(real: Db) {
+  let armed = false;
+  let release!: () => void;
+  let reached!: () => void;
+  const gate = new Promise<void>((r) => (release = r));
+  const heldReached = new Promise<void>((r) => (reached = r));
+  const wrap = <T extends object>(q: T): T =>
+    new Proxy(q, {
+      get(target, prop) {
+        if (prop === 'then') {
+          return (ok: (v: unknown) => unknown, bad: (e: unknown) => unknown) =>
+            (target as unknown as Promise<unknown>)
+              .then(async (rows) => {
+                reached();
+                await gate;
+                return rows;
+              })
+              .then(ok, bad);
+        }
+        const v = Reflect.get(target, prop, target) as unknown;
+        if (typeof v !== 'function') return v;
+        return (...args: unknown[]) => {
+          const r = (v as (...a: unknown[]) => unknown).apply(target, args);
+          return r !== null && typeof r === 'object' ? wrap(r) : r;
+        };
+      },
+    });
+  const db = new Proxy(real, {
+    get(target, prop) {
+      const v = Reflect.get(target, prop, target) as unknown;
+      if (prop === 'select' && typeof v === 'function') {
+        return (...args: unknown[]) => {
+          const q = (v as (...a: unknown[]) => object).apply(target, args);
+          if (!armed) return q;
+          armed = false;
+          return wrap(q);
+        };
+      }
+      return typeof v === 'function' ? (v as (...a: unknown[]) => unknown).bind(target) : v;
+    },
+  }) as Db;
+  return { db, arm: () => (armed = true), release: () => release(), heldReached };
+}
+
 describe('T3 step 0: ExchangeConfig reload', () => {
   type Loader = { load: () => Promise<void> };
   it('reloads run one after another and a failed one does not break the chain', async () => {
@@ -557,54 +605,6 @@ describe('T3 step 0: ExchangeConfig reload', () => {
     }
   });
 
-  /**
-   * `db` whose FIRST select started after `arm()` returns its rows only after `release()`: the load that issued it has READ
-   * the old settings but cannot apply them yet - exactly the window in which a second reload could finish first.
-   */
-  function heldDb(real: Db) {
-    let armed = false;
-    let release!: () => void;
-    let reached!: () => void;
-    const gate = new Promise<void>((r) => (release = r));
-    const heldReached = new Promise<void>((r) => (reached = r));
-    const wrap = <T extends object>(q: T): T =>
-      new Proxy(q, {
-        get(target, prop) {
-          if (prop === 'then') {
-            return (ok: (v: unknown) => unknown, bad: (e: unknown) => unknown) =>
-              (target as unknown as Promise<unknown>)
-                .then(async (rows) => {
-                  reached();
-                  await gate;
-                  return rows;
-                })
-                .then(ok, bad);
-          }
-          const v = Reflect.get(target, prop, target) as unknown;
-          if (typeof v !== 'function') return v;
-          return (...args: unknown[]) => {
-            const r = (v as (...a: unknown[]) => unknown).apply(target, args);
-            return r !== null && typeof r === 'object' ? wrap(r) : r;
-          };
-        },
-      });
-    const db = new Proxy(real, {
-      get(target, prop) {
-        const v = Reflect.get(target, prop, target) as unknown;
-        if (prop === 'select' && typeof v === 'function') {
-          return (...args: unknown[]) => {
-            const q = (v as (...a: unknown[]) => object).apply(target, args);
-            if (!armed) return q;
-            armed = false;
-            return wrap(q);
-          };
-        }
-        return typeof v === 'function' ? (v as (...a: unknown[]) => unknown).bind(target) : v;
-      },
-    }) as Db;
-    return { db, arm: () => (armed = true), release: () => release(), heldReached };
-  }
-
   it('two reloads in parallel: the first has READ the old value but is held; the second reads the NEW value -> the cache ends on the NEW value', async () => {
     const held = heldDb(env.database.db);
     const cfg = new ExchangeConfig(held.db);
@@ -625,8 +625,11 @@ describe('T3 step 0: ExchangeConfig reload', () => {
   });
 
   it('reloadAfterCommit retries once, and never throws after a failed retry (the cache is then flagged stale)', async () => {
-    const cfg = env.ex.config as unknown as Loader;
-    const real = cfg.load.bind(env.ex.config);
+    // its own config object: stopping it must not touch the shared env.ex.config of this file
+    const own = new ExchangeConfig(env.database.db, { retryDelayMs: () => 60_000 });
+    await own.reload();
+    const cfg = own as unknown as Loader;
+    const real = cfg.load.bind(own);
     let calls = 0;
     cfg.load = async () => {
       calls++;
@@ -634,21 +637,23 @@ describe('T3 step 0: ExchangeConfig reload', () => {
       await real();
     };
     try {
-      await env.ex.config.reloadAfterCommit();
+      await own.reloadAfterCommit();
       expect(calls).toBe(2); // the first failed, the retry worked
-      expect(env.ex.config.stale).toBe(false);
+      expect(own.stale).toBe(false);
       calls = 0;
       cfg.load = async () => {
         calls++;
         throw new Error('db down');
       };
-      await expect(env.ex.config.reloadAfterCommit()).resolves.toBeUndefined();
+      await expect(own.reloadAfterCommit()).resolves.toBeUndefined();
       expect(calls).toBe(2); // exactly two attempts inline, then give up quietly (logged) and retry in the background
-      expect(env.ex.config.stale).toBe(true);
+      expect(own.stale).toBe(true);
     } finally {
       cfg.load = real;
-      env.ex.config.stop(); // no background retry left behind
+      own.stop(); // no background retry left behind
     }
+    expect(own.stale).toBe(false); // stop() clears the flag: nothing is retrying any more
+    expect(env.ex.config.stale).toBe(false);
   });
 });
 
@@ -738,5 +743,61 @@ describe('T3F: a cache that cannot reload heals itself', () => {
     cfg.stop();
     await vi.advanceTimersByTimeAsync(120_000);
     expect(calls).toBe(5);
+  });
+});
+
+describe('T3F review fixes: a hanging load()', () => {
+  type Loader = { load: () => Promise<void> };
+  const sent: { key: string; level: string }[] = [];
+  const alerter = { send: async (key: string, level: 'info' | 'warn' | 'critical') => void sent.push({ key, level }) };
+  afterEach(() => {
+    vi.useRealTimers();
+    sent.length = 0;
+  });
+
+  it('a load that never resolves times out (10 s), counts as a failed reload, flags the cache stale with one alert, and does not block the next reload', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    const cfg = new ExchangeConfig(env.database.db, { alerter });
+    const loader = cfg as unknown as Loader;
+    let calls = 0;
+    loader.load = () => {
+      calls++;
+      return new Promise<void>(() => undefined); // hangs forever
+    };
+    const done = cfg.reloadAfterCommit();
+    await vi.advanceTimersByTimeAsync(9_999);
+    expect(calls).toBe(1);
+    expect(cfg.stale).toBe(false); // still waiting for the first attempt
+    await vi.advanceTimersByTimeAsync(1); // attempt 1 times out, attempt 2 starts
+    expect(calls).toBe(2);
+    await vi.advanceTimersByTimeAsync(10_000); // attempt 2 times out
+    await done;
+    expect(cfg.stale).toBe(true);
+    expect(sent).toEqual([{ key: 'config-stale', level: 'critical' }]);
+    // the chain is not stuck: a later reload (load works again) goes through, the flag clears
+    vi.useRealTimers();
+    loader.load = async () => undefined;
+    await cfg.reload();
+    expect(cfg.stale).toBe(false);
+    expect(sent.map((a) => a.level)).toEqual(['critical', 'info']);
+    cfg.stop();
+  });
+
+  it('the late result of a timed-out load is never assigned over a newer one', async () => {
+    const held = heldDb(env.database.db);
+    const cfg = new ExchangeConfig(held.db, { loadTimeoutMs: 100 });
+    await cfg.reload(); // OFF / 0.001
+    held.arm();
+    const first = cfg.reload(); // reads OFF / 0.001, then hangs in the held select
+    await held.heldReached;
+    await expect(first).rejects.toThrow(/timed out/);
+    await env.database.db.update(exchangeSettings).set({ taxRate: '0.005', taxMode: 'WITHHOLD' }).where(eq(exchangeSettings.id, 1));
+    await cfg.reload(); // reads the NEW values
+    expect([cfg.tax.mode, cfg.tax.rate.toFixed()]).toEqual(['WITHHOLD', '0.005']);
+    held.release(); // the abandoned load now finishes with its OLD rows
+    await new Promise((r) => setTimeout(r, 150));
+    expect([cfg.tax.mode, cfg.tax.rate.toFixed()]).toEqual(['WITHHOLD', '0.005']);
+    cfg.stop();
+    await setTax('OFF');
   });
 });

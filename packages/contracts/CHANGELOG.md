@@ -13,7 +13,7 @@ Chỉ thêm trường; không thêm endpoint (vẫn 150). Hướng dẫn: README
 **Có thể ảnh hưởng UI**
 - Ai tự dựng đối tượng `ExchangeStatus` (test, story) phải thêm 3 trường mới (typecheck sẽ báo).
 - Server: `adminUpdateTaxSettings` từ chối bật `taxMode = 'WITHHOLD'` (400 `VALIDATION_ERROR`, field `taxMode`) khi đang bật cặp có quote khác USDT
-  (báo cáo thuế cộng số của một đồng quote). Giao diện admin nên hiện lỗi này ở ô `taxMode`.
+  (báo cáo thuế cộng số của một đồng quote). Giao diện admin nên hiện lỗi này ở ô `taxMode`. Chiều ngược lại: khi thuế đang `WITHHOLD`, `adminUpdateSymbol` bật cặp quote khác USDT bị 400 `VALIDATION_ERROR` (field `enabled`).
 
 ## 0.15.0 — 2026-10-14 (Thuế crypto Việt Nam, thử nghiệm — Module T, đợt T1)
 Chỉ thêm. 10 endpoint mới, tổng 150. Hướng dẫn: README mục 15.

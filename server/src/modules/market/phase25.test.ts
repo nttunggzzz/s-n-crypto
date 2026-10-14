@@ -197,11 +197,16 @@ describe('coin info (admin)', () => {
     const admin = await h.staff('admin');
     const support = await h.staff('support');
     await expectApiError(support.b.adminUpdateAsset({ params: { asset: 'BTC' }, body: { tags: ['LAYER1'], reason: 'gọn nhóm ngành' } }), 'FORBIDDEN');
-    const btc = await admin.b.adminUpdateAsset({ params: { asset: 'BTC' }, body: { tags: ['LAYER1', 'LAYER1'], reason: 'gọn nhóm ngành' } });
-    expect(btc).toEqual({ asset: 'BTC', name: 'Bitcoin', tags: ['LAYER1'], description: expect.any(String) });
-    expect((await h.browser().exchangeInfo()).assets[0]!.tags).toEqual(['LAYER1']);
-    const [row] = await h.env.database.db.select().from(auditLogs).where(and(eq(auditLogs.action, 'ASSET_UPDATE'), eq(auditLogs.targetId, 'BTC')));
-    expect(row).toMatchObject({ targetType: 'ASSET', reason: 'gọn nhóm ngành', before: { tags: ['LAYER1', 'PAYMENTS'] }, after: { tags: ['LAYER1'] } });
+    try {
+      const btc = await admin.b.adminUpdateAsset({ params: { asset: 'BTC' }, body: { tags: ['LAYER1', 'LAYER1'], reason: 'gọn nhóm ngành' } });
+      expect(btc).toEqual({ asset: 'BTC', name: 'Bitcoin', tags: ['LAYER1'], description: expect.any(String) });
+      expect((await h.browser().exchangeInfo()).assets[0]!.tags).toEqual(['LAYER1']);
+      const [row] = await h.env.database.db.select().from(auditLogs).where(and(eq(auditLogs.action, 'ASSET_UPDATE'), eq(auditLogs.targetId, 'BTC'), eq(auditLogs.reason, 'gọn nhóm ngành')));
+      expect(row).toMatchObject({ targetType: 'ASSET', reason: 'gọn nhóm ngành', before: { tags: ['LAYER1', 'PAYMENTS'] }, after: { tags: ['LAYER1'] } });
+    } finally {
+      // put the seed tags back so the tests of this file do not depend on their order
+      await admin.b.adminUpdateAsset({ params: { asset: 'BTC' }, body: { tags: ['LAYER1', 'PAYMENTS'], reason: 'khôi phục nhóm ngành' } });
+    }
     await expectApiError(admin.b.adminUpdateAsset({ params: { asset: 'ZZZ' }, body: { name: 'Zed', reason: 'thử coin lạ' } }), 'NOT_FOUND');
   });
 });

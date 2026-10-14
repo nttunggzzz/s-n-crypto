@@ -12,6 +12,7 @@ import { MarketDataService } from './modules/market/marketData.ts';
 import { BinanceStream, syncSymbolsFromBinance } from './modules/market/binance.ts';
 import { CandleService } from './modules/market/candleService.ts';
 import { ExchangeConfig } from './modules/exchange/exchangeConfig.ts';
+import { checkTaxQuoteInvariant } from './modules/tax/taxService.ts';
 import { createExchange } from './modules/exchange/index.ts';
 import { reconcile } from './modules/exchange/reconciliation.ts';
 import { RealtimeHub } from './realtime/hub.ts';
@@ -67,6 +68,7 @@ if (feedOn) {
 
 const exchangeConfig = new ExchangeConfig(database.db, { alerter });
 await exchangeConfig.reload();
+await checkTaxQuoteInvariant(exchangeConfig, alerter);
 const market = new MarketDataService(
   exchangeConfig.allSymbols().map((s) => s.row.symbol),
   () => exchangeConfig.settings.staleThresholdMs,

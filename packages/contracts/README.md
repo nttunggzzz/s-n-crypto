@@ -344,7 +344,7 @@ await api.adminTaxWithholdings({ query: { userId, symbol, from: sum.from, to: su
 - `taxRate`: > 0 và ≤ 0,01, tối đa 8 chữ số lẻ (sai → 400 `VALIDATION_ERROR`); tắt thuế bằng `taxMode: 'OFF'`, không bằng tỷ lệ 0.
   Đổi tỷ lệ/tỷ giá chỉ áp dụng cho lần khớp **sau**: mỗi bản ghi giữ tỷ lệ và tỷ giá của chính nó.
 - Ràng buộc bật thuế: `adminUpdateTaxSettings` từ chối `taxMode: 'WITHHOLD'` khi đang bật một cặp có quote khác USDT (400 `VALIDATION_ERROR`, field `taxMode`):
-  báo cáo thuế cộng số của một đồng quote (USDT), nên chỉ bật thuế khi mọi cặp đang bật đều quote USDT. Tắt cặp quote khác trước rồi mới bật thuế.
+  báo cáo thuế cộng số của một đồng quote (USDT), nên chỉ bật thuế khi mọi cặp đang bật đều quote USDT. Tắt cặp quote khác trước rồi mới bật thuế. Chiều ngược lại cũng bị chặn: khi `taxMode = 'WITHHOLD'`, `adminUpdateSymbol` từ chối bật (`enabled: true`) một cặp quote khác USDT (400 `VALIDATION_ERROR`, field `enabled`).
 - `byCategory` luôn 3 dòng theo thứ tự enum (`DOMESTIC_ORG` luôn 0); `bySymbol` xếp theo thuế giảm dần.
 
 **Mock:** bắt đầu ở `WITHHOLD` 0,1%, tỷ giá 26350 (server thật bắt đầu `OFF`); có 2 lần bán cũ của người dùng demo (tháng 8 chưa có tỷ giá,

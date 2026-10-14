@@ -29,6 +29,19 @@ export interface ExchangeConfigOptions {
   alerter?: Pick<Alerter, 'send'>;
   /** Delay before background retry `attempt` (0-based). Default `reloadBackoffMs`; tests shorten it. */
   retryDelayMs?: (attempt: number) => number;
+  /** One load() that takes longer than this is treated as failed (a hanging query must not block the reload chain). Default 10 s. */
+  loadTimeoutMs?: number;
+}
+
+/** Contract `TaxSettings` from a settings row (the committed row of the admin's transaction, or the cached one). */
+export function taxSettingsFromRow(s: SettingsRow): TaxSettings {
+  return {
+    taxMode: s.taxMode,
+    taxRate: dec(s.taxRate).toFixed(),
+    taxVndRate: s.taxVndRate === null ? null : dec(s.taxVndRate).toFixed(),
+    taxVndRateUpdatedAt: s.taxVndRateUpdatedAt?.toISOString() ?? null,
+    updatedAt: s.taxUpdatedAt.toISOString(),
+  };
 }
 
 export interface LoadedSymbol {
@@ -54,6 +67,8 @@ export class ExchangeConfig extends EventEmitter<{ changed: [] }> {
   private retryTimer: NodeJS.Timeout | undefined;
   private retryAttempt = 0;
   private stopped = false;
+  /** Bumped before every load and when one times out: a load whose number is no longer current never assigns its result. */
+  private loadGen = 0;
 
   constructor(
     private readonly db: Db,
@@ -67,11 +82,12 @@ export class ExchangeConfig extends EventEmitter<{ changed: [] }> {
     return this.staleSince !== null;
   }
 
-  /** Stops the background retry (server shutdown). */
+  /** Stops the background retry (server shutdown) and clears the stale flag: nothing is retrying any more. */
   stop(): void {
     this.stopped = true;
     clearTimeout(this.retryTimer);
     this.retryTimer = undefined;
+    this.staleSince = null;
   }
 
   /** Tail of the reload chain: reloads run one after another, so an older read can never overwrite a newer one. */
@@ -80,12 +96,53 @@ export class ExchangeConfig extends EventEmitter<{ changed: [] }> {
   reload(): Promise<void> {
     const run = this.reloading
       .then(
-        () => this.load(),
-        () => this.load(),
+        () => this.loadWithTimeout(),
+        () => this.loadWithTimeout(),
       )
       .then(() => this.markFresh());
     this.reloading = run.catch(() => undefined);
     return run;
+  }
+
+  /**
+   * One load() with a deadline. On timeout the generation is bumped so that the late result of the abandoned load is never
+   * assigned (it could be older than a newer load's result), and the reload fails like any other failed load.
+   */
+  private async loadWithTimeout(): Promise<void> {
+    const gen = ++this.loadGen;
+    const ms = this.opts.loadTimeoutMs ?? 10_000;
+    let timer: NodeJS.Timeout | undefined;
+    const deadline = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        if (this.loadGen === gen) this.loadGen++;
+        reject(new Error(`exchange config load timed out after ${ms} ms`));
+      }, ms);
+      timer.unref();
+    });
+    try {
+      await Promise.race([this.load(), deadline]);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  /**
+   * Fail-safe for a HALT that is committed in the DB while the cache cannot be refreshed: the in-memory settings say halted at
+   * once, so matching and new orders stop. A later successful load overwrites it with the real DB value.
+   */
+  applyCommittedHalt(halted: true): void {
+    if (this.settingsRow.tradingHalted === halted) return;
+    this.settingsRow = { ...this.settingsRow, tradingHalted: halted };
+    this.publishChange();
+  }
+
+  private publishChange(): void {
+    const key = this.statusKey();
+    if (key !== this.lastStatusKey) {
+      this.lastStatusKey = key;
+      this.statusChangedAt = new Date();
+    }
+    this.emit('changed');
   }
 
   /**
@@ -152,9 +209,9 @@ export class ExchangeConfig extends EventEmitter<{ changed: [] }> {
   }
 
   private async load(): Promise<void> {
+    const gen = this.loadGen;
     const [s] = await this.db.select().from(exchangeSettings).where(eq(exchangeSettings.id, 1));
     if (!s) throw new Error('exchange_settings row missing — run migrations');
-    this.settingsRow = s;
     const rows = await this.db.select().from(symbols).orderBy(asc(symbols.sortOrder), asc(symbols.symbol));
     const map = new Map<string, LoadedSymbol>();
     for (const row of rows) {
@@ -170,15 +227,13 @@ export class ExchangeConfig extends EventEmitter<{ changed: [] }> {
       };
       map.set(row.symbol, { row, rules, tick: dec(row.tickSize), step: dec(row.stepSize) });
     }
-    this.symbolMap = map;
     const assetRows = await this.db.select().from(assets);
+    // timed out (or superseded) while reading: this result may be older than the cache, so it is dropped
+    if (gen !== this.loadGen) return;
+    this.settingsRow = s;
+    this.symbolMap = map;
     this.assetMap = new Map(assetRows.map((a) => [a.asset, { asset: a.asset, name: a.name, tags: a.tags as AssetTag[], description: a.description }]));
-    const key = this.statusKey();
-    if (key !== this.lastStatusKey) {
-      this.lastStatusKey = key;
-      this.statusChangedAt = new Date();
-    }
-    this.emit('changed');
+    this.publishChange();
   }
 
   get settings(): SettingsRow {
@@ -211,14 +266,7 @@ export class ExchangeConfig extends EventEmitter<{ changed: [] }> {
 
   /** Contract `TaxSettings` (admin) — the same values exchangeInfo publishes. */
   taxSettings(): TaxSettings {
-    const t = this.tax;
-    return {
-      taxMode: t.mode,
-      taxRate: t.rate.toFixed(),
-      taxVndRate: t.vndRate === null ? null : t.vndRate.toFixed(),
-      taxVndRateUpdatedAt: t.vndRateUpdatedAt?.toISOString() ?? null,
-      updatedAt: t.updatedAt.toISOString(),
-    };
+    return taxSettingsFromRow(this.settingsRow);
   }
 
   allSymbols(): LoadedSymbol[] {

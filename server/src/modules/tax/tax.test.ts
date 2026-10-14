@@ -6,7 +6,7 @@ import { auditLogs, exchangeSettings, symbols, taxWithholdings, trades, userTaxP
 import { applyBalanceChanges } from '../exchange/ledger.ts';
 import { marketTrade, setBook } from '../../../test/helpers.ts';
 import { ApiHarness } from '../../../test/apiHarness.ts';
-import { TaxService } from './taxService.ts';
+import { checkTaxQuoteInvariant, TaxService } from './taxService.ts';
 
 /** HTTP tests of batch T2 (module T §3.5): tax settings (admin) + taxpayer profile (user). Responses are validated against the contract. */
 const h = new ApiHarness();
@@ -218,6 +218,159 @@ describe('T3F: an admin change that already committed never answers 500 because 
     await admin.b.adminUpdateSymbol({ params: { symbol: 'ETHUSDT' }, body: { enabled: true, cancelOpenOrders: false, reason: 'reload failure test: symbol back' } });
     await admin.b.adminUpdateSettings({ body: { feeRate: '0.001', reason: 'reload failure test: fee back' } });
     await admin.b.adminUpdateTaxSettings({ body: { taxRate: '0.001', reason: 'reload failure test: tax back' } });
+  });
+});
+
+describe('T3F review fixes: committed state wins over a stale cache', () => {
+  type Loader = { load: () => Promise<void> };
+  const haltAudits = async (action: string) => (await h.env.database.db.select().from(auditLogs).where(eq(auditLogs.action, action))).length;
+
+  it('P1: halt -> resume (reload fails, cache stale) -> halt again: the second halt is written and audited, and the exchange stays halted after the cache heals', async () => {
+    const admin = await h.staff('admin');
+    const db = h.env.database.db;
+    const config = h.env.ex.config;
+    const cfg = config as unknown as Loader;
+    const real = cfg.load.bind(config);
+    await admin.b.adminHaltTrading({ body: { reason: 'p1 test: first halt (cache healthy)', confirm: 'HALT' } });
+    expect(config.tradingHalted).toBe(true);
+    const halts = await haltAudits('TRADING_HALT');
+    cfg.load = async () => {
+      throw new Error('db hiccup during reload');
+    };
+    try {
+      await admin.b.adminResumeTrading({ body: { reason: 'p1 test: resume while the reload fails', confirm: 'RESUME' } });
+      expect(config.stale).toBe(true);
+      expect(config.tradingHalted).toBe(true); // the stale cache still says halted
+      await admin.b.adminHaltTrading({ body: { reason: 'p1 test: halt again while stale', confirm: 'HALT' } });
+      const [row] = await db.select().from(exchangeSettings).where(eq(exchangeSettings.id, 1));
+      expect(row!.tradingHalted).toBe(true); // written, although the cache already said "halted"
+      expect(await haltAudits('TRADING_HALT')).toBe(halts + 1); // audited
+      expect(config.tradingHalted).toBe(true); // matching stops now
+    } finally {
+      cfg.load = real;
+    }
+    await config.reload(); // the cache heals with the real DB value
+    expect(config.stale).toBe(false);
+    expect(config.tradingHalted).toBe(true);
+    await admin.b.adminResumeTrading({ body: { reason: 'p1 test: cleanup', confirm: 'RESUME' } });
+    expect(config.tradingHalted).toBe(false);
+  });
+
+  it('P1 fail-safe: a halt committed while the cache cannot reload stops matching at once (cache said "open"), and the heal keeps it halted', async () => {
+    const admin = await h.staff('admin');
+    const config = h.env.ex.config;
+    const cfg = config as unknown as Loader;
+    const real = cfg.load.bind(config);
+    expect(config.tradingHalted).toBe(false);
+    cfg.load = async () => {
+      throw new Error('db hiccup during reload');
+    };
+    try {
+      const res = await admin.b.adminHaltTrading({ body: { reason: 'p1 test: halt with a failing reload', confirm: 'HALT' } });
+      expect(res.tradingHalted).toBe(true);
+      expect(config.stale).toBe(true);
+      expect(config.tradingHalted).toBe(true); // applied from the committed row, not left at the cached "open"
+      expect(() => config.requireTradable('BTCUSDT')).toThrow(/halted/i);
+      // a halt that is already in the DB is a no-op write but still refreshes / re-applies
+      await admin.b.adminHaltTrading({ body: { reason: 'p1 test: halt twice', confirm: 'HALT' } });
+      expect(config.tradingHalted).toBe(true);
+    } finally {
+      cfg.load = real;
+    }
+    await config.reload();
+    expect(config.tradingHalted).toBe(true);
+    await admin.b.adminResumeTrading({ body: { reason: 'p1 test: cleanup', confirm: 'RESUME' } });
+    expect(config.tradingHalted).toBe(false);
+  });
+
+  it('P3-2: with WITHHOLD on, enabling a pair quoted in another asset is refused (field enabled); the startup check reports a violation that already exists', async () => {
+    const admin = await h.staff('admin');
+    const db = h.env.database.db;
+    const config = h.env.ex.config;
+    await db.insert(symbols).values({ symbol: 'ETHBTC', baseAsset: 'ETH', quoteAsset: 'BTC', tickSize: '0.0001', stepSize: '0.001', minQty: '0.001', maxQty: '9000', minNotional: '0.0001', sourceStatus: 'TRADING', sortOrder: 99, enabled: false });
+    await config.reload();
+    const sent: { key: string; level: string }[] = [];
+    const alerter = { send: async (key: string, level: 'info' | 'warn' | 'critical') => void sent.push({ key, level }) };
+    try {
+      await admin.b.adminUpdateTaxSettings({ body: { taxMode: 'WITHHOLD', reason: 'p3-2 test: tax on (the pair is disabled)' } });
+      const symbolAudits = async () => (await db.select().from(auditLogs).where(and(eq(auditLogs.action, 'SYMBOL_UPDATE'), eq(auditLogs.targetId, 'ETHBTC')))).length;
+      const audits = await symbolAudits();
+      await expect(admin.b.adminUpdateSymbol({ params: { symbol: 'ETHBTC' }, body: { enabled: true, cancelOpenOrders: false, reason: 'p3-2 test: enable under tax' } })).rejects.toSatisfy(
+        (e: unknown) => e instanceof ApiError && e.code === 'VALIDATION_ERROR' && e.status === 400 && (e.details as { field?: string } | undefined)?.field === 'enabled',
+      );
+      const [row] = await db.select().from(symbols).where(eq(symbols.symbol, 'ETHBTC'));
+      expect(row!.enabled).toBe(false);
+      expect(await symbolAudits()).toBe(audits); // nothing written
+      // disabling is always fine, and a USDT pair can still be enabled
+      await admin.b.adminUpdateSymbol({ params: { symbol: 'ETHUSDT' }, body: { enabled: false, cancelOpenOrders: false, reason: 'p3-2 test: usdt pair off' } });
+      await admin.b.adminUpdateSymbol({ params: { symbol: 'ETHUSDT' }, body: { enabled: true, cancelOpenOrders: false, reason: 'p3-2 test: usdt pair on' } });
+
+      // startup check: nothing wrong now, then force the violation behind the API's back
+      expect(await checkTaxQuoteInvariant(config, alerter)).toEqual([]);
+      expect(sent).toEqual([]);
+      await db.update(symbols).set({ enabled: true }).where(eq(symbols.symbol, 'ETHBTC'));
+      await config.reload();
+      expect(await checkTaxQuoteInvariant(config, alerter)).toEqual(['ETHBTC']);
+      expect(sent).toEqual([{ key: 'tax-quote', level: 'critical' }]);
+      // tax OFF: no violation by definition, and the pair may be enabled through the API
+      await admin.b.adminUpdateTaxSettings({ body: { taxMode: 'OFF', reason: 'p3-2 test: tax off' } });
+      expect(await checkTaxQuoteInvariant(config, alerter)).toEqual([]);
+      await db.update(symbols).set({ enabled: false }).where(eq(symbols.symbol, 'ETHBTC'));
+      await config.reload();
+      await admin.b.adminUpdateSymbol({ params: { symbol: 'ETHBTC' }, body: { enabled: true, cancelOpenOrders: false, reason: 'p3-2 test: enable with tax off' } });
+    } finally {
+      await db.delete(symbols).where(eq(symbols.symbol, 'ETHBTC'));
+      await db.update(exchangeSettings).set({ taxMode: 'OFF' }).where(eq(exchangeSettings.id, 1));
+      await config.reload();
+    }
+  });
+
+  it('P3-3: the audit "before" of a settings / symbol change is read from the DB, not from a stale cache', async () => {
+    const admin = await h.staff('admin');
+    const db = h.env.database.db;
+    const config = h.env.ex.config;
+    const cfg = config as unknown as Loader;
+    const real = cfg.load.bind(config);
+    cfg.load = async () => {
+      throw new Error('db hiccup during reload');
+    };
+    try {
+      await admin.b.adminUpdateSettings({ body: { feeRate: '0.002', reason: 'p3-3 test: fee 1' } });
+      await admin.b.adminUpdateSettings({ body: { feeRate: '0.003', reason: 'p3-3 test: fee 2' } }); // the cache still says 0.001
+      await admin.b.adminUpdateSymbol({ params: { symbol: 'ETHUSDT' }, body: { enabled: false, cancelOpenOrders: false, reason: 'p3-3 test: off' } });
+      await admin.b.adminUpdateSymbol({ params: { symbol: 'ETHUSDT' }, body: { enabled: true, cancelOpenOrders: false, reason: 'p3-3 test: on' } }); // the cache still says enabled
+    } finally {
+      cfg.load = real;
+      await config.reload();
+    }
+    const fee2 = (await db.select().from(auditLogs).where(eq(auditLogs.reason, 'p3-3 test: fee 2')))[0]!;
+    expect((fee2.before as { feeRate: string }).feeRate).toBe('0.002');
+    const on = (await db.select().from(auditLogs).where(eq(auditLogs.reason, 'p3-3 test: on')))[0]!;
+    expect(on.before).toEqual({ enabled: false });
+    await admin.b.adminUpdateSettings({ body: { feeRate: '0.001', reason: 'p3-3 test: fee back' } });
+  });
+
+  it('P2: while the cache cannot reload, the answers to settings and tax changes carry the NEW committed values', async () => {
+    const admin = await h.staff('admin');
+    const config = h.env.ex.config;
+    const cfg = config as unknown as Loader;
+    const real = cfg.load.bind(config);
+    cfg.load = async () => {
+      throw new Error('db hiccup during reload');
+    };
+    try {
+      const tax = await admin.b.adminUpdateTaxSettings({ body: { taxRate: '0.004', taxVndRate: '26000', reason: 'p2 test: tax while stale' } });
+      expect([tax.taxRate, tax.taxVndRate]).toEqual(['0.004', '26000']);
+      const fee = await admin.b.adminUpdateSettings({ body: { feeRate: '0.003', reason: 'p2 test: fee while stale' } });
+      expect(fee.feeRate).toBe('0.003');
+      expect(config.stale).toBe(true);
+      expect(config.tax.rate.toFixed()).toBe('0.001'); // the cache is old - the answers were not
+    } finally {
+      cfg.load = real;
+    }
+    await config.reload();
+    await admin.b.adminUpdateTaxSettings({ body: { taxRate: '0.001', taxVndRate: null, reason: 'p2 test: tax back' } });
+    await admin.b.adminUpdateSettings({ body: { feeRate: '0.001', reason: 'p2 test: fee back' } });
   });
 });
 
