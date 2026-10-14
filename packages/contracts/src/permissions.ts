@@ -25,10 +25,14 @@ export const Permission = z.enum([
   'bots.manage',
   /** create / revoke sign-up invite codes (closed staging) */
   'users.invite',
+  /** Vietnam tax (0.15.0): read tax settings, summaries, withholding records and the CSV statement */
+  'tax.read',
+  /** Vietnam tax: change taxMode / taxRate / VND reference rate (audited) */
+  'tax.manage',
 ]);
 export type Permission = z.infer<typeof Permission>;
 
-const SUPPORT: Permission[] = ['users.read', 'exchange.read', 'reconciliation.read'];
+const SUPPORT: Permission[] = ['users.read', 'exchange.read', 'reconciliation.read', 'tax.read'];
 const ADMIN: Permission[] = [
   ...SUPPORT,
   'users.lock',
@@ -36,6 +40,7 @@ const ADMIN: Permission[] = [
   'balances.adjust',
   'accounts.reset',
   'exchange.configure',
+  'tax.manage',
   'exchange.halt',
   'audit.read',
   'reconciliation.run',

@@ -1,13 +1,16 @@
 /**
  * ⚠️ Tiny mock "exchange" so the UI can see phase-2 flows without a backend:
  * stop triggers, trailing stops, OCO one-cancels-other, TP/SL children, price alerts.
- * JS numbers, simplified fees — never reuse this math in the UI.
+ * JS numbers for reservations — never reuse this math in the UI. A fill's quoteQty, fee, tax (0.15.0) and realizedPnl
+ * use @cex/core Dec with the server's rounding (settleFills + positions.ts).
  */
+import { dec, roundDown, roundUp, ZERO, type Dec } from '@cex/core';
 import type { Order, OrderList, Trade } from '../index.ts';
 import { ORDER_DEFAULTS, MOCK_PAIRS } from '../fixtures/index.ts';
 import { adjust, emitUser, mockStore, nextId, notify } from './store.ts';
+import { mockRecordWithholding, mockTaxOfFill } from './tax.ts';
 
-const FEE = 0.001;
+const feeRate = () => Number(mockStore.settings.feeRate);
 const now = () => new Date().toISOString();
 const f8 = (n: number) => n.toFixed(8);
 const floorQty = (symbol: string, q: number) => {
@@ -44,39 +47,73 @@ function close(o: Order, status: Order['status'], reason: Order['closeReason'] =
   emitUser({ kind: 'order', order: o });
 }
 
+const AVG_SCALE = 18;
+
+/**
+ * Average cost of the base asset, like server positions.ts (with the 0.15.0 tax):
+ *   BUY : avg = (held × avg + USDT paid) / (held + qty − fee)
+ *   SELL: realized = (USDT received − fee − tax) − qty × avg, 8 dp; null without a cost basis
+ */
+function applyToPosition(asset: string, side: 'BUY' | 'SELL', qty: Dec, quote: Dec, fee: Dec, tax: Dec): Dec | null {
+  const p = (mockStore.positions[asset] ??= { quantity: '0', avgCost: null });
+  const held = dec(p.quantity);
+  const avg = p.avgCost === null ? null : dec(p.avgCost);
+  if (side === 'BUY') {
+    const newQty = held.add(qty.sub(fee));
+    const cost = (avg ?? ZERO).mul(held).add(quote);
+    p.avgCost = newQty.gt(0) ? cost.div(newQty).toDecimalPlaces(AVG_SCALE).toFixed() : null;
+    p.quantity = newQty.toFixed();
+    return null;
+  }
+  const realized = avg === null ? null : quote.sub(fee).sub(tax).sub(qty.mul(avg)).toDecimalPlaces(8);
+  const left = held.sub(qty);
+  p.quantity = left.gt(0) ? left.toFixed() : '0';
+  if (!left.gt(0)) p.avgCost = null;
+  return realized;
+}
+
 /** Settles a fill of the whole order at `price` and releases its reservation. */
 function fill(o: Order, price: number, lock: { asset: string; amount: number } | null, liquidity: 'MAKER' | 'TAKER'): Trade {
-  const qty = o.quantity ? Number(o.quantity) : floorQty(o.symbol, Number(o.quoteOrderQty) / price);
-  const quote = qty * price;
+  const qtyN = o.quantity ? Number(o.quantity) : floorQty(o.symbol, Number(o.quoteOrderQty) / price);
+  const isBuy = o.side === 'BUY';
+  const qty = dec(f8(qtyN));
+  const px = dec(f8(price));
+  // the user pays a BUY (round up) and receives a SELL (round down); exact on real pairs (tick + step ≤ 8 decimals)
+  const quote = isBuy ? roundUp(qty.mul(px)) : roundDown(qty.mul(px));
+  const fee = roundUp(isBuy ? qty.mul(dec(mockStore.settings.feeRate)) : quote.mul(dec(mockStore.settings.feeRate)));
+  const tax = mockTaxOfFill(o.side, quote);
   const base = baseOf(o.symbol);
-  const fee = o.side === 'BUY' ? qty * FEE : quote * FEE;
-  if (o.side === 'BUY') {
-    if (lock) adjust('USDT', lock.amount - quote, -lock.amount);
-    else adjust('USDT', -quote);
-    adjust(base, qty - fee);
+  if (isBuy) {
+    if (lock) adjust('USDT', lock.amount - Number(quote.toFixed(8)), -lock.amount);
+    else adjust('USDT', -Number(quote.toFixed(8)));
+    adjust(base, Number(qty.sub(fee).toFixed(8)));
   } else {
-    if (lock) adjust(base, lock.amount - qty, -lock.amount);
-    else adjust(base, -qty);
-    adjust('USDT', quote - fee);
+    if (lock) adjust(base, lock.amount - qtyN, -lock.amount);
+    else adjust(base, -qtyN);
+    // TRADE_CREDIT − FEE − TAX_WITHHOLDING
+    adjust('USDT', Number(quote.sub(fee).sub(tax).toFixed(8)));
   }
-  o.executedQty = f8(qty);
-  o.cumulativeQuoteQty = f8(quote);
-  o.avgPrice = f8(price);
+  const realized = applyToPosition(base, o.side, qty, quote, fee, tax);
+  o.executedQty = qty.toFixed(8);
+  o.cumulativeQuoteQty = quote.toFixed(8);
+  o.avgPrice = px.toFixed(8);
   const trade: Trade = {
     id: nextId(),
     orderId: o.id,
     symbol: o.symbol,
     side: o.side,
-    price: f8(price),
-    quantity: f8(qty),
-    quoteQty: f8(quote),
-    fee: f8(fee),
-    feeAsset: o.side === 'BUY' ? base : 'USDT',
+    price: px.toFixed(8),
+    quantity: qty.toFixed(8),
+    quoteQty: quote.toFixed(8),
+    fee: fee.toFixed(8),
+    feeAsset: isBuy ? base : 'USDT',
+    tax: tax.toFixed(8),
     liquidity,
-    realizedPnl: o.side === 'SELL' ? f8(quote * 0.01) : null,
+    realizedPnl: realized === null ? null : realized.toFixed(8),
     createdAt: now(),
   };
   mockStore.trades.unshift(trade);
+  mockRecordWithholding(trade);
   emitUser({ kind: 'trade', trade });
   close(o, 'FILLED');
   placeTpSl(o);
@@ -168,7 +205,7 @@ export function cancel(o: Order, reason: Order['closeReason'] = 'USER_CANCELED')
 
 function placeTpSl(parent: Order): void {
   if (parent.side !== 'BUY' || !parent.tpsl || parent.tpsl.state !== 'PENDING') return;
-  const net = floorQty(parent.symbol, Number(parent.executedQty) * (1 - FEE));
+  const net = floorQty(parent.symbol, Number(parent.executedQty) * (1 - feeRate()));
   const t = parent.tpsl;
   if (net <= 0) {
     t.state = 'SKIPPED';

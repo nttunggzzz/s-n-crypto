@@ -74,8 +74,9 @@ export async function exportTradesCsv(db: Db, userId: string, f: RangeFilter): P
     .orderBy(desc(trades.id))
     .limit(MAX_EXPORT_ROWS);
   return csv(
-    ['tradeId', 'orderId', 'time_utc', 'time_gmt7', 'symbol', 'side', 'price', 'quantity', 'quoteQty', 'fee', 'feeAsset', 'liquidity', 'realizedPnl'],
-    rows.map(serializeTrade).map((t) => [t.id, t.orderId, t.createdAt, gmt7(t.createdAt), t.symbol, t.side, t.price, t.quantity, t.quoteQty, t.fee, t.feeAsset, t.liquidity, t.realizedPnl]),
+    // `tax` (Vietnam tax withheld, quote asset — module T) right after feeAsset, as the contract mock exports it
+    ['tradeId', 'orderId', 'time_utc', 'time_gmt7', 'symbol', 'side', 'price', 'quantity', 'quoteQty', 'fee', 'feeAsset', 'tax', 'liquidity', 'realizedPnl'],
+    rows.map(serializeTrade).map((t) => [t.id, t.orderId, t.createdAt, gmt7(t.createdAt), t.symbol, t.side, t.price, t.quantity, t.quoteQty, t.fee, t.feeAsset, t.tax, t.liquidity, t.realizedPnl]),
   );
 }
 

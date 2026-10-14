@@ -9,6 +9,8 @@ export interface PositionFill {
   quote: Dec;
   /** Fee: in base on BUY, in USDT on SELL. */
   fee: Dec;
+  /** Vietnam tax withheld (SELL only, USDT); absent or 0 otherwise. */
+  tax?: Dec;
 }
 
 const AVG_SCALE = 18;
@@ -16,7 +18,7 @@ const AVG_SCALE = 18;
 /**
  * Average-cost accounting for one (user, base asset), inside the fill's transaction.
  *   BUY : avg = (held × avg + USDT paid) / (held + qty − fee)
- *   SELL: realized = (USDT received − fee) − qty × avg ; avg unchanged (reset when flat)
+ *   SELL: realized = (USDT received − fee − tax) − qty × avg ; avg unchanged (reset when flat)
  * Returns the realized PnL of each fill (null for BUY, or SELL without a cost basis).
  */
 export async function applyFillsToPosition(tx: Tx, userId: string, asset: string, side: 'BUY' | 'SELL', fills: PositionFill[]): Promise<(Dec | null)[]> {
@@ -40,7 +42,7 @@ export async function applyFillsToPosition(tx: Tx, userId: string, asset: string
       qty = newQty;
       realized.push(null);
     } else {
-      const proceeds = f.quote.sub(f.fee);
+      const proceeds = f.quote.sub(f.fee).sub(f.tax ?? ZERO);
       const r = avg === null ? null : proceeds.sub(f.qty.mul(avg)).toDecimalPlaces(8);
       if (r !== null) realizedTotal = realizedTotal.add(r);
       realized.push(r);

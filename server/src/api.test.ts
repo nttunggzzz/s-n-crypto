@@ -278,7 +278,7 @@ describe('API phase 2', () => {
     const csv = await b.exportTrades({ query: { symbol: 'BTCUSDT' } });
     expect(csv.startsWith('\uFEFF')).toBe(true); // BOM for Excel (trim() would strip it)
     const lines = csv.trim().split('\r\n');
-    expect(lines[0]).toBe('tradeId,orderId,time_utc,time_gmt7,symbol,side,price,quantity,quoteQty,fee,feeAsset,liquidity,realizedPnl');
+    expect(lines[0]).toBe('tradeId,orderId,time_utc,time_gmt7,symbol,side,price,quantity,quoteQty,fee,feeAsset,tax,liquidity,realizedPnl');
     expect(lines).toHaveLength(3); // header + 2 fills of the market buy
     const raw = await fetch(`${base}/api/v1/export/orders.csv`, { headers: { cookie: b.cookie() } });
     expect(raw.headers.get('content-type')).toContain('text/csv');

@@ -141,7 +141,7 @@ describe('allocateSpotFill — spot round trip (Module A §2.1)', () => {
 
   it('sell with no open entry (coins from faucet or before) → UNATTRIBUTED, no entry opened', () => {
     const r = allocateSpotFill(null, sell(1, '0.2', '100', '20', '0.02'), RULES, null);
-    expect(r).toEqual({ action: 'UNATTRIBUTED', allocatedQty: '0.00000000', unattributedQty: '0.20000000', allocatedQuote: '0.00000000', allocatedFee: '0.00000000', newState: null, outOfOrder: false });
+    expect(r).toEqual({ action: 'UNATTRIBUTED', allocatedQty: '0.00000000', unattributedQty: '0.20000000', allocatedQuote: '0.00000000', allocatedFee: '0.00000000', allocatedTax: '0.00000000', newState: null, outOfOrder: false });
     // a CLOSED entry counts as "no open entry"
     const [, closed] = run([buy(1, '1', '100', '100', '0'), sell(2, '1', '100', '100', '0')]);
     expect(allocateSpotFill(closed!.newState!, sell(3, '0.1', '100', '10', '0'), RULES, 2).action).toBe('UNATTRIBUTED');
@@ -386,7 +386,7 @@ describe('replayAllocations (Module A §2.2 point 5, §2.3 (d)/(e))', () => {
     expect(rep.allocations.map((a) => a.action)).toEqual(['OPEN', 'ADD', 'REDUCE', 'CLOSE', 'UNATTRIBUTED', 'OPEN', 'REDUCE']);
     rep.allocations.forEach((a, i) => {
       const s = seq[i]!;
-      expect(a).toEqual({ fillId: String(CHAIN[i]!.id), action: s.action, entryOpenFillId: s.newState?.openFillId ?? null, allocatedQty: s.allocatedQty, unattributedQty: s.unattributedQty, allocatedQuote: s.allocatedQuote, allocatedFee: s.allocatedFee });
+      expect(a).toEqual({ fillId: String(CHAIN[i]!.id), action: s.action, entryOpenFillId: s.newState?.openFillId ?? null, allocatedQty: s.allocatedQty, unattributedQty: s.unattributedQty, allocatedQuote: s.allocatedQuote, allocatedFee: s.allocatedFee, allocatedTax: s.allocatedTax });
     });
     expect(rep.entries.map((e) => e.openFillId)).toEqual(['1', '6']);
     expect(rep.entries[0]!.state).toEqual(seq[3]!.newState);
@@ -433,5 +433,51 @@ describe('replayAllocations (Module A §2.2 point 5, §2.3 (d)/(e))', () => {
       { stepSize: '0.0001', minNotional: '5' },
       { stepSize: '0.01', minNotional: '10' },
     ]);
+  });
+});
+
+describe('Vietnam tax on spot SELL fills (module T, Trade.tax)', () => {
+  const taxed = (id: number, qty: string, price: string, quote: string, fee: string, tax: string): SpotFillInput => ({ ...sell(id, qty, price, quote, fee), tax });
+
+  it('whole SELL: allocatedTax = tax; PnL after fee AND tax; tax is not counted in fees', () => {
+    // BUY 0.5 @ 100 = 50, fee 0.0005 BTC → net 0.4995 ; SELL 0.4995 @ 110 = 54.945, fee 0.054945, tax 0.054945 (0.1 %)
+    // realized = 54.945 − 0.054945 − 0.054945 − 50 = 4.83511 ; fees = 0.0005 × 100 + 0.054945 = 0.104945
+    const [, c] = run([buy(1, '0.5', '100', '50', '0.0005'), taxed(2, '0.4995', '110', '54.945', '0.054945', '0.054945')]);
+    expect(c).toMatchObject({ action: 'CLOSE', allocatedTax: '0.05494500', allocatedFee: '0.05494500' });
+    expect(c!.newState!.sellTax).toBe('0.05494500');
+    const r = computeEntryResult(c!.newState!, { initialStop: null });
+    expect([r.realizedPnl, r.netPnl, r.fees]).toEqual(['4.83511000', '4.83511000', '0.10494500']);
+  });
+
+  it('SELL larger than the entry: tax split pro rata like the fee, the entry part rounded UP', () => {
+    // open 0.4995 ; SELL 0.6 @ 110 = 66, fee 0.066, tax 0.06600001 → entry share 0.4995 / 0.6 = 0.8325
+    // allocatedTax = roundUp(0.06600001 × 0.8325 = 0.054945008325) = 0.05494501 ; allocatedFee = 0.054945 (exact)
+    // realized = 54.945 − 0.054945 − 0.05494501 − 50 = 4.83510999
+    const [, c] = run([buy(1, '0.5', '100', '50', '0.0005'), taxed(2, '0.6', '110', '66', '0.066', '0.06600001')]);
+    expect(c).toMatchObject({ action: 'CLOSE', allocatedQty: '0.49950000', unattributedQty: '0.10050000', allocatedQuote: '54.94500000', allocatedFee: '0.05494500', allocatedTax: '0.05494501' });
+    expect(computeEntryResult(c!.newState!, { initialStop: null }).netPnl).toBe('4.83510999');
+  });
+
+  it('BUY and UNATTRIBUTED carry no tax; a BUY with tax is refused; a SELL without tax field = 0', () => {
+    const [o] = run([buy(1, '1', '100', '100', '0.001')]);
+    const u = allocateSpotFill(null, taxed(9, '0.1', '100', '10', '0.01', '0.01'), RULES, null);
+    expect([o!.allocatedTax, u.allocatedTax, u.action]).toEqual(['0.00000000', '0.00000000', 'UNATTRIBUTED']);
+    expect(() => allocateSpotFill(null, { ...buy(3, '1', '100', '100', '0.001'), tax: '0.1' }, RULES, null)).toThrow(/never withheld/);
+    expect(() => allocateSpotFill(null, taxed(4, '1', '100', '100', '0.1', '-0.1'), RULES, null)).toThrow();
+    const [, c] = run([buy(1, '0.5', '100', '50', '0.0005'), sell(2, '0.4995', '110', '54.945', '0.054945')]);
+    expect([c!.allocatedTax, c!.newState!.sellTax]).toEqual(['0.00000000', '0.00000000']);
+  });
+
+  it('replay gives the same tax split; a state stored before module T (no sellTax) reads as 0', () => {
+    const fills = [buy(1, '1', '100', '100', '0.001'), taxed(2, '0.5', '110', '55', '0.055', '0.055'), taxed(3, '0.499', '120', '59.88', '0.05988', '0.05988')];
+    const seq = run(fills);
+    const rep = replayAllocations(fills, RULES);
+    expect(rep.allocations.map((a) => a.allocatedTax)).toEqual(seq.map((s) => s.allocatedTax));
+    expect(rep.entries[0]!.state.sellTax).toBe('0.11488000');
+    const legacy: SpotEntryState = { ...seq[1]!.newState! };
+    delete legacy.sellTax;
+    expect(allocateSpotFill(legacy, fills[2]!, RULES, 2).newState!.sellTax).toBe('0.05988000');
+    // 0.5 sold, no stored tax: realized = 55 − 0.055 − 0 − 100 × 0.5 / 0.999 = 54.945 − 50.05005005… = 4.89494994… → floor
+    expect(computeEntryResult(legacy, { initialStop: null }).realizedPnl).toBe('4.89494994');
   });
 });

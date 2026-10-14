@@ -46,12 +46,13 @@ export async function resetDb(database: Database): Promise<void> {
   await database.db.execute(sql`
     TRUNCATE grid_bot_cells, grid_bots, dca_runs, dca_plans, login_events,
              futures_funding_payments, futures_funding_events, futures_trades, futures_orders, futures_positions, futures_user_symbols, futures_symbols,
-             trades, orders, order_lists, ledger_entries, balances, positions, portfolio_snapshots, price_alerts,
+             tax_withholdings, user_tax_profiles, trades, orders, order_lists, ledger_entries, balances, positions, portfolio_snapshots, price_alerts,
              notifications, user_preferences, faucet_claims, sessions, verification_tokens,
              audit_logs, reconciliation_runs, candles, symbols, assets, announcements, users RESTART IDENTITY CASCADE`);
   await database.db.execute(sql`
     UPDATE exchange_settings SET trading_halted = false, fee_rate = '0.001', faucet_asset = 'USDT',
-      faucet_amount = '10000', faucet_cooldown_hours = 24, faucet_lifetime_cap = '100000', stale_threshold_ms = 10000`);
+      faucet_amount = '10000', faucet_cooldown_hours = 24, faucet_lifetime_cap = '100000', stale_threshold_ms = 10000,
+      tax_mode = 'OFF', tax_rate = '0.001', tax_vnd_rate = NULL, tax_vnd_rate_updated_at = NULL`);
   await database.db.insert(symbols).values(TEST_SYMBOLS);
   await database.db.insert(futuresSymbols).values(TEST_FUTURES);
   await seedAssets(database.db);

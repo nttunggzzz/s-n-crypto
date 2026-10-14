@@ -27,3 +27,4 @@ export {
 } from './rMetrics.ts';
 export * from './journalFills.ts';
 export * from './journalStats.ts';
+export * from './tax.ts';

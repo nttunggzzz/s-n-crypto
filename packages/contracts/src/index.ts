@@ -17,6 +17,7 @@ export * from './analytics.ts';
 export * from './bots.ts';
 export * from './stats.ts';
 export * from './journal.ts';
+export * from './tax.ts';
 export * from './permissions.ts';
 export * from './admin.ts';
 export * from './realtime.ts';

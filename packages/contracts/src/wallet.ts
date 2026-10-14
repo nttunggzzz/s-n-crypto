@@ -34,6 +34,8 @@ export const LedgerEntryType = z.enum([
   'FEE',
   'ADMIN_ADJUST',
   'ACCOUNT_RESET',
+  /** Vietnam tax withheld from a spot SELL fill (0.15.0): quote asset, after TRADE_CREDIT and FEE, ref ORDER. */
+  'TAX_WITHHOLDING',
   // futures (phase F)
   /** Spot ↔ Futures wallet transfer (one row in each wallet). */
   'TRANSFER',

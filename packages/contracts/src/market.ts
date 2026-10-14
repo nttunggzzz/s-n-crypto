@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { CandleInterval, DataStatus, DecimalString, EpochMs, IsoDateTime, SymbolCode } from './common.ts';
+import { TaxMode } from './tax.ts';
 
 export const SymbolInfo = z.object({
   symbol: SymbolCode,
@@ -55,6 +56,16 @@ export const ExchangeInfo = z.object({
   tradingHalted: z.boolean(),
   /** Fee rate applied to the received asset, e.g. "0.001" = 0.1%. */
   feeRate: DecimalString,
+  /**
+   * Vietnam tax (0.15.0, test exchange): WITHHOLD = every spot SELL fill pays roundUp8(quoteQty × taxRate) in the quote
+   * asset, on the gross value, besides the fee (BUY never). OFF = nothing withheld: hide the tax line of the order form.
+   * DOMESTIC_ORG sellers are not withheld (`taxProfile`). See tax.ts.
+   */
+  taxMode: TaxMode,
+  taxRate: DecimalString,
+  /** VND per 1 USDT, a reference rate set by the exchange; null = not set → show no VND amount. */
+  taxVndRate: DecimalString.nullable(),
+  taxVndRateUpdatedAt: IsoDateTime.nullable(),
   symbols: z.array(SymbolInfo),
   /** One entry per asset used by `symbols` (base and quote), in symbol order. */
   assets: z.array(AssetInfo),

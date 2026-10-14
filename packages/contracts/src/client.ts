@@ -71,7 +71,7 @@ export function createApiClient(options: ApiClientOptions = {}): ApiClient {
  * URL of a CSV export for a plain download link, e.g.
  * <a href={exportUrl('exportTrades', { symbol: 'BTCUSDT' })} download>. The session cookie authenticates it.
  */
-export function exportUrl(name: 'exportOrders' | 'exportTrades' | 'exportLedger', query: Record<string, string | undefined> = {}, baseUrl = ''): string {
+export function exportUrl(name: 'exportOrders' | 'exportTrades' | 'exportLedger' | 'taxExport' | 'adminTaxExport', query: Record<string, string | undefined> = {}, baseUrl = ''): string {
   const qs = new URLSearchParams();
   for (const [k, v] of Object.entries(query)) if (v !== undefined) qs.set(k, v);
   const s = qs.toString();

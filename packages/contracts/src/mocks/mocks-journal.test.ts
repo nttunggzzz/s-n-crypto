@@ -126,8 +126,10 @@ describe('journal mock: auto-journal window and MANUAL entries', () => {
     await marketSell('ETHUSDT', '0.0999');
     const closed = await api.journalGet({ params: { entryId: open[0]!.id } });
     expect(closed).toMatchObject({ status: 'CLOSED', closeReason: 'FILLS', initialStopLocked: true, openQty: '0.00000000', exitQty: '0.09990000' });
-    // bought 0.1 @ 2500 = 250 (fee 0.0001 ETH → 0.0999 net), sold 0.0999 @ 2500 = 249.75 (fee 0.24975) → 249.50025 − 250 = −0.49975
-    expect(closed.result).toMatchObject({ netPnl: '-0.49975000', outcome: 'LOSS', rMultiple: null, fees: '0.49975000' });
+    // bought 0.1 @ 2500 = 250 (fee 0.0001 ETH → 0.0999 net), sold 0.0999 @ 2500 = 249.75 (fee 0.24975, the mock withholds
+    // the Vietnam tax 0.1% = 0.24975 too) → 249.75 − 0.24975 − 0.24975 − 250 = −0.7495; the tax is not a fee
+    expect(closed.result).toMatchObject({ netPnl: '-0.74950000', outcome: 'LOSS', rMultiple: null, fees: '0.49975000' });
+    expect(closed.fills.map((f) => f.allocatedTax)).toEqual(['0.00000000', '0.24975000']);
     expect(closed.fills.map((f) => f.leg)).toEqual(['SPOT', 'SPOT']);
   });
 
@@ -291,7 +293,7 @@ describe('journal mock: decisions after the A1 review (module A §2.1, §2.2, §
     const e = await api.journalCreate({ body: { orderIds: [order] } });
     expect(e.fillCount).toBe(1);
     // the same order fills a second time (the mock engine fills orders at once: add the fill by hand)
-    mockStore.trades.unshift({ id: nextId(), orderId: order, symbol: 'BNBUSDT', side: 'BUY', price: '740.00000000', quantity: '0.50000000', quoteQty: '370.00000000', fee: '0.00050000', feeAsset: 'BNB', liquidity: 'MAKER', realizedPnl: null, createdAt: new Date().toISOString() });
+    mockStore.trades.unshift({ id: nextId(), orderId: order, symbol: 'BNBUSDT', side: 'BUY', price: '740.00000000', quantity: '0.50000000', quoteQty: '370.00000000', fee: '0.00050000', feeAsset: 'BNB', tax: '0.00000000', liquidity: 'MAKER', realizedPnl: null, createdAt: new Date().toISOString() });
     const more = await api.journalUpdate({ params: { entryId: e.id }, body: { addOrderIds: [order] } });
     expect(more).toMatchObject({ fillCount: 2, result: { entryQty: '1.50000000' } });
     expect((await api.journalUpdate({ params: { entryId: e.id }, body: { addOrderIds: [order] } })).fillCount).toBe(2); // nothing new: no-op

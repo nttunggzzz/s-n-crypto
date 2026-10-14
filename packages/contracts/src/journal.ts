@@ -236,6 +236,13 @@ export const JournalFill = z.object({
   allocatedQuote: DecimalString,
   /** Fee of the allocated part, in feeAsset. */
   allocatedFee: DecimalString,
+  /**
+   * Vietnam tax withheld from the whole fill (0.15.0) = `Trade.tax`, in USDT; "0.00000000" for BUY, futures legs and
+   * fills that were not withheld.
+   */
+  tax: DecimalString,
+  /** Tax of the allocated part (SELL), split like allocatedFee: whole fill → tax, part → roundUp8(tax × allocatedQty / quantity). */
+  allocatedTax: DecimalString,
   executedAt: IsoDateTime,
 });
 export type JournalFill = z.infer<typeof JournalFill>;

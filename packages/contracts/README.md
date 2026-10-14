@@ -296,3 +296,52 @@ Mã mới: `PAYLOAD_TOO_LARGE` (413; `details.reason`: `ATTACHMENT_TOO_LARGE` > 
 để thử tạo mục `MANUAL` (cặp đang có mục AUTO mở thì lần khớp vẫn vào mục đó). Lệnh của bot lưới không bao giờ vào nhật ký.
 Thử hạn mức 50 MB: `mockStore.journal.otherImageBytes = 52_428_700`. Ảnh tải lên được cả khi trang mở qua http không an toàn (mock tự băm sha256 bằng JS).
 
+## 15. Thuế crypto Việt Nam — thử nghiệm (v0.15.0)
+Kế hoạch: `docs/plans/module-T-thue-viet-nam.md`. Sàn **thử nghiệm**: tính và ghi sổ như sàn được cấp phép phải làm (TT 32/2026, TT 41/2026),
+trên tiền ảo. Mọi màn hình thuế ghi nhãn "thử nghiệm"; **không** dùng tên/số hiệu mẫu chứng từ của cơ quan thuế, không gọi CSV là "chứng từ".
+
+**Luật (đã chốt, giao diện không tự đổi)**
+- Chỉ lần khớp **BÁN Spot** bị trích, khi `exchangeInfo.taxMode = 'WITHHOLD'` tại lúc khớp và người bán không phải `DOMESTIC_ORG`.
+  Mua, Futures, chuyển ví, faucet, admin cộng/trừ, đặt lại tài khoản: không trích. Lệnh bán của bot lưới cũng bị trích.
+- Thuế một lần khớp = `roundUp(dec(quoteQty).mul(taxRate))` (8 chữ số, làm tròn **lên**), trên **giá trị gộp** (không trừ phí trước), lãi hay lỗ đều trích.
+- Tiền nhận về của lệnh bán = `quoteQty − fee − tax`. `Trade.tax` luôn có (`"0.00000000"` khi không trích). `Trade.realizedPnl` đã trừ cả phí **và** thuế.
+- Sổ cái có loại dòng mới `TAX_WITHHOLDING` (USDT, sau `TRADE_CREDIT` và `FEE`, ref `ORDER`) — thêm nhãn "Thuế tạm khấu trừ (thử nghiệm)".
+- CSV giao dịch (`exportTrades`) có thêm cột `tax` sau `feeAsset`.
+- Nhật ký: `JournalFill.tax` / `allocatedTax` (thuế của phần khớp thuộc mục). Lãi lỗ của mục nhật ký sẽ trừ thuế từ đợt T2 (server + `@cex/core`).
+
+**Form đặt lệnh BÁN** (`exchangeInfo`): giá trị gộp · phí · thuế tạm tính (`taxRate`; ẩn khi `taxMode = 'OFF'` hoặc người dùng là `DOMESTIC_ORG`) · thực nhận ước tính.
+Dòng VND chỉ hiện khi `taxVndRate !== null`, ghi "tỷ giá tham khảo do sàn đặt" + `taxVndRateUpdatedAt`. Ước tính bằng `@cex/core`; số của server là số đúng.
+
+**Người dùng** (chỉ dữ liệu của chính mình)
+```ts
+const p = await api.taxProfile();                                        // { category: 'INDIVIDUAL' | 'FOREIGN_ORG' | 'DOMESTIC_ORG', updatedAt }
+await api.taxUpdateProfile({ body: { category: 'FOREIGN_ORG' } });       // chỉ nhận category (gửi thêm trường → 400); áp dụng cho lần khớp sau
+const s = await api.taxSummary({ query: { year: 2026 } });               // bỏ year = năm hiện tại (giờ Việt Nam)
+const page = await api.taxWithholdings({ query: { symbol, from, to, limit: 50, cursor } });
+<a href={exportUrl('taxExport', { from, to })} download>                 // CSV, cột = TAX_EXPORT_COLUMNS
+```
+- `taxSummary.months`: luôn 12 dòng (tháng theo giờ Việt Nam UTC+7 — kỳ khai thuế khấu trừ); tháng không có gì là số 0.
+- Mỗi nhóm có hai phần: khấu trừ (`withholdingCount`, `withheldGrossQuote`, `taxAmount`, `withheldGrossVnd`, `taxVnd`, `vndMissingCount`) và
+  doanh số bán (`sellCount`, `sellGrossQuote`, `sellFees`, `realizedPnl`, `sellsWithoutCostBasis` — mọi lần bán, kể cả không bị trích).
+  `DOMESTIC_ORG` tự kê khai 20%: hiện doanh thu, phí, lãi lỗ; giá vốn = `sellGrossQuote − sellFees − realizedPnl` (khi `sellsWithoutCostBasis = 0`).
+- VND: `null` khi chưa có tỷ giá → hiện "—". Tổng VND là `null` nếu **một** bản ghi trong nhóm thiếu tỷ giá (`vndMissingCount > 0`): hiện
+  "N lần khấu trừ chưa có tỷ giá". `grossVnd` làm tròn xuống, `taxVnd` làm tròn lên tới đồng; chỉ để tham khảo, sổ sách bằng USDT.
+- Futures: ghi chú "Futures chưa có căn cứ thuế — không trích".
+
+**Admin** (`tax.read`: support, admin, owner; `tax.manage`: admin, owner)
+```ts
+await api.adminTaxSettings();                                             // { taxMode, taxRate, taxVndRate, taxVndRateUpdatedAt, updatedAt }
+await api.adminUpdateTaxSettings({ body: { taxMode: 'WITHHOLD', taxRate: '0.001', taxVndRate: '26350', reason } }); // audit TAX_SETTINGS_UPDATE
+await api.adminUpdateTaxSettings({ body: { taxVndRate: null, reason } }); // xóa tỷ giá → VND của các lần khớp sau là null
+const sum = await api.adminTaxSummary({ query: { period: '2026-10' } }); // hoặc '2026-Q4'; from/to (UTC; to = ms cuối kỳ) đưa thẳng vào list/CSV
+await api.adminTaxWithholdings({ query: { userId, symbol, from: sum.from, to: sum.to } });
+<a href={exportUrl('adminTaxExport', { from: sum.from, to: sum.to })} download>   // bảng kê, cột = ADMIN_TAX_EXPORT_COLUMNS
+```
+- `taxRate`: > 0 và ≤ 0,01, tối đa 8 chữ số lẻ (sai → 400 `VALIDATION_ERROR`); tắt thuế bằng `taxMode: 'OFF'`, không bằng tỷ lệ 0.
+  Đổi tỷ lệ/tỷ giá chỉ áp dụng cho lần khớp **sau**: mỗi bản ghi giữ tỷ lệ và tỷ giá của chính nó.
+- `byCategory` luôn 3 dòng theo thứ tự enum (`DOMESTIC_ORG` luôn 0); `bySymbol` xếp theo thuế giảm dần.
+
+**Mock:** bắt đầu ở `WITHHOLD` 0,1%, tỷ giá 26350 (server thật bắt đầu `OFF`); có 2 lần bán cũ của người dùng demo (tháng 8 chưa có tỷ giá,
+tháng 9 có) và 2 bản ghi của người khác (tháng 10, một `FOREIGN_ORG`). Bán trong mock bị trích đúng công thức trên. Đổi trạng thái:
+`setMockTax({ taxMode: 'OFF' })`, `setMockTax({ category: 'DOMESTIC_ORG' })`, `setMockTax({ taxVndRate: null })`.
+

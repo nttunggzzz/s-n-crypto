@@ -37,7 +37,7 @@ export const sumDecimals = (values: readonly string[]): string => values.reduce(
 // ───────────────────────────── spot
 
 /** Core input of a mock spot trade. */
-export const spotFillOfTrade = (t: Trade): SpotFillInput => ({ id: t.id, side: t.side, price: t.price, quantity: t.quantity, quoteQty: t.quoteQty, fee: t.fee, createdAt: t.createdAt });
+export const spotFillOfTrade = (t: Trade): SpotFillInput => ({ id: t.id, side: t.side, price: t.price, quantity: t.quantity, quoteQty: t.quoteQty, fee: t.fee, tax: t.tax, createdAt: t.createdAt });
 
 /** Core input rebuilt from a journal fill (fixture entries: their trades are not in the mock wallet; quote = price × quantity, exact on this exchange). */
 export const spotFillOfJournalFill = (f: JournalFill): SpotFillInput => ({
@@ -47,6 +47,7 @@ export const spotFillOfJournalFill = (f: JournalFill): SpotFillInput => ({
   quantity: f.quantity,
   quoteQty: new Dec(f.price).mul(f.quantity).toFixed(8),
   fee: f.fee,
+  tax: f.tax,
   createdAt: f.executedAt,
 });
 

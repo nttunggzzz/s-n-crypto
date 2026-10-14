@@ -198,6 +198,10 @@ export const announcements = pgTable(
   (t) => [index('announcements_public_idx').on(t.pinned, t.publishedAt).where(sql`${t.hidden} = false and ${t.publishedAt} is not null`)],
 );
 
+export const TAX_MODES = ['OFF', 'WITHHOLD'] as const;
+export const TAX_CATEGORIES = ['INDIVIDUAL', 'FOREIGN_ORG', 'DOMESTIC_ORG'] as const;
+export type TaxCategoryValue = (typeof TAX_CATEGORIES)[number];
+
 /** Single row (id = 1). */
 export const exchangeSettings = pgTable(
   'exchange_settings',
@@ -214,6 +218,15 @@ export const exchangeSettings = pgTable(
     futuresTakerFee: amount('futures_taker_fee').notNull().default('0.0005'),
     futuresLiquidationFee: amount('futures_liquidation_fee').notNull().default('0.005'),
     updatedAt: ts('updated_at').notNull().defaultNow(),
+    // Vietnam tax (module T): OFF by default — an admin turns it on (audited TAX_SETTINGS_UPDATE).
+    taxMode: text('tax_mode', { enum: TAX_MODES }).notNull().default('OFF'),
+    /** 0 < rate ≤ 0.01 (checked by the contract and the service), applied to spot SELL fills. */
+    taxRate: amount('tax_rate').notNull().default('0.001'),
+    /** VND per 1 USDT typed by the admin; null = not set → every VND amount is null. */
+    taxVndRate: amount('tax_vnd_rate'),
+    taxVndRateUpdatedAt: ts('tax_vnd_rate_updated_at'),
+    /** Last change of the tax settings (TaxSettings.updatedAt). */
+    taxUpdatedAt: ts('tax_updated_at').notNull().defaultNow(),
   },
   (t) => [check('exchange_settings_singleton', sql`${t.id} = 1`)],
 );
@@ -258,6 +271,8 @@ export const LEDGER_TYPES = [
   'FUNDING_FEE',
   'LIQUIDATION',
   'MARGIN_ADJUST',
+  /** Vietnam tax withheld from a spot SELL fill (quote asset, ref ORDER) — module T. */
+  'TAX_WITHHOLDING',
 ] as const;
 export type LedgerType = (typeof LEDGER_TYPES)[number];
 export const REF_TYPES = ['ORDER', 'TRADE', 'FAUCET', 'ADMIN', 'TRANSFER', 'FUTURES_ORDER', 'FUTURES_POSITION'] as const;
@@ -413,13 +428,73 @@ export const trades = pgTable(
     fee: amount('fee').notNull(),
     feeAsset: text('fee_asset').notNull(),
     liquidity: text('liquidity', { enum: ['MAKER', 'TAKER'] }).notNull(),
-    /** SELL only: USDT received after fee minus quantity × average cost; null if no cost basis. */
+    /** SELL only: USDT received after fee and tax minus quantity × average cost; null if no cost basis. */
     realizedPnl: amount('realized_pnl'),
     /** Time of the Binance market event that caused this fill (audit trail). */
     marketEventAt: ts('market_event_at'),
     createdAt: ts('created_at').notNull().defaultNow(),
+    /** Vietnam tax withheld from this fill, quote asset (SELL only; 0 otherwise and for fills before module T). */
+    tax: amount('tax').notNull().default('0'),
   },
   (t) => [index('trades_user_idx').on(t.userId, t.id), index('trades_order_idx').on(t.orderId)],
+);
+
+/**
+ * Vietnam tax (module T): one row per withheld spot SELL fill — never two (unique trade_id), never edited or deleted
+ * (append-only trigger, migration 0008). Written in the fill's transaction with the TAX_WITHHOLDING ledger row.
+ * Rate, category and the VND reference rate are snapshots taken at the fill.
+ */
+export const taxWithholdings = pgTable(
+  'tax_withholdings',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    tradeId: bigint('trade_id', { mode: 'number' })
+      .notNull()
+      .references(() => trades.id),
+    orderId: bigint('order_id', { mode: 'number' })
+      .notNull()
+      .references(() => orders.id),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    symbol: text('symbol').notNull(),
+    /** Quote asset of the pair (asset of grossQuote and taxAmount). */
+    asset: text('asset').notNull(),
+    quantity: amount('quantity').notNull(),
+    price: amount('price').notNull(),
+    grossQuote: amount('gross_quote').notNull(),
+    taxRate: amount('tax_rate').notNull(),
+    taxAmount: amount('tax_amount').notNull(),
+    category: text('category', { enum: TAX_CATEGORIES }).notNull(),
+    /** VND per 1 USDT at the fill; the three VND columns are null together. */
+    vndRate: amount('vnd_rate'),
+    /** floor(grossQuote × vndRate), whole dong. */
+    grossVnd: amount('gross_vnd'),
+    /** ceil(taxAmount × vndRate), whole dong. */
+    taxVnd: amount('tax_vnd'),
+    /** = the trade's createdAt. */
+    createdAt: ts('created_at').notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('tax_withholdings_trade_uq').on(t.tradeId),
+    index('tax_withholdings_user_idx').on(t.userId, t.createdAt),
+    index('tax_withholdings_created_idx').on(t.createdAt),
+    check('tax_withholdings_amount_pos', sql`${t.taxAmount} > 0`),
+    check('tax_withholdings_category', sql`${t.category} in ('INDIVIDUAL', 'FOREIGN_ORG')`),
+  ],
+);
+
+/** Self-declared taxpayer category (module T §3.3). No identity document column — on purpose. No row = INDIVIDUAL. */
+export const userTaxProfiles = pgTable(
+  'user_tax_profiles',
+  {
+    userId: uuid('user_id')
+      .primaryKey()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    category: text('category', { enum: TAX_CATEGORIES }).notNull().default('INDIVIDUAL'),
+    updatedAt: ts('updated_at').notNull().defaultNow(),
+  },
+  (t) => [check('user_tax_profiles_category', sql`${t.category} in ('INDIVIDUAL', 'FOREIGN_ORG', 'DOMESTIC_ORG')`)],
 );
 
 /**
