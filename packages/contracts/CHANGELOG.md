@@ -1,5 +1,24 @@
 # Changelog — @cex/contracts
 
+## 0.17.0 — 2026-10-14 (Module N — đợt N1: tin tức và sự kiện vĩ mô cho hệ phân tích)
+Chỉ thêm. 2 endpoint Admin mới, tổng 152. Không có endpoint cho người dùng thường (C-D1). Hướng dẫn: README mục 16.
+Trạng thái server: chưa có route cho `adminNewsItems`, `adminNewsSources` (đợt N2).
+
+**Thêm**
+- `analysis.ts`: `NewsEventType` (10 giá trị, có `OTHER`), `SnapshotNewsItem` (`firstSeenAt` bắt buộc, `publishedAt` và `tone` nullable), `SnapshotNews`,
+  `MacroEventCode`, `MacroEventImportance`, `SnapshotMacroEvent` (`actual`, `actualKnownAt` nullable), `AnalysisNewsContext` (`tilt.validated` chỉ nhận `false`).
+- `CryptoMarketSnapshot.news`, `CryptoMarketSnapshot.macroEvents` và `CryptoMarketAnalysisReport.newsContext`: `.nullable().optional()` để snapshot/báo cáo đã lưu
+  và mã dựng hiện có vẫn hợp lệ. `null` hoặc vắng = chưa có lớp tin tức (không phải "không có tin").
+- `AnalysisDepartmentId` thêm `news_event_risk`. `SnapshotHeadline` giữ nguyên, ghi chú cũ (`@deprecated`).
+- `news.ts`: `NewsSourceKind`, `NewsSourceHealth`, `NewsItemAdmin`, `AdminNewsItemsQuery` (lọc `symbol`/`eventType`/`source`/`from`/`to` theo `firstSeenAt`, phân trang cursor; `from` > `to` → 400 `VALIDATION_ERROR`), `AdminNewsSources`.
+- Endpoint `adminNewsItems` (GET `/api/v1/admin/news/items`), `adminNewsSources` (GET `/api/v1/admin/news/sources`), cả hai `auth: 'staff'`, quyền mới `news.view`
+  (gán cho support, admin, owner: dữ liệu chỉ-đọc, không chứa dữ liệu người dùng, giống `exchange.read`/`tax.read`).
+- Fixture `fixtures/news.ts`, resolver mock `mocks/news.ts` (cùng luật quyền/kiểm tra đầu vào như server), test `mocks/mocks-news.test.ts`.
+
+**Thay đổi nhỏ có thể ảnh hưởng UI**
+- `AnalysisDepartmentId` có thêm giá trị `news_event_risk`: nơi nào dùng `Record<AnalysisDepartmentId, …>` hoặc `switch` đầy đủ sẽ báo lỗi typecheck và cần bổ sung nhãn.
+- `Permission` có thêm `news.view`: `Record<Permission, …>` phải bổ sung.
+
 ## 0.16.0 — 2026-10-14 (Thuế — đợt T3F: cài đặt thuế đi qua `exchange:status`)
 Chỉ thêm trường; không thêm endpoint (vẫn 150). Hướng dẫn: README mục 15.
 

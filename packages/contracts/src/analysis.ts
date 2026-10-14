@@ -19,6 +19,8 @@ export const AnalysisDepartmentId = z.enum([
   'bull_bear_debate',
   'risk_execution_review',
   'final_synthesis',
+  /** Module N (0.17.0): news / scheduled-event risk gate. Not a core department: missing news never blocks a signal. */
+  'news_event_risk',
 ]);
 export type AnalysisDepartmentId = z.infer<typeof AnalysisDepartmentId>;
 
@@ -123,6 +125,11 @@ export const SnapshotDerivativesState = z.object({
 });
 export type SnapshotDerivativesState = z.infer<typeof SnapshotDerivativesState>;
 
+/**
+ * @deprecated Old hand-written headline shape (id, title, source, publishedAt, sentimentTilt) living inside
+ * `SnapshotOnChainAndMacro.headlines`. Module N replaces it with `CryptoMarketSnapshot.news` (`SnapshotNews`).
+ * Kept unchanged for compatibility.
+ */
 export const SnapshotHeadline = z.object({
   id: z.string().min(1),
   title: z.string().min(1),
@@ -131,6 +138,74 @@ export const SnapshotHeadline = z.object({
   sentimentTilt: z.enum(['BULLISH', 'BEARISH', 'NEUTRAL']),
 });
 export type SnapshotHeadline = z.infer<typeof SnapshotHeadline>;
+
+// ───────────────────────────── Module N: news and scheduled macro events (0.17.0)
+
+/** Closed list of event types a news item can be labelled with (rule-based classifier, no LLM at v0). */
+export const NewsEventType = z.enum([
+  'MACRO_DATA',
+  'CENTRAL_BANK',
+  'REGULATORY_ACTION',
+  'ETF',
+  'HACK_EXPLOIT',
+  'LISTING',
+  'DELISTING',
+  'EXCHANGE_INCIDENT',
+  'ADOPTION',
+  'OTHER',
+]);
+export type NewsEventType = z.infer<typeof NewsEventType>;
+
+/**
+ * One news item as the analysis system saw it. Point-in-time is `firstSeenAt` (when WE first saw it), never
+ * `publishedAt` (what the publisher claims; some RSS items have none -> null). Only title/url/source/times and
+ * derived labels are stored, never the article text. `tone` is a decimal string, null when the source gives none
+ * (only GDELT does) — null is NOT "0".
+ */
+export const SnapshotNewsItem = z.object({
+  id: z.string().min(1),
+  title: z.string().min(1),
+  url: z.string().min(1),
+  source: z.string().min(1),
+  publishedAt: IsoDateTime.nullable(),
+  firstSeenAt: IsoDateTime,
+  symbols: z.array(SymbolCode),
+  eventTypes: z.array(NewsEventType),
+  tone: DecimalString.nullable(),
+  classifierVersion: z.string().min(1),
+});
+export type SnapshotNewsItem = z.infer<typeof SnapshotNewsItem>;
+
+/**
+ * News slice of a snapshot. `LIVE` + `items: []` ("sources alive, no news") differs from `UNAVAILABLE` ("no sources").
+ * `sourcesLive` / `sourcesTotal` show freshness of the feeds behind it.
+ */
+export const SnapshotNews = z.object({
+  status: DataStatus,
+  observedAt: IsoDateTime.nullable(),
+  sourcesLive: z.number().int().nonnegative(),
+  sourcesTotal: z.number().int().nonnegative(),
+  items: z.array(SnapshotNewsItem),
+});
+export type SnapshotNews = z.infer<typeof SnapshotNews>;
+
+export const MacroEventCode = z.enum(['FOMC_DECISION', 'CPI', 'NFP', 'PCE', 'OTHER']);
+export type MacroEventCode = z.infer<typeof MacroEventCode>;
+
+export const MacroEventImportance = z.enum(['HIGH', 'MEDIUM', 'LOW']);
+export type MacroEventImportance = z.infer<typeof MacroEventImportance>;
+
+/** A scheduled macro release. `actual` / `actualKnownAt` are null until the number is out (never "0"). All times UTC. */
+export const SnapshotMacroEvent = z.object({
+  code: MacroEventCode,
+  name: z.string().min(1),
+  scheduledAt: IsoDateTime,
+  importance: MacroEventImportance,
+  source: z.string().min(1),
+  actual: DecimalString.nullable(),
+  actualKnownAt: IsoDateTime.nullable(),
+});
+export type SnapshotMacroEvent = z.infer<typeof SnapshotMacroEvent>;
 
 export const SnapshotOnChainAndMacro = z.object({
   status: DataStatus,
@@ -237,6 +312,13 @@ export const CryptoMarketSnapshot = z.object({
   }),
   derivatives: SnapshotDerivativesState.nullable(),
   onChainAndMacro: SnapshotOnChainAndMacro.nullable(),
+  /**
+   * Module N (0.17.0). `null` = no news layer; `undefined` = snapshot built before 0.17.0 (kept `.optional()` so
+   * stored snapshots and existing builders stay valid). Both mean "no news data", never "no news happened".
+   */
+  news: SnapshotNews.nullable().optional(),
+  /** Scheduled macro events (known in advance). Same null/undefined rule as `news`. */
+  macroEvents: z.array(SnapshotMacroEvent).nullable().optional(),
   portfolio: SnapshotPortfolioContext,
   timestampAlignment: TimestampAlignmentReport,
 });
@@ -380,6 +462,37 @@ export const AnalysisAuditMetadata = z.object({
 });
 export type AnalysisAuditMetadata = z.infer<typeof AnalysisAuditMetadata>;
 
+/**
+ * News and events behind one report (Module N §4.1): every advice combines market data and news, and says so.
+ * `tilt` is always shown but `validated: false` — "not validated, not counted in the direction" until N3/N5 prove it.
+ */
+export const AnalysisNewsContext = z.object({
+  status: DataStatus,
+  itemsUsed: z.array(
+    z.object({
+      id: z.string().min(1),
+      title: z.string().min(1),
+      source: z.string().min(1),
+      firstSeenAt: IsoDateTime,
+      eventTypes: z.array(NewsEventType),
+      tone: DecimalString.nullable(),
+    }),
+  ),
+  upcomingEvents: z.array(SnapshotMacroEvent),
+  tilt: z.object({
+    positive: z.number().int().nonnegative(),
+    negative: z.number().int().nonnegative(),
+    neutral: z.number().int().nonnegative(),
+    /** Mean tone of the items that have one; null when none has. */
+    meanTone: DecimalString.nullable(),
+    validated: z.literal(false),
+  }),
+  impact: z.array(z.enum(['BLOCKED', 'UNCERTAINTY_RAISED', 'CONTEXT_ONLY', 'UNAVAILABLE'])),
+  /** One "Tin tức: …" sentence saying whether news changed the advice and why. */
+  summaryLine: z.string().min(1),
+});
+export type AnalysisNewsContext = z.infer<typeof AnalysisNewsContext>;
+
 export const CryptoMarketAnalysisReport = z.object({
   reportId: z.string().min(1),
   symbol: SymbolCode,
@@ -399,6 +512,8 @@ export const CryptoMarketAnalysisReport = z.object({
   advisoryProposal: AdvisoryTradeProposal,
   evidence: z.array(EvidenceItem),
   riskFlags: z.array(RiskFlag),
+  /** Module N (0.17.0). `null`/absent = report built without the news layer (older reports stay valid). */
+  newsContext: AnalysisNewsContext.nullable().optional(),
   audit: AnalysisAuditMetadata,
 });
 export type CryptoMarketAnalysisReport = z.infer<typeof CryptoMarketAnalysisReport>;

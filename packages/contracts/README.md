@@ -351,3 +351,18 @@ await api.adminTaxWithholdings({ query: { userId, symbol, from: sum.from, to: su
 tháng 9 có) và 2 bản ghi của người khác (tháng 10, một `FOREIGN_ORG`). Bán trong mock bị trích đúng công thức trên. Đổi trạng thái:
 `setMockTax({ taxMode: 'OFF' })`, `setMockTax({ category: 'DOMESTIC_ORG' })`, `setMockTax({ taxVndRate: null })`.
 
+## 16. Tin tức và sự kiện vĩ mô cho hệ phân tích — Module N (v0.17.0, chỉ Admin)
+Kế hoạch: `docs/plans/module-N-tin-tuc-va-vi-mo.md`. Không có endpoint cho người dùng thường (C-D1); 2 endpoint `adminNews*` cần quyền `news.view` (support/admin/owner).
+```ts
+await api.adminNewsItems({ query: { symbol: 'BTCUSDT', eventType: 'ETF', source, from, to, limit: 50, cursor } }); // mới nhất trước theo firstSeenAt
+await api.adminNewsSources({}); // { items: NewsSourceHealth[] }: LIVE / STALE / UNAVAILABLE, trễ trung vị, số lần lỗi liên tiếp
+```
+- Mốc thời gian của tin là `firstSeenAt` (lúc hệ thấy tin); `from`/`to` lọc theo mốc này. `publishedAt` có thể `null` (RSS không ghi giờ).
+- `tone` (chuỗi thập phân) chỉ có ở nguồn GDELT, nguồn khác là `null` — `null` không phải "0". Sự kiện vĩ mô chưa công bố: `actual: null`.
+- `CryptoMarketSnapshot.news` / `macroEvents` và `CryptoMarketAnalysisReport.newsContext` là `.nullable().optional()`: snapshot/báo cáo cũ vẫn hợp lệ;
+  `null` hoặc vắng = chưa có lớp tin tức. `news.status = LIVE` với `items: []` nghĩa là "nguồn sống, không có tin".
+- `newsContext.tilt.validated` luôn `false` ("chưa kiểm chứng, chưa tính vào hướng"): UI phải ghi nhãn này cạnh số tin tích cực/tiêu cực.
+- `AnalysisDepartmentId` có thêm `news_event_risk`: nơi dùng `Record<AnalysisDepartmentId, …>` phải bổ sung.
+
+**Mock:** 6 tin mẫu (có/không tone, `publishedAt: null`, tin vĩ mô chung `symbols: []`), 4 nguồn (LIVE, STALE, UNAVAILABLE, tắt); fixture `fixtureSnapshotNews`, `fixtureMacroEvents` (CPI mức HIGH sắp tới), `fixtureAnalysisNewsContext`.
+

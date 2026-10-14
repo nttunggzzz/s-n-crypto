@@ -131,6 +131,7 @@ import {
   UpdateTaxProfileRequest,
   UpdateTaxSettingsRequest,
 } from './tax.ts';
+import { AdminNewsItemsQuery, AdminNewsSources, NewsItemAdmin } from './news.ts';
 
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 /**
@@ -340,6 +341,12 @@ export const endpoints = {
   adminTaxWithholdings: ep({ method: 'GET', path: '/api/v1/admin/tax/withholdings', auth: 'staff', permission: 'tax.read', query: AdminTaxWithholdingListQuery, response: paginated(AdminTaxWithholding) }),
   /** Statement CSV (ADMIN_TAX_EXPORT_COLUMNS), same filters, ≤ 10,000 rows newest first. */
   adminTaxExport: ep({ method: 'GET', path: '/api/v1/admin/tax/export.csv', auth: 'staff', permission: 'tax.read', query: AdminTaxWithholdingQuery, response: Csv, format: 'csv' }),
+
+  // Module N (0.17.0) — news layer of the analysis system, admin only (C-D1); see news.ts
+  /** Stored news items, newest firstSeenAt first; filter symbol / eventType / source / from / to (on firstSeenAt) + cursor paging. */
+  adminNewsItems: ep({ method: 'GET', path: '/api/v1/admin/news/items', auth: 'staff', permission: 'news.view', query: AdminNewsItemsQuery, response: paginated(NewsItemAdmin) }),
+  /** Health of every ingestion source (LIVE / STALE / UNAVAILABLE, lag, failures). */
+  adminNewsSources: ep({ method: 'GET', path: '/api/v1/admin/news/sources', auth: 'staff', permission: 'news.view', response: AdminNewsSources }),
 
   // ---- futures (phase F) — simulated USDT-M perpetuals, isolated margin, ≤ 20×
   futuresExchangeInfo: ep({ method: 'GET', path: '/api/v1/futures/exchange-info', auth: 'public', response: FuturesExchangeInfo }),

@@ -36,7 +36,7 @@ describe('phase 3 mocks follow the contract', () => {
     setMockRole('admin', false);
     await expect(api.adminOverview()).rejects.toSatisfy(code('TWO_FACTOR_REQUIRED'));
     setMockRole('support');
-    expect((await api.me()).permissions).toEqual(['users.read', 'exchange.read', 'reconciliation.read', 'tax.read']);
+    expect((await api.me()).permissions).toEqual(['users.read', 'exchange.read', 'reconciliation.read', 'tax.read', 'news.view']);
     await api.adminOverview();
     await expect(api.adminAdjustBalance({ params: { userId: DEMO }, body: { asset: 'USDT', amount: '1', reason: 'test reason' } })).rejects.toSatisfy(code('FORBIDDEN'));
   });
