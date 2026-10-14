@@ -45,7 +45,7 @@ Quy tắc dự án bắt buộc (CLAUDE.md, mục Bất biến):
 | **T2R** rà + gộp T1+T2 | — | **Xong** 2026-10-14 (đã push) |
 | **T3** API báo cáo | `be/tax-t3-reports` | **Đã gộp** `fdc0000` (Sonnet); verify 447/447; rà: 0 P0/P1, 1 P2 → T3F |
 | **T4a** test e2e + testid | `be/tax-t4-e2e` | **Đã gộp** `f7c8fe4` (Sonnet, effort medium); đỏ tới khi có UI |
-| **T3F** sửa theo rà T3 + realtime thuế | `be/tax-t3f` | Sonnet, effort high, thẻ ở mục 4F — **trước T5** |
+| **T3F** sửa theo rà T3 + realtime thuế | `be/tax-t3f` | **Đã gộp** `1c5f197` (Sonnet, effort high; rà 2 vòng, P1 dừng sàn đã sửa); verify 467/467; contracts 0.16.0 |
 | **T4b** giao diện | `ui/gd2-exchange` | Antigravity (PROMPT-16, lead viết) |
 | **T5** lên sàn thật | — | Lead + chủ dự án |
 
