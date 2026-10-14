@@ -11,6 +11,8 @@ Mỗi thẻ viết đủ để model Sonnet làm **mà không phải tự quyế
   - `isolation: "worktree"`;
   - prompt = toàn bộ khối **"Lệnh giao việc"** của thẻ.
 - Rà kết quả (`cex-reviewer`) và gộp `main` vẫn do lead làm (model mặc định). Sonnet chỉ code, test và commit trên nhánh của thẻ.
+- **Sau khi gộp, lead xóa worktree của thẻ.** Trước đó gỡ junction `node_modules/@cex/*` bằng `cmd /c rmdir`, rồi chạy `git worktree remove --force`.
+  Lý do (bài học 2026-10-14): worktree còn `node_modules` làm `npm run lint` trên main lỗi "multiple candidate TSConfigRootDirs" (738 lỗi giả).
 - Mỗi thẻ có 3 phần:
   - **Đầu vào** — phải có trước khi làm;
   - **Bước code** — theo thứ tự;
@@ -27,6 +29,7 @@ Quy tắc dự án bắt buộc (CLAUDE.md, mục Bất biến):
 - Không sửa apps/**, packages/ui/** (của Antigravity), không sửa host/, host-data/.
 - Worktree: node_modules/@cex/* phải trỏ vào packages của worktree (junction), nếu không thì typecheck xanh giả.
 - Không báo xong khi chưa chạy lệnh thật. Dán lệnh + kết quả.
+- Migration: chỉ thêm (cột nullable hoặc default hằng); diễn tập trên DB tạm có dữ liệu cũ như T2 đã làm.
 - Commit trên nhánh của thẻ, không gộp main, không push. Cuối commit message:
   Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
   (ghi đúng model đang chạy: Sonnet thì ghi "Claude Sonnet 5.5")
@@ -36,9 +39,9 @@ Quy tắc dự án bắt buộc (CLAUDE.md, mục Bất biến):
 
 | Thẻ | Nhánh | Trạng thái |
 |---|---|---|
-| T1 hợp đồng | `be/tax-t1-contracts` | Xong, chưa gộp (gộp cùng T2) |
-| T2 lõi backend | `be/tax-t2-core` (nền T1) | Đang chạy (model mặc định, giao trước khi có hướng dẫn này) |
-| **T2R** rà + gộp T1+T2 | — | Lead |
+| T1 hợp đồng | `be/tax-t1-contracts` | **Đã gộp** `ca59bc2` (cùng T2) |
+| T2 lõi backend | `be/tax-t2-core` (nền T1) | **Đã gộp** `ca59bc2`; verify 424/424; rà: 0 P0/P1, 1 P2 + 7 P3 → T3 mục 3.0 |
+| **T2R** rà + gộp T1+T2 | — | **Xong** 2026-10-14 (đã push) |
 | **T3** API báo cáo | `be/tax-t3-reports` | Sonnet, thẻ ở mục 3 |
 | **T4a** test e2e + testid | `be/tax-t4-e2e` | Sonnet, thẻ ở mục 4 |
 | **T4b** giao diện | `ui/gd2-exchange` | Antigravity (PROMPT-16, lead viết) |
@@ -66,10 +69,41 @@ Quy tắc dự án bắt buộc (CLAUDE.md, mục Bất biến):
 
 ## 3. Thẻ T3 — API báo cáo thuế (Sonnet)
 
-**Agent:** `cex-backend-builder`, `model: "sonnet"`. **Nhánh:** `be/tax-t3-reports` từ `main` **sau khi T2R gộp**.
+**Agent:** `cex-backend-builder`, `model: "sonnet"`. **Nhánh:** `be/tax-t3-reports` từ `main` **sau khi T2R gộp** (đã gộp: `ca59bc2`).
 **Đầu vào:**
-- `main` có bảng `tax_withholdings`, `trades.tax`, `user_tax_profiles`;
+- `main` có bảng `tax_withholdings`, `trades.tax`, `user_tax_profiles` (migration 0008);
 - hợp đồng 0.15.0 (`packages/contracts/src/tax.ts`, `endpoints.ts` dòng ~280–342).
+
+### 3.0. Sửa theo kết quả rà T2R (làm TRƯỚC 3.1, commit riêng "Tax T3 step 0")
+Reviewer kết luận gộp được, nhưng có các mục sau phải sửa trước khi bật thuế trên sàn thật:
+1. **P2 — lưu phân loại người bán trên từng lệnh BÁN.** Migration **0009** (chỉ thêm):
+   - Thêm cột `trades.tax_category text NULL`.
+   - Trong `settleFills`: với **mọi** lệnh SELL (kể cả khi `taxMode = OFF` và khi là `DOMESTIC_ORG`) ghi phân loại của người bán **lúc khớp**. Phân loại này đã được đọc trong transaction ở T2; dùng lại biến đó, không đọc lần 2. BUY để `NULL`.
+   - Không đổi hợp đồng (cột chỉ dùng nội bộ cho báo cáo).
+   - Test: đặt `DOMESTIC_ORG` → bán → đặt lại `INDIVIDUAL` → trade đó vẫn có `tax_category = 'DOMESTIC_ORG'`, không có bản ghi khấu trừ.
+2. **P3 — CHECK trên `exchange_settings`**, trong cùng migration 0009:
+   - `tax_mode IN ('OFF','WITHHOLD')`;
+   - `tax_rate > 0 AND tax_rate <= 0.01`.
+
+   Bảng có đúng 1 hàng nên thêm CHECK rẻ. Trước khi thêm, kiểm tra hàng hiện có thỏa điều kiện.
+3. **P3 — `ExchangeConfig.reload()`** (`server/src/modules/exchange/exchangeConfig.ts:42-45`):
+   - Cho các lần reload chạy **nối tiếp** bằng chuỗi promise (`this.reloading = this.reloading.then(load, load)`), để lần đọc cũ không ghi đè lần mới.
+   - Nếu reload sau commit bị lỗi: ghi log + thử lại 1 lần, **không** trả 500 cho request đã commit.
+   - Test: gọi 2 reload song song, xen giữa là một lần đổi DB → cache phải theo giá trị mới.
+4. **P3 — chú thích sai** `orderService.ts:501` ("never goes negative"): sửa thành đúng điều kiện. Âm chỉ có thể xảy ra khi quoteQty của một lần khớp < 2e-8, cặp thật không gặp.
+5. **P3 — CHANGELOG 0.15.0** (`packages/contracts/CHANGELOG.md:4, :40`) ghi lại cho đúng sau khi đã gộp:
+   - server đã trả `Trade.tax` và `exchangeInfo`;
+   - đã có route `taxProfile`, `taxUpdateProfile`, `adminTaxSettings`, `adminUpdateTaxSettings`;
+   - 6 endpoint báo cáo có route từ T3.
+
+   Đây là lần duy nhất thẻ này được sửa `packages/contracts`.
+6. **P3 — mock** `packages/contracts/src/mocks/journal.ts:147-152`: dùng `a.allocatedTax` do `replayAllocations` trả về, xóa phép chia tự viết. Test mock nhật ký vẫn xanh.
+7. **Test còn thiếu:**
+   - LIMIT SELL khớp từng phần ≥ 3 lần khi thuế bật: mỗi phần làm tròn riêng, Σ khớp sổ cái, `lockedAfter` đúng;
+   - HTTP `ledger?type=TAX_WITHHOLDING` trả đúng dòng;
+   - `adminRunReconciliation` trả được 2 loại lệch thuế (response khớp schema).
+
+**Không** đổi vị trí cột `tax` trong CSV giao dịch (đã công bố trong CHANGELOG).
 
 ### 3.1. File tạo mới / sửa
 | File | Việc |
@@ -80,7 +114,7 @@ Quy tắc dự án bắt buộc (CLAUDE.md, mục Bất biến):
 | `server/src/modules/exchange/exports.ts` | Thêm `exportTaxCsv`, `exportAdminTaxCsv`; dùng lại `csv()` và `gmt7()` có sẵn (export `csv` nếu chưa export) |
 | `server/src/modules/tax/reports.test.ts` (mới) | Test mục 3.7 |
 
-Không sửa: `packages/contracts/**`, `orderService.ts`, schema/migration (đợt này **không có migration**).
+Không sửa: `packages/contracts/**` (trừ 3.0 mục 5–6) và `orderService.ts` (trừ 3.0 mục 1, 4). Migration duy nhất là **0009** ở 3.0.
 
 ### 3.2. Mốc thời gian theo giờ Việt Nam (`period.ts`)
 ```ts
@@ -178,10 +212,11 @@ npm run ui-coverage                          # 6 endpoint thuế không còn tro
 
 ### 3.9. Lệnh giao việc T3 (dán nguyên khối, kèm "Quy tắc chung" mục 0)
 ```
-Đợt T3 Module T: API báo cáo thuế. Đọc docs/plans/module-T-huong-dan-code.md mục 3 và làm ĐÚNG theo đó;
-mục nào không rõ thì dừng và hỏi, không tự quyết thiết kế. Nhánh be/tax-t3-reports từ main.
-Hợp đồng: packages/contracts/src/tax.ts + endpoints.ts (không sửa). Không có migration.
-Báo cáo: file đã sửa, số test mới, kết quả 5 lệnh ở mục 3.8.
+Đợt T3 Module T: sửa theo kết quả rà T2R (mục 3.0) rồi làm API báo cáo thuế (mục 3.1–3.7).
+Đọc docs/plans/module-T-huong-dan-code.md mục 3 và làm ĐÚNG theo đó; mục nào không rõ thì dừng và hỏi, không tự quyết thiết kế.
+Nhánh be/tax-t3-reports từ main. Hai commit: "Tax T3 step 0" (mục 3.0, migration 0009) và "Tax T3 reports".
+Hợp đồng: packages/contracts/src/tax.ts + endpoints.ts — chỉ được sửa CHANGELOG và mocks/journal.ts theo mục 3.0.
+Báo cáo: file đã sửa, migration 0009 và vì sao an toàn cho sàn thật, số test mới, kết quả các lệnh ở mục 3.8.
 ```
 
 ---
