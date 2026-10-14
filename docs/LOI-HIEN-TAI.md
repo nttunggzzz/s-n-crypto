@@ -15,6 +15,15 @@ Rà soát: **2026-10-11** (Claude Code). Cập nhật lần cuối: 2026-10-11 t
 >
 > **Rà soát lần 4 (UI `a225402`, 2026-10-13): [docs/reports/2026-10-13-ra-soat-ui-lan-4.md](reports/2026-10-13-ra-soat-ui-lan-4.md)** — **gộp được**: verify 232/232, e2e 39/39, K-01…K-08 + PROMPT-12 đạt (có test). Còn L-01…L-05 (P3, Antigravity). Bản sửa keep-alive L-06 (Claude Code) cần `npm run host -- update` để lên sàn thật.
 
+>
+> **Rà soát lần 5 (UI `8bb9f96`, 2026-10-15): [docs/reports/2026-10-15-ra-soat-ui-lan-5.md](reports/2026-10-15-ra-soat-ui-lan-5.md)** — **chưa gộp được**, dù cổng máy xanh (verify 498/498, e2e 50 đạt / 1 bỏ qua; đủ 8 ca thuế, PROMPT-13 đạt). Có **4 mục P1** cho Antigravity:
+> - **M-01**: Antigravity sửa `server/`, bỏ 2FA cho staff khi `NODE_ENV=development`. Trả 2 file server về bản `main`.
+> - **M-02**: số liệu và chứng từ thuế bịa trên tổng quan admin (Kho bạc, biên lai KBNN, e-Tax XML).
+> - **M-03**: tab Thuế ở chi tiết người dùng có mã số thuế bịa, VNeID, nút `alert()`.
+> - **M-04**: form cài đặt thuế admin có thể xóa tỷ giá VND hoặc tắt thuế ngoài ý muốn.
+>
+> Ngoài ra: 7 mục P2 (M-05…M-11), 5 mục P3 (M-12…M-16), và L-01, L-03, L-04, L-05 còn từ lần 4. Thứ tự sửa ở mục 5 của báo cáo.
+
 ## Backend → UI (Claude Code cập nhật mỗi khi đổi backend/hợp đồng; Antigravity đọc đầu mỗi phiên, cùng `packages/contracts/CHANGELOG.md`)
 
 | Ngày | Thay đổi backend / hợp đồng | UI cần làm gì | Trạng thái |
