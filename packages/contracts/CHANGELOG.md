@@ -1,5 +1,41 @@
 # Changelog — @cex/contracts
 
+## 0.15.0 — 2026-10-14 (Thuế crypto Việt Nam, thử nghiệm — Module T, đợt T1)
+Chỉ thêm. 10 endpoint mới, tổng 150. Server chưa có route cho chúng (T2–T3); giao diện làm trên mock. Hướng dẫn: README mục 15.
+Luật (module T §0, §3.2): chỉ lần khớp **BÁN Spot** bị trích khi `taxMode = 'WITHHOLD'` và người bán không phải `DOMESTIC_ORG`;
+thuế = roundUp 8 chữ số của (quoteQty × taxRate) trên giá trị gộp, từng lần khớp, lãi hay lỗ đều trích. Mua, Futures, chuyển ví, faucet,
+admin cộng/trừ, đặt lại tài khoản: không trích.
+
+**Thêm**
+- `tax.ts`: enum `TaxMode` (`OFF | WITHHOLD`), `TaxCategory` (`INDIVIDUAL | FOREIGN_ORG | DOMESTIC_ORG`, tự khai, **không** có trường giấy tờ);
+  hằng `TAX_LIMITS` (tỷ lệ tối đa 0.01, mặc định 0.001, CSV ≤ 10.000 dòng); `VndAmount` (đồng, số nguyên); `TaxRateInput`, `VndRateInput`;
+  schema `TaxSettings`, `UpdateTaxSettingsRequest`, `TaxProfile`, `UpdateTaxProfileRequest` (strict: chỉ `category`), `TaxWithholding`,
+  `AdminTaxWithholding` (+ `userId`), `TaxWithholdingQuery`/`ListQuery`, `AdminTaxWithholdingQuery`/`ListQuery`, `TaxTotals`, `TaxSales`,
+  `TaxMonth`, `TaxSummaryQuery`, `TaxSummary`, `TaxPeriod` (`YYYY-MM` | `YYYY-Qn`), `AdminTaxSummaryQuery`, `AdminTaxSummary`;
+  cột CSV `TAX_EXPORT_COLUMNS`, `ADMIN_TAX_EXPORT_COLUMNS` (server và mock dùng chung).
+- Endpoint người dùng (`auth: user`): `taxProfile`, `taxUpdateProfile` (PUT), `taxSummary`, `taxWithholdings` (phân trang), `taxExport` (CSV).
+- Endpoint admin (`auth: staff`): `adminTaxSettings`, `adminTaxSummary`, `adminTaxWithholdings`, `adminTaxExport` (quyền `tax.read`);
+  `adminUpdateTaxSettings` (PATCH, quyền `tax.manage`, ghi audit `TAX_SETTINGS_UPDATE`).
+- Quyền `tax.read` (support, admin, owner — như `reconciliation.read`) và `tax.manage` (admin, owner — như `exchange.configure`).
+- `Trade.tax: DecimalString` (luôn có, `"0.00000000"` khi không trích; tiền nhận về của lệnh bán = quoteQty − fee − tax).
+- `ExchangeInfo.taxMode`, `taxRate`, `taxVndRate` (nullable), `taxVndRateUpdatedAt` (nullable) — cho form bán ước tính thuế.
+- `LedgerEntryType` thêm `TAX_WITHHOLDING`; `AuditAction` thêm `TAX_SETTINGS_UPDATE`.
+- `JournalFill.tax`, `JournalFill.allocatedTax` (chia như `allocatedFee`: cả lần khớp → `tax`, một phần → roundUp8(tax × allocatedQty / quantity)).
+- `exportUrl()` nhận thêm `'taxExport' | 'adminTaxExport'`.
+- Mock: bắt đầu `WITHHOLD` 0.1%, tỷ giá 26350 (server thật bắt đầu `OFF`); lần khớp trong mock tính `quoteQty`, phí, thuế và `realizedPnl` bằng `@cex/core`
+  đúng hướng làm tròn của server (giá vốn trung bình như `positions.ts`, khởi tạo từ fixture danh mục); có bản ghi khấu trừ cho mỗi lần bán bị trích;
+  báo cáo, danh sách, CSV đọc cùng một nguồn. 2 lần bán cũ của người dùng demo (fixture `fixtureTaxedTrades`) + 2 bản ghi của người dùng khác.
+  Hàm dev `setMockTax({ taxMode, taxRate, taxVndRate, category })`. Test `mocks/mocks-tax.test.ts` (12 ca).
+
+**Thay đổi nhỏ có thể ảnh hưởng UI**
+- `realizedPnl` của `Trade` nay là sau phí **và** thuế (khi thuế tắt thì như cũ).
+- Bảng nhãn loại dòng sổ cái nên thêm `TAX_WITHHOLDING`; bộ lọc nhật ký admin nên thêm `TAX_SETTINGS_UPDATE`; vai trò support có thêm quyền `tax.read`
+  (`me.permissions`).
+- Mock: phí lần khớp nay làm tròn lên 8 chữ số theo `feeRate` hiện hành (trước là float × 0.001); `realizedPnl` của lệnh bán trong mock là số thật
+  theo giá vốn (trước là số giả 1% giá trị); `exchangeInfo.feeRate` của mock theo cấu hình admin; CSV `exportTrades` có thêm cột `tax` sau `feeAsset`;
+  `myTrades` của mock có thêm 2 lệnh bán cũ (381, 382).
+- Server **chưa** trả `Trade.tax` và 4 trường thuế của `exchangeInfo` (đợt T2): ghép nhánh hợp đồng này cùng T2, hoặc T2 thêm trước.
+
 ## 0.14.0 — 2026-10-14 (Nhật ký giao dịch — Module A, đợt A1)
 Chỉ thêm. 12 endpoint mới, tổng 140. Server chưa có route cho chúng (A2–A4); giao diện làm trên mock ngay từ bản này. Hướng dẫn: README mục 14.
 
