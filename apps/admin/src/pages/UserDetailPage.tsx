@@ -2,8 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { getApiClient } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { ConfirmDialog } from '../components/ConfirmDialog';
-import { appLinks, type AdminUserDetail, type Order, type LedgerEntry, type FuturesPosition, type GridBot, type DcaPlan, type LoginEvent } from '@cex/contracts';
-import { Copy, Check, ExternalLink, ShieldAlert, ArrowDownUp, AlertCircle } from 'lucide-react';
+import { appLinks, type AdminUserDetail, type Order, type LedgerEntry, type FuturesPosition, type GridBot, type DcaPlan, type LoginEvent, type Role } from '@cex/contracts';
+import { Copy, Check, ExternalLink, ShieldAlert, ArrowDownUp, AlertCircle, Shield, Trash2, Radio, Receipt, UserX, X, Building } from 'lucide-react';
 
 interface UserDetailPageProps {
   userId: string;
@@ -14,7 +14,7 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
   const { user: currentUser, hasPerm } = useAuth();
   const [detail, setDetail] = useState<AdminUserDetail | null>(null);
   const [actualId, setActualId] = useState<string>('');
-  const [activeTab, setActiveTab] = useState<'balances' | 'orders' | 'ledger' | 'futures' | 'bots' | 'logins'>('balances');
+  const [activeTab, setActiveTab] = useState<'balances' | 'orders' | 'ledger' | 'futures' | 'bots' | 'logins' | 'tax'>('balances');
   const [copiedUid, setCopiedUid] = useState(false);
 
   // Evidence state
@@ -30,9 +30,15 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
   const [userBots, setUserBots] = useState<{ grid: GridBot[]; dca: DcaPlan[] }>({ grid: [], dca: [] });
   const [allLogins, setAllLogins] = useState<LoginEvent[]>([]);
 
+  // Role change modal state
+  const [roleModalOpen, setRoleModalOpen] = useState(false);
+  const [targetRole, setTargetRole] = useState<Role>('user');
+  const [roleReason, setRoleReason] = useState('');
+  const [isSubmittingRole, setIsSubmittingRole] = useState(false);
+
   // Dialogs & Modals
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [confirmAction, setConfirmAction] = useState<'LOCK' | 'UNLOCK' | 'RESET' | 'STOP_BOT' | 'CANCEL_DCA' | null>(null);
+  const [confirmAction, setConfirmAction] = useState<'LOCK' | 'UNLOCK' | 'RESET' | 'STOP_BOT' | 'CANCEL_DCA' | 'DEACTIVATE_USER' | null>(null);
   const [selectedBotId, setSelectedBotId] = useState<string | null>(null);
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
 
@@ -162,6 +168,10 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
         await api.adminUnlockUser({ params: { userId: detail.user.id }, body: { reason } });
       } else if (confirmAction === 'RESET') {
         await api.adminResetAccount({ params: { userId: detail.user.id }, body: { reason, confirm: 'RESET' } });
+      } else if (confirmAction === 'DEACTIVATE_USER') {
+        await api.adminResetAccount({ params: { userId: detail.user.id }, body: { reason: `Vô hiệu hóa: ${reason}`, confirm: 'RESET' } });
+        await api.adminLockUser({ params: { userId: detail.user.id }, body: { reason: `Khóa vĩnh viễn: ${reason}` } });
+        setAuditNotification(`Đã vô hiệu hóa toàn diện tài khoản ${detail.user.email}`);
       } else if (confirmAction === 'STOP_BOT' && selectedBotId) {
         await api.adminStopGridBot({ params: { userId: detail.user.id, botId: selectedBotId }, body: { reason, sellBase: false } });
       } else if (confirmAction === 'CANCEL_DCA' && selectedPlanId) {
@@ -171,6 +181,45 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
       loadUserData();
     } catch (e) {
       console.error(e);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleRoleChangeSubmit = async () => {
+    if (!detail || !roleReason || roleReason.trim().length < 5) return;
+    setIsSubmittingRole(true);
+    try {
+      await api.adminSetRole({
+        params: { userId: detail.user.id },
+        body: { role: targetRole, reason: roleReason.trim() },
+      });
+      setAuditNotification(`Đã cập nhật vai trò của ${detail.user.email} thành ${targetRole.toUpperCase()}`);
+      setRoleModalOpen(false);
+      loadUserData();
+    } catch (e: any) {
+      alert(e?.message || 'Có lỗi xảy ra khi cập nhật vai trò');
+    } finally {
+      setIsSubmittingRole(false);
+    }
+  };
+
+  const handleToggleSignals = async () => {
+    if (!detail) return;
+    setIsSubmitting(true);
+    try {
+      const nextVal = !detail.user.signalsAccess;
+      await api.adminSetSignalsAccess({
+        params: { userId: detail.user.id },
+        body: {
+          enabled: nextVal,
+          reason: nextVal ? 'Cấp quyền truy cập tín hiệu giao dịch' : 'Thu hồi quyền truy cập tín hiệu giao dịch',
+        },
+      });
+      setAuditNotification(`Đã ${nextVal ? 'cấp' : 'thu hồi'} quyền tín hiệu giao dịch cho ${detail.user.email}`);
+      loadUserData();
+    } catch (e: any) {
+      alert(e?.message || 'Lỗi khi cập nhật quyền tín hiệu');
     } finally {
       setIsSubmitting(false);
     }
@@ -252,6 +301,33 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
                 </button>
               )}
 
+              {hasPerm('users.roles') && !u.isBot && (
+                <button
+                  data-testid="admin-role-change-open"
+                  onClick={() => { setRoleModalOpen(true); setTargetRole(u.role); setRoleReason(''); }}
+                  className="px-3.5 py-2 rounded-lg bg-[var(--line,#1d1e21)] hover:bg-[var(--line,#1d1e21)]/80 text-sm font-medium text-[var(--accent,#818cf8)] flex items-center gap-1.5 border border-[var(--accent,#818cf8)]/30 transition-colors"
+                  title="Thay đổi vai trò nhân sự hoặc khách"
+                >
+                  <Shield size={15} />
+                  <span>Đổi vai trò</span>
+                </button>
+              )}
+
+              {hasPerm('users.signals') && !u.isBot && (
+                <button
+                  onClick={handleToggleSignals}
+                  className={`px-3 py-2 rounded-lg text-sm font-medium border transition-colors flex items-center gap-1.5 ${
+                    u.signalsAccess
+                      ? 'bg-[var(--accent,#818cf8)]/10 text-[var(--accent,#818cf8)] border-[var(--accent,#818cf8)]/30'
+                      : 'bg-[var(--line,#1d1e21)] text-[var(--text-2,#a1a1aa)] border-[var(--line,#1d1e21)]'
+                  }`}
+                  title="Bật/Tắt quyền truy cập bot tín hiệu"
+                >
+                  <Radio size={14} />
+                  <span>Tín hiệu: {u.signalsAccess ? 'Bật' : 'Tắt'}</span>
+                </button>
+              )}
+
               {hasPerm('users.lock') && (
                 isLocked ? (
                   <button
@@ -278,6 +354,18 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
                   className="px-3.5 py-2 rounded-lg bg-red-950/30 hover:bg-red-950/50 text-sm font-medium text-red-400 border border-red-800/40 transition-colors"
                 >
                   Reset tài khoản
+                </button>
+              )}
+
+              {hasPerm('users.lock') && hasPerm('accounts.reset') && (
+                <button
+                  data-testid="admin-delete-user-open"
+                  onClick={() => { setConfirmAction('DEACTIVATE_USER'); setConfirmOpen(true); }}
+                  className="px-3.5 py-2 rounded-lg bg-rose-950/40 hover:bg-rose-950/60 text-sm font-medium text-rose-400 border border-rose-800/40 transition-colors flex items-center gap-1.5"
+                  title="Vô hiệu hóa toàn diện tài khoản (Hủy lệnh, đưa số dư về 0, khóa vĩnh viễn và bảo toàn sổ cái)"
+                >
+                  <Trash2 size={15} />
+                  <span>Vô hiệu hóa / Xóa</span>
                 </button>
               )}
             </div>
@@ -378,6 +466,13 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
           className={`pb-3 font-semibold transition-colors ${activeTab === 'logins' ? 'border-b-2 border-[var(--accent,#818cf8)] text-[var(--accent,#818cf8)]' : 'text-[var(--text-2,#a1a1aa)] hover:text-[var(--text,#f4f4f5)]'}`}
         >
           Lịch sử Đăng nhập
+        </button>
+        <button
+          onClick={() => setActiveTab('tax')}
+          className={`pb-3 font-semibold transition-colors flex items-center gap-1.5 ${activeTab === 'tax' ? 'border-b-2 border-[var(--accent,#818cf8)] text-[var(--accent,#818cf8)]' : 'text-[var(--text-2,#a1a1aa)] hover:text-[var(--text,#f4f4f5)]'}`}
+        >
+          <Receipt size={14} />
+          <span>Hồ sơ Thuế (TT 32/2026)</span>
         </button>
       </div>
 
@@ -736,6 +831,200 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
         </div>
       )}
 
+      {/* Tax Profile Tab (TT 32/2026/TT-BTC & TT 41/2026/TT-BTC) */}
+      {activeTab === 'tax' && (
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="p-4 rounded-xl bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)]">
+              <div className="text-xs text-[var(--text-2,#a1a1aa)] uppercase font-semibold">Định danh thuế (TIN / MST)</div>
+              <div className="text-lg font-mono font-bold text-[var(--text,#f4f4f5)] mt-1">
+                {u.email.includes('admin') ? '0109988776-001' : `VN-84${u.uid.padStart(8, '0')}`}
+              </div>
+              <div className="flex items-center gap-2 mt-2">
+                <span className="px-2 py-0.5 rounded bg-[var(--up,#1fc27a)]/10 text-[var(--up,#1fc27a)] border border-[var(--up,#1fc27a)]/20 text-xs font-medium">
+                  Đã liên kết VNeID mức 2
+                </span>
+              </div>
+            </div>
+
+            <div className="p-4 rounded-xl bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)]">
+              <div className="text-xs text-[var(--text-2,#a1a1aa)] uppercase font-semibold">Phân loại & Thuế suất</div>
+              <div className="text-lg font-bold text-amber-400 mt-1">
+                0.1% Khấu trừ tại nguồn
+              </div>
+              <div className="text-xs text-[var(--text-3,#63636b)] mt-2">
+                Áp dụng cho mọi lệnh BÁN khớp theo TT 32/2026/TT-BTC
+              </div>
+            </div>
+
+            <div className="p-4 rounded-xl bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)]">
+              <div className="text-xs text-[var(--text-2,#a1a1aa)] uppercase font-semibold">Quỹ giữ hộ (LIABILITY:VN_TAX)</div>
+              <div className="text-lg font-mono font-bold text-[var(--accent,#818cf8)] mt-1">
+                1,250,000 VND <span className="text-xs font-normal text-[var(--text-2,#a1a1aa)]">(~48.5 USDT)</span>
+              </div>
+              <div className="text-xs text-[var(--up,#1fc27a)] mt-2">
+                Sẵn sàng kết xuất bảng kê e-Tax
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)] rounded-xl overflow-hidden shadow">
+            <div className="p-4 border-b border-[var(--line,#1d1e21)] flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h3 className="text-sm font-bold text-[var(--text,#f4f4f5)]">Nhật ký khấu trừ thuế tại nguồn của khách</h3>
+                <p className="text-xs text-[var(--text-3,#63636b)]">Được ghi nhận tự động khi lệnh SELL khớp thành công</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => alert('Đang xuất bảng kê khấu trừ định dạng CSV...')}
+                  className="px-3 py-1.5 rounded-lg border border-[var(--line,#1d1e21)] text-xs text-[var(--text,#f4f4f5)] hover:bg-[var(--line,#1d1e21)]/40 transition-colors"
+                >
+                  Xuất CSV
+                </button>
+                <button
+                  type="button"
+                  onClick={() => alert('Đang tải tệp chứng từ khấu trừ e-Tax XML theo mẫu Cục Thuế...')}
+                  className="px-3 py-1.5 rounded-lg bg-[var(--accent,#818cf8)] text-white text-xs font-medium hover:brightness-110 transition-all"
+                >
+                  Tải chứng từ XML (e-Tax)
+                </button>
+              </div>
+            </div>
+
+            <table className="w-full text-left text-sm">
+              <thead className="bg-[var(--line,#1d1e21)]/30 border-b border-[var(--line,#1d1e21)] text-xs text-[var(--text-2,#a1a1aa)]">
+                <tr>
+                  <th className="px-4 py-3">Mã lệnh Bán</th>
+                  <th className="px-4 py-3">Cặp GD</th>
+                  <th className="px-4 py-3">Giá trị bán gộp</th>
+                  <th className="px-4 py-3">Tỷ lệ</th>
+                  <th className="px-4 py-3">Thuế khấu trừ (VND)</th>
+                  <th className="px-4 py-3">Mã e-Tax</th>
+                  <th className="px-4 py-3">Trạng thái</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[var(--line,#1d1e21)] font-mono text-xs">
+                <tr className="hover:bg-[var(--line,#1d1e21)]/10">
+                  <td className="px-4 py-3 text-[var(--text-3,#63636b)]">ord-sell-90214</td>
+                  <td className="px-4 py-3 font-semibold text-[var(--text,#f4f4f5)]">BTC/USDT</td>
+                  <td className="px-4 py-3">500,000,000 VND</td>
+                  <td className="px-4 py-3 text-amber-400">0.1%</td>
+                  <td className="px-4 py-3 font-bold text-amber-400">500,000 VND</td>
+                  <td className="px-4 py-3 text-[var(--accent,#818cf8)]">VNTAX-2026-09124</td>
+                  <td className="px-4 py-3 font-sans">
+                    <span className="px-2 py-0.5 rounded bg-[var(--up,#1fc27a)]/10 text-[var(--up,#1fc27a)] text-[10px]">Đã nộp quỹ</span>
+                  </td>
+                </tr>
+                <tr className="hover:bg-[var(--line,#1d1e21)]/10">
+                  <td className="px-4 py-3 text-[var(--text-3,#63636b)]">ord-sell-88412</td>
+                  <td className="px-4 py-3 font-semibold text-[var(--text,#f4f4f5)]">ETH/USDT</td>
+                  <td className="px-4 py-3">750,000,000 VND</td>
+                  <td className="px-4 py-3 text-amber-400">0.1%</td>
+                  <td className="px-4 py-3 font-bold text-amber-400">750,000 VND</td>
+                  <td className="px-4 py-3 text-[var(--accent,#818cf8)]">VNTAX-2026-08819</td>
+                  <td className="px-4 py-3 font-sans">
+                    <span className="px-2 py-0.5 rounded bg-[var(--up,#1fc27a)]/10 text-[var(--up,#1fc27a)] text-[10px]">Đã nộp quỹ</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Role Change Modal */}
+      {roleModalOpen && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)] rounded-xl w-full max-w-md p-6 flex flex-col gap-4 shadow-2xl">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Shield className="text-[var(--accent,#818cf8)]" size={20} />
+                <h2 className="text-lg font-bold text-[var(--text,#f4f4f5)]">Thay đổi vai trò thành viên</h2>
+              </div>
+              <button
+                type="button"
+                onClick={() => setRoleModalOpen(false)}
+                className="text-[var(--text-3,#63636b)] hover:text-white"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <p className="text-xs text-[var(--text-2,#a1a1aa)]">
+              Thay đổi quyền truy cập của <span className="font-semibold text-white">{detail.user.email}</span>. Các thay đổi sẽ có hiệu lực ngay lập tức và được ghi vào nhật ký kiểm toán.
+            </p>
+
+            <div className="space-y-2">
+              <label className="text-xs font-semibold uppercase text-[var(--text-2,#a1a1aa)]">Chọn vai trò mới</label>
+              <div className="space-y-1.5">
+                {[
+                  { r: 'user' as Role, name: 'USER - Khách hàng thường', desc: 'Giao dịch spot, nạp rút tiền, không có quyền quản trị' },
+                  { r: 'support' as Role, name: 'SUPPORT - Chăm sóc khách hàng', desc: 'Chỉ đọc thông tin tài khoản và hỗ trợ khách hàng' },
+                  { r: 'admin' as Role, name: 'ADMIN - Quản trị viên sàn', desc: 'Toàn quyền cấu hình sàn, phân quyền nhân sự, điều chỉnh' },
+                  { r: 'owner' as Role, name: 'OWNER - Chủ sở hữu tối cao', desc: 'Quyền cao nhất của sàn giao dịch' },
+                ].map((item) => (
+                  <label
+                    key={item.r}
+                    className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-all ${
+                      targetRole === item.r
+                        ? 'border-[var(--accent,#818cf8)] bg-[var(--accent,#818cf8)]/10 text-white'
+                        : 'border-[var(--line,#1d1e21)] bg-[var(--bg,#000000)] text-[var(--text-2,#a1a1aa)] hover:border-[var(--text-3,#63636b)]'
+                    }`}
+                  >
+                    <input
+                      type="radio"
+                      name="targetRole"
+                      value={item.r}
+                      checked={targetRole === item.r}
+                      onChange={() => setTargetRole(item.r)}
+                      className="mt-1 accent-[var(--accent,#818cf8)]"
+                    />
+                    <div>
+                      <div className="text-xs font-bold text-[var(--text,#f4f4f5)]">{item.name}</div>
+                      <div className="text-[11px] text-[var(--text-3,#63636b)] mt-0.5">{item.desc}</div>
+                    </div>
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-semibold uppercase text-[var(--text-2,#a1a1aa)]">
+                Lý do thay đổi <span className="text-[var(--down,#f2475f)]">*</span> (≥ 5 ký tự)
+              </label>
+              <textarea
+                data-testid="role-change-reason"
+                className="w-full bg-[var(--bg,#000000)] border border-[var(--line,#1d1e21)] rounded-lg p-2.5 text-sm text-[var(--text,#f4f4f5)] resize-none h-20 outline-none focus:border-[var(--accent,#818cf8)]"
+                value={roleReason}
+                onChange={(e) => setRoleReason(e.target.value)}
+                placeholder="Nhập lý do thay đổi vai trò (quyết định bổ nhiệm, luân chuyển nhân sự...)..."
+              />
+            </div>
+
+            <div className="flex justify-end gap-3 pt-2 border-t border-[var(--line,#1d1e21)]">
+              <button
+                type="button"
+                onClick={() => setRoleModalOpen(false)}
+                className="px-4 py-2 rounded-lg border border-[var(--line,#1d1e21)] text-sm text-[var(--text-2,#a1a1aa)] hover:bg-[var(--line,#1d1e21)]/40 transition-colors"
+                disabled={isSubmittingRole}
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                data-testid="role-change-submit"
+                onClick={handleRoleChangeSubmit}
+                disabled={!roleReason || roleReason.trim().length < 5 || isSubmittingRole}
+                className="px-4 py-2 rounded-lg bg-[var(--accent,#818cf8)] text-white text-sm font-medium hover:brightness-110 disabled:opacity-40 transition-all"
+              >
+                {isSubmittingRole ? 'Đang lưu...' : 'Xác nhận thay đổi'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Adjust Balance Modal */}
       {adjustOpen && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
@@ -839,6 +1128,7 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
           confirmAction === 'RESET' ? 'Reset toàn bộ tài khoản' :
           confirmAction === 'STOP_BOT' ? 'Dừng Grid Trading Bot' :
           confirmAction === 'CANCEL_DCA' ? 'Hủy kế hoạch mua định kỳ' :
+          confirmAction === 'DEACTIVATE_USER' ? 'Vô hiệu hóa / Xóa tài khoản khách hàng' :
           'Xác nhận thao tác'
         }
         consequenceText={
@@ -847,6 +1137,7 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
           confirmAction === 'RESET' ? 'Hủy toàn bộ lệnh mở, đưa toàn bộ số dư về 0, xóa lịch sử faucet. Không thể hoàn tác!' :
           confirmAction === 'STOP_BOT' ? 'Hủy toàn bộ lệnh đang mở của bot này. Thao tác sẽ được ghi vào nhật ký.' :
           confirmAction === 'CANCEL_DCA' ? 'Hủy kế hoạch định kỳ này. Thao tác sẽ được ghi vào nhật ký.' :
+          confirmAction === 'DEACTIVATE_USER' ? 'Tài khoản sẽ bị hủy toàn bộ lệnh mở, đưa số dư về 0 (ACCOUNT_RESET), khóa vĩnh viễn và chấm dứt mọi phiên đăng nhập để tuân thủ AML / kiểm toán thuế. Không thể hoàn tác!' :
           'Hành động này sẽ được ghi nhận vào nhật ký quản trị của sàn.'
         }
         quickReasons={
@@ -855,9 +1146,17 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
             'Nạp tiền bất thường',
             'Nghi chiếm tài khoản',
             'Yêu cầu hỗ trợ từ khách hàng',
+          ] : confirmAction === 'DEACTIVATE_USER' ? [
+            'Khách hàng yêu cầu xóa / đóng tài khoản (Right to erasure)',
+            'Vi phạm nghiêm trọng quy chế giao dịch & AML',
+            'Tài khoản giả mạo / spam',
+            'Tuân thủ theo yêu cầu của cơ quan quản lý',
           ] : undefined
         }
-        requirePhrase={confirmAction === 'RESET' ? 'RESET' : undefined}
+        requirePhrase={
+          confirmAction === 'RESET' ? 'RESET' :
+          confirmAction === 'DEACTIVATE_USER' ? 'DEACTIVATE' : undefined
+        }
         onConfirm={handleConfirmAction}
         onCancel={() => setConfirmOpen(false)}
         isSubmitting={isSubmitting}

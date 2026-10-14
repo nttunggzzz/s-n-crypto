@@ -5,7 +5,7 @@ interface ConfirmDialogProps {
   isOpen: boolean;
   title: string;
   consequenceText: string;
-  requirePhrase?: 'HALT' | 'RESUME' | 'RESET';
+  requirePhrase?: 'HALT' | 'RESUME' | 'RESET' | 'DELETE' | 'DEACTIVATE' | string;
   quickReasons?: string[];
   onConfirm: (reason: string) => void;
   onCancel: () => void;

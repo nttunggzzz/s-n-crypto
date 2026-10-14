@@ -13,6 +13,7 @@ import {
   KeyRound,
   FileText,
   Scale,
+  Receipt,
 } from 'lucide-react';
 
 interface SidebarItem {
@@ -24,6 +25,7 @@ interface SidebarItem {
 
 const MENU_ITEMS: SidebarItem[] = [
   { label: 'Tổng quan', path: '/admin', permission: 'exchange.read', icon: LayoutDashboard },
+  { label: 'Quản lý Thuế (TT 32/2026)', path: '/admin/tax', permission: 'exchange.read', icon: Receipt },
   { label: 'Người dùng', path: '/admin/users', permission: 'users.read', icon: Users },
   { label: 'Nhân sự', path: '/admin/roles', permission: 'users.roles', icon: ShieldCheck },
   { label: 'Cặp Spot', path: '/admin/symbols', permission: 'exchange.read', icon: CandlestickChart },

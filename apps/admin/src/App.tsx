@@ -17,6 +17,7 @@ import { SettingsPage } from './pages/SettingsPage';
 import { AuditLogsPage } from './pages/AuditLogsPage';
 import { ReconciliationPage } from './pages/ReconciliationPage';
 import { RolesPage } from './pages/RolesPage';
+import { TaxManagementPage } from './pages/TaxManagementPage';
 
 const AppContent: React.FC = () => {
   // Vite sets base='/admin/', so pathname might be '/admin/' or '/admin/users'
@@ -40,7 +41,8 @@ const AppContent: React.FC = () => {
     // Strip trailing slash for easier matching, except if it's exactly /admin/
     const normalized = currentPath.endsWith('/') && currentPath.length > 1 ? currentPath.slice(0, -1) : currentPath;
 
-    if (normalized === '/admin') return <OverviewPage />;
+    if (normalized === '/admin') return <OverviewPage onNavigate={navigate} />;
+    if (normalized === '/admin/tax') return <TaxManagementPage />;
     if (normalized === '/admin/users') return <UsersPage onNavigate={navigate} />;
     if (normalized.startsWith('/admin/users/')) {
       const id = normalized.split('/')[3] ?? '';
@@ -56,7 +58,7 @@ const AppContent: React.FC = () => {
     if (normalized === '/admin/reconciliation') return <ReconciliationPage />;
     if (normalized === '/admin/roles') return <RolesPage />;
 
-    return <OverviewPage />;
+    return <OverviewPage onNavigate={navigate} />;
   };
 
   return (
