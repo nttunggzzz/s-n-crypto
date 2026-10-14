@@ -98,4 +98,8 @@ Nhờ tách thư mục, hai bên code tiếp mà người dùng không bị ản
 - **Captcha (Turnstile):**
   - muốn dùng: thêm `trycloudflare.com` vào Hostnames của widget, điền hai khóa vào `.env.host`;
   - để trống thì không có captcha. Đăng ký vẫn cần mã mời.
+- **Tin tức cho hệ phân tích (Module N, chỉ admin thấy):** hai cờ trong `.env.host`, mặc định không cần ghi gì.
+  - `NEWS_INGEST_ENABLED` (mặc định `false` ở mọi môi trường): `true` mới bật việc tải tin RSS/GDELT. Tin RSS không lấy lại được về sau, nên chỉ bật sau khi đọc báo cáo đợt N2.
+  - `NEWS_CALENDAR_ENABLED` (mặc định `true`): nạp lịch công bố (FOMC, CPI, NFP, PCE) từ file trong repo lúc khởi động. File hỏng thì giữ dữ liệu cũ và gửi cảnh báo Telegram; hết sự kiện `HIGH` trong 45 ngày tới cũng cảnh báo (một lần).
+  - Muốn đổi thì thêm dòng `NEWS_INGEST_ENABLED=true`. Đừng để giá trị rỗng (`NEWS_INGEST_ENABLED=`): server sẽ không khởi động.
 - **Không bao giờ** đưa `.env.host` lên git hay gửi qua chat.

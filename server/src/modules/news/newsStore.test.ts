@@ -9,7 +9,7 @@ import { loadConfig } from '../../config.ts';
 import { createDatabase, MIGRATIONS_DIR, runMigrations, type Database, type Db } from '../../db/client.ts';
 import { announcements, macroEvents, newsIngestRuns, newsItems, newsSources, users } from '../../db/schema.ts';
 import { TEST_DB_PORT, TEST_DB_URL } from '../../../test/constants.ts';
-import { purgeUntaggedNews, startNews, UNTAGGED_NEWS_KEEP_DAYS } from './index.ts';
+import { CalendarCoverageWatcher, purgeUntaggedNews, startNews, UNTAGGED_NEWS_KEEP_DAYS } from './index.ts';
 import { CALENDAR_SOURCE_ID, NEWS_SOURCES, syncNewsSources } from './sources.ts';
 
 let database: Database;
@@ -29,13 +29,19 @@ beforeEach(async () => {
 
 describe('configuration (NEWS_INGEST_ENABLED, NEWS_CALENDAR_ENABLED)', () => {
   const prod = { NODE_ENV: 'production', DATA_ENCRYPTION_KEY: 'k', EMAIL_TRANSPORT: 'log' };
-  it('ingest defaults to off in production, on in development and tests; an explicit value always wins', () => {
+  it('ingest is off in EVERY environment (production, development, test, simulated feed) unless set to "true"', () => {
     expect(loadConfig(prod).NEWS_INGEST_ENABLED).toBe(false);
+    expect(loadConfig({ NODE_ENV: 'development' }).NEWS_INGEST_ENABLED).toBe(false);
+    expect(loadConfig({ NODE_ENV: 'test' }).NEWS_INGEST_ENABLED).toBe(false);
+    expect(loadConfig({}).NEWS_INGEST_ENABLED).toBe(false);
+    expect(loadConfig({ NODE_ENV: 'development', MARKET_FEED: 'sim' }).NEWS_INGEST_ENABLED).toBe(false);
     expect(loadConfig({ ...prod, NEWS_INGEST_ENABLED: 'true' }).NEWS_INGEST_ENABLED).toBe(true);
-    expect(loadConfig({ NODE_ENV: 'development' }).NEWS_INGEST_ENABLED).toBe(true);
-    expect(loadConfig({ NODE_ENV: 'test' }).NEWS_INGEST_ENABLED).toBe(true);
-    expect(loadConfig({}).NEWS_INGEST_ENABLED).toBe(true);
+    expect(loadConfig({ NODE_ENV: 'development', NEWS_INGEST_ENABLED: 'true' }).NEWS_INGEST_ENABLED).toBe(true);
     expect(loadConfig({ NODE_ENV: 'test', NEWS_INGEST_ENABLED: 'false' }).NEWS_INGEST_ENABLED).toBe(false);
+  });
+  it('an empty value is refused (so the env templates keep these two flags as comments)', () => {
+    expect(() => loadConfig({ NEWS_INGEST_ENABLED: '' })).toThrow();
+    expect(() => loadConfig({ NEWS_CALENDAR_ENABLED: '' })).toThrow();
   });
   it('the calendar defaults to on everywhere and can be switched off', () => {
     expect(loadConfig(prod).NEWS_CALENDAR_ENABLED).toBe(true);
@@ -44,6 +50,7 @@ describe('configuration (NEWS_INGEST_ENABLED, NEWS_CALENDAR_ENABLED)', () => {
   });
   it('anything but true/false is refused', () => {
     expect(() => loadConfig({ NEWS_INGEST_ENABLED: 'yes' })).toThrow();
+    expect(() => loadConfig({ NEWS_INGEST_ENABLED: 'TRUE' })).toThrow();
     expect(() => loadConfig({ NEWS_CALENDAR_ENABLED: '1' })).toThrow();
   });
 });
@@ -91,16 +98,44 @@ describe('source catalogue and sync', () => {
 describe('startNews (server start-up)', () => {
   it('syncs the sources and loads the real calendar; run twice it changes nothing', async () => {
     const send = vi.fn(async () => undefined);
-    const news = await startNews(db(), { NEWS_INGEST_ENABLED: false, NEWS_CALENDAR_ENABLED: true }, { alerter: { send } });
+    const now = () => new Date('2026-10-15T00:00:00Z');
+    const news = await startNews(db(), { NEWS_INGEST_ENABLED: false, NEWS_CALENDAR_ENABLED: true }, { alerter: { send }, now });
     news.stop();
     expect(await db().select().from(newsSources)).toHaveLength(8);
     const events = await db().select().from(macroEvents);
     expect(events).toHaveLength(119);
     const runs = await db().select().from(newsIngestRuns).where(eq(newsIngestRuns.sourceId, CALENDAR_SOURCE_ID));
     expect(runs.map((r) => [r.status, r.itemsSeen, r.itemsInserted])).toEqual([['OK', 119, 119]]);
-    (await startNews(db(), { NEWS_INGEST_ENABLED: false, NEWS_CALENDAR_ENABLED: true })).stop();
+    (await startNews(db(), { NEWS_INGEST_ENABLED: false, NEWS_CALENDAR_ENABLED: true }, { now })).stop();
     expect(await db().select().from(macroEvents)).toHaveLength(119);
-    expect(send).not.toHaveBeenCalled();
+    expect(send).not.toHaveBeenCalled(); // a HIGH event (the 28 Oct FOMC) lies within 45 days: nothing to report
+  });
+
+  it('a calendar that has run out of HIGH events is reported to the operator once, not on every check, and once more when fixed', async () => {
+    const send = vi.fn(async () => undefined);
+    let t = new Date('2028-01-01T00:00:00Z'); // after the last event of the file (December 2027)
+    const news = await startNews(db(), { NEWS_INGEST_ENABLED: false, NEWS_CALENDAR_ENABLED: true }, { alerter: { send }, now: () => t });
+    news.stop();
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(send).toHaveBeenCalledWith('news-calendar-coverage', 'warn', expect.stringContaining('45 ngày'), true);
+
+    const watcher = new CalendarCoverageWatcher(db(), { send }, () => t);
+    expect(await watcher.check()).toBe(false);
+    expect(await watcher.check()).toBe(false);
+    expect(await watcher.check()).toBe(false);
+    expect(send).toHaveBeenCalledTimes(2); // a new watcher (a restart) tells once again; the repeated checks of one watcher tell nothing more
+    await db().insert(macroEvents).values({ code: 'CPI', name: 'CPI', scheduledAt: new Date('2028-01-10T13:30:00Z'), importance: 'HIGH', referencePeriod: 'Dec 2027', sourceUrl: 'https://x.test/' });
+    expect(await watcher.check()).toBe(true);
+    expect(await watcher.check()).toBe(true);
+    expect(send).toHaveBeenCalledTimes(3);
+    expect(send).toHaveBeenLastCalledWith('news-calendar-coverage', 'info', expect.stringContaining('đã có lại'), true);
+    t = new Date('2028-03-01T00:00:00Z'); // the event is behind us again
+    expect(await watcher.check()).toBe(false);
+    expect(send).toHaveBeenCalledTimes(4);
+  });
+
+  it('no alerter, no problem: the watcher only returns the answer', async () => {
+    expect(await new CalendarCoverageWatcher(db(), undefined, () => new Date('2028-01-01T00:00:00Z')).check()).toBe(false);
   });
 
   it('calendar switched off: sources are synced (calendar disabled), no event is loaded', async () => {
@@ -120,7 +155,7 @@ describe('startNews (server start-up)', () => {
 
 describe('clean-up of old untagged news (purgeUntaggedNews)', () => {
   const NOW = new Date('2026-10-14T09:00:00Z');
-  const base = { sourceId: 'rss-decrypt', titleFingerprint: 'f', classifierVersion: 'rules-v0.1' };
+  const base = { sourceId: 'rss-decrypt', titleFingerprint: 'f', classifierVersion: 'rules-v0.1', origin: 'LIVE' as const };
   let run: string;
   const item = (n: number, over: Partial<typeof newsItems.$inferInsert>) => ({ id: uid(n), url: `https://n.test/${n}`, urlCanonical: `https://n.test/${n}`, title: `t${n}`, eventTypes: ['OTHER'], symbols: [], firstSeenAt: new Date(NOW.getTime() - 40 * DAY), ingestRunId: run, ...base, ...over });
 
@@ -130,7 +165,7 @@ describe('clean-up of old untagged news (purgeUntaggedNews)', () => {
     run = r!.id;
   });
 
-  it('removes only live-ingested items with no pair, not macro, older than 30 days', async () => {
+  it('removes only LIVE items with no pair, not macro, older than 30 days; BACKFILL items stay whatever else is true of them', async () => {
     expect(UNTAGGED_NEWS_KEEP_DAYS).toBe(30);
     await db()
       .insert(newsItems)
@@ -142,18 +177,20 @@ describe('clean-up of old untagged news (purgeUntaggedNews)', () => {
         item(5, { eventTypes: ['MACRO_DATA'] }), // macro: kept
         item(6, { eventTypes: ['CENTRAL_BANK', 'OTHER'] }), // macro among others: kept
         item(7, { symbols: ['BTCUSDT'] }), // names a pair: kept
-        item(8, { ingestRunId: null }), // backfill (no run): kept, it is research data
+        item(8, { ingestRunId: null, origin: 'BACKFILL' }), // history loaded for research, no run
+        item(9, { origin: 'BACKFILL' }), // BACKFILL even with a run attached, old, untagged, OTHER: kept
+        item(10, { ingestRunId: null }), // LIVE without a run (a run row can be removed later): still LIVE, deleted
       ]);
-    expect(await purgeUntaggedNews(db(), NOW)).toBe(2);
+    expect(await purgeUntaggedNews(db(), NOW)).toBe(3);
     const left = (await db().select({ id: newsItems.id }).from(newsItems).orderBy(newsItems.id)).map((r) => r.id);
-    expect(left).toEqual([3, 4, 5, 6, 7, 8].map(uid));
+    expect(left).toEqual([3, 4, 5, 6, 7, 8, 9].map(uid));
     expect(await purgeUntaggedNews(db(), NOW)).toBe(0); // nothing left to remove
   });
 });
 
 describe('table constraints', () => {
   const src = 'rss-decrypt';
-  const row = (n: number, over: Partial<typeof newsItems.$inferInsert> = {}) => ({ sourceId: src, url: `https://n.test/${n}`, urlCanonical: `https://n.test/${n}`, title: 't', titleFingerprint: 'f', firstSeenAt: new Date(), eventTypes: ['OTHER'], classifierVersion: 'rules-v0.1', ...over });
+  const row = (n: number, over: Partial<typeof newsItems.$inferInsert> = {}) => ({ sourceId: src, url: `https://n.test/${n}`, urlCanonical: `https://n.test/${n}`, title: 't', titleFingerprint: 'f', firstSeenAt: new Date(), origin: 'LIVE' as const, eventTypes: ['OTHER'], classifierVersion: 'rules-v0.1', ...over });
   const code = async (p: Promise<unknown>) => ((await p.then(() => null, (e: unknown) => e)) as { cause?: { code?: string } } | null)?.cause?.code ?? null;
   beforeEach(async () => {
     await syncNewsSources(db(), { ingest: true, calendar: true });
@@ -164,6 +201,45 @@ describe('table constraints', () => {
     await db().insert(newsItems).values(row(2));
     expect(await code(db().insert(newsItems).values(row(2, { url: 'https://n.test/2?utm_source=x' })))).toBe('23505'); // same canonical URL
     expect(await code(db().insert(newsItems).values(row(3, { sourceId: 'no-such-source' })))).toBe('23503');
+  });
+
+  it('the database itself refuses a non-http(s) or over-long URL, an origin that is not LIVE/BACKFILL, and a missing origin', async () => {
+    for (const bad of ['ftp://n.test/a', 'javascript:alert(1)', 'data:text/html,x', 'n.test/a', '', 'HTTP://n.test/a']) {
+      expect(await code(db().insert(newsItems).values(row(100, { url: bad }))), bad).toBe('23514');
+      expect(await code(db().insert(newsItems).values(row(100, { urlCanonical: bad }))), bad).toBe('23514');
+    }
+    const long = `https://n.test/${'a'.repeat(2048)}`;
+    expect(long.length).toBeGreaterThan(2048);
+    expect(await code(db().insert(newsItems).values(row(101, { url: long })))).toBe('23514');
+    expect(await code(db().insert(newsItems).values(row(101, { urlCanonical: long })))).toBe('23514');
+    await db().insert(newsItems).values(row(102, { url: `https://n.test/${'a'.repeat(2048 - 'https://n.test/'.length)}` })); // exactly 2048 is fine
+    expect(await code(db().insert(newsItems).values(row(103, { origin: 'MANUAL' as never })))).toBe('23514');
+    // no default: an insert that does not say where the row comes from fails
+    expect(await code(db().execute(sql`INSERT INTO news_items (source_id, url, url_canonical, title, title_fingerprint, first_seen_at, event_types, classifier_version) VALUES ('rss-decrypt', 'https://n.test/104', 'https://n.test/104', 't', 'f', now(), ARRAY['OTHER'], 'v')`))).toBe('23502');
+    await db().insert(newsItems).values(row(105, { origin: 'BACKFILL', ingestRunId: null }));
+  });
+
+  it('the enums are CHECKs too: source kind, run status, macro code and importance', async () => {
+    const q = (text: string) => code(db().execute(sql.raw(text)));
+    expect(await q(`INSERT INTO news_sources (id, name, kind, url, poll_interval_sec) VALUES ('x', 'x', 'TWITTER', 'https://x.test/', 60)`)).toBe('23514');
+    expect(await q(`INSERT INTO news_ingest_runs (source_id, status, started_at) VALUES ('rss-decrypt', 'RUNNING', now())`)).toBe('23514');
+    expect(await q(`INSERT INTO macro_events (code, name, scheduled_at, importance, reference_period, source_url) VALUES ('GDP', 'x', now(), 'HIGH', 'p', 'https://x.test/')`)).toBe('23514');
+    expect(await q(`INSERT INTO macro_events (code, name, scheduled_at, importance, reference_period, source_url) VALUES ('CPI', 'x', now(), 'URGENT', 'p', 'https://x.test/')`)).toBe('23514');
+    expect(await q(`INSERT INTO news_sources (id, name, kind, url, poll_interval_sec) VALUES ('ok', 'x', 'FRED', 'https://x.test/', 60)`)).toBeNull();
+  });
+
+  it('a run can store a median lag of 30 days (it does not fit 32 bits), and a negative one', async () => {
+    const lag = 30 * 86_400_000; // 2 592 000 000 ms > 2 147 483 647
+    const [a] = await db().insert(newsIngestRuns).values({ sourceId: src, startedAt: new Date(), finishedAt: new Date(), status: 'OK', medianLagMs: lag }).returning();
+    const [b] = await db().insert(newsIngestRuns).values({ sourceId: src, startedAt: new Date(), finishedAt: new Date(), status: 'OK', medianLagMs: -lag }).returning();
+    expect([a!.medianLagMs, b!.medianLagMs]).toEqual([lag, -lag]);
+    expect((await db().select().from(newsIngestRuns).where(eq(newsIngestRuns.id, a!.id)))[0]!.medianLagMs).toBe(2_592_000_000);
+  });
+
+  it('first_seen_at keeps milliseconds only (a value with microseconds is rounded on the way in)', async () => {
+    await db().execute(sql`INSERT INTO news_items (source_id, url, url_canonical, title, title_fingerprint, first_seen_at, origin, event_types, classifier_version) VALUES ('rss-decrypt', 'https://n.test/p', 'https://n.test/p', 't', 'f', '2026-10-14T08:00:00.123456Z', 'LIVE', ARRAY['OTHER'], 'v')`);
+    const [r] = await db().select().from(newsItems).where(eq(newsItems.urlCanonical, 'https://n.test/p'));
+    expect(r!.firstSeenAt.toISOString()).toBe('2026-10-14T08:00:00.123Z');
   });
 
   it('symbols default to {} (market-wide); tone NULL is not 0; title fingerprints may repeat', async () => {

@@ -9,7 +9,9 @@ CREATE TABLE "macro_events" (
 	"note" text,
 	"actual" numeric(38, 18),
 	"actual_known_at" timestamp with time zone,
-	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "macro_events_code" CHECK ("macro_events"."code" in ('FOMC_DECISION', 'CPI', 'NFP', 'PCE', 'OTHER')),
+	CONSTRAINT "macro_events_importance" CHECK ("macro_events"."importance" in ('HIGH', 'MEDIUM', 'LOW'))
 );
 --> statement-breakpoint
 CREATE TABLE "news_ingest_runs" (
@@ -20,8 +22,9 @@ CREATE TABLE "news_ingest_runs" (
 	"status" text NOT NULL,
 	"items_seen" integer DEFAULT 0 NOT NULL,
 	"items_inserted" integer DEFAULT 0 NOT NULL,
-	"median_lag_ms" integer,
-	"error" text
+	"median_lag_ms" bigint,
+	"error" text,
+	CONSTRAINT "news_ingest_runs_status" CHECK ("news_ingest_runs"."status" in ('OK', 'ERROR', 'NOT_PUBLISHED_YET'))
 );
 --> statement-breakpoint
 CREATE TABLE "news_items" (
@@ -32,14 +35,18 @@ CREATE TABLE "news_items" (
 	"title" text NOT NULL,
 	"title_fingerprint" text NOT NULL,
 	"published_at" timestamp with time zone,
-	"first_seen_at" timestamp with time zone NOT NULL,
+	"first_seen_at" timestamp (3) with time zone NOT NULL,
+	"origin" text NOT NULL,
 	"symbols" text[] DEFAULT '{}'::text[] NOT NULL,
 	"event_types" text[] NOT NULL,
 	"tone" numeric(38, 18),
 	"classifier_version" text NOT NULL,
 	"ingest_run_id" uuid,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "news_items_event_types_nonempty" CHECK (cardinality("news_items"."event_types") >= 1)
+	CONSTRAINT "news_items_event_types_nonempty" CHECK (cardinality("news_items"."event_types") >= 1),
+	CONSTRAINT "news_items_url_http" CHECK ("news_items"."url" ~ '^https?://' and length("news_items"."url") <= 2048),
+	CONSTRAINT "news_items_url_canonical_http" CHECK ("news_items"."url_canonical" ~ '^https?://' and length("news_items"."url_canonical") <= 2048),
+	CONSTRAINT "news_items_origin" CHECK ("news_items"."origin" in ('LIVE', 'BACKFILL'))
 );
 --> statement-breakpoint
 CREATE TABLE "news_sources" (
@@ -50,7 +57,8 @@ CREATE TABLE "news_sources" (
 	"enabled" boolean DEFAULT false NOT NULL,
 	"poll_interval_sec" integer NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	"updated_at" timestamp with time zone DEFAULT now() NOT NULL
+	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
+	CONSTRAINT "news_sources_kind" CHECK ("news_sources"."kind" in ('GDELT', 'RSS', 'OFFICIAL_CALENDAR', 'FRED'))
 );
 --> statement-breakpoint
 ALTER TABLE "news_ingest_runs" ADD CONSTRAINT "news_ingest_runs_source_id_news_sources_id_fk" FOREIGN KEY ("source_id") REFERENCES "public"."news_sources"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
@@ -59,6 +67,7 @@ ALTER TABLE "news_items" ADD CONSTRAINT "news_items_ingest_run_id_news_ingest_ru
 CREATE UNIQUE INDEX "macro_events_code_at_uq" ON "macro_events" USING btree ("code","scheduled_at");--> statement-breakpoint
 CREATE INDEX "macro_events_at_idx" ON "macro_events" USING btree ("scheduled_at");--> statement-breakpoint
 CREATE INDEX "news_ingest_runs_source_idx" ON "news_ingest_runs" USING btree ("source_id","started_at" DESC NULLS LAST);--> statement-breakpoint
+CREATE INDEX "news_ingest_runs_source_status_idx" ON "news_ingest_runs" USING btree ("source_id","status","started_at" DESC NULLS LAST);--> statement-breakpoint
 CREATE UNIQUE INDEX "news_items_url_canonical_uq" ON "news_items" USING btree ("url_canonical");--> statement-breakpoint
 CREATE INDEX "news_items_title_fingerprint_idx" ON "news_items" USING btree ("title_fingerprint");--> statement-breakpoint
 CREATE INDEX "news_items_first_seen_idx" ON "news_items" USING btree ("first_seen_at" DESC NULLS LAST,"id" DESC NULLS LAST);--> statement-breakpoint

@@ -1,4 +1,4 @@
-import { and, eq, gte, lte, sql, type SQL } from 'drizzle-orm';
+import { and, eq, gt, gte, lte, sql, type SQL } from 'drizzle-orm';
 import { NEWS_MACRO_EVENTS_MAX_DAYS, type DataStatus, type NewsItemAdmin, type NewsSourceHealth, type NewsSourceKind, type SnapshotMacroEvent } from '@cex/contracts';
 import type { Db } from '../../db/client.ts';
 import { macroEvents, newsItems, newsSources } from '../../db/schema.ts';
@@ -14,6 +14,8 @@ import { CALENDAR_SOURCE_NAME, NEWS_SOURCES } from './sources.ts';
 const DAY_MS = 86_400_000;
 /** A source is LIVE while its last success is at most this many polling cycles old (contract: "within 3 cycles"). */
 export const STALE_AFTER_CYCLES = 3;
+/** The calendar must list a HIGH event within this many days ahead, else the file has run out and the source is STALE. */
+export const CALENDAR_HORIZON_DAYS = 45;
 
 // ───────────────────────────── items
 
@@ -23,13 +25,30 @@ export function encodeItemCursor(firstSeenAt: Date, id: string): string {
   return Buffer.from(`${firstSeenAt.toISOString()}|${id}`).toString('base64url');
 }
 
-/** Opaque cursor = base64url of `firstSeenAt|id`; anything else is a VALIDATION_ERROR (never an empty page). */
+/** Times the API accepts: the database cannot hold what `Date` can (year 0, +275760), and nothing here predates 1970. */
+export const MIN_TIME = Date.UTC(1970, 0, 1);
+export const MAX_TIME = Date.UTC(9999, 11, 31, 23, 59, 59, 999);
+
+/** A `from` / `to` bound: a real instant between 1970 and 9999, else VALIDATION_ERROR (never a database error). */
+export function parseBound(text: string, field: string): Date {
+  const d = new Date(text);
+  if (Number.isNaN(d.getTime()) || d.getTime() < MIN_TIME || d.getTime() > MAX_TIME) throw new AppError('VALIDATION_ERROR', `${field} is outside 1970-01-01 .. 9999-12-31`);
+  return d;
+}
+
+/**
+ * Opaque cursor = base64url of `firstSeenAt|id` as we wrote it (ISO with milliseconds, year 1970..9999, a uuid).
+ * Anything else, including a date that does not read back identically, is a VALIDATION_ERROR (never an empty page).
+ */
 export function decodeItemCursor(cursor: string): { t: Date; id: string } {
+  const bad = () => new AppError('VALIDATION_ERROR', 'Invalid cursor');
   const text = Buffer.from(cursor, 'base64url').toString();
   const sep = text.indexOf('|');
-  const t = new Date(sep < 0 ? NaN : Date.parse(text.slice(0, sep)));
+  if (sep < 0) throw bad();
+  const time = text.slice(0, sep);
   const id = text.slice(sep + 1);
-  if (sep < 0 || !UUID.test(id) || Number.isNaN(t.getTime())) throw new AppError('VALIDATION_ERROR', 'Invalid cursor');
+  const t = new Date(time);
+  if (Number.isNaN(t.getTime()) || t.toISOString() !== time || t.getTime() < MIN_TIME || t.getTime() > MAX_TIME || !UUID.test(id)) throw bad();
   return { t, id: id.toLowerCase() };
 }
 
@@ -54,8 +73,8 @@ export async function listNewsItems(db: Db, q: NewsItemsFilter): Promise<{ items
   if (q.symbol) where.push(sql`${newsItems.symbols} @> ARRAY[${q.symbol}]::text[]`);
   if (q.eventType) where.push(sql`${newsItems.eventTypes} @> ARRAY[${q.eventType}]::text[]`);
   if (q.sourceId) where.push(eq(newsItems.sourceId, q.sourceId));
-  if (q.from) where.push(gte(newsItems.firstSeenAt, new Date(q.from)));
-  if (q.to) where.push(lte(newsItems.firstSeenAt, new Date(q.to)));
+  if (q.from) where.push(gte(newsItems.firstSeenAt, parseBound(q.from, 'from')));
+  if (q.to) where.push(lte(newsItems.firstSeenAt, parseBound(q.to, 'to')));
   if (q.cursor !== undefined) {
     const c = decodeItemCursor(q.cursor);
     where.push(sql`(${newsItems.firstSeenAt}, ${newsItems.id}) < (${c.t.toISOString()}::timestamptz, ${c.id}::uuid)`);
@@ -100,16 +119,19 @@ export interface SourceFacts {
   lastSuccessAt: Date | null;
   /** ERROR runs after the newest OK run (NOT_PUBLISHED_YET is neither a success nor a failure). */
   consecutiveFailures: number;
+  /** Calendar only: a HIGH event is scheduled within the next 45 days (`hasHighEventAhead`). */
+  highEventAhead?: boolean;
 }
 
 /**
  * LIVE = last success within 3 polling cycles; STALE = succeeded before but not within 3 cycles; UNAVAILABLE = never
- * succeeded. A static calendar file is LIVE while its latest load succeeded (it is only read at start-up, so its age says
- * nothing); STALE when the latest load failed and older data is kept.
+ * succeeded. A static calendar file is LIVE while its latest load succeeded and it still lists a HIGH event in the next
+ * 45 days (it is only read at start-up, so its age says nothing, but a file that ran out of dates is stale data);
+ * STALE when the latest load failed and older data is kept, or when no HIGH event lies ahead.
  */
 export function sourceStatus(f: SourceFacts, now: Date): DataStatus {
   if (f.lastSuccessAt === null) return 'UNAVAILABLE';
-  if (f.kind === 'OFFICIAL_CALENDAR') return f.consecutiveFailures === 0 ? 'LIVE' : 'STALE';
+  if (f.kind === 'OFFICIAL_CALENDAR') return f.consecutiveFailures === 0 && f.highEventAhead === true ? 'LIVE' : 'STALE';
   return now.getTime() - f.lastSuccessAt.getTime() <= STALE_AFTER_CYCLES * f.pollIntervalSec * 1000 ? 'LIVE' : 'STALE';
 }
 
@@ -126,15 +148,26 @@ interface HealthRow extends Record<string, unknown> {
   median_lag_ms: string | null;
 }
 
+/** Is a HIGH macro event scheduled in (now, now + 45 days]? A range on `macro_events_at_idx`. */
+export async function hasHighEventAhead(db: Db, now: Date): Promise<boolean> {
+  const rows = await db
+    .select({ id: macroEvents.id })
+    .from(macroEvents)
+    .where(and(sql`${macroEvents.importance} = 'HIGH'`, gt(macroEvents.scheduledAt, now), lte(macroEvents.scheduledAt, new Date(now.getTime() + CALENDAR_HORIZON_DAYS * DAY_MS))))
+    .limit(1);
+  return rows.length > 0;
+}
+
 const catalogueOrder = new Map(NEWS_SOURCES.map((s, i) => [s.id, i]));
 
 /** Health of every source from `news_ingest_runs` and `news_items` (the last 24 h before `now`). */
 export async function listSourceHealth(db: Db, now: Date = new Date()): Promise<NewsSourceHealth[]> {
   const since = new Date(now.getTime() - DAY_MS).toISOString();
+  const highAhead = await hasHighEventAhead(db, now);
   const { rows } = await db.execute<HealthRow>(sql`
     SELECT s.id, s.name, s.kind, s.enabled, s.poll_interval_sec,
            floor(extract(epoch FROM ok.finished_at) * 1000)::bigint AS last_success_ms,
-           (SELECT floor(extract(epoch FROM max(coalesce(r.finished_at, r.started_at))) * 1000)::bigint FROM news_ingest_runs r WHERE r.source_id = s.id AND r.status = 'ERROR') AS last_error_ms,
+           floor(extract(epoch FROM err.at) * 1000)::bigint AS last_error_ms,
            (SELECT count(*) FROM news_ingest_runs r WHERE r.source_id = s.id AND r.status = 'ERROR' AND (ok.started_at IS NULL OR r.started_at > ok.started_at)) AS failures,
            (SELECT count(*) FROM news_items i WHERE i.source_id = s.id AND i.first_seen_at > ${since}::timestamptz AND i.first_seen_at <= ${now.toISOString()}::timestamptz) AS items_24h,
            (SELECT round((percentile_cont(0.5) WITHIN GROUP (ORDER BY extract(epoch FROM (i.first_seen_at - i.published_at)) * 1000))::numeric)::bigint
@@ -144,7 +177,12 @@ export async function listSourceHealth(db: Db, now: Date = new Date()): Promise<
         SELECT r.started_at, r.finished_at FROM news_ingest_runs r
          WHERE r.source_id = s.id AND r.status = 'OK' AND r.finished_at IS NOT NULL
          ORDER BY r.started_at DESC LIMIT 1
-      ) ok ON true`);
+      ) ok ON true
+      LEFT JOIN LATERAL (
+        SELECT coalesce(r.finished_at, r.started_at) AS at FROM news_ingest_runs r
+         WHERE r.source_id = s.id AND r.status = 'ERROR'
+         ORDER BY r.started_at DESC LIMIT 1
+      ) err ON true`);
   return rows
     .map((r): NewsSourceHealth => {
       const consecutiveFailures = Number(r.failures);
@@ -156,7 +194,7 @@ export async function listSourceHealth(db: Db, now: Date = new Date()): Promise<
         name: r.name,
         kind: r.kind,
         enabled: r.enabled,
-        status: sourceStatus({ kind: r.kind, pollIntervalSec: r.poll_interval_sec, lastSuccessAt, consecutiveFailures }, now),
+        status: sourceStatus({ kind: r.kind, pollIntervalSec: r.poll_interval_sec, lastSuccessAt, consecutiveFailures, highEventAhead: highAhead }, now),
         lastSuccessAt: lastSuccessAt?.toISOString() ?? null,
         lastErrorAt: lastErrorAt?.toISOString() ?? null,
         consecutiveFailures,
@@ -182,9 +220,12 @@ export interface MacroEventsFilter {
  */
 export function macroEventsWindow(q: Pick<MacroEventsFilter, 'from' | 'to'>, now: Date): { from: Date; to: Date } {
   const span = NEWS_MACRO_EVENTS_MAX_DAYS * DAY_MS;
-  const from = q.from !== undefined ? Date.parse(q.from) : q.to !== undefined ? Date.parse(q.to) - span : now.getTime();
-  const to = q.to !== undefined ? Date.parse(q.to) : from + span;
-  return { from: new Date(from), to: new Date(to) };
+  const given = { from: q.from === undefined ? undefined : parseBound(q.from, 'from').getTime(), to: q.to === undefined ? undefined : parseBound(q.to, 'to').getTime() };
+  const from = given.from ?? (given.to !== undefined ? given.to - span : now.getTime());
+  const to = given.to ?? from + span;
+  // a one-sided window can reach past the supported years: clamp it (no event can lie there)
+  const clamp = (ms: number) => new Date(Math.min(Math.max(ms, MIN_TIME), MAX_TIME));
+  return { from: clamp(from), to: clamp(to) };
 }
 
 export async function listMacroEvents(db: Db, q: MacroEventsFilter, now: Date = new Date()): Promise<SnapshotMacroEvent[]> {

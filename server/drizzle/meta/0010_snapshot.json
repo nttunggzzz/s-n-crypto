@@ -1,5 +1,5 @@
 {
-  "id": "e6c96108-9f6a-4446-a2d0-32760aeca55e",
+  "id": "ca6a02e0-940a-4138-871c-119328134674",
   "prevId": "8d888431-e285-46c7-ac8c-980d60a12053",
   "version": "7",
   "dialect": "postgresql",
@@ -2781,7 +2781,16 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "macro_events_code": {
+          "name": "macro_events_code",
+          "value": "\"macro_events\".\"code\" in ('FOMC_DECISION', 'CPI', 'NFP', 'PCE', 'OTHER')"
+        },
+        "macro_events_importance": {
+          "name": "macro_events_importance",
+          "value": "\"macro_events\".\"importance\" in ('HIGH', 'MEDIUM', 'LOW')"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.news_ingest_runs": {
@@ -2835,7 +2844,7 @@
         },
         "median_lag_ms": {
           "name": "median_lag_ms",
-          "type": "integer",
+          "type": "bigint",
           "primaryKey": false,
           "notNull": false
         },
@@ -2852,6 +2861,33 @@
           "columns": [
             {
               "expression": "source_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "started_at",
+              "isExpression": false,
+              "asc": false,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "news_ingest_runs_source_status_idx": {
+          "name": "news_ingest_runs_source_status_idx",
+          "columns": [
+            {
+              "expression": "source_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "status",
               "isExpression": false,
               "asc": true,
               "nulls": "last"
@@ -2887,7 +2923,12 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "news_ingest_runs_status": {
+          "name": "news_ingest_runs_status",
+          "value": "\"news_ingest_runs\".\"status\" in ('OK', 'ERROR', 'NOT_PUBLISHED_YET')"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.news_items": {
@@ -2939,7 +2980,13 @@
         },
         "first_seen_at": {
           "name": "first_seen_at",
-          "type": "timestamp with time zone",
+          "type": "timestamp (3) with time zone",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "origin": {
+          "name": "origin",
+          "type": "text",
           "primaryKey": false,
           "notNull": true
         },
@@ -3106,6 +3153,18 @@
         "news_items_event_types_nonempty": {
           "name": "news_items_event_types_nonempty",
           "value": "cardinality(\"news_items\".\"event_types\") >= 1"
+        },
+        "news_items_url_http": {
+          "name": "news_items_url_http",
+          "value": "\"news_items\".\"url\" ~ '^https?://' and length(\"news_items\".\"url\") <= 2048"
+        },
+        "news_items_url_canonical_http": {
+          "name": "news_items_url_canonical_http",
+          "value": "\"news_items\".\"url_canonical\" ~ '^https?://' and length(\"news_items\".\"url_canonical\") <= 2048"
+        },
+        "news_items_origin": {
+          "name": "news_items_origin",
+          "value": "\"news_items\".\"origin\" in ('LIVE', 'BACKFILL')"
         }
       },
       "isRLSEnabled": false
@@ -3171,7 +3230,12 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "news_sources_kind": {
+          "name": "news_sources_kind",
+          "value": "\"news_sources\".\"kind\" in ('GDELT', 'RSS', 'OFFICIAL_CALENDAR', 'FRED')"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.notifications": {

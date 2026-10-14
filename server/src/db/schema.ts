@@ -939,17 +939,21 @@ export const gridBotCells = pgTable(
  * One row per ingestion source (catalogue in modules/news/sources.ts, synced at start-up).
  * `enabled` follows the configuration (NEWS_INGEST_ENABLED / NEWS_CALENDAR_ENABLED), not an admin switch.
  */
-export const newsSources = pgTable('news_sources', {
-  /** Stable key, e.g. `rss-coindesk`, `gdelt-gkg`, `official-calendar`. */
-  id: text('id').primaryKey(),
-  name: text('name').notNull(),
-  kind: text('kind', { enum: ['GDELT', 'RSS', 'OFFICIAL_CALENDAR', 'FRED'] }).notNull(),
-  url: text('url').notNull(),
-  enabled: boolean('enabled').notNull().default(false),
-  pollIntervalSec: integer('poll_interval_sec').notNull(),
-  createdAt: ts('created_at').notNull().defaultNow(),
-  updatedAt: ts('updated_at').notNull().defaultNow(),
-});
+export const newsSources = pgTable(
+  'news_sources',
+  {
+    /** Stable key, e.g. `rss-coindesk`, `gdelt-gkg`, `official-calendar`. */
+    id: text('id').primaryKey(),
+    name: text('name').notNull(),
+    kind: text('kind', { enum: ['GDELT', 'RSS', 'OFFICIAL_CALENDAR', 'FRED'] }).notNull(),
+    url: text('url').notNull(),
+    enabled: boolean('enabled').notNull().default(false),
+    pollIntervalSec: integer('poll_interval_sec').notNull(),
+    createdAt: ts('created_at').notNull().defaultNow(),
+    updatedAt: ts('updated_at').notNull().defaultNow(),
+  },
+  (t) => [check('news_sources_kind', sql`${t.kind} in ('GDELT', 'RSS', 'OFFICIAL_CALENDAR', 'FRED')`)],
+);
 
 /** One attempt of a source (RSS fetch, GDELT file, calendar load); the source of truth for source health. */
 export const newsIngestRuns = pgTable(
@@ -967,10 +971,15 @@ export const newsIngestRuns = pgTable(
     itemsSeen: integer('items_seen').notNull().default(0),
     itemsInserted: integer('items_inserted').notNull().default(0),
     /** Median of firstSeenAt - publishedAt of the run's new items (ms, may be negative); null = no item had a publishedAt. */
-    medianLagMs: integer('median_lag_ms'),
+    medianLagMs: bigint('median_lag_ms', { mode: 'number' }),
     error: text('error'),
   },
-  (t) => [index('news_ingest_runs_source_idx').on(t.sourceId, t.startedAt.desc())],
+  (t) => [
+    index('news_ingest_runs_source_idx').on(t.sourceId, t.startedAt.desc()),
+    // latest OK / latest ERROR of one source straight from the index (source health), however long the history is
+    index('news_ingest_runs_source_status_idx').on(t.sourceId, t.status, t.startedAt.desc()),
+    check('news_ingest_runs_status', sql`${t.status} in ('OK', 'ERROR', 'NOT_PUBLISHED_YET')`),
+  ],
 );
 
 /**
@@ -985,6 +994,7 @@ export const newsItems = pgTable(
     sourceId: text('source_id')
       .notNull()
       .references(() => newsSources.id),
+    /** http(s) only and at most 2048 characters (CHECK; the contract says the same). */
     url: text('url').notNull(),
     /** Canonical form of `url` (tracking parameters removed): one row per story URL. */
     urlCanonical: text('url_canonical').notNull(),
@@ -992,7 +1002,13 @@ export const newsItems = pgTable(
     /** Normalised title hash, to spot the same story under another URL. */
     titleFingerprint: text('title_fingerprint').notNull(),
     publishedAt: ts('published_at'),
-    firstSeenAt: ts('first_seen_at').notNull(),
+    /** Millisecond precision (the API cursor is in milliseconds): a value written with now() is rounded to the millisecond too. */
+    firstSeenAt: timestamp('first_seen_at', { withTimezone: true, precision: 3, mode: 'date' }).notNull(),
+    /**
+     * LIVE = stored by an ingest job as the news appeared; BACKFILL = loaded later from history (N3). No default: whoever
+     * writes must say which. Only LIVE rows are ever cleaned up.
+     */
+    origin: text('origin', { enum: ['LIVE', 'BACKFILL'] }).notNull(),
     /** Listed pairs the item is about (`BTCUSDT`); empty = market-wide. */
     symbols: text('symbols').array().notNull().default(sql`'{}'::text[]`),
     /** At least one; `OTHER` when the classifier is not sure. */
@@ -1011,6 +1027,9 @@ export const newsItems = pgTable(
     index('news_items_symbols_gin').using('gin', t.symbols),
     index('news_items_source_seen_idx').on(t.sourceId, t.firstSeenAt.desc()),
     check('news_items_event_types_nonempty', sql`cardinality(${t.eventTypes}) >= 1`),
+    check('news_items_url_http', sql`${t.url} ~ '^https?://' and length(${t.url}) <= 2048`),
+    check('news_items_url_canonical_http', sql`${t.urlCanonical} ~ '^https?://' and length(${t.urlCanonical}) <= 2048`),
+    check('news_items_origin', sql`${t.origin} in ('LIVE', 'BACKFILL')`),
   ],
 );
 
@@ -1034,5 +1053,10 @@ export const macroEvents = pgTable(
     actualKnownAt: ts('actual_known_at'),
     createdAt: ts('created_at').notNull().defaultNow(),
   },
-  (t) => [uniqueIndex('macro_events_code_at_uq').on(t.code, t.scheduledAt), index('macro_events_at_idx').on(t.scheduledAt)],
+  (t) => [
+    uniqueIndex('macro_events_code_at_uq').on(t.code, t.scheduledAt),
+    index('macro_events_at_idx').on(t.scheduledAt),
+    check('macro_events_code', sql`${t.code} in ('FOMC_DECISION', 'CPI', 'NFP', 'PCE', 'OTHER')`),
+    check('macro_events_importance', sql`${t.importance} in ('HIGH', 'MEDIUM', 'LOW')`),
+  ],
 );

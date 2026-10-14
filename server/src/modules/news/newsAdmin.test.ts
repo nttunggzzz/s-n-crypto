@@ -1,6 +1,6 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setupServer } from 'msw/node';
-import { sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { ApiError, createApiClient, type ApiClient, type NewsItemAdmin } from '@cex/contracts';
 import { fixtureMacroEvents, fixtureNewsItems, fixtureNewsSources } from '@cex/contracts/fixtures';
 import { macroEvents, newsIngestRuns, newsItems, newsSources } from '../../db/schema.ts';
@@ -91,7 +91,7 @@ describe('adminNewsItems', () => {
   async function seed() {
     await db().insert(newsSources).values([SRC_A, SRC_G]);
     const [run] = await db().insert(newsIngestRuns).values({ sourceId: 'src-a', startedAt: new Date(T0), finishedAt: new Date(T0), status: 'OK' }).returning();
-    const base = { classifierVersion: 'rules-v0.1', titleFingerprint: 'fp' };
+    const base = { classifierVersion: 'rules-v0.1', titleFingerprint: 'fp', origin: 'LIVE' as const };
     const item = (n: number, o: Partial<typeof newsItems.$inferInsert>) => ({ id: uid(n), url: `https://news.test/${n}`, urlCanonical: `https://news.test/${n}`, title: `Title ${n}`, symbols: [], eventTypes: ['OTHER'], sourceId: 'src-a', firstSeenAt: new Date(T0), ...base, ...o });
     await db()
       .insert(newsItems)
@@ -159,7 +159,7 @@ describe('adminNewsItems', () => {
   it('an item added after a page was read does not shift the next page (cursor is a position, not an offset)', async () => {
     await seed();
     const first = await support.adminNewsItems({ query: { limit: 2 } });
-    await db().insert(newsItems).values({ id: uid(50), sourceId: 'src-a', url: 'https://news.test/50', urlCanonical: 'https://news.test/50', title: 'Fresh', titleFingerprint: 'fp', firstSeenAt: new Date(T0 + 2 * 3_600_000), eventTypes: ['OTHER'], classifierVersion: 'rules-v0.1' });
+    await db().insert(newsItems).values({ id: uid(50), sourceId: 'src-a', url: 'https://news.test/50', urlCanonical: 'https://news.test/50', title: 'Fresh', titleFingerprint: 'fp', firstSeenAt: new Date(T0 + 2 * 3_600_000), eventTypes: ['OTHER'], classifierVersion: 'rules-v0.1', origin: 'LIVE' });
     const rest = await support.adminNewsItems({ query: { limit: 10, cursor: first.nextCursor! } });
     expect(ids(rest)).toEqual([2, 1, 5, 6].map(uid));
   });
@@ -170,6 +170,47 @@ describe('adminNewsItems', () => {
     for (const cursor of ['!!!', 'x', 'AAAA', b64('no-separator'), b64('not-a-date|' + uid(1)), b64('2026-10-14T08:00:00.000Z|'), b64('2026-10-14T08:00:00.000Z|not-a-uuid'), b64('|' + uid(1))]) {
       await expectApiError(support.adminNewsItems({ query: { cursor } }), 'VALIDATION_ERROR', 400);
     }
+  });
+
+  it('a cursor must read back exactly as we wrote it and lie in 1970..9999: year 0, +275760, 1969, no milliseconds, free-form dates are 400 (not 500)', async () => {
+    await seed();
+    const b64 = (s: string) => Buffer.from(s).toString('base64url');
+    const id = uid(1);
+    for (const time of ['0000-01-01T00:00:00.000Z', '+275760-09-13T00:00:00.000Z', '-000001-01-01T00:00:00.000Z', '1969-12-31T23:59:59.999Z', '10000-01-01T00:00:00.000Z', '2026-10-14T08:00:00Z', '2026-10-14T08:00:00.000+00:00', 'Oct 14 2026 08:00 UTC', '2026-02-30T08:00:00.000Z']) {
+      await expectApiError(support.adminNewsItems({ query: { cursor: b64(`${time}|${id}`) } }), 'VALIDATION_ERROR', 400);
+    }
+    // the edges of the allowed range are fine
+    for (const time of ['1970-01-01T00:00:00.000Z', '9999-12-31T23:59:59.999Z']) {
+      await expect(support.adminNewsItems({ query: { cursor: b64(`${time}|${id}`) } })).resolves.toBeDefined();
+    }
+  });
+
+  it('from / to outside 1970..9999 are VALIDATION_ERROR (400), never a database error (500)', async () => {
+    for (const qs of ['from=0000-01-01T00:00:00.000Z', 'to=0000-01-01T00:00:00.000Z', 'from=1969-12-31T23:59:59.999Z', 'to=%2B275760-09-13T00:00:00.000Z', 'from=10000-01-01T00:00:00.000Z', 'to=-000001-01-01T00:00:00.000Z']) {
+      const res = await fetch(`${h.base}/api/v1/admin/news/items?${qs}`, { headers: { cookie: support.cookie() } });
+      expect([qs, res.status, ((await res.json()) as { error: { code: string } }).error.code]).toEqual([qs, 400, 'VALIDATION_ERROR']);
+    }
+    await expect(support.adminNewsItems({ query: { from: '1970-01-01T00:00:00.000Z', to: '9999-12-31T23:59:59.999Z' } })).resolves.toBeDefined();
+  });
+
+  it('first_seen_at has millisecond precision: three rows written with microseconds (as now() would) page through limit=1 without a skip or a repeat', async () => {
+    await db().insert(newsSources).values(SRC_A);
+    for (const n of [1, 2, 3]) {
+      await db().execute(sql`INSERT INTO news_items (id, source_id, url, url_canonical, title, title_fingerprint, first_seen_at, origin, event_types, classifier_version)
+        VALUES (${uid(n)}::uuid, 'src-a', ${`https://news.test/${n}`}, ${`https://news.test/${n}`}, 't', 'f', '2026-10-14T08:00:00.123456Z'::timestamptz, 'LIVE', ARRAY['OTHER'], 'rules-v0.1')`);
+    }
+    const seen: string[] = [];
+    let cursor: string | undefined;
+    for (let guard = 0; guard < 6; guard++) {
+      const page = await support.adminNewsItems({ query: { limit: 1, cursor } });
+      seen.push(...ids(page));
+      expect(page.items.every((i) => i.firstSeenAt === '2026-10-14T08:00:00.123Z')).toBe(true);
+      if (page.nextCursor === null) break;
+      cursor = page.nextCursor;
+    }
+    expect(seen).toEqual([3, 2, 1].map(uid));
+    const { rows } = await db().execute<{ n: string }>(sql`SELECT count(DISTINCT first_seen_at)::text AS n FROM news_items`);
+    expect(rows[0]!.n).toBe('1'); // the three microsecond values became one millisecond instant
   });
 
   it('filters: symbol (market-wide news is not returned), eventType (any of the item types), sourceId', async () => {
@@ -214,7 +255,7 @@ describe('adminNewsItems', () => {
     await seed();
     const cols = await db().execute<{ column_name: string }>(sql`SELECT column_name FROM information_schema.columns WHERE table_name = 'news_items'`);
     expect(cols.rows.map((c) => c.column_name).sort()).toEqual(
-      ['classifier_version', 'created_at', 'event_types', 'first_seen_at', 'id', 'ingest_run_id', 'published_at', 'source_id', 'symbols', 'title', 'title_fingerprint', 'tone', 'url', 'url_canonical'].sort(),
+      ['classifier_version', 'created_at', 'event_types', 'first_seen_at', 'id', 'ingest_run_id', 'origin', 'published_at', 'source_id', 'symbols', 'title', 'title_fingerprint', 'tone', 'url', 'url_canonical'].sort(),
     );
   });
 });
@@ -286,6 +327,15 @@ describe('adminNewsMacroEvents', () => {
     ]);
   });
 
+  it('bounds outside 1970..9999 are 400; a one-sided window that would reach past them is clamped, not a database error', async () => {
+    for (const qs of ['from=0000-01-01T00:00:00.000Z', 'to=0000-01-01T00:00:00.000Z', 'from=1969-12-31T23:59:59.999Z&to=1970-06-01T00:00:00.000Z', 'to=%2B275760-09-13T00:00:00.000Z', 'from=10000-01-01T00:00:00.000Z']) {
+      const res = await fetch(`${h.base}/api/v1/admin/news/macro-events?${qs}`, { headers: { cookie: support.cookie() } });
+      expect([qs, res.status, ((await res.json()) as { error: { code: string } }).error.code]).toEqual([qs, 400, 'VALIDATION_ERROR']);
+    }
+    expect((await support.adminNewsMacroEvents({ query: { to: '1970-01-01T00:00:00.000Z' } })).items).toEqual([]); // from = 1969 is clamped to 1970
+    expect((await support.adminNewsMacroEvents({ query: { from: '9999-12-31T00:00:00.000Z' } })).items).toEqual([]); // to = year 10000 is clamped
+  });
+
   it('events at the same time are ordered by code (stable answers)', async () => {
     await db().insert(macroEvents).values([ev('NFP', 5 * DAY, 'HIGH', { name: 'b' }), ev('CPI', 5 * DAY, 'HIGH', { name: 'a' })]);
     expect(names(await support.adminNewsMacroEvents({ query: { from: iso(NOW + 5 * DAY), to: iso(NOW + 5 * DAY) } }))).toEqual(['a', 'b']);
@@ -311,6 +361,7 @@ describe('adminNewsSources', () => {
     urlCanonical: `https://n.test/${n}`,
     title: `t${n}`,
     titleFingerprint: 'f',
+    origin: 'LIVE' as const,
     eventTypes: ['OTHER'],
     classifierVersion: 'rules-v0.1',
     firstSeenAt: ago(firstSeenAgo),
@@ -379,7 +430,10 @@ describe('adminNewsSources', () => {
     expect((await health()).get('rss-theblock')).toMatchObject({ status: 'UNAVAILABLE', lastSuccessAt: null, consecutiveFailures: 2, lastErrorAt: iso(NOW - 5 * MIN + 1000) });
   });
 
+  const highEvent = (daysAhead: number, importance: 'HIGH' | 'MEDIUM' = 'HIGH', code: 'CPI' | 'NFP' = 'CPI') => ({ code, name: 'e', scheduledAt: new Date(NOW + daysAhead * DAY), importance, referencePeriod: 'p', sourceUrl: 'https://x.test/' });
+
   it('the calendar is LIVE while its last load succeeded, however old; STALE after a failed reload that kept older data; UNAVAILABLE if it never loaded', async () => {
+    await db().insert(macroEvents).values(highEvent(10));
     expect((await health()).get('official-calendar')!.status).toBe('UNAVAILABLE');
     await runs([{ source: 'official-calendar', status: 'OK', at: 10 * DAY }]);
     expect((await health()).get('official-calendar')).toMatchObject({ status: 'LIVE', medianLagMs: null, itemsLast24h: 0 });
@@ -388,6 +442,21 @@ describe('adminNewsSources', () => {
     await db().delete(newsIngestRuns);
     await runs([{ source: 'official-calendar', status: 'ERROR', at: 1 * DAY }]);
     expect((await health()).get('official-calendar')).toMatchObject({ status: 'UNAVAILABLE', consecutiveFailures: 1 });
+  });
+
+  it('the calendar is STALE, although its last load was OK, when no HIGH event lies in the next 45 days (HIGH at exactly +45 d still counts)', async () => {
+    await runs([{ source: 'official-calendar', status: 'OK', at: 1 * MIN }]);
+    expect((await health()).get('official-calendar')!.status).toBe('STALE'); // nothing scheduled at all
+    await db().insert(macroEvents).values([highEvent(5, 'MEDIUM'), highEvent(46), { ...highEvent(-3), code: 'NFP' }]); // MEDIUM, too far, already past
+    expect((await health()).get('official-calendar')).toMatchObject({ status: 'STALE', consecutiveFailures: 0 });
+    await db().insert(macroEvents).values(highEvent(45, 'HIGH', 'NFP'));
+    expect((await health()).get('official-calendar')!.status).toBe('LIVE');
+    await db().delete(macroEvents).where(eq(macroEvents.scheduledAt, new Date(NOW + 45 * DAY)));
+    expect((await health()).get('official-calendar')!.status).toBe('STALE'); // only the +46 d event is left
+    nowMs = NOW + DAY - 1; // that event is 45 d + 1 ms ahead
+    expect((await health()).get('official-calendar')!.status).toBe('STALE');
+    nowMs = NOW + DAY; // exactly 45 d ahead
+    expect((await health()).get('official-calendar')!.status).toBe('LIVE');
   });
 
   it('itemsLast24h counts (now - 24 h, now]; medianLagMs is the median of firstSeenAt - publishedAt, may be negative, null without a publishedAt', async () => {
@@ -471,6 +540,7 @@ describe('the server answers like the contract mock (packages/contracts/src/mock
           urlCanonical: n.url,
           title: n.title,
           titleFingerprint: `fp-${n.id}`,
+          origin: 'LIVE' as const,
           publishedAt: n.publishedAt === null ? null : new Date(n.publishedAt),
           firstSeenAt: new Date(n.firstSeenAt),
           symbols: n.symbols,
@@ -543,11 +613,24 @@ describe('the server answers like the contract mock (packages/contracts/src/mock
       { from: '2026-09-01T00:00:00.000Z', to: '2026-12-31T00:00:00.000Z', importance: 'HIGH' },
       { from: '2026-10-01T00:00:00.000Z' },
       { to: '2026-10-20T00:00:00.000Z' },
-      { to: '2027-12-31T00:00:00.000Z' },
+      { to: '2027-06-01T00:00:00.000Z' },
       { from: '2026-09-01T00:00:00.000Z', to: '2026-12-31T00:00:00.000Z', code: 'NFP' },
     ];
-    for (const query of queries) {
-      expect((await support.adminNewsMacroEvents({ query })).items, JSON.stringify(query)).toEqual((await mock.adminNewsMacroEvents({ query })).items);
+    // the mock reads the real clock for its default window: pin it, so that the `{}` case keeps meaning something after 2026-10-28
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-14T09:00:00.000Z') });
+    useFixedNow = true;
+    nowMs = Date.parse('2026-10-14T09:00:00.000Z');
+    try {
+      for (const query of queries) {
+        const [ours, theirs] = [(await support.adminNewsMacroEvents({ query })).items, (await mock.adminNewsMacroEvents({ query })).items];
+        expect(ours, JSON.stringify(query)).toEqual(theirs);
+        if (Object.keys(query).filter((k) => k === 'from' || k === 'to').length < 2) expect(ours.length, `${JSON.stringify(query)} is not an empty comparison`).toBeGreaterThan(0);
+      }
+      // the default window really is "400 days from the call": CPI of 14 Oct 12:30 and the 28 Oct FOMC are ahead of the pinned time
+      expect((await support.adminNewsMacroEvents({})).items.map((e) => e.code)).toEqual(['CPI', 'FOMC_DECISION']);
+    } finally {
+      vi.useRealTimers();
+      useFixedNow = false;
     }
     const long = { from: '2025-01-01T00:00:00.000Z', to: '2026-02-06T00:00:00.000Z' }; // 401 days
     await expectApiError(mock.adminNewsMacroEvents({ query: long }), 'VALIDATION_ERROR', 400);
