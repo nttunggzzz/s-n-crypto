@@ -28,3 +28,5 @@ export {
 export * from './journalFills.ts';
 export * from './journalStats.ts';
 export * from './tax.ts';
+// Module N (N2a): pure news labelling (event types, symbol tags, GDELT tone, dedup keys), rules 'news-rules-v1'.
+export * from './newsClassify.ts';
