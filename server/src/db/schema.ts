@@ -932,3 +932,107 @@ export const gridBotCells = pgTable(
   },
   (t) => [primaryKey({ columns: [t.botId, t.idx] }), index('grid_bot_cells_order_idx').on(t.orderId)],
 );
+
+// ───────────────────────────── Module N: news and scheduled macro events (N2b)
+
+/**
+ * One row per ingestion source (catalogue in modules/news/sources.ts, synced at start-up).
+ * `enabled` follows the configuration (NEWS_INGEST_ENABLED / NEWS_CALENDAR_ENABLED), not an admin switch.
+ */
+export const newsSources = pgTable('news_sources', {
+  /** Stable key, e.g. `rss-coindesk`, `gdelt-gkg`, `official-calendar`. */
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  kind: text('kind', { enum: ['GDELT', 'RSS', 'OFFICIAL_CALENDAR', 'FRED'] }).notNull(),
+  url: text('url').notNull(),
+  enabled: boolean('enabled').notNull().default(false),
+  pollIntervalSec: integer('poll_interval_sec').notNull(),
+  createdAt: ts('created_at').notNull().defaultNow(),
+  updatedAt: ts('updated_at').notNull().defaultNow(),
+});
+
+/** One attempt of a source (RSS fetch, GDELT file, calendar load); the source of truth for source health. */
+export const newsIngestRuns = pgTable(
+  'news_ingest_runs',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    sourceId: text('source_id')
+      .notNull()
+      .references(() => newsSources.id),
+    startedAt: ts('started_at').notNull(),
+    /** null while running (or when the process died mid-run). */
+    finishedAt: ts('finished_at'),
+    /** NOT_PUBLISHED_YET = the source pointed at a file that is not there yet (GDELT 404): not a failure. */
+    status: text('status', { enum: ['OK', 'ERROR', 'NOT_PUBLISHED_YET'] }).notNull(),
+    itemsSeen: integer('items_seen').notNull().default(0),
+    itemsInserted: integer('items_inserted').notNull().default(0),
+    /** Median of firstSeenAt - publishedAt of the run's new items (ms, may be negative); null = no item had a publishedAt. */
+    medianLagMs: integer('median_lag_ms'),
+    error: text('error'),
+  },
+  (t) => [index('news_ingest_runs_source_idx').on(t.sourceId, t.startedAt.desc())],
+);
+
+/**
+ * A news item as the analysis system first saw it. Only title, URL, source, times and derived labels are stored, never the
+ * article text. Point-in-time is `first_seen_at` (ours), never `published_at` (the publisher's, may be null). `first_seen_at`
+ * has no default and is always written from a JS Date (millisecond precision) - the admin list cursor relies on it.
+ */
+export const newsItems = pgTable(
+  'news_items',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    sourceId: text('source_id')
+      .notNull()
+      .references(() => newsSources.id),
+    url: text('url').notNull(),
+    /** Canonical form of `url` (tracking parameters removed): one row per story URL. */
+    urlCanonical: text('url_canonical').notNull(),
+    title: text('title').notNull(),
+    /** Normalised title hash, to spot the same story under another URL. */
+    titleFingerprint: text('title_fingerprint').notNull(),
+    publishedAt: ts('published_at'),
+    firstSeenAt: ts('first_seen_at').notNull(),
+    /** Listed pairs the item is about (`BTCUSDT`); empty = market-wide. */
+    symbols: text('symbols').array().notNull().default(sql`'{}'::text[]`),
+    /** At least one; `OTHER` when the classifier is not sure. */
+    eventTypes: text('event_types').array().notNull(),
+    /** Source-provided score (GDELT only); NULL is "unscored", never 0. */
+    tone: amount('tone'),
+    classifierVersion: text('classifier_version').notNull(),
+    /** Run that first stored it; null for items without a run (backfill). */
+    ingestRunId: uuid('ingest_run_id').references(() => newsIngestRuns.id, { onDelete: 'set null' }),
+    createdAt: ts('created_at').notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex('news_items_url_canonical_uq').on(t.urlCanonical),
+    index('news_items_title_fingerprint_idx').on(t.titleFingerprint),
+    index('news_items_first_seen_idx').on(t.firstSeenAt.desc(), t.id.desc()),
+    index('news_items_symbols_gin').using('gin', t.symbols),
+    index('news_items_source_seen_idx').on(t.sourceId, t.firstSeenAt.desc()),
+    check('news_items_event_types_nonempty', sql`cardinality(${t.eventTypes}) >= 1`),
+  ],
+);
+
+/**
+ * Scheduled macro releases, loaded from modules/news/data/macro-calendar.csv at start-up. Future rows follow the file;
+ * past rows are evidence and are never changed or deleted by the loader. All times UTC.
+ */
+export const macroEvents = pgTable(
+  'macro_events',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    code: text('code', { enum: ['FOMC_DECISION', 'CPI', 'NFP', 'PCE', 'OTHER'] }).notNull(),
+    name: text('name').notNull(),
+    scheduledAt: ts('scheduled_at').notNull(),
+    importance: text('importance', { enum: ['HIGH', 'MEDIUM', 'LOW'] }).notNull(),
+    referencePeriod: text('reference_period').notNull(),
+    sourceUrl: text('source_url').notNull(),
+    note: text('note'),
+    /** Published value; null until known (v0 never fills it - FRED comes with N-D3). */
+    actual: amount('actual'),
+    actualKnownAt: ts('actual_known_at'),
+    createdAt: ts('created_at').notNull().defaultNow(),
+  },
+  (t) => [uniqueIndex('macro_events_code_at_uq').on(t.code, t.scheduledAt), index('macro_events_at_idx').on(t.scheduledAt)],
+);

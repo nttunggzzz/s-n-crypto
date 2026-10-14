@@ -30,13 +30,13 @@ export class ApiHarness {
   authNow = () => new Date(Date.now() + this.skewMs);
 
   /** Optional fake Binance REST order book for deep-depth tests; `env` overrides config (e.g. REGISTRATION). */
-  async start(opts: { depthFetcher?: DepthFetcher; webDist?: string; adminWebDist?: string; env?: Record<string, string> } = {}): Promise<void> {
+  async start(opts: { depthFetcher?: DepthFetcher; webDist?: string; adminWebDist?: string; env?: Record<string, string>; newsClock?: () => Date } = {}): Promise<void> {
     const config = loadConfig({ NODE_ENV: 'test', MARKET_FEED: 'off', APP_URL: 'http://localhost:5173', RATE_LIMIT_SCALE: '100', ...opts.env });
     this.inviteOnly = config.REGISTRATION === 'invite';
     this.env = await createTestEnv();
     const auth = new AuthService(this.env.database.db, config, this.mail, this.authNow);
     this.auth = auth;
-    const app = createApp({ config, db: this.env.database.db, auth, market: this.env.market, exchange: this.env.ex, candles: new CandleService(this.env.database.db, null), depthSnapshots: new DepthSnapshots(opts.depthFetcher ?? null), futures: this.env.futures, bots: this.env.bots, webDist: opts.webDist, adminWebDist: opts.adminWebDist });
+    const app = createApp({ config, db: this.env.database.db, auth, market: this.env.market, exchange: this.env.ex, candles: new CandleService(this.env.database.db, null), depthSnapshots: new DepthSnapshots(opts.depthFetcher ?? null), futures: this.env.futures, bots: this.env.bots, newsClock: opts.newsClock, webDist: opts.webDist, adminWebDist: opts.adminWebDist });
     this.server = http.createServer(app);
     this.hub = new RealtimeHub(this.env.market, this.env.ex, auth, allowedOrigins(config), this.env.futures, this.env.bots);
     this.hub.attach(this.server);

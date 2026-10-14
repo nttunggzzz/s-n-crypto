@@ -58,9 +58,26 @@ const Env = z.object({
   TELEGRAM_CHAT_ID: z.string().default(''),
   /** Name in front of every alert; default: Railway's environment name, else NODE_ENV. */
   ALERT_ENV_NAME: z.string().default(''),
+  /**
+   * Module N: fetch news (RSS, GDELT) into `news_items`. Default: off in production (the operator turns it on after
+   * reading the N2 report), on in development and tests. In N2b it only sets `news_sources.enabled` of the RSS/GDELT
+   * sources; the fetch job itself arrives with N2c.
+   */
+  NEWS_INGEST_ENABLED: z.enum(['true', 'false']).optional(),
+  /** Module N: load the scheduled macro events (macro-calendar.csv) into `macro_events` at start-up. Default on. */
+  NEWS_CALENDAR_ENABLED: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((v) => v === 'true'),
 });
 
-export type Config = Omit<z.infer<typeof Env>, 'REGISTRATION'> & { symbols: string[]; isProd: boolean; dataKey: string; REGISTRATION: 'open' | 'invite' };
+export type Config = Omit<z.infer<typeof Env>, 'REGISTRATION' | 'NEWS_INGEST_ENABLED'> & {
+  symbols: string[];
+  isProd: boolean;
+  dataKey: string;
+  REGISTRATION: 'open' | 'invite';
+  NEWS_INGEST_ENABLED: boolean;
+};
 
 /** Fixed key for development/tests only — never valid in production. */
 const DEV_DATA_KEY = Buffer.alloc(32, 'cex-dev-only-not-a-secret').toString('base64');
@@ -88,6 +105,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   return {
     ...parsed,
     REGISTRATION: registration,
+    NEWS_INGEST_ENABLED: parsed.NEWS_INGEST_ENABLED === undefined ? parsed.NODE_ENV !== 'production' : parsed.NEWS_INGEST_ENABLED === 'true',
     symbols: parsed.SYMBOLS.split(',').map((s) => s.trim().toUpperCase()).filter(Boolean),
     isProd: parsed.NODE_ENV === 'production',
     dataKey: parsed.DATA_ENCRYPTION_KEY || DEV_DATA_KEY,
