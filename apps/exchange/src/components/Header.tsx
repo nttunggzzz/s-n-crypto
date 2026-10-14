@@ -285,7 +285,7 @@ export const Header: React.FC<HeaderProps> = ({ currentPath, onNavigate }) => {
                       </div>
                       <div onClick={() => onNavigate('/settings')} className="px-4 py-2 hover:bg-[var(--panel-2)] cursor-pointer text-[13px] text-[var(--text,#f4f4f5)] flex items-center gap-2">
                         <Shield size={16} className="text-[var(--text-2,#a1a1aa)]" />
-                        Bảo mật (2FA)
+                        Bảo mật
                       </div>
                       <div onClick={() => onNavigate('/assets/analysis')} className="px-4 py-2 hover:bg-[var(--panel-2)] cursor-pointer text-[13px] text-[var(--text,#f4f4f5)] flex items-center gap-2">
                         <BarChart2 size={16} className="text-[var(--text-2,#a1a1aa)]" />

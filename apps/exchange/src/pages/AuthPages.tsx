@@ -11,6 +11,7 @@ export interface AuthPageProps {
 
 export const LoginPage: React.FC<AuthPageProps> = ({ onNavigate }) => {
   const { login, loginTwoFactor, isAuthenticated, sessionEndedMessage } = useAuth();
+  const { publicConfig } = useConfig();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [twoFactorChallenge, setTwoFactorChallenge] = useState<string | null>(null);
@@ -174,13 +175,20 @@ export const LoginPage: React.FC<AuthPageProps> = ({ onNavigate }) => {
               />
 
               <div className="flex justify-end -mt-2">
-                <button
-                  type="button"
-                  onClick={() => onNavigate('/forgot-password')}
-                  className="text-sm font-semibold text-[var(--accent,#818cf8)] hover:brightness-125 transition-all"
-                >
-                  Quên mật khẩu?
-                </button>
+                {publicConfig?.emailDelivery === 'sent' ? (
+                  <button
+                    type="button"
+                    data-testid="login-forgot-password"
+                    onClick={() => onNavigate('/forgot-password')}
+                    className="text-sm font-semibold text-[var(--accent,#818cf8)] hover:brightness-125 transition-all"
+                  >
+                    Quên mật khẩu?
+                  </button>
+                ) : (
+                  <span className="text-xs text-[var(--text-3,#63636b)]">
+                    Quên mật khẩu? Liên hệ quản trị viên.
+                  </span>
+                )}
               </div>
 
               <Button type="submit" variant="primary" loading={loading} aria-label="Đăng nhập" fullWidth className="py-2.5">
@@ -491,10 +499,36 @@ export const RegisterPage: React.FC<AuthPageProps> = ({ onNavigate }) => {
 };
 
 export const ForgotPasswordPage: React.FC<AuthPageProps> = ({ onNavigate }) => {
+  const { publicConfig } = useConfig();
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const api = getApiClient();
+
+  if (publicConfig?.emailDelivery !== 'sent') {
+    return (
+      <div className="min-h-[80vh] flex items-center justify-center px-4 py-12">
+        <Card variant="surface" className="max-w-md w-full border-[var(--color-border-default,#272a33)] p-6 text-center">
+          <div data-testid="forgot-password-disabled" className="flex flex-col items-center gap-3">
+            <h2 className="text-xl font-bold text-[var(--color-text-primary,#f3f4f6)]">
+              Tính năng tạm tắt
+            </h2>
+            <p className="text-xs text-[var(--color-text-secondary,#9ca3af)] leading-relaxed">
+              Tính năng khôi phục mật khẩu qua email hiện đang tạm tắt. Vui lòng liên hệ quản trị viên để được hỗ trợ đặt lại mật khẩu.
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => onNavigate('/login')}
+              className="mt-3"
+            >
+              Quay lại đăng nhập
+            </Button>
+          </div>
+        </Card>
+      </div>
+    );
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

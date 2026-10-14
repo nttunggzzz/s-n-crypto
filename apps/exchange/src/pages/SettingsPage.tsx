@@ -546,9 +546,11 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate }) => {
 
             {/* Security Level Progress Bar */}
             {(() => {
-              const secScore = (secOverview?.twoFactorEnabled ? 1 : 0) + (secOverview?.antiPhishingCode ? 1 : 0);
-              const secLevelLabel = secScore === 2 ? 'Cao' : secScore === 1 ? 'Trung bình' : 'Cơ bản';
-              const secLevelVariant: 'success' | 'warning' | 'default' = secScore === 2 ? 'success' : secScore === 1 ? 'warning' : 'default';
+              const isEmailSent = publicConfig?.emailDelivery === 'sent';
+              const maxScore = isEmailSent ? 2 : 1;
+              const secScore = (secOverview?.twoFactorEnabled ? 1 : 0) + (isEmailSent && secOverview?.antiPhishingCode ? 1 : 0);
+              const secLevelLabel = secScore === maxScore ? 'Cao' : secScore > 0 ? 'Trung bình' : 'Cơ bản';
+              const secLevelVariant: 'success' | 'warning' | 'default' = secScore === maxScore ? 'success' : secScore > 0 ? 'warning' : 'default';
 
               return (
                 <div className="p-5 rounded-[var(--radius-lg,12px)] border border-[var(--line,#1d1e21)] bg-[var(--panel,#0a0a0b)] space-y-3.5 shadow-sm">
@@ -556,7 +558,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate }) => {
                     <div className="flex items-center gap-2.5">
                       <ShieldCheck
                         size={20}
-                        className={secScore === 2 ? 'text-[var(--up,#1fc27a)]' : secScore === 1 ? 'text-[var(--warn,#f5b544)]' : 'text-[var(--text-3,#63636b)]'}
+                        className={secScore === maxScore ? 'text-[var(--up,#1fc27a)]' : secScore > 0 ? 'text-[var(--warn,#f5b544)]' : 'text-[var(--text-3,#63636b)]'}
                       />
                       <span className="font-bold text-sm text-[var(--text,#f4f4f5)]">Mức độ bảo mật</span>
                     </div>
@@ -565,20 +567,22 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate }) => {
                     </Badge>
                   </div>
 
-                  {/* Progress Bar 2 segments (2FA & Anti-Phishing) */}
-                  <div className="grid grid-cols-2 gap-2.5">
+                  {/* Progress Bar segments */}
+                  <div className={`grid ${isEmailSent ? 'grid-cols-2' : 'grid-cols-1'} gap-2.5`}>
                     <div
                       className={`h-2 rounded-full transition-all duration-300 ${
                         secOverview?.twoFactorEnabled ? 'bg-[var(--up,#1fc27a)]' : 'bg-[var(--line,#1d1e21)]'
                       }`}
                       title="Xác thực hai yếu tố (2FA)"
                     />
-                    <div
-                      className={`h-2 rounded-full transition-all duration-300 ${
-                        secOverview?.antiPhishingCode ? 'bg-[var(--up,#1fc27a)]' : 'bg-[var(--line,#1d1e21)]'
-                      }`}
-                      title="Mã chống lừa đảo (Anti-phishing)"
-                    />
+                    {isEmailSent && (
+                      <div
+                        className={`h-2 rounded-full transition-all duration-300 ${
+                          secOverview?.antiPhishingCode ? 'bg-[var(--up,#1fc27a)]' : 'bg-[var(--line,#1d1e21)]'
+                        }`}
+                        title="Mã chống lừa đảo (Anti-phishing)"
+                      />
+                    )}
                   </div>
 
                   <div className="flex items-center justify-between text-[11px] text-[var(--text-3,#63636b)] pt-1 flex-wrap gap-2">
@@ -590,14 +594,16 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate }) => {
                         <span className="text-[var(--text-3,#63636b)]">Chưa bật</span>
                       )}
                     </span>
-                    <span className="flex items-center gap-1.5">
-                      Mã chống lừa đảo:{' '}
-                      {secOverview?.antiPhishingCode ? (
-                        <span className="text-[var(--up,#1fc27a)] font-medium">✓ Đã đặt</span>
-                      ) : (
-                        <span className="text-[var(--text-3,#63636b)]">Chưa đặt</span>
-                      )}
-                    </span>
+                    {isEmailSent && (
+                      <span className="flex items-center gap-1.5">
+                        Mã chống lừa đảo:{' '}
+                        {secOverview?.antiPhishingCode ? (
+                          <span className="text-[var(--up,#1fc27a)] font-medium">✓ Đã đặt</span>
+                        ) : (
+                          <span className="text-[var(--text-3,#63636b)]">Chưa đặt</span>
+                        )}
+                      </span>
+                    )}
                   </div>
                 </div>
               );
@@ -658,34 +664,36 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate }) => {
             </div>
 
             {/* Anti-phishing Code Card */}
-            <div>
-              <h3 className="text-sm font-bold text-[var(--text,#f4f4f5)] mb-3">Mã chống lừa đảo (Anti-Phishing)</h3>
-              <div className="flex items-center justify-between p-4 rounded-[var(--radius-lg,12px)] border border-[var(--line,#1d1e21)] bg-[var(--panel,#0a0a0b)]">
-                <div>
-                  <div className="text-sm font-semibold text-[var(--text,#f4f4f5)] flex items-center gap-2">
-                    Mã chống lừa đảo
-                    <Badge variant={secOverview?.antiPhishingCode ? 'success' : 'secondary'} size="sm">
-                      {secOverview?.antiPhishingCode ? `Đang dùng: ${secOverview.antiPhishingCode}` : 'Chưa đặt'}
-                    </Badge>
+            {publicConfig?.emailDelivery === 'sent' && (
+              <div data-testid="settings-anti-phishing">
+                <h3 className="text-sm font-bold text-[var(--text,#f4f4f5)] mb-3">Mã chống lừa đảo (Anti-Phishing)</h3>
+                <div className="flex items-center justify-between p-4 rounded-[var(--radius-lg,12px)] border border-[var(--line,#1d1e21)] bg-[var(--panel,#0a0a0b)]">
+                  <div>
+                    <div className="text-sm font-semibold text-[var(--text,#f4f4f5)] flex items-center gap-2">
+                      Mã chống lừa đảo
+                      <Badge variant={secOverview?.antiPhishingCode ? 'success' : 'secondary'} size="sm">
+                        {secOverview?.antiPhishingCode ? `Đang dùng: ${secOverview.antiPhishingCode}` : 'Chưa đặt'}
+                      </Badge>
+                    </div>
+                    <div className="text-xs text-[var(--text-3,#63636b)] mt-1 max-w-xl">
+                      Mã này xuất hiện ở đầu mọi email thật từ sàn. Email không có mã = giả mạo.
+                    </div>
                   </div>
-                  <div className="text-xs text-[var(--text-3,#63636b)] mt-1 max-w-xl">
-                    Mã này xuất hiện ở đầu mọi email thật từ sàn. Email không có mã = giả mạo.
-                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setAntiCodeInput('');
+                      setAntiPasswordInput('');
+                      setAnti2faInput('');
+                      setAntiPhishingModalOpen(true);
+                    }}
+                  >
+                    {secOverview?.antiPhishingCode ? 'Thay đổi' : 'Cài đặt'}
+                  </Button>
                 </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => {
-                    setAntiCodeInput('');
-                    setAntiPasswordInput('');
-                    setAnti2faInput('');
-                    setAntiPhishingModalOpen(true);
-                  }}
-                >
-                  {secOverview?.antiPhishingCode ? 'Thay đổi' : 'Cài đặt'}
-                </Button>
               </div>
-            </div>
+            )}
 
             {/* Change Password Card */}
             <div>
