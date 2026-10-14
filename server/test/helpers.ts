@@ -46,6 +46,7 @@ export async function resetDb(database: Database): Promise<void> {
   await database.db.execute(sql`
     TRUNCATE grid_bot_cells, grid_bots, dca_runs, dca_plans, login_events,
              futures_funding_payments, futures_funding_events, futures_trades, futures_orders, futures_positions, futures_user_symbols, futures_symbols,
+             news_items, news_ingest_runs, news_sources, macro_events,
              tax_withholdings, user_tax_profiles, trades, orders, order_lists, ledger_entries, balances, positions, portfolio_snapshots, price_alerts,
              notifications, user_preferences, faucet_claims, sessions, verification_tokens,
              audit_logs, reconciliation_runs, candles, symbols, assets, announcements, users RESTART IDENTITY CASCADE`);

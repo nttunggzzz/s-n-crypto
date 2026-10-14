@@ -58,6 +58,20 @@ const Env = z.object({
   TELEGRAM_CHAT_ID: z.string().default(''),
   /** Name in front of every alert; default: Railway's environment name, else NODE_ENV. */
   ALERT_ENV_NAME: z.string().default(''),
+  /**
+   * Module N: fetch news (RSS, GDELT) into `news_items`. Off EVERYWHERE unless set to `true` explicitly (development,
+   * tests, `--sim` and e2e included: nothing reaches out to news sites by accident). In N2b it only sets
+   * `news_sources.enabled` of the RSS/GDELT sources; the fetch job itself arrives with N2c.
+   */
+  NEWS_INGEST_ENABLED: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
+  /** Module N: load the scheduled macro events (macro-calendar.csv) into `macro_events` at start-up. Default on. */
+  NEWS_CALENDAR_ENABLED: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((v) => v === 'true'),
 });
 
 export type Config = Omit<z.infer<typeof Env>, 'REGISTRATION'> & { symbols: string[]; isProd: boolean; dataKey: string; REGISTRATION: 'open' | 'invite' };

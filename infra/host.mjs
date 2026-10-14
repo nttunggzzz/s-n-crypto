@@ -77,6 +77,13 @@ ALERT_ENV_NAME=may-ca-nhan
 # address users open (trycloudflare.com for the quick tunnel).
 TURNSTILE_SITE_KEY=
 TURNSTILE_SECRET=
+
+# News for the analysis system (admin only). Comments on purpose: an empty value would stop the server from starting.
+# NEWS_INGEST_ENABLED = fetch news (RSS, GDELT) into the database. Default false; only "true" turns it on.
+#   RSS news cannot be fetched back later, so decide after reading the N2 report.
+# NEWS_INGEST_ENABLED=false
+# NEWS_CALENDAR_ENABLED = load the scheduled macro events (FOMC, CPI, NFP, PCE) at start-up. Default true.
+# NEWS_CALENDAR_ENABLED=true
 `;
 
 function readHostEnv() {

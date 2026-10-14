@@ -71,6 +71,13 @@
       "when": 1791962773113,
       "tag": "0009_tax_t3_trade_category",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1791998935464,
+      "tag": "0010_news_n2b_store",
+      "breakpoints": true
     }
   ]
 }
