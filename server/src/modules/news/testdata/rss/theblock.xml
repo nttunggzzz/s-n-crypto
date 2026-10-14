@@ -1,0 +1,155 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Test fixture: trimmed from theblock RSS fetched 2026-10-14T16:23Z. Titles/links/dates only (no article text). -->
+<rss version="2.0" xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <title>The Block</title>
+    <item>
+      <title><![CDATA[Hex and PulseChain founder Richard Heart detained in Istanbul: reports]]></title>
+      <link>https://www.theblock.co/news/regulation/2026-10-14-hex-pulsechain-founder-richard-heart-detained-istanbul-turkish-media-reports-418574</link>
+      <guid isPermaLink="false">3f263420-af86-5b34-92e4-a62f65b0a840</guid>
+      <pubDate>Wed, 14 Oct 2026 15:53:15 +0000</pubDate>
+      <category domain="https://www.theblock.co/category/crypto-ecosystems"><![CDATA[Crypto Ecosystems]]></category>
+      <category domain="https://www.theblock.co/category/legal"><![CDATA[Legal]]></category>
+      <category domain="https://www.theblock.co/category/markets"><![CDATA[Markets]]></category>
+      <category domain="https://www.theblock.co/category/policy"><![CDATA[Policy]]></category>
+      <category domain="https://www.theblock.co/category/regulation"><![CDATA[Regulation]]></category>
+      <category domain="tag"><![CDATA[Crime]]></category>
+      <category domain="https://www.theblock.co/">News</category>
+    </item>
+    <item>
+      <title><![CDATA[Standard Chartered pushes $2 trillion stablecoin market forecast to 2030 as supply growth stalls]]></title>
+      <link>https://www.theblock.co/news/web3/2026-10-14-standard-chartered-stablecoin-market-report-418578</link>
+      <guid isPermaLink="false">2c2061d2-c606-569c-adf4-efc950fc0653</guid>
+      <pubDate>Wed, 14 Oct 2026 15:47:18 +0000</pubDate>
+      <category domain="https://www.theblock.co/category/crypto-ecosystems"><![CDATA[Crypto Ecosystems]]></category>
+      <category domain="https://www.theblock.co/category/defi"><![CDATA[DeFi]]></category>
+      <category domain="https://www.theblock.co/category/equities"><![CDATA[Equities]]></category>
+      <category domain="https://www.theblock.co/category/markets"><![CDATA[Markets]]></category>
+      <category domain="https://www.theblock.co/category/stablecoins"><![CDATA[Stablecoins]]></category>
+      <category domain="https://www.theblock.co/category/token-projects"><![CDATA[Token Projects]]></category>
+      <category domain="https://www.theblock.co/category/web3"><![CDATA[Web3]]></category>
+      <category domain="tag"><![CDATA[Analyst Reports]]></category>
+      <category domain="tag"><![CDATA[Tether]]></category>
+      <category domain="tag"><![CDATA[USDC]]></category>
+      <category domain="https://www.theblock.co/">News</category>
+    </item>
+    <item>
+      <title><![CDATA[StarkWare launches OffMarket to let Polymarket users trade more privately]]></title>
+      <link>https://www.theblock.co/news/ecosystems/2026-10-14-starkware-launches-offmarket-to-let-polymarket-users-trade-more-privately-418567</link>
+      <guid isPermaLink="false">6cddcb2f-e349-5284-9f7b-fcf238749580</guid>
+      <pubDate>Wed, 14 Oct 2026 15:00:00 +0000</pubDate>
+      <category domain="https://www.theblock.co/category/crypto-ecosystems"><![CDATA[Crypto Ecosystems]]></category>
+      <category domain="https://www.theblock.co/category/defi"><![CDATA[DeFi]]></category>
+      <category domain="tag"><![CDATA[exclusive]]></category>
+      <category domain="https://www.theblock.co/">News</category>
+    </item>
+    <item>
+      <title><![CDATA[Strive buys $235 million in bitcoin as warrant exercises yield $369 million]]></title>
+      <link>https://www.theblock.co/news/business/2026-10-14-strive-buys-235-million-in-bitcoin-warrant-yield-369-million-418556</link>
+      <guid isPermaLink="false">67d8d40b-87c8-5b20-82f7-2a0debf0fc37</guid>
+      <pubDate>Wed, 14 Oct 2026 14:32:39 +0000</pubDate>
+      <category domain="https://www.theblock.co/category/companies"><![CDATA[Companies]]></category>
+      <category domain="https://www.theblock.co/category/markets"><![CDATA[Markets]]></category>
+      <category domain="https://www.theblock.co/">News</category>
+    </item>
+    <item>
+      <title><![CDATA[BNY, Citadel Securities complete Treasury repo in first use of tokenized assets on major triparty platform]]></title>
+      <link>https://www.theblock.co/news/business/2026-10-14-bny-citadel-securities-complete-treasury-repo-in-first-use-of-tokenized-assets-on-major-triparty-platform-418534</link>
+      <guid isPermaLink="false">4ba36bfd-ffba-5f6d-9c61-36c894551d24</guid>
+      <pubDate>Wed, 14 Oct 2026 13:21:37 +0000</pubDate>
+      <category domain="https://www.theblock.co/category/companies"><![CDATA[Companies]]></category>
+      <category domain="https://www.theblock.co/">News</category>
+    </item>
+    <item>
+      <title><![CDATA[Strategy’s preferred stock financing may cost it bitcoin, K33 argues]]></title>
+      <link>https://www.theblock.co/news/markets/2026-10-14-strategys-preferred-stock-financing-may-cost-it-bitcoin-k33-argues-418543</link>
+      <guid isPermaLink="false">7bb22251-574c-5881-a1cf-0c387e565ed7</guid>
+      <pubDate>Wed, 14 Oct 2026 13:20:46 +0000</pubDate>
+      <category domain="https://www.theblock.co/category/companies"><![CDATA[Companies]]></category>
+      <category domain="https://www.theblock.co/category/crypto-ecosystems"><![CDATA[Crypto Ecosystems]]></category>
+      <category domain="https://www.theblock.co/category/equities"><![CDATA[Equities]]></category>
+      <category domain="https://www.theblock.co/category/layer-1s"><![CDATA[Layer 1s]]></category>
+      <category domain="https://www.theblock.co/category/markets"><![CDATA[Markets]]></category>
+      <category domain="https://www.theblock.co/category/public-equities"><![CDATA[Public Equities]]></category>
+      <category domain="https://www.theblock.co/category/token-projects"><![CDATA[Token Projects]]></category>
+      <category domain="tag"><![CDATA[Analyst Reports]]></category>
+      <category domain="tag"><![CDATA[Bitcoin]]></category>
+      <category domain="tag"><![CDATA[Strategy]]></category>
+      <category domain="https://www.theblock.co/">News</category>
+    </item>
+    <item>
+      <title><![CDATA[DriveWealth to use Ripple’s RLUSD for stablecoin settlement, cross-border payments]]></title>
+      <link>https://www.theblock.co/news/business/2026-10-14-drivewealth-ripple-rlusd-stablecoin-settlement-418479</link>
+      <guid isPermaLink="false">40b68a26-3d44-5932-9ed0-6533ca881939</guid>
+      <pubDate>Wed, 14 Oct 2026 13:00:00 +0000</pubDate>
+      <category domain="https://www.theblock.co/category/companies"><![CDATA[Companies]]></category>
+      <category domain="https://www.theblock.co/category/crypto-ecosystems"><![CDATA[Crypto Ecosystems]]></category>
+      <category domain="https://www.theblock.co/category/deals"><![CDATA[Deals]]></category>
+      <category domain="https://www.theblock.co/category/finance-firms"><![CDATA[Finance firms]]></category>
+      <category domain="tag"><![CDATA[Payments]]></category>
+      <category domain="tag"><![CDATA[Ripple]]></category>
+      <category domain="https://www.theblock.co/">News</category>
+    </item>
+    <item>
+      <title><![CDATA[Polygon Labs completes Coinme acquisition, bringing regulated payments coverage across 48 US states]]></title>
+      <link>https://www.theblock.co/news/business/2026-10-14-polygon-labs-completes-coinme-acquisition-bringing-regulated-payments-coverage-across-48-us-states-418518</link>
+      <guid isPermaLink="false">6464359f-c417-5909-89c6-12720479bd79</guid>
+      <pubDate>Wed, 14 Oct 2026 13:00:00 +0000</pubDate>
+      <category domain="https://www.theblock.co/category/companies"><![CDATA[Companies]]></category>
+      <category domain="https://www.theblock.co/">News</category>
+    </item>
+    <item>
+      <title><![CDATA[Evernorth taps Ripple, Kraken, Coinbase and BitGo to put $648 million XRP treasury to work]]></title>
+      <link>https://www.theblock.co/news/deals/2026-10-14-evernorth-taps-ripple-kraken-coinbase-bitgo-xrp-treasury-work-418503</link>
+      <guid isPermaLink="false">d8c32434-9f80-5723-a63f-13075f9f74cf</guid>
+      <pubDate>Wed, 14 Oct 2026 12:00:00 +0000</pubDate>
+      <category domain="https://www.theblock.co/category/companies"><![CDATA[Companies]]></category>
+      <category domain="https://www.theblock.co/category/crypto-ecosystems"><![CDATA[Crypto Ecosystems]]></category>
+      <category domain="https://www.theblock.co/category/deals"><![CDATA[Deals]]></category>
+      <category domain="https://www.theblock.co/category/defi"><![CDATA[DeFi]]></category>
+      <category domain="https://www.theblock.co/category/markets"><![CDATA[Markets]]></category>
+      <category domain="https://www.theblock.co/category/public-equities"><![CDATA[Public Equities]]></category>
+      <category domain="https://www.theblock.co/category/token-projects"><![CDATA[Token Projects]]></category>
+      <category domain="tag"><![CDATA[Crypto Treasuries]]></category>
+      <category domain="tag"><![CDATA[XRP]]></category>
+      <category domain="https://www.theblock.co/">News</category>
+    </item>
+    <item>
+      <title><![CDATA[How Bitcoin Works]]></title>
+      <link>https://www.theblock.co/learn/campus/how-bitcoin-works-417659</link>
+      <guid isPermaLink="false">463ade62-a561-59db-b32b-92fae95b6a47</guid>
+      <pubDate>Wed, 14 Oct 2026 11:52:16 +0000</pubDate>
+      <category domain="tag"><![CDATA[201]]></category>
+      <category domain="tag"><![CDATA[Bitcoin]]></category>
+      <category domain="tag"><![CDATA[blockchain]]></category>
+      <category domain="tag"><![CDATA[campus]]></category>
+      <category domain="https://www.theblock.co/">News</category>
+    </item>
+    <item>
+      <title><![CDATA[Coinbase lays out flexible designs as key priority for Bitcoin’s post-quantum migration]]></title>
+      <link>https://www.theblock.co/news/ecosystems/2026-10-13-coinbase-bitcoin-post-quantum-migration-418509</link>
+      <guid isPermaLink="false">f4fbb91c-c2b5-5fb0-8b37-bb29ddc77adf</guid>
+      <pubDate>Wed, 14 Oct 2026 02:49:34 +0000</pubDate>
+      <category domain="https://www.theblock.co/category/crypto-ecosystems"><![CDATA[Crypto Ecosystems]]></category>
+      <category domain="https://www.theblock.co/category/web3"><![CDATA[Web3]]></category>
+      <category domain="https://www.theblock.co/">News</category>
+    </item>
+    <item>
+      <title><![CDATA[Ripple, Stripe-owned Privy partner to bring embedded wallets to XRP Ledger]]></title>
+      <link>https://www.theblock.co/news/business/2026-10-13-stripe-privy-ripple-xrp-ledger-wallets-418463</link>
+      <guid isPermaLink="false">3fe5b87f-65c8-56bd-a3e3-7746313ebf9a</guid>
+      <pubDate>Tue, 13 Oct 2026 16:00:00 +0000</pubDate>
+      <category domain="https://www.theblock.co/category/companies"><![CDATA[Companies]]></category>
+      <category domain="https://www.theblock.co/category/crypto-ecosystems"><![CDATA[Crypto Ecosystems]]></category>
+      <category domain="https://www.theblock.co/category/crypto-infrastructure"><![CDATA[Crypto Infrastructure]]></category>
+      <category domain="https://www.theblock.co/category/infrastructure"><![CDATA[Infrastructure]]></category>
+      <category domain="https://www.theblock.co/category/markets"><![CDATA[Markets]]></category>
+      <category domain="https://www.theblock.co/category/token-projects"><![CDATA[Token Projects]]></category>
+      <category domain="https://www.theblock.co/category/web3"><![CDATA[Web3]]></category>
+      <category domain="tag"><![CDATA[Ripple]]></category>
+      <category domain="tag"><![CDATA[Wallets]]></category>
+      <category domain="tag"><![CDATA[XRP]]></category>
+      <category domain="https://www.theblock.co/">News</category>
+    </item>
+  </channel>
+</rss>

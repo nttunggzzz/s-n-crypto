@@ -1,0 +1,102 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Test fixture: trimmed from decrypt RSS fetched 2026-10-14T16:23Z. Titles/links/dates only (no article text). -->
+<rss version="2.0" xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <title>Decrypt</title>
+    <item>
+      <title>&#39;It Can Take Years&#39;: Coinbase Presses for Bitcoin Quantum Migration to Start Now</title>
+      <link>https://decrypt.co/380963/coinbase-bitcoin-quantum-migration-start-now</link>
+      <guid isPermaLink="false">https://decrypt.co/?p=380963</guid>
+      <pubDate>Wed, 14 Oct 2026 16:15:19 +0000</pubDate>
+      <category></category>
+      <category>Technology</category>
+    </item>
+    <item>
+      <title>Bitcoin Falls as Hot Inflation Puts a Fed Hike Back on the Table</title>
+      <link>https://decrypt.co/380950/bitcoin-falls-hot-inflation-fed-hike-odds</link>
+      <guid isPermaLink="false">https://decrypt.co/?p=380950</guid>
+      <pubDate>Wed, 14 Oct 2026 14:51:44 +0000</pubDate>
+      <category></category>
+      <category>Markets</category>
+    </item>
+    <item>
+      <title>Hex Founder Richard Heart Detained in Istanbul on Interpol Red Notice: Report</title>
+      <link>https://decrypt.co/380948/hex-founder-richard-heart-detained-in-istanbul-on-interpol-red-notice-report</link>
+      <guid isPermaLink="false">https://decrypt.co/?p=380948</guid>
+      <pubDate>Wed, 14 Oct 2026 14:03:20 +0000</pubDate>
+      <category>Law and Order</category>
+    </item>
+    <item>
+      <title>Ledger Asks Resellers in Seven Asian Markets to Pull Devices After Suspected $86M Drain</title>
+      <link>https://decrypt.co/380940/ledger-asks-resellers-in-seven-asian-markets-to-pull-devices-after-suspected-86m-drain</link>
+      <guid isPermaLink="false">https://decrypt.co/?p=380940</guid>
+      <pubDate>Wed, 14 Oct 2026 13:47:44 +0000</pubDate>
+      <category></category>
+      <category></category>
+      <category>Technology</category>
+    </item>
+    <item>
+      <title>Notorious Crypto Celeb Meme Coin Promoter Plots Second Wave on New Launchpad</title>
+      <link>https://decrypt.co/380928/notorious-crypto-celeb-meme-coin-promoter-plots-second-wave-on-new-launchpad</link>
+      <guid isPermaLink="false">https://decrypt.co/?p=380928</guid>
+      <pubDate>Wed, 14 Oct 2026 13:41:21 +0000</pubDate>
+      <category></category>
+      <category>Coins</category>
+    </item>
+    <item>
+      <title>Morning Minute: Move Over, Saylor, There’s a New Top Buyer in Town</title>
+      <link>https://decrypt.co/380920/morning-minute-move-over-saylor-theres-a-new-top-buyer-in-town</link>
+      <guid isPermaLink="false">https://decrypt.co/?p=380920</guid>
+      <pubDate>Wed, 14 Oct 2026 12:11:35 +0000</pubDate>
+      <category></category>
+      <category>Opinion</category>
+    </item>
+    <item>
+      <title>Kraken Owner Payward to Buy Lithuania&#39;s Saldo Bank in EU Push</title>
+      <link>https://decrypt.co/380912/kraken-owner-payward-to-buy-lithuanias-saldo-bank-in-eu-push</link>
+      <guid isPermaLink="false">https://decrypt.co/?p=380912</guid>
+      <pubDate>Wed, 14 Oct 2026 10:21:34 +0000</pubDate>
+      <category></category>
+      <category></category>
+      <category>Business</category>
+    </item>
+    <item>
+      <title>BitMEX Sued in UK for Return of $27M in Bitcoin Over Unlicensed Derivatives</title>
+      <link>https://decrypt.co/380904/bitmex-sued-in-uk-for-return-of-27m-in-bitcoin-over-unlicensed-derivatives</link>
+      <guid isPermaLink="false">https://decrypt.co/?p=380904</guid>
+      <pubDate>Wed, 14 Oct 2026 09:54:52 +0000</pubDate>
+      <category></category>
+      <category>Law and Order</category>
+    </item>
+    <item>
+      <title>OpenAI Engineer Arrested for Bugging Office, Company Says AI Caught Him</title>
+      <link>https://decrypt.co/380896/openai-engineer-arrested-bugging-office-ai-caught-him</link>
+      <guid isPermaLink="false">https://decrypt.co/?p=380896</guid>
+      <pubDate>Tue, 13 Oct 2026 21:46:04 +0000</pubDate>
+      <category>Artificial Intelligence</category>
+    </item>
+    <item>
+      <title>Character.AI Files for Bankruptcy as Disney Bids $20 Million—And Users Get Grief Resources</title>
+      <link>https://decrypt.co/380894/character-ai-bankruptcy-disney-users-grief-resources</link>
+      <guid isPermaLink="false">https://decrypt.co/?p=380894</guid>
+      <pubDate>Tue, 13 Oct 2026 21:16:04 +0000</pubDate>
+      <category>Business</category>
+    </item>
+    <item>
+      <title>Binance Is Shutting Down Its Bitcoin Mining Pool After Six Years</title>
+      <link>https://decrypt.co/380870/binance-shutting-down-bitcoin-mining-pool</link>
+      <guid isPermaLink="false">https://decrypt.co/?p=380870</guid>
+      <pubDate>Tue, 13 Oct 2026 20:16:03 +0000</pubDate>
+      <category></category>
+      <category>Business</category>
+    </item>
+    <item>
+      <title>Bitcoin Whale That Sat Through Every Crash Since 2020 Just Moved $377M</title>
+      <link>https://decrypt.co/380867/bitcoin-whale-every-crash-2020-moves-377m</link>
+      <guid isPermaLink="false">https://decrypt.co/?p=380867</guid>
+      <pubDate>Tue, 13 Oct 2026 19:38:12 +0000</pubDate>
+      <category></category>
+      <category>Coins</category>
+    </item>
+  </channel>
+</rss>
