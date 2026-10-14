@@ -77,6 +77,9 @@ export const MarketProvider: React.FC<{ children: React.ReactNode }> = ({ childr
       setExchangeStatus({
         tradingHalted: infoRes.tradingHalted,
         disabledSymbols: dis,
+        taxMode: infoRes.taxMode,
+        taxRate: infoRes.taxRate,
+        taxVndRate: infoRes.taxVndRate,
         updatedAt: infoRes.serverTime,
       });
 

@@ -10,7 +10,7 @@ import { AvatarIcon } from './AvatarIcon.tsx';
 import { 
   Search, Moon, Globe, ChevronDown, 
   Wallet, History, CreditCard, Settings, Shield, LogOut, Copy, LayoutPanelLeft, User, X,
-  Bot, BarChart2, LayoutDashboard
+  Bot, BarChart2, LayoutDashboard, Receipt
 } from 'lucide-react';
 
 export interface HeaderProps {
@@ -294,6 +294,15 @@ export const Header: React.FC<HeaderProps> = ({ currentPath, onNavigate }) => {
                       <div onClick={() => onNavigate('/bots')} className="px-4 py-2 hover:bg-[var(--panel-2)] cursor-pointer text-[13px] text-[var(--text,#f4f4f5)] flex items-center gap-2">
                         <Bot size={16} className="text-[var(--text-2,#a1a1aa)]" />
                         Bot của tôi
+                      </div>
+                      <div onClick={() => onNavigate('/account/tax')} className="px-4 py-2 hover:bg-[var(--panel-2)] cursor-pointer text-[13px] text-[var(--text,#f4f4f5)] flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Receipt size={16} className="text-[var(--text-2,#a1a1aa)]" />
+                          Thuế (Việt Nam)
+                        </div>
+                        <span className="text-[9px] uppercase font-bold text-amber-400 bg-amber-400/10 px-1.5 py-0.5 rounded border border-amber-400/20">
+                          Thử nghiệm
+                        </span>
                       </div>
                       <div onClick={() => onNavigate('/settings')} className="px-4 py-2 hover:bg-[var(--panel-2)] cursor-pointer text-[13px] text-[var(--text,#f4f4f5)] flex items-center gap-2">
                         <Settings size={16} className="text-[var(--text-2,#a1a1aa)]" />

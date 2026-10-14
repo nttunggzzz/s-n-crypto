@@ -23,6 +23,7 @@ const RegisterPage = lazy(() => import('./pages/AuthPages.tsx').then((m) => ({ d
 const ForgotPasswordPage = lazy(() => import('./pages/AuthPages.tsx').then((m) => ({ default: m.ForgotPasswordPage })));
 const ResetPasswordPage = lazy(() => import('./pages/AuthPages.tsx').then((m) => ({ default: m.ResetPasswordPage })));
 const VerifyEmailPage = lazy(() => import('./pages/AuthPages.tsx').then((m) => ({ default: m.VerifyEmailPage })));
+const AccountTaxPage = lazy(() => import('./pages/AccountTaxPage.tsx').then((m) => ({ default: m.AccountTaxPage })));
 const UiShowcasePage = lazy(() => import('./pages/UiShowcasePage.tsx').then((m) => ({ default: m.UiShowcasePage })));
 
 const AppContent: React.FC = () => {
@@ -76,6 +77,9 @@ const AppContent: React.FC = () => {
     }
     if (currentPath === '/settings') {
       return <SettingsPage onNavigate={navigate} />;
+    }
+    if (currentPath === '/account/tax') {
+      return <AccountTaxPage onNavigate={navigate} />;
     }
     if (currentPath === '/login') {
       return <LoginPage onNavigate={navigate} />;

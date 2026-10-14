@@ -56,6 +56,10 @@ export const ERROR_MESSAGES: Record<ErrorCode, string> = {
   // Faucet
   FAUCET_COOLDOWN: 'Bạn đang trong thời gian chờ giữa các lần nạp tiền thử nghiệm.',
   FAUCET_CAP_REACHED: 'Bạn đã đạt hạn mức nạp tiền thử nghiệm trọn đời (100.000 USDT).',
+
+  // Uploads
+  PAYLOAD_TOO_LARGE: 'Dung lượng tệp hoặc dữ liệu gửi lên vượt quá giới hạn cho phép.',
+  UNSUPPORTED_MEDIA_TYPE: 'Định dạng tệp không được hỗ trợ.',
 };
 
 export function getErrorMessage(code: string, fallback = 'Đã có lỗi xảy ra. Vui lòng thử lại.'): string {

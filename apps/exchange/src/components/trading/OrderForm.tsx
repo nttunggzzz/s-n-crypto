@@ -5,6 +5,8 @@ import {
   dec,
   floorToStep,
   roundDown,
+  roundUp,
+  type Dec,
   checkPrice,
   checkQuantity,
   checkNotional,
@@ -49,7 +51,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({
 }) => {
   const { user, isAuthenticated, resendVerification } = useAuth();
   const { publicConfig } = useConfig();
-  const { activeSymbolInfo, activeTicker, exchangeInfo, tradingHalted, disabledSymbols, realtimeClient } = useMarket();
+  const { activeSymbolInfo, activeTicker, exchangeInfo, exchangeStatus, tradingHalted, disabledSymbols, realtimeClient } = useMarket();
   const { success, error: toastError } = useToast();
   const api = getApiClient();
 
@@ -403,6 +405,55 @@ export const OrderForm: React.FC<OrderFormProps> = ({
     } catch {}
     return '—';
   }, [exchangeInfo, side, orderType, quoteOrderQty, quantity, price, activeTicker]);
+
+  // Vietnam Tax calculation (Module T)
+  const taxMode = exchangeStatus?.taxMode ?? exchangeInfo?.taxMode ?? 'OFF';
+  const taxRate = exchangeStatus?.taxRate ?? exchangeInfo?.taxRate ?? '0.001';
+  const taxVndRate = exchangeStatus ? exchangeStatus.taxVndRate : (exchangeInfo?.taxVndRate ?? null);
+  const feeRate = exchangeInfo?.feeRate ?? '0.001';
+
+  const taxCalculation = useMemo(() => {
+    if (side !== 'SELL' || taxMode !== 'WITHHOLD') return null;
+    if (!quantity || !activeSymbolInfo) return null;
+    try {
+      const q = dec(quantity);
+      if (q.lte(0)) return null;
+
+      let p: Dec | null = null;
+      if (orderType === 'MARKET' || orderType === 'STOP_MARKET') {
+        p = activeTicker?.lastPrice ? dec(activeTicker.lastPrice) : null;
+      } else {
+        p = price ? dec(price) : null;
+      }
+
+      if (!p || p.lte(0)) return null;
+
+      const gross = p.mul(q);
+      const fRate = dec(feeRate);
+      const fee = roundUp(gross.mul(fRate));
+      const tRate = dec(taxRate);
+      const tax = roundUp(gross.mul(tRate));
+      const net = gross.sub(fee).sub(tax);
+
+      let vnd: Dec | null = null;
+      if (taxVndRate !== null && taxVndRate !== undefined && taxVndRate !== '') {
+        const vRate = dec(taxVndRate);
+        if (vRate.gt(0)) {
+          vnd = roundUp(tax.mul(vRate), 0);
+        }
+      }
+
+      return {
+        gross,
+        fee,
+        tax,
+        net,
+        vnd,
+      };
+    } catch {
+      return null;
+    }
+  }, [side, taxMode, quantity, price, orderType, activeTicker?.lastPrice, activeSymbolInfo, feeRate, taxRate, taxVndRate]);
 
   // Real order dispatching
   const dispatchOrder = async (orderPayload: OrderPayload) => {
@@ -1117,13 +1168,102 @@ export const OrderForm: React.FC<OrderFormProps> = ({
           </div>
         )}
 
-        {/* Estimated Fee info */}
-        <div className="flex items-center justify-between text-[11px] text-[var(--color-text-muted,#6b7280)]">
-          <span>Phí giao dịch (ước tính):</span>
-          <span className="font-mono text-[var(--color-text-secondary,#9ca3af)]">
-            ~{estimatedFee} {side === 'BUY' ? baseAsset : 'USDT'}
-          </span>
-        </div>
+        {/* Vietnam Tax Breakdown (Module T) */}
+        {side === 'SELL' && taxMode === 'WITHHOLD' && taxCalculation ? (
+          <div
+            data-testid="tax-breakdown"
+            className="p-2.5 rounded-[var(--radius-sm,4px)] bg-[var(--color-bg-secondary,#16181d)] border border-[var(--color-border,#242731)] flex flex-col gap-1.5 text-[11px]"
+          >
+            <div className="flex items-center justify-between pb-1 border-b border-[var(--color-border,#242731)]">
+              <span className="font-medium text-[var(--color-text,#e5e7eb)] flex items-center gap-1.5">
+                Chi tiết thuế & phí
+                <span
+                  data-testid="tax-test-label"
+                  className="px-1.5 py-0.2 text-[9px] font-semibold tracking-wider uppercase rounded bg-amber-500/20 text-amber-400 border border-amber-500/30"
+                  title="Sàn khấu trừ thuế 0,1% trên giá trị bán theo TT 32/2026/TT-BTC (sàn thử nghiệm: số liệu mô phỏng)."
+                >
+                  thử nghiệm
+                </span>
+              </span>
+              <span className="text-[10px] text-[var(--color-text-muted,#6b7280)] font-mono">
+                {quoteAsset}
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between text-[var(--color-text-muted,#6b7280)]">
+              <span>Giá trị gộp:</span>
+              <span
+                data-testid="tax-gross"
+                data-value={taxCalculation.gross.toString()}
+                className="font-mono text-[var(--color-text,#e5e7eb)]"
+              >
+                {formatDecimal(taxCalculation.gross.toString(), { decimals: 2 })} {quoteAsset}
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between text-[var(--color-text-muted,#6b7280)]">
+              <span>Phí ước tính:</span>
+              <span
+                data-testid="tax-fee"
+                data-value={taxCalculation.fee.toString()}
+                className="font-mono text-[var(--color-text,#e5e7eb)]"
+              >
+                {formatDecimal(taxCalculation.fee.toString(), { decimals: 8 })} {quoteAsset}
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between text-[var(--color-text-muted,#6b7280)]">
+              <span className="flex items-center gap-1">
+                Thuế ước tính ({(Number(taxRate) * 100).toFixed(1)}%):
+                <span
+                  title="Sàn khấu trừ thuế 0,1% trên giá trị bán theo TT 32/2026/TT-BTC (sàn thử nghiệm: số liệu mô phỏng)."
+                  className="cursor-help text-[var(--color-text-muted,#6b7280)] hover:text-amber-400"
+                >
+                  <Info className="w-3 h-3" />
+                </span>
+              </span>
+              <span
+                data-testid="tax-amount"
+                data-value={taxCalculation.tax.toString()}
+                className="font-mono text-amber-400 font-medium"
+              >
+                {formatDecimal(taxCalculation.tax.toString(), { decimals: 8 })} {quoteAsset}
+              </span>
+            </div>
+
+            {taxCalculation.vnd !== null && (
+              <div className="flex items-center justify-between text-[var(--color-text-muted,#6b7280)]">
+                <span>Quy đổi VND:</span>
+                <span
+                  data-testid="tax-vnd"
+                  data-value={taxCalculation.vnd.toString()}
+                  className="font-mono text-amber-300/90"
+                >
+                  ~ {formatDecimal(taxCalculation.vnd.toString(), { decimals: 0 })} ₫
+                </span>
+              </div>
+            )}
+
+            <div className="flex items-center justify-between pt-1 border-t border-[var(--color-border,#242731)] font-medium">
+              <span className="text-[var(--color-text,#e5e7eb)]">Thực nhận ước tính:</span>
+              <span
+                data-testid="tax-net"
+                data-value={taxCalculation.net.toString()}
+                className="font-mono text-[var(--color-buy,#34d399)]"
+              >
+                {formatDecimal(taxCalculation.net.toString(), { decimals: 8 })} {quoteAsset}
+              </span>
+            </div>
+          </div>
+        ) : (
+          /* Estimated Fee info */
+          <div className="flex items-center justify-between text-[11px] text-[var(--color-text-muted,#6b7280)]">
+            <span>Phí giao dịch (ước tính):</span>
+            <span className="font-mono text-[var(--color-text-secondary,#9ca3af)]">
+              ~{estimatedFee} {side === 'BUY' ? baseAsset : 'USDT'}
+            </span>
+          </div>
+        )}
 
         {/* Validation Error Message */}
         {validationError && (

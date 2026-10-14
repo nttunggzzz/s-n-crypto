@@ -264,6 +264,7 @@ export const WalletPage: React.FC<WalletPageProps> = ({ onNavigate }) => {
     TRADE_DEBIT: { label: 'Khấu trừ khớp lệnh', variant: 'error' },
     TRADE_CREDIT: { label: 'Nhận tiền khớp lệnh', variant: 'success' },
     FEE: { label: 'Phí giao dịch', variant: 'default' },
+    TAX_WITHHOLDING: { label: 'Thuế khấu trừ', variant: 'warning' },
     ADMIN_ADJUST: { label: 'Quản trị điều chỉnh', variant: 'info' },
     ACCOUNT_RESET: { label: 'Đặt lại tài khoản', variant: 'error' },
   };

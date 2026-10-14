@@ -1321,6 +1321,10 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
               {currentPosition?.side === 'LONG' ? 'Đóng Long' : 'Mở Short'}
             </Button>
           </div>
+
+          <div className="text-[10px] text-center text-[var(--color-text-muted,#6b7280)] mt-2">
+            Futures: chưa có quy định thuế, không khấu trừ
+          </div>
         </div>
       </div>
 

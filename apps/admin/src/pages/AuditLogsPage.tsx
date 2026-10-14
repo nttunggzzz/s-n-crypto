@@ -53,6 +53,7 @@ export const AuditLogsPage: React.FC = () => {
             <option value="TRADING_HALT">TRADING_HALT</option>
             <option value="TRADING_RESUME">TRADING_RESUME</option>
             <option value="SETTINGS_UPDATE">SETTINGS_UPDATE</option>
+            <option value="TAX_SETTINGS_UPDATE">TAX_SETTINGS_UPDATE</option>
             <option value="USER_ROLE">USER_ROLE</option>
             <option value="ACCOUNT_RESET">ACCOUNT_RESET</option>
           </select>
