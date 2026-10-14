@@ -45,7 +45,7 @@ Cả hai `waitForURL(/\/trade\//)` hết giờ: đăng ký xong app dừng ở m
 
 | Mã | Kết quả | Bằng chứng |
 |---|---|---|
-| N-01 | ❌ Chưa (Claude Code) | `infra/dev.mjs` chưa đổi. Chủ dự án đang dùng cách tạm `ui/.env` |
+| N-01 | ✅ Claude Code (`3bc7edd`) | `infra/dev.mjs` + `infra/devEmailEnv.mjs`: dev mặc định tắt bắt xác minh; shell / `.env` thắng; `--verify-email` để thử luồng thật. 4 test `infra/devEmailEnv.test.mjs` |
 | N-02 nút gửi email xác minh | ❌ **Đã làm rồi bị gỡ** | `37ebfbd` thêm nút ở Ví, form lệnh, Cài đặt; `9ec5c74` xóa hết (xem K-01). Báo cáo vẫn ghi "✅ Đã sửa" |
 | N-03 tab cũ tự mở khóa | ✅ (đọc mã) | `AuthContext.tsx:136-170` focus/visibility + `BroadcastChannel('cex-auth')`; `AuthPages.tsx:717-721` gửi `verified`. Xem K-08 |
 | N-04 giá Limit điền sẵn | ✅ chạy thật | mở `/trade/BTCUSDT`: ô giá = `83039.9` (giá hiện tại theo tick). Còn lỗi tổng giá trị → K-03 |
@@ -57,11 +57,11 @@ Cả hai `waitForURL(/\/trade\//)` hết giờ: đăng ký xong app dừng ở m
 | N-10 gợi ý nạp thêm | ✅ (đọc mã) | `WalletPage.tsx` dòng gợi ý khi đang chờ; admin có chú thích "Đặt 0 để nạp liên tục" |
 | N-11 định dạng bảng lệnh/Danh mục | ✅ (đọc mã) | `UserOrdersTabs.tsx`, `PortfolioPage.tsx` dùng `formatPrice`/`formatAmount` theo tick/bước. Còn chỗ khác → K-05, K-07 |
 | N-12 hộp xác nhận admin | ✅ (đọc mã) | `ConfirmDialog.tsx` `role="dialog"`, `aria-modal`, nút có tên |
-| N-13 toast "đã gửi email" | — | bị gỡ cùng K-01; yêu cầu `emailDelivery` đã ghi ở `contract-requests.md` (chờ Claude Code) |
+| N-13 toast "đã gửi email" | ◐ | giao diện bị gỡ cùng K-01. **Phần backend xong** (contracts 0.12.0 `publicConfig.emailDelivery`, `3bc7edd`); UI dùng khi khôi phục K-01 |
 | N-14 nến cặp sai | ✅ (đọc mã) | `TradePage.tsx` truyền `currentSymbol` thẳng vào chart |
 | R-13 nút không tên | ✅ (đọc mã) | `Tabs.tsx` `role="tab"` + `aria-selected`; sidebar admin, sổ lệnh, bảng lệnh có `aria-label` |
 | R-14 định dạng | ◐ | xem K-05, K-07 |
-| R-16 `onClose` | ❌ Chưa (Claude Code) | đã ghi ở `contract-requests.md` |
+| R-16 `onClose` | ✅ Claude Code (`3bc7edd`) | `RealtimeClient.onClose` + `WS_SESSION_ENDED` ở contracts 0.12.0; test `server/src/realtime/realtimeClient.test.ts`. UI cần dùng (xem "Backend → UI" trong `LOI-HIEN-TAI.md`) |
 | R-18 sửa `e2e/` | ✅ | lần này không đụng `e2e/` |
 
 ## 3. Lỗi mới
@@ -179,16 +179,17 @@ Cả hai `waitForURL(/\/trade\//)` hết giờ: đăng ký xong app dừng ở m
 - **Cách sửa an toàn:** thêm điều kiện `publicConfig?.emailVerificationRequired === true`; khi lỗi không phải 401 thì giữ nguyên `user`.
 - **Nghiệm thu:** hệ host-mode: chuyển tab 5 lần → không có `GET /me` mới.
 
-### K-09 — Quy trình (P3, chủ dự án quyết một phần)
+### K-09 — Quy trình (P3)
 1. Bảng N trong báo cáo lần 2 ghi "✅ Đã sửa (Antigravity)" nhưng **không có commit và lệnh đã chạy** (quy tắc ở đầu báo cáo và `project-rules.md` mục 9). N-02 ghi xong rồi bị `9ec5c74` gỡ mà không cập nhật.
 2. Nhánh UI thêm `.agent/agents/*`, `.agent/skills/*` (~250 file: script Python, test, tài liệu bên thứ ba) và `AGENTS.md` ở gốc repo. Gộp vào `main` thì:
    - các agent khác cũng đọc `AGENTS.md`;
    - `eslint.config.js` đã được sửa để bỏ qua `.agent/**`.
 
-   **Chủ dự án quyết:**
-   - (a) giữ trong repo;
-   - (b) chỉ giữ `.agent/rules/` + `.agent/agents/`, còn skill đặt ngoài repo;
-   - (c) bỏ `AGENTS.md` ở gốc (nội dung chuyển vào `.agent/`).
+   **Chủ dự án đã quyết (2026-10-13): giữ lại** — đây là các skill của Claude mà Antigravity dùng. Việc đã làm:
+   - quét 246 file trong `.agent/` và `AGENTS.md`: không có file khóa/bí mật, không có chuỗi giống khóa API;
+   - `.agent` thêm vào `.dockerignore` để ảnh Docker (Railway) không chứa chúng;
+   - ESLint đã bỏ qua `.agent/**`; vitest chỉ chạy `packages/`, `server/`, `infra/` nên không chạy test trong skill;
+   - mục K-09.2 coi như **đã đóng**, không còn chặn việc gộp.
 3. `AGENTS.md` mô tả bước cuối "✅ Hoàn tất & Merge Code". Antigravity **không** tự gộp vào `main`; gộp là việc của chủ dự án sau khi `ui-check` xanh.
 
 ### K-10 — e2e đỏ giả khi máy bận (P3, Claude Code)
@@ -211,7 +212,7 @@ Cả hai `waitForURL(/\/trade\//)` hết giờ: đăng ký xong app dừng ở m
    - R-04 CSP, R-16 `onClose`, N-13 `emailDelivery`;
    - K-10;
    - test `chart-orders.spec.ts` khi PROMPT-12 xong.
-3. **Chủ dự án:** quyết K-09 mục 2.
+3. **Chủ dự án:** không còn việc chờ quyết (K-09.2 đã quyết: giữ `.agent/` và `AGENTS.md`).
 
 Sau mỗi đợt chạy `npm run ui-check -- --e2e`. Phải xanh. Khi chạy, tắt `npm run dev` để tránh đỏ giả (K-10).
 

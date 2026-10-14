@@ -35,8 +35,8 @@ const E2E_MODES = {
     dbPort: 5437,
     webPort: 5191,
     stateDir: '.e2e/host',
-    // infra/host.mjs writes EMAIL_TRANSPORT=log; the transport is invisible to the apps (not in /api/v1/config),
-    // and the file transport keeps the emails readable here (the log transport prints below LOG_LEVEL=warn).
+    // infra/host.mjs writes EMAIL_TRANSPORT=log; the file transport used here looks the same to the apps
+    // (publicConfig.emailDelivery = 'log' for both) and keeps the emails readable (the log transport prints below LOG_LEVEL=warn).
     env: { REGISTRATION: 'invite', REQUIRE_EMAIL_VERIFICATION: 'false' },
   },
 } as const;

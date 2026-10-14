@@ -26,6 +26,7 @@ import { AppError } from '../../lib/errors.ts';
 import type { MarketDataService } from '../market/marketData.ts';
 import type { UserRow } from '../auth/authService.ts';
 import type { Exchange } from '../exchange/index.ts';
+import type { SettingsRow } from '../exchange/exchangeConfig.ts';
 import type { Futures } from '../futures/index.ts';
 import type { Bots } from '../bots/index.ts';
 import { applyBalanceChanges, getBalances } from '../exchange/ledger.ts';
@@ -81,6 +82,18 @@ export function serializeRun(r: typeof reconciliationRuns.$inferSelect): Reconci
  * Admin operations. Every change runs in ONE transaction with its audit row, so a change
  * exists iff its audit entry exists. Permission checks happen in route(); target rules here.
  */
+/** Contract `ExchangeSettings` from a settings row (the cached one for GET, the committed one for the response to a change). */
+export function settingsFromRow(s: SettingsRow): ExchangeSettings {
+  return {
+    tradingHalted: s.tradingHalted,
+    feeRate: dec(s.feeRate).toFixed(),
+    faucet: { asset: s.faucetAsset, amount: toFixedStr(dec(s.faucetAmount)), cooldownHours: s.faucetCooldownHours, lifetimeCap: toFixedStr(dec(s.faucetLifetimeCap)) },
+    futures: { makerFee: dec(s.futuresMakerFee).toFixed(), takerFee: dec(s.futuresTakerFee).toFixed(), liquidationFee: dec(s.futuresLiquidationFee).toFixed() },
+    staleThresholdMs: s.staleThresholdMs,
+    updatedAt: s.updatedAt.toISOString(),
+  };
+}
+
 export class AdminService {
   private readonly priceOf;
 
@@ -478,16 +491,9 @@ export class AdminService {
 
   // ───────── exchange
 
+  /** The cached settings (GET). Responses to a change are built from the COMMITTED row instead (`settingsFromRow`). */
   settings(): ExchangeSettings {
-    const s = this.ex.config.settings;
-    return {
-      tradingHalted: s.tradingHalted,
-      feeRate: dec(s.feeRate).toFixed(),
-      faucet: { asset: s.faucetAsset, amount: toFixedStr(dec(s.faucetAmount)), cooldownHours: s.faucetCooldownHours, lifetimeCap: toFixedStr(dec(s.faucetLifetimeCap)) },
-      futures: { makerFee: dec(s.futuresMakerFee).toFixed(), takerFee: dec(s.futuresTakerFee).toFixed(), liquidationFee: dec(s.futuresLiquidationFee).toFixed() },
-      staleThresholdMs: s.staleThresholdMs,
-      updatedAt: s.updatedAt.toISOString(),
-    };
+    return settingsFromRow(this.ex.config.settings);
   }
 
   async updateSettings(
@@ -527,29 +533,41 @@ export class AdminService {
     if (p.futuresMakerFee !== undefined) set.futuresMakerFee = futuresFee(p.futuresMakerFee, 'futuresMakerFee', '0.01');
     if (p.futuresTakerFee !== undefined) set.futuresTakerFee = futuresFee(p.futuresTakerFee, 'futuresTakerFee', '0.01');
     if (p.futuresLiquidationFee !== undefined) set.futuresLiquidationFee = futuresFee(p.futuresLiquidationFee, 'futuresLiquidationFee', '0.05');
-    const before = this.settings();
-    await this.db.transaction(async (tx) => {
-      await tx
+    const committed = await this.db.transaction(async (tx) => {
+      // `before` is what the DB holds (row locked), not what the cache believes
+      const [cur] = await tx.select().from(exchangeSettings).where(eq(exchangeSettings.id, 1)).for('update');
+      if (!cur) throw new Error('exchange_settings row missing — run migrations');
+      const [row] = await tx
         .update(exchangeSettings)
         .set({ ...set, updatedAt: new Date() })
-        .where(eq(exchangeSettings.id, 1));
+        .where(eq(exchangeSettings.id, 1))
+        .returning();
       const { reason: _r, ...changes } = p;
-      await writeAudit(tx, { actorId: actor.user.id, action: 'SETTINGS_UPDATE', targetType: 'EXCHANGE', before, after: changes, reason: p.reason, ip: actor.ip });
+      await writeAudit(tx, { actorId: actor.user.id, action: 'SETTINGS_UPDATE', targetType: 'EXCHANGE', before: settingsFromRow(cur), after: changes, reason: p.reason, ip: actor.ip });
+      return row!;
     });
-    await this.ex.config.reload();
-    return this.settings();
+    await this.ex.config.reloadAfterCommit();
+    return settingsFromRow(committed);
   }
 
-  /** Emergency stop: no new orders, no matching, until resumed. No-op if already in that state. */
+  /**
+   * Emergency stop: no new orders, no matching, until resumed. The "already in that state" decision is made on the DB row
+   * (locked), never on the cache: a cache that could not be refreshed must not swallow the admin's last action.
+   */
   async setHalted(actor: Actor, halted: boolean, reason: string): Promise<ExchangeSettings> {
-    if (this.ex.config.tradingHalted !== halted) {
-      await this.db.transaction(async (tx) => {
-        await tx.update(exchangeSettings).set({ tradingHalted: halted, updatedAt: new Date() }).where(eq(exchangeSettings.id, 1));
-        await writeAudit(tx, { actorId: actor.user.id, action: halted ? 'TRADING_HALT' : 'TRADING_RESUME', targetType: 'EXCHANGE', before: { tradingHalted: !halted }, after: { tradingHalted: halted }, reason, ip: actor.ip });
-      });
-      await this.ex.config.reload();
-    }
-    return this.settings();
+    const { row, wrote } = await this.db.transaction(async (tx) => {
+      const [cur] = await tx.select().from(exchangeSettings).where(eq(exchangeSettings.id, 1)).for('update');
+      if (!cur) throw new Error('exchange_settings row missing — run migrations');
+      if (cur.tradingHalted === halted) return { row: cur, wrote: false };
+      const [upd] = await tx.update(exchangeSettings).set({ tradingHalted: halted, updatedAt: new Date() }).where(eq(exchangeSettings.id, 1)).returning();
+      await writeAudit(tx, { actorId: actor.user.id, action: halted ? 'TRADING_HALT' : 'TRADING_RESUME', targetType: 'EXCHANGE', before: { tradingHalted: cur.tradingHalted }, after: { tradingHalted: halted }, reason, ip: actor.ip });
+      return { row: upd!, wrote: true };
+    });
+    // refresh when this call changed the DB, or when the cache disagrees with the DB (an earlier reload failed)
+    if (wrote || this.ex.config.tradingHalted !== row.tradingHalted) await this.ex.config.reloadAfterCommit();
+    // fail safe: a committed HALT must stop matching even if the cache could not be refreshed
+    if (row.tradingHalted && this.ex.config.stale) this.ex.config.applyCommittedHalt(true);
+    return settingsFromRow(row);
   }
 
   async listSymbols(): Promise<AdminSymbol[]> {
@@ -569,22 +587,30 @@ export class AdminService {
   }
 
   async updateSymbol(actor: Actor, symbol: string, enabled: boolean, cancelOpenOrders: boolean, reason: string): Promise<AdminSymbol> {
-    const s = this.ex.config.findSymbol(symbol);
-    if (!s) throw new AppError('NOT_FOUND', `Unknown symbol ${symbol}`);
+    if (!this.ex.config.findSymbol(symbol)) throw new AppError('NOT_FOUND', `Unknown symbol ${symbol}`);
     await this.db.transaction(async (tx) => {
+      // lock order: exchange_settings first (taxService.updateSettings does the same), then the pair
+      const [cfg] = await tx.select().from(exchangeSettings).where(eq(exchangeSettings.id, 1)).for('update');
+      if (!cfg) throw new Error('exchange_settings row missing — run migrations');
+      const [cur] = await tx.select().from(symbols).where(eq(symbols.symbol, symbol)).for('update');
+      if (!cur) throw new AppError('NOT_FOUND', `Unknown symbol ${symbol}`);
+      // the tax reports add up one currency (USDT): while the tax is on, no pair quoted in another asset may be switched on
+      if (enabled && !cur.enabled && cur.quoteAsset !== 'USDT' && cfg.taxMode === 'WITHHOLD') {
+        throw new AppError('VALIDATION_ERROR', `${symbol} is quoted in ${cur.quoteAsset}: turn the tax (taxMode WITHHOLD) off before enabling it`, { field: 'enabled' });
+      }
       await tx.update(symbols).set({ enabled, updatedAt: new Date() }).where(eq(symbols.symbol, symbol));
       await writeAudit(tx, {
         actorId: actor.user.id,
         action: 'SYMBOL_UPDATE',
         targetType: 'SYMBOL',
         targetId: symbol,
-        before: { enabled: s.row.enabled },
+        before: { enabled: cur.enabled },
         after: { enabled, cancelOpenOrders: !enabled && cancelOpenOrders },
         reason,
         ip: actor.ip,
       });
     });
-    await this.ex.config.reload();
+    await this.ex.config.reloadAfterCommit();
     if (!enabled && cancelOpenOrders) {
       const open = await this.db
         .select({ id: orders.id, userId: orders.userId })
@@ -663,7 +689,7 @@ export class AdminService {
       await tx.insert(assets).values({ asset, ...next, updatedAt: t }).onConflictDoUpdate({ target: assets.asset, set: { ...next, updatedAt: t } });
       await writeAudit(tx, { actorId: actor.user.id, action: 'ASSET_UPDATE', targetType: 'ASSET', targetId: asset, before, after: next, reason, ip: actor.ip });
     });
-    await this.ex.config.reload();
+    await this.ex.config.reloadAfterCommit();
     return this.ex.config.assetInfo(asset);
   }
 

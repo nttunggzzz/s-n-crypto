@@ -1,5 +1,123 @@
 # Changelog — @cex/contracts
 
+## 0.16.0 — 2026-10-14 (Thuế — đợt T3F: cài đặt thuế đi qua `exchange:status`)
+Chỉ thêm trường; không thêm endpoint (vẫn 150). Hướng dẫn: README mục 15.
+
+**Thêm**
+- `ExchangeStatus.taxMode`, `taxRate`, `taxVndRate` (nullable) — cùng giá trị với `exchangeInfo.taxMode/taxRate/taxVndRate`. Kênh realtime `exchange:status`
+  nay còn được đẩy khi admin đổi `taxMode`, `taxRate` hoặc `taxVndRate` (`adminUpdateTaxSettings`), nên form BÁN đang mở cập nhật thuế tạm tính ngay,
+  không cần tải lại `exchangeInfo`. Không đẩy khi chỉ `taxVndRateUpdatedAt` đổi (trường đó không nằm trong `ExchangeStatus`; đọc ở `exchangeInfo`).
+- Fixture `fixtureExchangeStatus`. Mock: `exchange:status` của realtime mock mang 3 trường thuế và được gửi khi `setMockTax()` hoặc
+  `adminUpdateTaxSettings` (mock) đổi chúng (kiểm tra theo nhịp của mock realtime, mặc định 1 giây).
+
+**Có thể ảnh hưởng UI**
+- Ai tự dựng đối tượng `ExchangeStatus` (test, story) phải thêm 3 trường mới (typecheck sẽ báo).
+- Server: `adminUpdateTaxSettings` từ chối bật `taxMode = 'WITHHOLD'` (400 `VALIDATION_ERROR`, field `taxMode`) khi đang bật cặp có quote khác USDT
+  (báo cáo thuế cộng số của một đồng quote). Giao diện admin nên hiện lỗi này ở ô `taxMode`. Chiều ngược lại: khi thuế đang `WITHHOLD`, `adminUpdateSymbol` bật cặp quote khác USDT bị 400 `VALIDATION_ERROR` (field `enabled`).
+
+## 0.15.0 — 2026-10-14 (Thuế crypto Việt Nam, thử nghiệm — Module T, đợt T1)
+Chỉ thêm. 10 endpoint mới, tổng 150. Hướng dẫn: README mục 15.
+Trạng thái server (cập nhật sau T3): đã có route cho cả 10 endpoint. 4 endpoint cài đặt/hồ sơ (`taxProfile`, `taxUpdateProfile`, `adminTaxSettings`,
+`adminUpdateTaxSettings`) từ đợt T2; 6 endpoint báo cáo (`taxSummary`, `taxWithholdings`, `taxExport`, `adminTaxSummary`, `adminTaxWithholdings`,
+`adminTaxExport`) từ đợt T3. Server đã trả `Trade.tax` và 4 trường thuế của `exchangeInfo` (T2).
+Luật (module T §0, §3.2): chỉ lần khớp **BÁN Spot** bị trích khi `taxMode = 'WITHHOLD'` và người bán không phải `DOMESTIC_ORG`;
+thuế = roundUp 8 chữ số của (quoteQty × taxRate) trên giá trị gộp, từng lần khớp, lãi hay lỗ đều trích. Mua, Futures, chuyển ví, faucet,
+admin cộng/trừ, đặt lại tài khoản: không trích.
+
+**Thêm**
+- `tax.ts`: enum `TaxMode` (`OFF | WITHHOLD`), `TaxCategory` (`INDIVIDUAL | FOREIGN_ORG | DOMESTIC_ORG`, tự khai, **không** có trường giấy tờ);
+  hằng `TAX_LIMITS` (tỷ lệ tối đa 0.01, mặc định 0.001, CSV ≤ 10.000 dòng); `VndAmount` (đồng, số nguyên); `TaxRateInput`, `VndRateInput`;
+  schema `TaxSettings`, `UpdateTaxSettingsRequest`, `TaxProfile`, `UpdateTaxProfileRequest` (strict: chỉ `category`), `TaxWithholding`,
+  `AdminTaxWithholding` (+ `userId`), `TaxWithholdingQuery`/`ListQuery`, `AdminTaxWithholdingQuery`/`ListQuery`, `TaxTotals`, `TaxSales`,
+  `TaxMonth`, `TaxSummaryQuery`, `TaxSummary`, `TaxPeriod` (`YYYY-MM` | `YYYY-Qn`), `AdminTaxSummaryQuery`, `AdminTaxSummary`;
+  cột CSV `TAX_EXPORT_COLUMNS`, `ADMIN_TAX_EXPORT_COLUMNS` (server và mock dùng chung).
+- Endpoint người dùng (`auth: user`): `taxProfile`, `taxUpdateProfile` (PUT), `taxSummary`, `taxWithholdings` (phân trang), `taxExport` (CSV).
+- Endpoint admin (`auth: staff`): `adminTaxSettings`, `adminTaxSummary`, `adminTaxWithholdings`, `adminTaxExport` (quyền `tax.read`);
+  `adminUpdateTaxSettings` (PATCH, quyền `tax.manage`, ghi audit `TAX_SETTINGS_UPDATE`).
+- Quyền `tax.read` (support, admin, owner — như `reconciliation.read`) và `tax.manage` (admin, owner — như `exchange.configure`).
+- `Trade.tax: DecimalString` (luôn có, `"0.00000000"` khi không trích; tiền nhận về của lệnh bán = quoteQty − fee − tax).
+- `ExchangeInfo.taxMode`, `taxRate`, `taxVndRate` (nullable), `taxVndRateUpdatedAt` (nullable) — cho form bán ước tính thuế.
+- `LedgerEntryType` thêm `TAX_WITHHOLDING`; `AuditAction` thêm `TAX_SETTINGS_UPDATE`.
+- (T2) `ReconciliationMismatch.kind` thêm `TAX_LEDGER_VS_WITHHOLDINGS` (−Σ sổ cái `TAX_WITHHOLDING` ≠ Σ bản ghi khấu trừ) và
+  `TAX_TRADES_VS_WITHHOLDINGS` (Σ `Trade.tax` của lệnh bán ≠ Σ bản ghi), theo (người dùng, tài sản quote), `field: 'available'`.
+  Màn đối soát admin nên có nhãn cho hai loại này.
+- `JournalFill.tax`, `JournalFill.allocatedTax` (chia như `allocatedFee`: cả lần khớp → `tax`, một phần → roundUp8(tax × allocatedQty / quantity)).
+- `exportUrl()` nhận thêm `'taxExport' | 'adminTaxExport'`.
+- Mock: bắt đầu `WITHHOLD` 0.1%, tỷ giá 26350 (server thật bắt đầu `OFF`); lần khớp trong mock tính `quoteQty`, phí, thuế và `realizedPnl` bằng `@cex/core`
+  đúng hướng làm tròn của server (giá vốn trung bình như `positions.ts`, khởi tạo từ fixture danh mục); có bản ghi khấu trừ cho mỗi lần bán bị trích;
+  báo cáo, danh sách, CSV đọc cùng một nguồn. 2 lần bán cũ của người dùng demo (fixture `fixtureTaxedTrades`) + 2 bản ghi của người dùng khác.
+  Hàm dev `setMockTax({ taxMode, taxRate, taxVndRate, category })`. Test `mocks/mocks-tax.test.ts` (12 ca).
+
+**Thay đổi nhỏ có thể ảnh hưởng UI**
+- `realizedPnl` của `Trade` nay là sau phí **và** thuế (khi thuế tắt thì như cũ).
+- Bảng nhãn loại dòng sổ cái nên thêm `TAX_WITHHOLDING`; bộ lọc nhật ký admin nên thêm `TAX_SETTINGS_UPDATE`; vai trò support có thêm quyền `tax.read`
+  (`me.permissions`).
+- Mock: phí lần khớp nay làm tròn lên 8 chữ số theo `feeRate` hiện hành (trước là float × 0.001); `realizedPnl` của lệnh bán trong mock là số thật
+  theo giá vốn (trước là số giả 1% giá trị); `exchangeInfo.feeRate` của mock theo cấu hình admin; CSV `exportTrades` có thêm cột `tax` sau `feeAsset`;
+  `myTrades` của mock có thêm 2 lệnh bán cũ (381, 382).
+- (Đã xử lý ở T2) Server trả `Trade.tax` và 4 trường thuế của `exchangeInfo`; hợp đồng và T2 đã gộp cùng nhau vào `main`.
+
+## 0.14.0 — 2026-10-14 (Nhật ký giao dịch — Module A, đợt A1)
+Chỉ thêm. 12 endpoint mới, tổng 140. Server chưa có route cho chúng (A2–A4); giao diện làm trên mock ngay từ bản này. Hướng dẫn: README mục 14.
+
+**Thêm**
+- `stats.ts` (dùng chung với Module C): `StatsBasis` (`ACTUAL_FILLS | MODELED_CANDLES | BOT_FILLS`), `TradeOutcome`, `RSummary`, `RCurvePoint`, `PnlCurvePoint`.
+  Tên trường giống hệt `summarizeR` của `@cex/core` (`countWithR`, `totalNetPnl`, `rCurve`, `pnlCurve`…); mọi thống kê có `rMetricsVersion`.
+- `journal.ts`: enum `JournalMarket`, `JournalDirection`, `JournalStatus` (OPEN/CLOSED/VOID), `JournalOrigin`, `JournalMistake`, `JournalOutcome`,
+  `JournalStatsRange`, `JournalFillSkipReason`, `JournalFillLeg` (SPOT/OPEN/CLOSE), `JournalCloseReason`, `JournalReconcileIssueType`, `JournalImageType`,
+  `JournalConflictReason`; hằng `JOURNAL_LIMITS`; schema `JournalPlan`, `JournalResult` (= kết quả `computeEntryResult` / `futuresEntryResult`, có `rMetricsVersion`),
+  `JournalFill`, `JournalEntry` (có `status`, `closeReason`, `needsReview`, `adjustedAt`, `adjustmentReason`), `JournalEntryDetail`, `JournalCreateRequest`,
+  `JournalUpdateRequest` (`addOrderIds`), `JournalListQuery`, `JournalStatsQuery`, `JournalStats` (`basis`, `rMetricsVersion`, `excluded: { void, needsReview }`,
+  nhóm theo setup / symbol / market / direction / weekday / mistake), `JournalSetupList`, `JournalSettings`, `JournalUpdateSettingsRequest`,
+  `JournalAttachment`, `JournalAttachmentUpload`.
+- Endpoint: `journalList`, `journalGet`, `journalCreate` (201), `journalUpdate`, `journalDelete`, `journalSetups`, `journalStats`, `journalSettings`,
+  `journalUpdateSettings`, `journalUploadAttachment` (201), `journalAttachment` (ảnh nhị phân), `journalDeleteAttachment`.
+- Bật/tắt tự ghi nhật ký ở `journalSettings` / `journalUpdateSettings` (chỉ nhận `{ autoJournal }`, gửi kèm mốc thời gian → 400). **Không** thêm gì vào `Preferences`.
+- Mã lỗi `PAYLOAD_TOO_LARGE` (413, `details.reason`: `PayloadTooLargeReason`) và `UNSUPPORTED_MEDIA_TYPE` (415).
+  `CONFLICT` của nhật ký có `details.reason` (`JournalConflictReason`), thứ tự kiểm ghi trong `journal.ts`.
+- Khung hợp đồng: `format: 'binary'` + `BinaryFile`; kiểu `BinaryEndpointName`, `ClientEndpointName`; client có `journalAttachmentUrl(id)`.
+- Server (`lib/http.ts`): endpoint `format: 'binary'` gửi bytes kèm `Content-Type` (không kiểm schema phản hồi; vẫn kiểm đăng nhập và tham số);
+  body JSON vượt giới hạn → 413 `PAYLOAD_TOO_LARGE` (`BODY_TOO_LARGE`, `limitBytes`) thay cho 500, có ghi log cảnh báo (đường dẫn, IP).
+  Test `server/src/lib/http.binary.test.ts` (route giả, không cần DB).
+- Mock: 11 mục mẫu tính tay (test so khớp từng số với `@cex/core`); mọi phân bổ, kết quả, thống kê gọi `allocateSpotFill`, `replayAllocations`,
+  `allocateFuturesLegs`, `computeEntryResult`, `futuresEntryResult`, `computeJournalStats` của `@cex/core` (`@cex/contracts` thêm phụ thuộc `@cex/core`).
+  Luật tự ghi giống server (module A §2.1, §2.2, §2.4):
+  - lần khớp được ghi khi nằm trong cửa sổ tự ghi **hoặc** cặp/vị thế đang có mục AUTO mở — tắt tự ghi chỉ dừng việc mở mục mới;
+  - mục AUTO Futures chỉ mở bởi lần khớp mở vị thế (trong cửa sổ); vị thế mở lúc tắt thì các chân về sau ghi "không thuộc mục nào";
+  - mục MANUAL lấy được lần khớp trống và lần khớp "không thuộc mục nào"; mục MANUAL Futures nhận các chân về sau của chính vị thế;
+    `addOrderIds` với lệnh đã có trong mục chỉ thêm phần mới khớp;
+  - dừng lỗ ban đầu tự lấy từ SL của lệnh mở (Futures: lệnh mở vị thế, không phải SL hiện tại), bỏ qua nếu SL sai phía;
+  - lệnh bot lưới/DCA không bao giờ vào nhật ký;
+  - ảnh thật (kiểm chữ ký file, 1 MB, 4 ảnh/mục, hạn mức 50 MB); sha256 có bản JS dự phòng khi trang không có `crypto.subtle` (http không an toàn).
+
+**Thay đổi nhỏ có thể ảnh hưởng UI**
+- `format: 'binary'`: `ApiClient` **không** có hàm cho endpoint nhị phân (`api.journalAttachment` không tồn tại; dùng `journalAttachmentUrl`).
+  Code duyệt mọi `EndpointName` để gọi client nên dùng `ClientEndpointName`.
+- `ErrorCode` có thêm 2 mã: bảng dịch `Record<ErrorCode, string>` của app phải thêm câu cho `PAYLOAD_TOO_LARGE`, `UNSUPPORTED_MEDIA_TYPE`.
+- Gửi body JSON quá lớn (> 32 KB) trước đây nhận 500 `INTERNAL_ERROR`, nay nhận 413 `PAYLOAD_TOO_LARGE`.
+
+## 0.13.0 — 2026-10-13 (Kiểu dữ liệu hệ phân tích)
+**Thêm: kiểu dữ liệu hệ phân tích (chỉ export, chưa có endpoint).** Không thêm, không đổi endpoint (vẫn 128). UI không cần làm gì.
+- File mới `src/analysis.ts` (export từ `index.ts`): `CryptoMarketSnapshot`, `DepartmentFinding`, `EvidenceItem`, `RiskFlag`,
+  `BullBearDebateResult`, `RiskExecutionReview`, `PositionSizingLadderOutput`, `InvalidationCondition`, `AdvisoryTradeProposal`
+  (`advisoryOnly: true`, `liveExecutionEnabled: false`), `CryptoMarketAnalysisReport`, `WalkForwardFoldMetrics`, `BacktestEvaluationSummary`.
+  Dùng nội bộ cho engine tín hiệu (Module C); C1 sẽ nhúng `CryptoMarketAnalysisReport` vào hợp đồng Admin.
+- Chuẩn hóa so với bản chép `be/analysis` (bản đó chưa từng phát hành):
+  - `audit.PriorLessonsUsed` → `audit.priorLessonsUsed`;
+  - `SnapshotDerivativesState.nextFundingTime`: `EpochMs` → `IsoDateTime` (cùng kiểu `FuturesMarkPrice.nextFundingTime`);
+  - `SnapshotDerivativesState.maxLeverage` / `maintenanceMarginRate` / `takerFeeRate` → `nullable` (không còn mặc định đoán 20 / 0.0050 / 0.0004);
+  - `SnapshotPortfolioContext.equityUsdt` / `availableUsdt` / `currentDrawdownPct` / `dailyLossPct` / `weeklyLossPct` / `consecutiveLosses`
+    → `nullable` (`NOT_PROVIDED` không còn ghi số 0);
+  - `BacktestEvaluationSummary.sharpeRatio` / `sortinoRatio` / `calmarRatio` / `deflatedSharpeRatio` / `probabilityOfBacktestOverfitting` /
+    `winRatePct` / `profitFactor` / `walkForwardEfficiencyRatio` và `WalkForwardFoldMetrics.inSampleSharpe` / `outOfSampleSharpe` → `nullable`
+    (không xác định được thì `null`, không còn số giữ chỗ 0 / 0.5 / 9.99).
+  - `CryptoMarketSnapshot.spot.orderBookSynthetic: boolean` (mới): `true` chỉ khi backtest dựng sổ lệnh từ spread/khối lượng của nến;
+    bằng chứng lấy từ sổ lệnh đó là `INFERRED`, không phải `OBSERVED`.
+  - `CircuitBreakerStatusSchema` thêm `NOT_APPLICABLE`: danh mục `NOT_PROVIDED` thì các cầu dao danh mục "không áp dụng" (trước đây ghi `NORMAL`).
+  - Chú thích: `deflatedSharpeRatio` chỉ hiệu chỉnh nhiều lần thử (coi lợi nhuận là phân phối chuẩn);
+    `probabilityOfBacktestOverfitting` là phép sàng lọc 4 khúc, không phải CSCV đầy đủ; `verdict = PASS_RESEARCH_GATE` **không phải** cổng M3.
+- Nguồn: chuyển thể từ TauricResearch/TradingAgents v0.6.0 (Apache-2.0), xem `THIRD_PARTY_NOTICES.md` ở gốc repo.
+
 ## 0.12.0 — 2026-10-12 (Realtime `onClose`, `publicConfig.emailDelivery`)
 Chỉ thêm, không đổi endpoint (vẫn 128). Hai việc UI đã xin ở `docs/parts/contract-requests.md` (R-16, N-13).
 - **`RealtimeClient.onClose(cb)`** → hàm hủy đăng ký. `cb({ code, reason })` được gọi mỗi lần kết nối đóng (mạng rớt, server khởi động lại,

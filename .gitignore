@@ -4,6 +4,7 @@
 /ui/
 /host/
 /host-data/
+/vendor/
 node_modules/
 build/
 dist/

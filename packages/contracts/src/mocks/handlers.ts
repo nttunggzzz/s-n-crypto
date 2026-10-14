@@ -28,6 +28,9 @@ import { adminResolvers } from './admin.ts';
 import { futuresResolvers } from './futures.ts';
 import { inviteResolvers, mockConsumeInvite } from './invites.ts';
 import { phase26Resolvers } from './phase26.ts';
+import { journalResolvers } from './journal.ts';
+import { taxResolvers } from './tax.ts';
+import type { BinaryFile } from '../common.ts';
 const requireTradable = (symbol: string) => {
   if (mockStore.scenario === 'halted') throw new MockError('TRADING_HALTED', 'Trading is halted by the operator');
   if (!MOCK_PAIRS[symbol]) throw new MockError('NOT_FOUND', 'Unknown symbol');
@@ -96,6 +99,11 @@ const resolvers: { [N in EndpointName]: Resolver<N> } = {
   exchangeInfo: () => ({
     ...fixtureExchangeInfo,
     tradingHalted: mockStore.scenario === 'halted',
+    feeRate: mockStore.settings.feeRate,
+    taxMode: mockStore.tax.settings.taxMode,
+    taxRate: mockStore.tax.settings.taxRate,
+    taxVndRate: mockStore.tax.settings.taxVndRate,
+    taxVndRateUpdatedAt: mockStore.tax.settings.taxVndRateUpdatedAt,
     symbols: fixtureExchangeInfo.symbols.map((s) => ({ ...s, enabled: mockStore.adminSymbols.find((a) => a.symbol === s.symbol)?.enabled ?? s.enabled })),
     assets: mockStore.assets,
     serverTime: now(),
@@ -306,8 +314,8 @@ const resolvers: { [N in EndpointName]: Resolver<N> } = {
     requireUser();
     const s = query.get('symbol');
     return csv(
-      ['tradeId', 'orderId', 'time_utc', 'time_gmt7', 'symbol', 'side', 'price', 'quantity', 'quoteQty', 'fee', 'feeAsset', 'liquidity', 'realizedPnl'],
-      mockStore.trades.filter((t) => !s || t.symbol === s).map((t) => [t.id, t.orderId, t.createdAt, vnTime(t.createdAt), t.symbol, t.side, t.price, t.quantity, t.quoteQty, t.fee, t.feeAsset, t.liquidity, t.realizedPnl]),
+      ['tradeId', 'orderId', 'time_utc', 'time_gmt7', 'symbol', 'side', 'price', 'quantity', 'quoteQty', 'fee', 'feeAsset', 'tax', 'liquidity', 'realizedPnl'],
+      mockStore.trades.filter((t) => !s || t.symbol === s).map((t) => [t.id, t.orderId, t.createdAt, vnTime(t.createdAt), t.symbol, t.side, t.price, t.quantity, t.quoteQty, t.fee, t.feeAsset, t.tax, t.liquidity, t.realizedPnl]),
     );
   },
   exportLedger: () => {
@@ -365,6 +373,8 @@ const resolvers: { [N in EndpointName]: Resolver<N> } = {
   ...futuresResolvers,
   ...phase26Resolvers,
   ...inviteResolvers,
+  ...journalResolvers,
+  ...taxResolvers,
 
   markNotificationsRead: ({ body }) => {
     requireUser();
@@ -416,6 +426,14 @@ export function createMockHandlers(opts: MockHandlerOptions = {}): HttpHandler[]
           return new HttpResponse(result as string, {
             status: 200,
             headers: { 'content-type': 'text/csv; charset=utf-8', 'content-disposition': `attachment; filename="${def.path.split('/').pop()}"` },
+          });
+        }
+        if (def.format === 'binary') {
+          // raw bytes with their own type, like the server (no schema check)
+          const file = result as BinaryFile;
+          return new HttpResponse(new Uint8Array(file.data), {
+            status: def.status ?? 200,
+            headers: { 'content-type': file.contentType, 'x-content-type-options': 'nosniff', 'cache-control': 'private, max-age=3600' },
           });
         }
         return HttpResponse.json(result as object, { status: def.status ?? 200 });

@@ -4,6 +4,7 @@
  * Prices here are made-up round numbers, not market data.
  */
 import { ASSET_CATALOG } from '../assetCatalog.ts';
+import { fixtureTaxedTrades, fixtureTaxSettings } from './tax.ts';
 import type {
   AdminAnnouncement,
   AdminOverview,
@@ -19,6 +20,7 @@ import type {
   CandleInterval,
   Depth,
   ExchangeInfo,
+  ExchangeStatus,
   FaucetStatus,
   LedgerEntry,
   MarketStatus,
@@ -130,6 +132,10 @@ export const fixtureAssets: AssetInfo[] = [...new Set(fixtureSymbols.flatMap((s)
 export const fixtureExchangeInfo: ExchangeInfo = {
   tradingHalted: false,
   feeRate: '0.001',
+  taxMode: fixtureTaxSettings.taxMode,
+  taxRate: fixtureTaxSettings.taxRate,
+  taxVndRate: fixtureTaxSettings.taxVndRate,
+  taxVndRateUpdatedAt: fixtureTaxSettings.taxVndRateUpdatedAt,
   symbols: fixtureSymbols,
   assets: fixtureAssets,
   serverTime: T0,
@@ -299,6 +305,16 @@ export function fixtureCandles(symbol: string, interval: CandleInterval, n = 200
     };
   });
 }
+
+/** `exchange:status` as the mock starts: open, one disabled pair (SUIUSDT), the tax settings of `fixtureExchangeInfo`. */
+export const fixtureExchangeStatus: ExchangeStatus = {
+  tradingHalted: false,
+  disabledSymbols: ['SUIUSDT'],
+  taxMode: fixtureTaxSettings.taxMode,
+  taxRate: fixtureTaxSettings.taxRate,
+  taxVndRate: fixtureTaxSettings.taxVndRate,
+  updatedAt: T0,
+};
 
 export const fixtureMarketStatus: MarketStatus = {
   connection: 'CONNECTED',
@@ -558,6 +574,7 @@ export const fixtureMyTrades: Trade[] = [
     quoteQty: '280.02000000',
     fee: '0.00000359',
     feeAsset: 'BTC',
+    tax: '0.00000000',
     liquidity: 'MAKER',
     realizedPnl: null,
     createdAt: '2026-10-09T02:35:00.000Z',
@@ -572,10 +589,13 @@ export const fixtureMyTrades: Trade[] = [
     quoteQty: '999.98750000',
     fee: '0.00001250',
     feeAsset: 'BTC',
+    tax: '0.00000000',
     liquidity: 'TAKER',
     realizedPnl: null,
     createdAt: '2026-10-09T02:00:00.000Z',
   },
+  // older SELL fills with Vietnam tax withheld (0.15.0) — see fixtures/tax.ts
+  ...fixtureTaxedTrades,
 ];
 
 export const fixtureLedger: LedgerEntry[] = [
@@ -730,3 +750,9 @@ export const fixtureAdminOverview: AdminOverview = {
   lastReconciliation: fixtureReconciliationRuns[0]!,
   serverTime: T0,
 };
+
+// ───────────────────────────── trading journal (0.14.0)
+export * from './journal.ts';
+
+// ───────────────────────────── Vietnam tax (0.15.0)
+export * from './tax.ts';

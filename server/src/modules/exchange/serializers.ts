@@ -70,6 +70,7 @@ export function serializeTrade(t: TradeRow): Trade {
     quoteQty: fx(t.quoteQty),
     fee: fx(t.fee),
     feeAsset: t.feeAsset,
+    tax: fx(t.tax),
     liquidity: t.liquidity,
     realizedPnl: fxn(t.realizedPnl),
     createdAt: t.createdAt.toISOString(),

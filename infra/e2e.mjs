@@ -21,6 +21,11 @@ if (!existsSync(path.join(ROOT, 'apps/exchange/package.json'))) {
   process.exit(0);
 }
 await yieldToLiveExchange('e2e');
+// The browser tests are timing-sensitive: with `npm run dev` running (Binance prices + Vite servers) 6 tests failed that pass
+// when run alone (review lan-3 K-10). Not an error — the owner may need both — but say it, so a red run is read correctly.
+if ((await busy(8080)) || (await busy(5173))) {
+  process.stdout.write('[e2e] WARNING: `npm run dev` seems to be running (:8080 / :5173). A red test may be only slowness: stop it, or re-run the failed file alone before calling it a bug.\n');
+}
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 /** pg_ctl of the embedded PostgreSQL package (stops a database left over by a crashed run). */

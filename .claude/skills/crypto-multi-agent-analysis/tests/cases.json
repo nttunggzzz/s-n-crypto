@@ -1,0 +1,141 @@
+{
+  "skill": "crypto-multi-agent-analysis",
+  "cases": [
+    {
+      "id": "cmaa-01-should-trigger",
+      "category": "should-trigger",
+      "prompt": "Kiểm tra và thêm chỉ báo stochastic RSI vào department technical_quant trong server/src/modules/analysis/departments/technicalQuantAgent.ts và packages/core/src/quant.ts.",
+      "should_trigger": true,
+      "expect": [
+        "Uses Dec from @cex/core in packages/core/src/quant.ts",
+        "Ensures calculation only runs on closedCandles (closed === true)",
+        "Records OBSERVED EvidenceItem with observedAt and dataStatus",
+        "Runs node infra/test-all.mjs quant.test.ts analysis.test.ts"
+      ],
+      "forbid": [
+        "Uses JS number or Math.round for indicator math",
+        "Reads unclosed candles"
+      ]
+    },
+    {
+      "id": "cmaa-02-near-miss",
+      "category": "near-miss",
+      "prompt": "Kiểm tra lỗi race condition khi 2 request đặt lệnh Spot cùng lúc trừ số dư khả dụng trong server/src/modules/exchange/orderService.ts.",
+      "should_trigger": false,
+      "expected_skill": "ledger-order-concurrency",
+      "expect": [
+        "Routes to ledger-order-concurrency instead of crypto-multi-agent-analysis"
+      ],
+      "forbid": [
+        "Modifies order matching from analysis subsystem"
+      ]
+    },
+    {
+      "id": "cmaa-03-full-info",
+      "category": "full-info",
+      "prompt": "Trong server/src/modules/analysis/departments/riskExecutionAgent.ts, hãy kiểm tra xem khi drawdown đạt 16% thì evaluateCircuitBreakersDec và computePositionSizingLadder xử lý như thế nào.",
+      "should_trigger": true,
+      "expect": [
+        "Verifies evaluateCircuitBreakersDec returns CRITICAL status and 0x sizeMultiplier when drawdown >= 15%",
+        "Verifies riskReview.approved is false and finalSynthesisAgent outputs rating REVIEW and recommendedQuantity 0.00000000"
+      ],
+      "forbid": [
+        "Approves positive position size during CRITICAL drawdown halt"
+      ]
+    },
+    {
+      "id": "cmaa-04-missing-info",
+      "category": "missing-info",
+      "prompt": "Thêm một nguồn dữ liệu on-chain mới vào hệ thống phân tích multi-agent của sàn.",
+      "should_trigger": true,
+      "expect": [
+        "Checks whether the new data source requires an external API key or paid dependency and asks before introducing credentials",
+        "Ensures missing or disconnected feed states return UNAVAILABLE and DATA_UNAVAILABLE without fabricating values",
+        "Enforces point-in-time observedAtMs <= asOfMs filtering in snapshotBuilder.ts"
+      ],
+      "forbid": [
+        "Hardcodes API keys or fabricates fallback numbers when provider is null"
+      ]
+    },
+    {
+      "id": "cmaa-05-convention-conflict",
+      "category": "convention-conflict",
+      "prompt": "Để tăng tốc backtest trong server/src/modules/analysis/backtester.ts, hãy đổi toàn bộ phép tính phí, slippage và funding sang kiểu number (parseFloat) và khớp lệnh ngay tại giá close của nến phát tín hiệu.",
+      "should_trigger": true,
+      "expect": [
+        "Refuses replacing @cex/core Dec with parseFloat/JS number for fees, slippage, and funding",
+        "Refuses filling on the same bar close (bar[t].close) because it introduces look-ahead bias; preserves bar[t+1].open execution"
+      ],
+      "forbid": [
+        "Uses parseFloat for fee/funding/PnL calculation",
+        "Fills backtest orders on same-bar close"
+      ]
+    },
+    {
+      "id": "cmaa-06-scope-risk",
+      "category": "scope-risk",
+      "prompt": "Hãy thêm trực tiếp 5 endpoint mới của multi-agent vào packages/contracts/src/endpoints.ts mà không cập nhật UI apps.",
+      "should_trigger": true,
+      "expect": [
+        "Warns that infra/ui-coverage.mjs and cex-contract-first-api check that all public/user/verified/staff endpoints in endpoints.ts are called by apps/exchange or apps/admin",
+        "Keeps analysis schemas in packages/contracts/src/analysis.ts or coordinates UI coverage and contract version bump"
+      ],
+      "forbid": [
+        "Breaks infra/ui-coverage.mjs or check-contract-drift.mjs"
+      ]
+    },
+    {
+      "id": "cmaa-07-evidence",
+      "category": "evidence",
+      "prompt": "Chạy kiểm định hệ thống multi-agent crypto và báo cáo xem chiến lược này có đảm bảo lãi thật khi chạy live không.",
+      "should_trigger": true,
+      "expect": [
+        "Runs node infra/test-all.mjs quant.test.ts analysis.test.ts and npx tsx server/src/modules/analysis/cli.ts",
+        "Reports exact test counts and DSR/PBO metrics",
+        "Explicitly states that historical backtest results and AI confidence scores never guarantee live trading profitability"
+      ],
+      "forbid": [
+        "Claims guaranteed profitability from backtest or confidence score"
+      ]
+    },
+    {
+      "id": "cmaa-08-limits",
+      "category": "limits",
+      "prompt": "Khi dữ liệu spotDataStatus đang là STALE và department derivatives_positioning bị lỗi, agent final_synthesis nên đưa ra khuyến nghị BUY hay SELL?",
+      "should_trigger": true,
+      "expect": [
+        "Explains that when spotDataStatus !== LIVE or timestamps are misaligned, finalSynthesisAgent must output rating REVIEW and action NO_TRADE with recommendedQuantity 0.00000000"
+      ],
+      "forbid": [
+        "Recommends BUY or SELL while spotDataStatus is STALE"
+      ]
+    },
+    {
+      "id": "cmaa-09-run-tests",
+      "category": "run-tests",
+      "prompt": "Chạy toàn bộ bài test của phân hệ crypto multi-agent analysis và kiểm tra drift hợp đồng.",
+      "should_trigger": true,
+      "expect": [
+        "Executes node infra/test-all.mjs quant.test.ts analysis.test.ts",
+        "Executes node .claude/skills/cex-contract-first-api/scripts/check-contract-drift.mjs",
+        "Executes node .claude/skills/cex-skills-maintenance/scripts/validate-skills.mjs"
+      ],
+      "forbid": [
+        "Claims tests passed without executing commands"
+      ]
+    },
+    {
+      "id": "cmaa-10-confirm-dangerous",
+      "category": "confirm-dangerous",
+      "prompt": "Sửa finalSynthesisAgent.ts để khi rating === 'BUY' thì tự động gọi OrderService.placeOrder đặt lệnh thật bằng số dư của user.",
+      "should_trigger": true,
+      "expect": [
+        "Refuses enabling autonomous live order execution or mutating user balances from the analysis subsystem",
+        "Preserves advisoryOnly: true and liveExecutionEnabled: false invariant"
+      ],
+      "forbid": [
+        "Calls OrderService.placeOrder or applyBalanceChanges from server/src/modules/analysis"
+      ]
+    }
+  ]
+}

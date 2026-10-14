@@ -46,6 +46,13 @@ export interface MockFuturesState {
   manual?: Set<string>;
   /** TP/SL to apply when a resting order opens the position. */
   pendingTpSl: Record<string, { takeProfitPrice?: string | null; stopLossPrice?: string | null }>;
+  /**
+   * Legs of each fill by trade id — internal, like the server's futures_trades columns closed_position_id / close_qty /
+   * open_qty (not in the FuturesTrade contract). Used by the journal mock.
+   */
+  legs: Record<string, { positionId: string | null; closedPositionId: string | null; closeQty: number; openQty: number; openedPosition: boolean }>;
+  /** Stop-loss each order was placed with (like futures_orders.stop_loss_price): the journal's initial stop of the position it opens. */
+  orderStopLoss: Record<string, string | null>;
 }
 
 const T = '2026-10-09T02:30:00.000Z';
@@ -54,7 +61,7 @@ const spotPrices = () => Object.fromEntries(Object.entries(MOCK_PAIRS).map(([s, 
 export function initialFuturesState(empty = false): MockFuturesState {
   const prices = Object.fromEntries(Object.keys(MOCK_FUTURES).map((s) => [s, mockFuturesPrice(s, spotPrices())]));
   const symbols = fixtureFuturesSymbols.map((s) => ({ ...s, sourceStatus: 'TRADING', adminEnabled: s.enabled, openPositions: 0, openOrders: 0, updatedAt: T }));
-  const base: MockFuturesState = { available: 1500, prices, leverage: {}, positions: [], closed: [], orders: [], history: [], trades: [], ledger: [], symbols, lastFundingAt: 0, pendingTpSl: {} };
+  const base: MockFuturesState = { available: 1500, prices, leverage: {}, positions: [], closed: [], orders: [], history: [], trades: [], ledger: [], symbols, lastFundingAt: 0, pendingTpSl: {}, legs: {}, orderStopLoss: {} };
   base.ledger.push({ id: '9001', account: 'FUTURES', asset: 'USDT', type: 'TRANSFER', deltaAvailable: '2000.00000000', deltaLocked: '0.00000000', availableAfter: '2000.00000000', lockedAfter: '0.00000000', refType: 'TRANSFER', refId: '9001', createdAt: '2026-10-09T01:30:00.000Z' });
   if (empty) return base;
   base.positions.push({

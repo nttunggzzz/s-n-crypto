@@ -9,6 +9,11 @@
 //   npm run host -- start [--no-tunnel]     database + server on :8090 + public HTTPS link (Cloudflare quick tunnel)
 //   npm run host -- invite "<who>" [uses] [days]                 invite code + link (server running or not)
 //   npm run host -- set-role <email> <user|support|admin|owner>  e.g. make yourself owner
+//   npm run host -- backup [--no-verify]    backup of the database while the server RUNS (+ a drill: restore it into a scratch
+//                                           database and check the books). Files: host-data/backups/logical/. Set in .env.host:
+//                                           HOST_BACKUP_PASSPHRASE (encrypt), HOST_BACKUP_COPY_DIR (a second drive / synced folder), HOST_BACKUP_KEEP
+//   npm run host -- schedule-backup [HH:MM] daily backup with Windows Task Scheduler (default 03:30);  unschedule-backup removes it
+//   npm run host -- restore <file> --yes    replace the database with a backup (server stopped; the database folder is copied first)
 //   npm run host -- stop                    clean stop from another window (same as Ctrl+C in the host window)
 //   npm run host -- status
 //
@@ -56,6 +61,13 @@ REGISTRATION=invite
 EMAIL_TRANSPORT=log
 REQUIRE_EMAIL_VERIFICATION=false
 
+# Database backups (npm run host -- backup / schedule-backup). The passphrase encrypts every file (they hold emails and
+# password hashes): write it down in a password manager — lost = the backups cannot be opened.
+# COPY_DIR = another drive or a synced cloud folder, so a dead disk does not take the backups with it.
+HOST_BACKUP_PASSPHRASE=
+HOST_BACKUP_COPY_DIR=
+HOST_BACKUP_KEEP=30
+
 # Telegram alerts (start-up with the new address, prices down, ledger mismatch, crash): set BOTH or neither.
 TELEGRAM_BOT_TOKEN=
 TELEGRAM_CHAT_ID=
@@ -91,6 +103,7 @@ function serverScript(script, scriptArgs) {
     DATABASE_URL: `postgres://postgres:postgres@localhost:${PG_PORT}/cex`,
     APP_URL: currentUrl(),
     LOG_LEVEL: 'warn',
+    HOST_DATA_DIR: DATA,
   };
   execFileSync(process.execPath, ['--import', 'tsx', script, ...scriptArgs], { cwd: path.join(WT, 'server'), env, stdio: 'inherit' });
 }
@@ -323,6 +336,40 @@ switch (cmd) {
   case 'set-role':
     await withDatabase(() => serverScript('scripts/setRole.ts', args));
     break;
+  case 'backup':
+    try {
+      await withDatabase(() => serverScript('scripts/hostBackup.ts', args));
+    } catch {
+      process.exit(1); // hostBackup.ts already printed why and alerted
+    }
+    break;
+  case 'restore': {
+    const file = args.find((a) => !a.startsWith('--'));
+    if (!file || !existsSync(file)) fail('usage: npm run host -- restore <backup file> --yes   (list: host-data/backups/logical/)');
+    if (await busy(PORT)) fail('stop the exchange first (npm run host -- stop): a restore replaces the whole database');
+    if (!args.includes('--yes')) fail(`this REPLACES the whole database with ${file}. Every account, balance and order made after that backup is lost.
+[host] The database folder is copied to host-data/backups first. Run again with --yes to do it.`);
+    if (await busy(PG_PORT)) fail(`database port ${PG_PORT} is in use — stop the exchange first`);
+    coldBackup();
+    try {
+      await withDatabase(() => serverScript('scripts/hostRestore.ts', [path.resolve(file)]));
+    } catch {
+      process.exit(1);
+    }
+    break;
+  }
+  case 'schedule-backup': {
+    if (process.platform !== 'win32') fail('schedule-backup uses Windows Task Scheduler — on other systems add a cron entry for: node infra/host.mjs backup');
+    const at = args[0] ?? '03:30';
+    if (!/^([01]d|2[0-3]):[0-5]d$/.test(at)) fail('time as HH:MM, e.g. 03:30');
+    const task = `"${process.execPath}" "${path.join(ROOT, 'infra', 'host.mjs')}" backup`;
+    execFileSync('schtasks', ['/Create', '/F', '/SC', 'DAILY', '/ST', at, '/TN', 'CEX host backup', '/TR', task], { stdio: 'inherit' });
+    say(`[host] a backup runs every day at ${at} (Task Scheduler "CEX host backup"; the PC must be on and you signed in). Check it: schtasks /Query /TN "CEX host backup"`);
+    break;
+  }
+  case 'unschedule-backup':
+    execFileSync('schtasks', ['/Delete', '/F', '/TN', 'CEX host backup'], { stdio: 'inherit' });
+    break;
   case 'stop':
     if (!(await busy(PORT))) fail('the host is not running');
     writeFileSync(path.join(DATA, 'stop-request'), new Date().toISOString());
@@ -333,6 +380,6 @@ switch (cmd) {
     await status();
     break;
   default:
-    say('usage: npm run host -- update [ui-branch|--no-ui] [--skip-verify] [--skip-e2e] | start [--no-tunnel] | invite "<who>" [uses] [days] | set-role <email> <role> | stop | status');
+    say('usage: npm run host -- update [ui-branch|--no-ui] [--skip-verify] [--skip-e2e] | start [--no-tunnel] | invite "<who>" [uses] [days] | set-role <email> <role> | backup [--no-verify] | restore <file> --yes | schedule-backup [HH:MM] | unschedule-backup | stop | status');
     process.exit(cmd ? 1 : 0);
 }

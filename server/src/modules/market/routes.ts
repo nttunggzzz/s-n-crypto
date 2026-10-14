@@ -24,13 +24,20 @@ export function registerMarketRoutes(router: Router, opts: RouteOptions, deps: M
     if (!config.findSymbol(symbol)) throw new AppError('NOT_FOUND', `Unknown symbol ${symbol}`);
   };
 
-  route(router, opts, 'exchangeInfo', async () => ({
-    tradingHalted: config.tradingHalted,
-    feeRate: config.feeRate.toFixed(),
-    symbols: config.allSymbols().map((s) => config.toSymbolInfo(s)),
-    assets: config.assetInfos(),
-    serverTime: new Date().toISOString(),
-  }));
+  route(router, opts, 'exchangeInfo', async () => {
+    const tax = config.taxSettings();
+    return {
+      tradingHalted: config.tradingHalted,
+      feeRate: config.feeRate.toFixed(),
+      taxMode: tax.taxMode,
+      taxRate: tax.taxRate,
+      taxVndRate: tax.taxVndRate,
+      taxVndRateUpdatedAt: tax.taxVndRateUpdatedAt,
+      symbols: config.allSymbols().map((s) => config.toSymbolInfo(s)),
+      assets: config.assetInfos(),
+      serverTime: new Date().toISOString(),
+    };
+  });
 
   route(router, opts, 'tickers', async () => ({ items: config.allSymbols().map((s) => market.getTicker(s.row.symbol)) }));
 

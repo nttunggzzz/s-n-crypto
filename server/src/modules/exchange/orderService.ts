@@ -14,14 +14,16 @@ import {
   maxDec,
   minDec,
   roundUp,
+  taxVndAmounts,
   toFixedStr,
   walkBook,
+  withholdingTax,
   ZERO,
   type Dec,
   type Fill,
   type WalkTarget,
 } from '@cex/core';
-import { balances, OPEN_STATUSES, orderLists, orders, trades, type TpSlData } from '../../db/schema.ts';
+import { balances, OPEN_STATUSES, orderLists, orders, taxWithholdings, trades, type TpSlData } from '../../db/schema.ts';
 import type { Db, Tx } from '../../db/client.ts';
 import { AppError, isUniqueViolation } from '../../lib/errors.ts';
 import type { MarketDataService } from '../market/marketData.ts';
@@ -32,6 +34,7 @@ import type { OpenOrderIndex } from './openOrderIndex.ts';
 import { Outcome } from './outcome.ts';
 import type { NotificationService } from './notificationService.ts';
 import { applyFillsToPosition } from './positions.ts';
+import { sellTaxContext } from './tax.ts';
 
 export type PlaceOrderInput = z.output<typeof PlaceOrderRequest>;
 export type PlaceOcoInput = z.output<typeof PlaceOcoRequest>;
@@ -443,16 +446,25 @@ export class OrderService {
     const quote = sym.row.quoteAsset;
     const ref = { refType: 'ORDER' as const, refId: String(order.id) };
 
+    if (!fills.some((f) => f.qty.gt(0))) throw new Error(`settleFills called with no quantity for order ${order.id}`);
+    // Vietnam tax (module T §3.2): SELL only, decided at the fill, per fill on the gross value, rounded up.
+    const { category: taxCategory, terms: taxTerms } = await sellTaxContext(tx, this.config, order.userId, order.side);
     const parts = fills
       .filter((f) => f.qty.gt(0))
       .map((f) => {
         const quoteQty = f.qty.mul(f.price);
-        return { price: f.price, qty: f.qty, quote: quoteQty, fee: roundUp(isBuy ? f.qty.mul(feeRate) : quoteQty.mul(feeRate)) };
+        return {
+          price: f.price,
+          qty: f.qty,
+          quote: quoteQty,
+          fee: roundUp(isBuy ? f.qty.mul(feeRate) : quoteQty.mul(feeRate)),
+          tax: taxTerms ? withholdingTax(quoteQty, taxTerms.rate) : ZERO,
+        };
       });
-    if (parts.length === 0) throw new Error(`settleFills called with no quantity for order ${order.id}`);
     const qtySum = parts.reduce((s, p) => s.add(p.qty), ZERO);
     const quoteSum = parts.reduce((s, p) => s.add(p.quote), ZERO);
     const feeSum = parts.reduce((s, p) => s.add(p.fee), ZERO);
+    const taxSum = parts.reduce((s, p) => s.add(p.tax), ZERO);
 
     const executed = dec(order.executedQty).add(qtySum);
     if (order.quantity !== null && executed.gt(dec(order.quantity))) throw new Error(`order ${order.id} overfilled`);
@@ -486,6 +498,9 @@ export class OrderService {
     } else {
       changes.push({ userId: order.userId, asset: quote, type: 'TRADE_CREDIT', deltaAvailable: quoteSum, ...ref });
       if (feeSum.gt(0)) changes.push({ userId: order.userId, asset: quote, type: 'FEE', deltaAvailable: feeSum.neg(), ...ref });
+      // fee and tax are each at most 1% of the fill's gross value, so the proceeds cover them. The only way one fill's net
+      // could go negative is a quoteQty below about 2e-8 (both round up to 1e-8), which no real pair produces.
+      if (taxSum.gt(0)) changes.push({ userId: order.userId, asset: quote, type: 'TAX_WITHHOLDING', deltaAvailable: taxSum.neg(), ...ref });
     }
     out.addBalances((await applyBalanceChanges(tx, changes)).values());
 
@@ -503,6 +518,8 @@ export class OrderService {
           quoteQty: fx(p.quote),
           fee: fx(p.fee),
           feeAsset: isBuy ? base : quote,
+          tax: fx(p.tax),
+          taxCategory,
           liquidity,
           realizedPnl: fxn(realized[i]),
           marketEventAt: eventAt,
@@ -510,6 +527,35 @@ export class OrderService {
       )
       .returning();
     out.trades.push(...insertedTrades);
+    if (taxTerms) {
+      // one record per withheld trade (unique trade_id): a replayed price event cannot reach here twice for a fill
+      // (the order row is locked and re-checked open), and the unique index is the last line of defence.
+      await tx.insert(taxWithholdings).values(
+        // built from each returned trade row itself (no reliance on RETURNING order)
+        insertedTrades.map((t) => {
+          const gross = dec(t.quoteQty);
+          const taxAmount = dec(t.tax);
+          const vnd = taxVndAmounts(gross, taxAmount, taxTerms.vndRate);
+          return {
+            tradeId: t.id,
+            orderId: order.id,
+            userId: order.userId,
+            symbol: order.symbol,
+            asset: quote,
+            quantity: fx(dec(t.quantity)),
+            price: fx(dec(t.price)),
+            grossQuote: fx(gross),
+            taxRate: taxTerms.rate.toFixed(),
+            taxAmount: fx(taxAmount),
+            category: taxTerms.category,
+            vndRate: taxTerms.vndRate === null ? null : taxTerms.vndRate.toFixed(),
+            grossVnd: vnd.grossVnd === null ? null : vnd.grossVnd.toFixed(0),
+            taxVnd: vnd.taxVnd === null ? null : vnd.taxVnd.toFixed(0),
+            createdAt: t.createdAt,
+          };
+        }),
+      );
+    }
 
     const [updated] = await tx
       .update(orders)

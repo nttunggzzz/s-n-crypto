@@ -22,6 +22,8 @@ import type { Exchange } from './modules/exchange/index.ts';
 import { registerExchangeRoutes } from './modules/exchange/routes.ts';
 import { AdminService } from './modules/admin/adminService.ts';
 import { registerAdminRoutes } from './modules/admin/routes.ts';
+import { TaxService } from './modules/tax/taxService.ts';
+import { registerTaxRoutes } from './modules/tax/routes.ts';
 
 export interface AppDeps {
   config: Config;
@@ -150,6 +152,7 @@ export function createApp(deps: AppDeps) {
   route(router, opts, 'announcements', async ({ query }) => ({ items: await news.listPublic(query.limit) }));
   registerExchangeRoutes(router, opts, deps.db, deps.exchange, deps.market, config.RATE_LIMIT_SCALE);
   registerAdminRoutes(router, opts, new AdminService(deps.db, deps.exchange, deps.market, deps.futures, deps.bots), news, deps.auth.invites, config.RATE_LIMIT_SCALE);
+  registerTaxRoutes(router, opts, new TaxService(deps.db, exConfig), deps.db, config.RATE_LIMIT_SCALE);
   if (deps.futures) registerFuturesRoutes(router, opts, deps.db, deps.futures, deps.market, config.RATE_LIMIT_SCALE);
   if (deps.bots) registerBotRoutes(router, opts, deps.bots, config.RATE_LIMIT_SCALE);
   app.use(router);

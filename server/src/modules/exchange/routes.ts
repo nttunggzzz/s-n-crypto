@@ -18,14 +18,14 @@ export function makePriceOf(market: MarketDataService): (asset: string) => Dec |
   return (asset) => (asset === 'USDT' ? dec('1') : market.livePrice(`${asset}USDT`));
 }
 
-function cursorId(cursor: string | undefined): number | undefined {
+export function cursorId(cursor: string | undefined): number | undefined {
   if (cursor === undefined) return undefined;
   const n = Number(cursor);
   if (!Number.isSafeInteger(n) || n <= 0) throw new AppError('VALIDATION_ERROR', 'Invalid cursor');
   return n;
 }
 
-function page<T extends { id: number }>(rows: T[], limit: number) {
+export function page<T extends { id: number }>(rows: T[], limit: number) {
   const more = rows.length > limit;
   const items = more ? rows.slice(0, limit) : rows;
   return { items, nextCursor: more ? String(items[items.length - 1]!.id) : null };

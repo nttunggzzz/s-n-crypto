@@ -92,3 +92,45 @@ Test mở **hai trình duyệt cùng lúc**: admin thao tác ở `/admin/…`, n
 | `chart-order-line` | Mỗi dòng `<li>` lệnh đang mở | Thuộc tính `data-order-id`, `data-side="BUY"` / `"SELL"`, `data-price` (giá chuỗi gốc từ API) |
 | `chart-fill-markers` | Danh sách `<ul>` chứa các điểm khớp lệnh (B/S) trên biểu đồ | Nằm trong DOM `sr-only` |
 | `chart-fill-marker` | Mỗi dòng `<li>` điểm khớp | Thuộc tính `data-side="BUY"` / `"SELL"`, `data-price` (giá trung bình khớp), `data-time` (giây UTC), `data-count` (số lần khớp) |
+
+## Thuế Việt Nam (Module T) — `tax.spec.ts`
+Sàn thử nghiệm: mọi màn thuế có nhãn "thử nghiệm", không dùng tên/số của biểu mẫu nhà nước, không có ô nhập giấy tờ.
+**Quy ước giá trị:** phần tử số mang thuộc tính `data-value` = số thập phân thô (chuỗi, dấu chấm, không phân tách hàng nghìn; VND là số nguyên). Chữ hiển thị tùy định dạng vi-VN; test so `data-value`, không đọc chữ.
+Đường dẫn: trang Thuế của người dùng ở `/account/tax`; trang Thuế của admin ở `/admin/tax` (mục Thuế trong menu, quyền `tax.read`; sửa cài đặt cần `tax.manage`).
+
+**Form đặt lệnh (`apps/exchange`, `/trade/:symbol`)**
+| id | Ở đâu | Nội dung |
+|---|---|---|
+| `tax-breakdown` | form đặt lệnh, tab BÁN (Limit và Market) | Khối 4 dòng, hiện khi đã nhập khối lượng. **Không có** khi `exchangeInfo.taxMode = OFF`, và **không bao giờ có** ở tab MUA |
+| `tax-gross` | trong `tax-breakdown` | Giá trị gộp (quote), `data-value` = giá × khối lượng |
+| `tax-fee` | trong `tax-breakdown` | Phí ước tính, `data-value` |
+| `tax-amount` | trong `tax-breakdown` | Thuế ước tính, `data-value` = `roundUp(gộp × taxRate)` (8 chữ số, `@cex/core`) |
+| `tax-net` | trong `tax-breakdown` | Thực nhận ước tính = gộp − phí − thuế, `data-value` |
+| `tax-vnd` | trong `tax-breakdown` | Quy đổi VND của thuế, `data-value` = `roundUp(thuế × taxVndRate, 0)`. **Không có** khi `taxVndRate = null` |
+| `tax-test-label` | trong `tax-breakdown` | Nhãn "thử nghiệm" |
+
+**Trang Thuế của người dùng (`/account/tax`)**
+| id | Nội dung |
+|---|---|
+| `account-tax-page` | Khung trang |
+| `tax-year-select` | Chọn năm (`<select>`, mặc định năm hiện tại giờ Việt Nam) |
+| `tax-year-total` | Tổng thuế đã khấu trừ của năm đang chọn, `data-value` = `taxSummary.totals.taxAmount` |
+| `tax-month-row` | 12 dòng tháng của năm; `data-month="YYYY-MM"` |
+| `tax-category-select` | `<select>` phân loại, `value` = `INDIVIDUAL` / `FOREIGN_ORG` / `DOMESTIC_ORG`; đổi giá trị gọi `taxUpdateProfile`. Không có ô nhập giấy tờ nào |
+| `tax-withholding-row` | Mỗi bản ghi khấu trừ; `data-trade-id` = `tradeId` |
+| `tax-export-csv` | Nút tải CSV (`taxExport`); tệp tải về có dòng tiêu đề = `TAX_EXPORT_COLUMNS` |
+
+**Trang Thuế của admin (`/admin/tax`)**
+| id | Nội dung |
+|---|---|
+| `admin-tax-page` | Khung trang |
+| `admin-tax-mode` | `<select>` `OFF` / `WITHHOLD` |
+| `admin-tax-rate` | Ô tỷ lệ (chuỗi thập phân, vd `0.001`) |
+| `admin-tax-vnd-rate` | Ô tỷ giá VND/USDT; để trống + lưu = xóa tỷ giá (`null`) |
+| `admin-tax-reason` | Ô lý do (≥ 5 ký tự), nằm ngay trên trang (không qua hộp xác nhận) |
+| `admin-tax-save` | Nút lưu, gọi `adminUpdateTaxSettings`; khóa khi thiếu lý do; không render khi thiếu quyền `tax.manage` |
+| `admin-tax-period` | Chọn kỳ (`YYYY-MM` hoặc `YYYY-Qn`); mặc định tháng hiện tại giờ Việt Nam |
+| `admin-tax-total` | Tổng thuế của kỳ, `data-value` = `adminTaxSummary.totals.taxAmount` |
+| `admin-tax-by-symbol-row` | Mỗi cặp có bản ghi; `data-symbol` |
+| `admin-tax-export-csv` | Nút tải bảng kê CSV; tiêu đề = `ADMIN_TAX_EXPORT_COLUMNS` |
+

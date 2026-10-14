@@ -229,3 +229,125 @@ saveTextFile(await api.exportLedger({ query: {} }), 'so-cai.csv');
   ```
 - **Thao tác admin → web sàn thấy gì:** bảng ở `docs/antigravity/PROMPT-08-web-admin-noi-web-san.md` mục 3.
 
+## 14. Nhật ký giao dịch (v0.14.0)
+Kế hoạch đầy đủ: `docs/plans/module-A-nhat-ky-giao-dich.md`. 12 endpoint `journal*`, chỉ thấy mục của chính mình (của người khác → 404).
+
+**Mục nhật ký là gì**
+- Server **tự dựng** mục từ các lần khớp thật; người dùng không nhập giá, khối lượng, phí.
+  - Spot: tối đa một mục `AUTO` đang mở mỗi cặp. Mua thì mở hoặc cộng thêm; bán thì trừ dần; còn lẻ dưới bước khối lượng thì mục đóng.
+  - Futures: một mục = một vị thế. Lệnh đảo chiều xuất hiện ở **hai** mục: chân `CLOSE` ở mục cũ, chân `OPEN` ở mục mới (`fills[].leg`).
+    Mục AUTO chỉ mở bởi lần khớp **mở vị thế**; vị thế mở lúc đang tắt tự ghi thì về sau không tự có mục (người dùng tạo mục MANUAL từ vị thế).
+- **Tắt tự ghi** chỉ dừng việc **mở mục mới**: mục AUTO đang mở vẫn nhận lần mua thêm / bán / đóng vị thế cho tới khi đóng.
+  Bật lại không ghi bù những gì xảy ra lúc tắt. Ở màn Cài đặt ghi rõ: "Tắt: không tạo mục mới; mục đang mở vẫn được cập nhật".
+- Mục MANUAL Futures tự nhận các lần khớp về sau của **chính vị thế đó**. Mục MANUAL Spot thì thêm lệnh bằng "Thêm lệnh" (`addOrderIds`);
+  chọn lại một lệnh đã có trong mục (lệnh khớp tiếp) chỉ thêm phần mới khớp.
+- `origin: 'AUTO'` (tự ghi) **không có nút xóa**, chỉ sửa ghi chú/kế hoạch. `origin: 'MANUAL'` có nút xóa (hộp xác nhận) và nút "Thêm lệnh" khi đang mở.
+- Bán phần coin có từ trước (faucet, mua trước khi bật nhật ký, bot mua) thì phần đó nằm ở `fills[].unattributedQty`, không thuộc mục nào.
+  Ghi chú trên giao diện: "Bán coin do bot DCA/Grid mua cũng được tính vào mục của bạn".
+
+**Hiển thị kết quả — chỉ số server trả, không tự tính**
+- `result.netPnl`, `rMultiple`, `outcome`, `holdingMs` là `null` khi mục còn mở; phần đã chốt là `result.realizedPnl`. `null` → "—".
+- `result.riskUsdt` / `rMultiple` = `null` khi không có dừng lỗ ban đầu (`initialStop`). Dừng lỗ ban đầu tự lấy từ SL của lệnh mở
+  (Spot: lệnh mua đầu tiên; Futures: lệnh mở vị thế, không phải SL hiện tại của vị thế), chỉ khi SL nằm đúng phía so với giá vào.
+- `result.realizedPnl` khi mục còn mở: Spot = lãi/lỗ của phần đã bán; Futures = lãi/lỗ đã chốt − mọi phí đã trả + funding tới giờ.
+- `initialStopLocked` → không cho sửa ô dừng lỗ ban đầu (chỉ sửa `plan.stop`, R không đổi; gợi ý lỗi `MOVED_STOP`).
+- Ghi chú A-D7: lãi lỗ tính theo giá vốn của **chính mục**, có thể khác trang "Phân tích lãi lỗ" khi đang giữ coin mua từ trước.
+- Huy hiệu theo đối soát: `adjustedAt` → "Đã điều chỉnh do đối soát" (lý do `adjustmentReason`); `status: 'VOID'` → "Không tính vào thống kê"; `needsReview` → "Cần kiểm tra — số coin trong ví ít hơn nhật ký".
+- `notes` là chữ thuần (tối đa 5.000 ký tự) — hiển thị như text, **không** render HTML.
+
+**Gọi API**
+```ts
+const page = await api.journalList({ query: { status: 'CLOSED', setup: 'Breakout', limit: 50 } });
+const entry = await api.journalGet({ params: { entryId } });           // + fills, attachments
+await api.journalUpdate({ params: { entryId }, body: { setup: 'Breakout', tags: ['trend'], notes, mistakes: ['FOMO'], executionScore: 4, initialStop: '76000' } });
+await api.journalCreate({ body: { orderIds: ['123', '124'] } });       // MANUAL từ lệnh spot đã khớp; hoặc { futuresPositionId }
+const stats = await api.journalStats({ query: { range: '30d' } });     // basis 'ACTUAL_FILLS'; stats.excluded = { void, needsReview }
+const { setups, tags } = await api.journalSetups();                    // gợi ý khi gõ
+const s = await api.journalSettings();                                 // { autoJournal, autoSince } → "Tự ghi từ <autoSince>"
+await api.journalUpdateSettings({ body: { autoJournal: false } });     // chỉ nhận autoJournal
+```
+- Thống kê: thẻ win rate, kỳ vọng R, profit factor, drawdown lấy từ `stats.summary`; đường R lũy kế `summary.rCurve` (bắt đầu từ 0), đường USDT `summary.pnlCurve`;
+  bảng theo setup / coin / thị trường / hướng / ngày trong tuần (`byWeekday`, 1 = thứ Hai, GMT+7) / lỗi (`byMistake`). Dòng "N mục không tính vào thống kê"
+  = `excluded.void + excluded.needsReview`, bấm vào mở `journalList({ query: { excluded: 'true' } })`.
+- Ảnh: tải lên bằng JSON `{ contentType, dataBase64 }` (base64 thuần, không có tiền tố `data:`). **Thu nhỏ ở trình duyệt** còn ≤ 1600 px và nén WebP/JPEG ≤ 1 MB trước khi gửi.
+  Hiện ảnh bằng `<img src={journalAttachmentUrl(a.id)}>` — client **không** có hàm `api.journalAttachment` (endpoint trả ảnh nhị phân, `format: 'binary'`).
+
+**Lỗi riêng của nhật ký** (`CONFLICT` → đọc `details.reason`, kiểu `JournalConflictReason`)
+| Lý do | Khi nào |
+|---|---|
+| `FILL_ALREADY_JOURNALED` | lần khớp của lệnh/vị thế đã thuộc mục khác (phần bán "không thuộc mục nào" thì vẫn lấy được) |
+| `BOT_ORDER` | lệnh do bot đặt (Grid/DCA) |
+| `ORDER_NOT_FILLED` | lệnh chưa khớp |
+| `SYMBOL_MISMATCH` / `MARKET_MISMATCH` | khác cặp / thêm lệnh vào mục Futures |
+| `NO_OPENING_FILL` | lần khớp sớm nhất của các lệnh đã chọn là lệnh bán |
+| `MULTIPLE_ROUND_TRIPS` | các lệnh đã chọn tạo hơn một vòng (mua → đóng → mua lại): chọn lại |
+| `LEGACY_FUTURES_FILL` | vị thế Futures có lần khớp từ trước khi sàn ghi chân lệnh |
+| `ENTRY_NOT_EXTENDABLE` | thêm lệnh vào mục `AUTO` hoặc mục không còn mở |
+| `STOP_LOCKED` | sửa `initialStop` sau lần giảm vị thế đầu tiên |
+| `STOP_WRONG_SIDE` | dừng lỗ sai phía (LONG: ≥ giá vào; SHORT: ≤ giá vào) |
+| `AUTO_ENTRY_NOT_DELETABLE` | xóa mục `AUTO` |
+| `TOO_MANY_ATTACHMENTS` | đã đủ 4 ảnh |
+
+Mã mới: `PAYLOAD_TOO_LARGE` (413; `details.reason`: `ATTACHMENT_TOO_LARGE` > 1 MB, `ATTACHMENT_QUOTA` hết 50 MB, `BODY_TOO_LARGE`) và
+`UNSUPPORTED_MEDIA_TYPE` (415: không phải PNG/JPEG/WebP thật, kể cả SVG/GIF hay file đổi đuôi).
+
+**Mock:** có sẵn 11 mục mẫu (thắng, thua, hòa, đang mở, không có dừng lỗ, Futures bị thanh lý, đảo chiều, bán có phần dư, `VOID`, `needsReview`), số liệu do
+`@cex/core` tính như server. Tự ghi bật sẵn: đặt lệnh trong mock là có mục `AUTO`; tắt tự ghi rồi đặt lệnh ở một cặp chưa có mục AUTO mở
+để thử tạo mục `MANUAL` (cặp đang có mục AUTO mở thì lần khớp vẫn vào mục đó). Lệnh của bot lưới không bao giờ vào nhật ký.
+Thử hạn mức 50 MB: `mockStore.journal.otherImageBytes = 52_428_700`. Ảnh tải lên được cả khi trang mở qua http không an toàn (mock tự băm sha256 bằng JS).
+
+## 15. Thuế crypto Việt Nam — thử nghiệm (v0.15.0; `exchange:status` mang cài đặt thuế từ v0.16.0)
+Kế hoạch: `docs/plans/module-T-thue-viet-nam.md`. Sàn **thử nghiệm**: tính và ghi sổ như sàn được cấp phép phải làm (TT 32/2026, TT 41/2026),
+trên tiền ảo. Mọi màn hình thuế ghi nhãn "thử nghiệm"; **không** dùng tên/số hiệu mẫu chứng từ của cơ quan thuế, không gọi CSV là "chứng từ".
+
+**Luật (đã chốt, giao diện không tự đổi)**
+- Chỉ lần khớp **BÁN Spot** bị trích, khi `exchangeInfo.taxMode = 'WITHHOLD'` tại lúc khớp và người bán không phải `DOMESTIC_ORG`.
+  Mua, Futures, chuyển ví, faucet, admin cộng/trừ, đặt lại tài khoản: không trích. Lệnh bán của bot lưới cũng bị trích.
+- Thuế một lần khớp = `roundUp(dec(quoteQty).mul(taxRate))` (8 chữ số, làm tròn **lên**), trên **giá trị gộp** (không trừ phí trước), lãi hay lỗ đều trích.
+- Tiền nhận về của lệnh bán = `quoteQty − fee − tax`. `Trade.tax` luôn có (`"0.00000000"` khi không trích). `Trade.realizedPnl` đã trừ cả phí **và** thuế.
+- Sổ cái có loại dòng mới `TAX_WITHHOLDING` (USDT, sau `TRADE_CREDIT` và `FEE`, ref `ORDER`) — thêm nhãn "Thuế tạm khấu trừ (thử nghiệm)".
+- CSV giao dịch (`exportTrades`) có thêm cột `tax` sau `feeAsset`.
+- Nhật ký: `JournalFill.tax` / `allocatedTax` (thuế của phần khớp thuộc mục). Lãi lỗ của mục nhật ký sẽ trừ thuế từ đợt T2 (server + `@cex/core`).
+
+**Form đặt lệnh BÁN** (`exchangeInfo`): giá trị gộp · phí · thuế tạm tính (`taxRate`; ẩn khi `taxMode = 'OFF'` hoặc người dùng là `DOMESTIC_ORG`) · thực nhận ước tính.
+Dòng VND chỉ hiện khi `taxVndRate !== null`, ghi "tỷ giá tham khảo do sàn đặt" + `taxVndRateUpdatedAt`. Ước tính bằng `@cex/core`; số của server là số đúng.
+
+**Cập nhật thuế tức thì (v0.16.0):** `exchange:status` (`ExchangeStatus`) có thêm `taxMode`, `taxRate`, `taxVndRate` — cùng giá trị với `exchangeInfo`.
+Admin đổi một trong ba thì kênh đẩy sự kiện mới (như khi dừng/mở sàn), nên form BÁN lấy thuế tạm tính từ `exchange:status` (ảnh chụp khi subscribe + thay đổi sau đó)
+và dùng `exchangeInfo` chỉ để có `taxVndRateUpdatedAt`. Lần khớp đang diễn ra cùng lúc với thay đổi có thể còn dùng giá trị cũ (như `feeRate`); số của server là số đúng.
+
+**Người dùng** (chỉ dữ liệu của chính mình)
+```ts
+const p = await api.taxProfile();                                        // { category: 'INDIVIDUAL' | 'FOREIGN_ORG' | 'DOMESTIC_ORG', updatedAt }
+await api.taxUpdateProfile({ body: { category: 'FOREIGN_ORG' } });       // chỉ nhận category (gửi thêm trường → 400); áp dụng cho lần khớp sau
+const s = await api.taxSummary({ query: { year: 2026 } });               // bỏ year = năm hiện tại (giờ Việt Nam)
+const page = await api.taxWithholdings({ query: { symbol, from, to, limit: 50, cursor } });
+<a href={exportUrl('taxExport', { from, to })} download>                 // CSV, cột = TAX_EXPORT_COLUMNS
+```
+- `taxSummary.months`: luôn 12 dòng (tháng theo giờ Việt Nam UTC+7 — kỳ khai thuế khấu trừ); tháng không có gì là số 0.
+- Mỗi nhóm có hai phần: khấu trừ (`withholdingCount`, `withheldGrossQuote`, `taxAmount`, `withheldGrossVnd`, `taxVnd`, `vndMissingCount`) và
+  doanh số bán (`sellCount`, `sellGrossQuote`, `sellFees`, `realizedPnl`, `sellsWithoutCostBasis` — mọi lần bán, kể cả không bị trích).
+  `DOMESTIC_ORG` tự kê khai 20%: hiện doanh thu, phí, lãi lỗ; giá vốn = `sellGrossQuote − sellFees − realizedPnl` (khi `sellsWithoutCostBasis = 0`).
+- VND: `null` khi chưa có tỷ giá → hiện "—". Tổng VND là `null` nếu **một** bản ghi trong nhóm thiếu tỷ giá (`vndMissingCount > 0`): hiện
+  "N lần khấu trừ chưa có tỷ giá". `grossVnd` làm tròn xuống, `taxVnd` làm tròn lên tới đồng; chỉ để tham khảo, sổ sách bằng USDT.
+- Futures: ghi chú "Futures chưa có căn cứ thuế — không trích".
+
+**Admin** (`tax.read`: support, admin, owner; `tax.manage`: admin, owner)
+```ts
+await api.adminTaxSettings();                                             // { taxMode, taxRate, taxVndRate, taxVndRateUpdatedAt, updatedAt }
+await api.adminUpdateTaxSettings({ body: { taxMode: 'WITHHOLD', taxRate: '0.001', taxVndRate: '26350', reason } }); // audit TAX_SETTINGS_UPDATE
+await api.adminUpdateTaxSettings({ body: { taxVndRate: null, reason } }); // xóa tỷ giá → VND của các lần khớp sau là null
+const sum = await api.adminTaxSummary({ query: { period: '2026-10' } }); // hoặc '2026-Q4'; from/to (UTC; to = ms cuối kỳ) đưa thẳng vào list/CSV
+await api.adminTaxWithholdings({ query: { userId, symbol, from: sum.from, to: sum.to } });
+<a href={exportUrl('adminTaxExport', { from: sum.from, to: sum.to })} download>   // bảng kê, cột = ADMIN_TAX_EXPORT_COLUMNS
+```
+- `taxRate`: > 0 và ≤ 0,01, tối đa 8 chữ số lẻ (sai → 400 `VALIDATION_ERROR`); tắt thuế bằng `taxMode: 'OFF'`, không bằng tỷ lệ 0.
+  Đổi tỷ lệ/tỷ giá chỉ áp dụng cho lần khớp **sau**: mỗi bản ghi giữ tỷ lệ và tỷ giá của chính nó.
+- Ràng buộc bật thuế: `adminUpdateTaxSettings` từ chối `taxMode: 'WITHHOLD'` khi đang bật một cặp có quote khác USDT (400 `VALIDATION_ERROR`, field `taxMode`):
+  báo cáo thuế cộng số của một đồng quote (USDT), nên chỉ bật thuế khi mọi cặp đang bật đều quote USDT. Tắt cặp quote khác trước rồi mới bật thuế. Chiều ngược lại cũng bị chặn: khi `taxMode = 'WITHHOLD'`, `adminUpdateSymbol` từ chối bật (`enabled: true`) một cặp quote khác USDT (400 `VALIDATION_ERROR`, field `enabled`).
+- `byCategory` luôn 3 dòng theo thứ tự enum (`DOMESTIC_ORG` luôn 0); `bySymbol` xếp theo thuế giảm dần.
+
+**Mock:** bắt đầu ở `WITHHOLD` 0,1%, tỷ giá 26350 (server thật bắt đầu `OFF`); có 2 lần bán cũ của người dùng demo (tháng 8 chưa có tỷ giá,
+tháng 9 có) và 2 bản ghi của người khác (tháng 10, một `FOREIGN_ORG`). Bán trong mock bị trích đúng công thức trên. Đổi trạng thái:
+`setMockTax({ taxMode: 'OFF' })`, `setMockTax({ category: 'DOMESTIC_ORG' })`, `setMockTax({ taxVndRate: null })`.
+

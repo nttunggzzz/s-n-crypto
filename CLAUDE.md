@@ -56,21 +56,26 @@ npm install
 npm run db:start      # PostgreSQL nhúng :5433 (dữ liệu ở .pgdata) + migrate
 npm run dev:server    # API :8080, đọc .env (copy từ .env.example)
 npm test              # vitest — tự bật PostgreSQL thật trên :5434
+npx vitest run -c vitest.unit.config.ts [packages/core]   # chỉ test thuần packages/*, không dựng DB — chạy song song được giữa các worktree
 npm run typecheck     # mọi workspace có tsconfig (core, contracts, server, và ui/apps khi đã gộp)
 npm run db:generate   # sau khi sửa server/src/db/schema.ts
 npm run admin:set-role -- <email> owner   # tạo owner đầu tiên (ghi audit ROLE_BOOTSTRAP)
 npm run admin:invite -- "<người nhận>" [lượt] [ngày]  # mã mời đăng ký (REGISTRATION=invite — mặc định ở production)
 npm run dev           # cả hệ thống: DB + server + mọi app trong apps/* (mock tắt)
 npm run dev -- --sim  # như trên nhưng giá GIẢ LẬP (không cần Binance: offline, test e2e, CI)
+                      # dev mặc định KHÔNG bắt xác minh email (dev không gửi email thật); `-- --verify-email` để thử luồng thật (link nằm ở log [server], dòng "EMAIL (log transport");
+                      #   quyết định trong shell hoặc .env (REQUIRE_EMAIL_VERIFICATION) luôn thắng
 npm run verify        # cổng gộp main: typecheck mọi workspace (cả UI) + lint + test + build app + báo cáo API app chưa dùng
 npm run lint          # ESLint: backend/contracts/core/infra/e2e lỗi là chặn; apps/*, packages/ui chỉ cảnh báo
 npm run ui-coverage   # endpoint nào backend có mà app chưa gọi (--strict: thiếu là lỗi)
-npm run ui-check -- [nhánh] [--base <ref>] [--e2e] [--no-verify] [--keep]
+npm run ui-check -- [nhánh] [--base <ref>] [--e2e] [--no-verify] [--keep] [--only <đối số Playwright>]
                       # nhánh UI (mặc định ui/gd2-exchange) gộp <ref> (mặc định main) trong worktree tạm → verify (+ e2e);
-                      #   --no-verify: bỏ verify (chỉ chạy e2e nếu có --e2e); e2e đỏ → báo cáo chép ra .e2e/ui-check/
-npm run host -- update | start | invite "<tên>" | set-role <email> owner | status
+                      #   --no-verify: bỏ verify (chỉ chạy e2e nếu có --e2e); e2e đỏ → báo cáo chép ra .e2e/ui-check/;
+                      #   --only: phần còn lại của dòng lệnh đưa cho Playwright (ngầm hiểu --e2e), vd `-- --no-verify --only trade-form --project=desktop`
+npm run host -- update | start | invite "<tên>" | set-role <email> owner | status | backup | schedule-backup | restore <file> --yes
                       # chạy sàn cho người dùng thật trên máy này (trước Railway): bản riêng host/, dữ liệu
                       #   host-data/ (trong thư mục dự án, git bỏ qua — cấm `git clean -x`), :8090 + link https trycloudflare — docs/deploy/may-ca-nhan.md
+                      #   `backup` = sao lưu khi đang chạy + diễn tập khôi phục (server/src/ops/logicalBackup.ts), mã hóa bằng HOST_BACKUP_PASSPHRASE
 npm run e2e           # test trình duyệt (Playwright, Edge cài sẵn): build apps/exchange, dựng 2 hệ riêng, mỗi hệ phục vụ
                       #   cả API, /ws và bản build app (giá giả lập): DB :5436 + server :5190 (email ra .e2e/outbox.jsonl) và
                       #   hệ host-mode DB :5437 + server :5191 (.e2e/host/; như sàn thật: REGISTRATION=invite,
