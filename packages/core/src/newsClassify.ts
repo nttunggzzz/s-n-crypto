@@ -227,7 +227,16 @@ interface Token {
   end: number;
 }
 
-function hasCryptoContext(tokens: Token[], start: number, end: number): boolean {
+/**
+ * Extra context words accepted ONLY for an upper-case ambiguous ticker (not for common-word names): market and venue
+ * words, so "Binance to delist TRUMP perpetual contracts" is TRUMPUSDT.
+ */
+const MARKET_CONTEXT: ReadonlySet<string> = new Set([
+  'delist', 'delists', 'delisting', 'list', 'lists', 'listing', 'listed', 'perpetual', 'perpetuals', 'perp', 'perps',
+  'futures', 'spot', 'pair', 'pairs', 'trading', 'binance', 'coinbase', 'okx', 'bybit', 'kraken', 'upbit', 'robinhood',
+]);
+
+function hasCryptoContext(tokens: Token[], start: number, end: number, market = false): boolean {
   let first = -1;
   let last = -1;
   for (let i = 0; i < tokens.length; i++) {
@@ -240,7 +249,8 @@ function hasCryptoContext(tokens: Token[], start: number, end: number): boolean 
   if (first < 0) return false;
   for (let i = Math.max(0, first - 2); i <= Math.min(tokens.length - 1, last + 2); i++) {
     if (i >= first && i <= last) continue;
-    if (CRYPTO_CONTEXT.has(tokens[i]!.text.toLowerCase())) return true;
+    const w = tokens[i]!.text.toLowerCase();
+    if (CRYPTO_CONTEXT.has(w) || (market && MARKET_CONTEXT.has(w))) return true;
   }
   return false;
 }
@@ -279,6 +289,7 @@ export function tagSymbols(title: string, aliases: SymbolAlias[]): string[] {
 
   const byTicker = new Map<string, SymbolAlias>();
   for (const a of aliases) byTicker.set(a.ticker, a);
+  let eventTypes: NewsEventTypeCode[] | undefined;
   for (const t of tokens) {
     const dollar = t.start > 0 && title[t.start - 1] === '$';
     const upper = t.text.toUpperCase();
@@ -289,7 +300,12 @@ export function tagSymbols(title: string, aliases: SymbolAlias[]): string[] {
       continue;
     }
     if (t.text !== upper || !/[A-Z]/.test(t.text)) continue;
-    if (AMBIGUOUS_TICKERS.has(alias.ticker) && !hasCryptoContext(tokens, t.start, t.end)) continue;
+    if (AMBIGUOUS_TICKERS.has(alias.ticker) && !hasCryptoContext(tokens, t.start, t.end, true)) {
+      // A delisting / listing / hack headline that carries the upper-case ticker is about that coin: the
+      // risk gate needs the pair, so a missed tag here is worse than a rare false one.
+      eventTypes ??= classifyEventTypes(title);
+      if (!eventTypes.some((e) => e === 'LISTING' || e === 'DELISTING' || e === 'HACK_EXPLOIT')) continue;
+    }
     found.add(alias.symbol);
   }
   return [...found].sort();
@@ -436,12 +452,12 @@ function keywordMatches(k: Keyword, title: string): boolean {
 /**
  * GDELT GKG themes used by `classifyEventTypes`, and nothing else (themes are tagged from full article text, so
  * only subject-level themes are trusted):
- *  - `ECON_CENTRALBANK`                        -> CENTRAL_BANK
  *  - `CYBER_ATTACK` together with `ECON_BITCOIN` -> HACK_EXPLOIT
- * Inflation, monetary-policy and Fed-policy themes are deliberately NOT used: they fire whenever an article
- * merely mentions the topic.
+ * Central-bank, inflation, monetary-policy and Fed-policy themes are deliberately NOT used: they fire whenever an
+ * article merely mentions the topic (7 of 11 sample rows with ECON_CENTRALBANK are not about a central bank), so
+ * CENTRAL_BANK comes from the title only.
  */
-export const GDELT_THEMES_USED: readonly string[] = ['ECON_CENTRALBANK', 'CYBER_ATTACK', 'ECON_BITCOIN'];
+export const GDELT_THEMES_USED: readonly string[] = ['CYBER_ATTACK', 'ECON_BITCOIN'];
 
 /**
  * Event types of a news title (plus, optionally, its GDELT themes). Can return several types, in
@@ -456,7 +472,6 @@ export function classifyEventTypes(title: string, gdeltThemes?: readonly string[
   }
   if (gdeltThemes && gdeltThemes.length > 0) {
     const themes = new Set(gdeltThemes.map((x) => x.trim()));
-    if (themes.has('ECON_CENTRALBANK')) hit.add('CENTRAL_BANK');
     if (themes.has('CYBER_ATTACK') && themes.has('ECON_BITCOIN')) hit.add('HACK_EXPLOIT');
   }
   const out = NEWS_EVENT_TYPES.filter((x) => x !== 'OTHER' && hit.has(x));

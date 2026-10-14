@@ -314,6 +314,43 @@ describe('out-of-sample probe (written after the rules; run once, misses pinned)
   });
 });
 
+// --- Regression group from the lead's 15 trap headlines + 1 of ours (synthetic: lead probe). Written by the lead
+// before this fix; expectations are exactly the lead's.
+describe('lead probe regression (synthetic: lead probe)', () => {
+  const cases: { t: string; has?: L[]; not?: L[]; symbols: string[] }[] = [
+    { t: 'Hackers drain $50M from Solana DeFi protocol', has: [HACK], symbols: ['SOLUSDT'] },
+    { t: 'Binance to delist TRUMP perpetual contracts', has: [DELIST], symbols: ['TRUMPUSDT'] },
+    { t: 'Trump says tariffs on China will rise next month', not: [HACK, DELIST, REG], symbols: [] },
+    { t: 'SEC sues Coinbase over unregistered securities', has: [REG], symbols: [] },
+    { t: 'Ethics panel questions senator over stock trades', symbols: [] },
+    { t: 'New solution cuts data-center energy use', symbols: [] },
+    { t: 'Fed holds rates steady, Powell signals patience', has: [CB], symbols: [] },
+    { t: 'US CPI rises 0.4% in September, hotter than expected', has: [MAC], symbols: [] },
+    { t: 'Bitcoin ETFs see record $1.2B outflows', has: [ETF], symbols: [BTC] },
+    { t: 'Link up with friends this weekend', symbols: [] },
+    { t: 'Near-term outlook for stocks darkens', symbols: [] },
+    { t: 'Uniswap exploit: attacker steals $8 million', has: [HACK], symbols: ['UNIUSDT'] },
+    { t: 'Bitcoin Cash hard fork scheduled', symbols: ['BCHUSDT'] },
+    { t: 'Exchange outage halts withdrawals on Kraken', has: [INC], symbols: [] },
+    { t: 'Ethereum price slips as ETH staking outflows grow', symbols: [ETH] },
+    { t: 'Upbit lists OP and SUI spot pairs', has: [LIST], symbols: ['OPUSDT', 'SUIUSDT'] },
+  ];
+  for (const c of cases) {
+    it(c.t, () => {
+      const got = classifyEventTypes(c.t);
+      for (const h of c.has ?? []) expect(got).toContain(h);
+      for (const n of c.not ?? []) expect(got).not.toContain(n);
+      expect(tagSymbols(c.t, ALIASES)).toEqual(c.symbols);
+    });
+  }
+
+  it('ambiguous upper-case ticker in a LISTING/DELISTING/HACK headline is tagged without nearby context', () => {
+    expect(tagSymbols('Binance will delist LINK on Friday', ALIASES)).toEqual(['LINKUSDT']);
+    expect(tagSymbols('Exploit hits NEAR bridge, funds drained', ALIASES)).toEqual(['NEARUSDT']);
+    expect(tagSymbols('Near the end, hackers drained funds from the Link bridge', ALIASES)).toEqual([]); // not upper-case
+  });
+});
+
 describe('constants', () => {
   it('versions and event types', () => {
     expect(NEWS_CLASSIFIER_VERSION).toBe('news-rules-v1');
@@ -322,7 +359,7 @@ describe('constants', () => {
       'EXCHANGE_INCIDENT', 'ADOPTION', 'OTHER',
     ]);
     expect(TONE_THRESHOLD).toBe('1.5');
-    expect(GDELT_THEMES_USED).toEqual(['ECON_CENTRALBANK', 'CYBER_ATTACK', 'ECON_BITCOIN']);
+    expect(GDELT_THEMES_USED).toEqual(['CYBER_ATTACK', 'ECON_BITCOIN']);
   });
 
   it('parses the real catalog (50 coins incl. USDT) and the fixtures', () => {
@@ -428,7 +465,7 @@ describe('classifyEventTypes edge cases', () => {
   });
 
   it('GDELT themes: only the documented ones change the result', () => {
-    expect(classifyEventTypes('Cardoso: Inflation must fall to single digits', ['AGRICULTURE', 'ECON_CENTRALBANK'])).toEqual(['MACRO_DATA', 'CENTRAL_BANK']);
+    expect(classifyEventTypes('Cardoso: Inflation must fall to single digits', ['AGRICULTURE', 'ECON_CENTRALBANK'])).toEqual(['MACRO_DATA']); // central-bank theme no longer used
     expect(classifyEventTypes('Wallet maker pulls devices from stores', ['CYBER_ATTACK', 'ECON_BITCOIN'])).toEqual(['HACK_EXPLOIT']);
     expect(classifyEventTypes('Wallet maker pulls devices from stores', ['CYBER_ATTACK'])).toEqual(['OTHER']);
     expect(classifyEventTypes('Wallet maker pulls devices from stores', ['ECON_BITCOIN'])).toEqual(['OTHER']);
@@ -439,15 +476,12 @@ describe('classifyEventTypes edge cases', () => {
 
   it('themes of the real GKG sample rows', () => {
     const cardoso = GKG.find((r) => r.title?.startsWith('Cardoso'))!;
-    expect(classifyEventTypes(cardoso.title!, cardoso.themes)).toEqual(['MACRO_DATA', 'CENTRAL_BANK']);
+    expect(classifyEventTypes(cardoso.title!, cardoso.themes)).toEqual(['MACRO_DATA']);
     const ledger = GKG.find((r) => r.title?.startsWith('PYMNTS | Ledger'))!;
     expect(classifyEventTypes(ledger.title!, ledger.themes)).toEqual(['HACK_EXPLOIT']);
-    // rows that carry ECON_CENTRALBANK (their text discusses a central bank) get CENTRAL_BANK on top of the title
-    // result; the inflation / Fed-policy themes of the same rows add nothing. 7 of the 11 sample rows with
-    // ECON_CENTRALBANK have a title that does not name a central bank, so title-only labelling would miss them.
+    // ECON_CENTRALBANK rows (7 of 11 are not about a central bank) add nothing: CENTRAL_BANK is title-only
     const jumps = GKG.find((r) => r.title?.startsWith('September Inflation Jumps'))!;
-    expect(classifyEventTypes(jumps.title!)).toEqual(['MACRO_DATA']);
-    expect(classifyEventTypes(jumps.title!, jumps.themes)).toEqual(['MACRO_DATA', 'CENTRAL_BANK']);
+    expect(classifyEventTypes(jumps.title!, jumps.themes)).toEqual(['MACRO_DATA']);
     // ECON_BITCOIN alone (7 rows) never creates a type
     const q3 = GKG.find((r) => r.title?.startsWith('Bitcoin Just Posted'))!;
     expect(classifyEventTypes(q3.title!, q3.themes)).toEqual(['OTHER']);
