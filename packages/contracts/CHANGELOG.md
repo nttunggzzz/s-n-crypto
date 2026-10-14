@@ -1,7 +1,10 @@
 # Changelog — @cex/contracts
 
 ## 0.15.0 — 2026-10-14 (Thuế crypto Việt Nam, thử nghiệm — Module T, đợt T1)
-Chỉ thêm. 10 endpoint mới, tổng 150. Server chưa có route cho chúng (T2–T3); giao diện làm trên mock. Hướng dẫn: README mục 15.
+Chỉ thêm. 10 endpoint mới, tổng 150. Hướng dẫn: README mục 15.
+Trạng thái server (cập nhật sau T3): đã có route cho cả 10 endpoint. 4 endpoint cài đặt/hồ sơ (`taxProfile`, `taxUpdateProfile`, `adminTaxSettings`,
+`adminUpdateTaxSettings`) từ đợt T2; 6 endpoint báo cáo (`taxSummary`, `taxWithholdings`, `taxExport`, `adminTaxSummary`, `adminTaxWithholdings`,
+`adminTaxExport`) từ đợt T3. Server đã trả `Trade.tax` và 4 trường thuế của `exchangeInfo` (T2).
 Luật (module T §0, §3.2): chỉ lần khớp **BÁN Spot** bị trích khi `taxMode = 'WITHHOLD'` và người bán không phải `DOMESTIC_ORG`;
 thuế = roundUp 8 chữ số của (quoteQty × taxRate) trên giá trị gộp, từng lần khớp, lãi hay lỗ đều trích. Mua, Futures, chuyển ví, faucet,
 admin cộng/trừ, đặt lại tài khoản: không trích.
@@ -37,7 +40,7 @@ admin cộng/trừ, đặt lại tài khoản: không trích.
 - Mock: phí lần khớp nay làm tròn lên 8 chữ số theo `feeRate` hiện hành (trước là float × 0.001); `realizedPnl` của lệnh bán trong mock là số thật
   theo giá vốn (trước là số giả 1% giá trị); `exchangeInfo.feeRate` của mock theo cấu hình admin; CSV `exportTrades` có thêm cột `tax` sau `feeAsset`;
   `myTrades` của mock có thêm 2 lệnh bán cũ (381, 382).
-- Server **chưa** trả `Trade.tax` và 4 trường thuế của `exchangeInfo` (đợt T2): ghép nhánh hợp đồng này cùng T2, hoặc T2 thêm trước.
+- (Đã xử lý ở T2) Server trả `Trade.tax` và 4 trường thuế của `exchangeInfo`; hợp đồng và T2 đã gộp cùng nhau vào `main`.
 
 ## 0.14.0 — 2026-10-14 (Nhật ký giao dịch — Module A, đợt A1)
 Chỉ thêm. 12 endpoint mới, tổng 140. Server chưa có route cho chúng (A2–A4); giao diện làm trên mock ngay từ bản này. Hướng dẫn: README mục 14.

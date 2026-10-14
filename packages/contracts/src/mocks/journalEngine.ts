@@ -69,7 +69,7 @@ export const maxFillId = (ids: readonly string[]): string | null => ids.reduce<s
 export function replayManualSpot(
   fills: SpotFillInput[],
   lot: JournalLotRules,
-): { ok: true; state: SpotEntryState; allocations: Map<string, { allocatedQty: string; unattributedQty: string; allocatedQuote: string; allocatedFee: string }> } | { ok: false; reason: 'NO_OPENING_FILL' | 'MULTIPLE_ROUND_TRIPS' } {
+): { ok: true; state: SpotEntryState; allocations: Map<string, { allocatedQty: string; unattributedQty: string; allocatedQuote: string; allocatedFee: string; allocatedTax: string }> } | { ok: false; reason: 'NO_OPENING_FILL' | 'MULTIPLE_ROUND_TRIPS' } {
   const r = replayAllocations(fills, lot);
   if (r.allocations.length === 0 || r.allocations[0]!.action === 'UNATTRIBUTED') return { ok: false, reason: 'NO_OPENING_FILL' };
   if (r.entries.length !== 1 || r.allocations.some((a) => a.action === 'UNATTRIBUTED')) return { ok: false, reason: 'MULTIPLE_ROUND_TRIPS' };

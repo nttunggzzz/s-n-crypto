@@ -1,7 +1,9 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { and, desc, eq, sql } from 'drizzle-orm';
 import { ApiError } from '@cex/contracts';
-import { auditLogs, exchangeSettings, taxWithholdings, userTaxProfiles, users } from '../../db/schema.ts';
+import { dec } from '@cex/core';
+import { auditLogs, exchangeSettings, taxWithholdings, trades, userTaxProfiles, users } from '../../db/schema.ts';
+import { applyBalanceChanges } from '../exchange/ledger.ts';
 import { marketTrade, setBook } from '../../../test/helpers.ts';
 import { ApiHarness } from '../../../test/apiHarness.ts';
 import { TaxService } from './taxService.ts';
@@ -141,5 +143,54 @@ describe('tax settings (admin)', () => {
     expect(h.env.ex.config.tax.mode).toBe('OFF');
     const n = await h.env.database.db.select({ n: sql<number>`count(*)::int` }).from(auditLogs).where(and(eq(auditLogs.action, 'TAX_SETTINGS_UPDATE'), eq(auditLogs.reason, 'must roll back')));
     expect(n[0]!.n).toBe(0);
+  });
+});
+
+/** Sells 0.5 BTC with the tax on (0.5 x 99 x 0.001 = 0.0495) and puts the settings back; returns the seller. */
+async function sellWithTax() {
+  const admin = await h.staff('admin');
+  await admin.b.adminUpdateTaxSettings({ body: { taxMode: 'WITHHOLD', reason: 'tax on for a T3 test' } });
+  try {
+    const seller = await h.user();
+    await seller.b.faucetClaim({ body: {} });
+    await seller.b.placeOrder({ body: { symbol: 'BTCUSDT', side: 'BUY', type: 'MARKET', quantity: '1' } });
+    await seller.b.placeOrder({ body: { symbol: 'BTCUSDT', side: 'SELL', type: 'MARKET', quantity: '0.5' } });
+    return seller;
+  } finally {
+    await admin.b.adminUpdateTaxSettings({ body: { taxMode: 'OFF', reason: 'tax back off after a T3 test' } });
+  }
+}
+
+describe('tax in the wallet ledger and the admin reconciliation (HTTP)', () => {
+  it('the wallet ledger shows the TAX_WITHHOLDING line of the sale, in USDT, tied to the order', async () => {
+    const seller = await sellWithTax();
+    const ledger = await seller.b.ledger({ query: { asset: 'USDT' } });
+    const taxLines = ledger.items.filter((l) => l.type === 'TAX_WITHHOLDING');
+    expect(taxLines).toHaveLength(1);
+    expect(taxLines[0]).toMatchObject({ account: 'SPOT', asset: 'USDT', deltaAvailable: '-0.04950000', deltaLocked: '0.00000000', refType: 'ORDER' });
+    const [rec] = await h.env.database.db.select().from(taxWithholdings).where(eq(taxWithholdings.userId, seller.id));
+    expect(taxLines[0]!.refId).toBe(String(rec!.orderId));
+    // another user's ledger has no such line
+    const other = await h.user();
+    expect((await other.b.ledger({ query: {} })).items.filter((l) => l.type === 'TAX_WITHHOLDING')).toEqual([]);
+  });
+
+  it('adminRunReconciliation answers with both tax mismatch kinds (response validated against the contract) - keep this test last', async () => {
+    const admin = await h.staff('admin');
+    const seller = await sellWithTax();
+    const clean = await admin.b.adminRunReconciliation();
+    expect(clean.mismatches.filter((m) => m.kind.startsWith('TAX_'))).toEqual([]);
+    // money taken as tax with no record + a trade whose tax was edited
+    await h.env.database.db.transaction((tx) => applyBalanceChanges(tx, [{ userId: seller.id, asset: 'USDT', type: 'TAX_WITHHOLDING', deltaAvailable: dec('-0.01'), refType: 'ORDER', refId: 'x' }]));
+    await h.env.database.db.update(trades).set({ tax: '0.0496' }).where(and(eq(trades.userId, seller.id), eq(trades.side, 'SELL')));
+    const run = await admin.b.adminRunReconciliation();
+    expect(run.ok).toBe(false);
+    const kinds = run.mismatches.filter((m) => m.userId === seller.id && m.kind.startsWith('TAX_')).map((m) => [m.kind, m.asset, m.field, m.account, Number(m.expected), Number(m.actual)]);
+    expect(kinds.sort()).toEqual(
+      [
+        ['TAX_LEDGER_VS_WITHHOLDINGS', 'USDT', 'available', 'SPOT', 0.0495, 0.0595],
+        ['TAX_TRADES_VS_WITHHOLDINGS', 'USDT', 'available', 'SPOT', 0.0495, 0.0496],
+      ].sort(),
+    );
   });
 });

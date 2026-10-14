@@ -228,7 +228,11 @@ export const exchangeSettings = pgTable(
     /** Last change of the tax settings (TaxSettings.updatedAt). */
     taxUpdatedAt: ts('tax_updated_at').notNull().defaultNow(),
   },
-  (t) => [check('exchange_settings_singleton', sql`${t.id} = 1`)],
+  (t) => [
+    check('exchange_settings_singleton', sql`${t.id} = 1`),
+    check('exchange_settings_tax_mode', sql`${t.taxMode} in ('OFF', 'WITHHOLD')`),
+    check('exchange_settings_tax_rate', sql`${t.taxRate} > 0 and ${t.taxRate} <= 0.01`),
+  ],
 );
 
 // ───────────────────────────── ledger (P05)
@@ -435,6 +439,11 @@ export const trades = pgTable(
     createdAt: ts('created_at').notNull().defaultNow(),
     /** Vietnam tax withheld from this fill, quote asset (SELL only; 0 otherwise and for fills before module T). */
     tax: amount('tax').notNull().default('0'),
+    /**
+     * SELL only: the seller's tax category AT THE FILL (also while taxMode = OFF and for DOMESTIC_ORG). null for a BUY and
+     * for fills before migration 0009. Internal, for the tax reports - not part of the API contract.
+     */
+    taxCategory: text('tax_category', { enum: TAX_CATEGORIES }),
   },
   (t) => [index('trades_user_idx').on(t.userId, t.id), index('trades_order_idx').on(t.orderId)],
 );

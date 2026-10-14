@@ -1,0 +1,3 @@
+ALTER TABLE "trades" ADD COLUMN "tax_category" text;--> statement-breakpoint
+ALTER TABLE "exchange_settings" ADD CONSTRAINT "exchange_settings_tax_mode" CHECK ("exchange_settings"."tax_mode" in ('OFF', 'WITHHOLD'));--> statement-breakpoint
+ALTER TABLE "exchange_settings" ADD CONSTRAINT "exchange_settings_tax_rate" CHECK ("exchange_settings"."tax_rate" > 0 and "exchange_settings"."tax_rate" <= 0.01);

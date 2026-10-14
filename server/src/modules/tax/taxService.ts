@@ -58,7 +58,8 @@ export class TaxService {
       };
       await writeAudit(tx, { actorId: actor.user.id, action: 'TAX_SETTINGS_UPDATE', targetType: 'EXCHANGE', before, after, reason: p.reason, ip: actor.ip });
     });
-    await this.config.reload();
+    // the change is committed: a failing cache refresh is logged and retried, it must not turn the request into a 500
+    await this.config.reloadAfterCommit();
     return this.settings();
   }
 

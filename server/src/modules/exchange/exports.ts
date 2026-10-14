@@ -1,6 +1,8 @@
 import { and, desc, eq, gte, lte, notInArray, type SQL } from 'drizzle-orm';
 import { ledgerEntries, orders, trades } from '../../db/schema.ts';
 import type { Db } from '../../db/client.ts';
+import { ADMIN_TAX_EXPORT_COLUMNS, TAX_EXPORT_COLUMNS } from '@cex/contracts';
+import { serializeAdminWithholding, serializeWithholding, withholdingRows, type WithholdingFilter } from '../tax/reports.ts';
 import { serializeLedger, serializeOrder, serializeTrade } from './serializers.ts';
 
 export const MAX_EXPORT_ROWS = 10_000;
@@ -11,7 +13,7 @@ interface RangeFilter {
   to?: string;
 }
 
-function csv(header: string[], rows: (string | number | null)[][]): string {
+export function csv(header: readonly string[], rows: (string | number | null)[][]): string {
   const esc = (v: string | number | null) => {
     if (v === null) return '';
     const s = String(v);
@@ -93,5 +95,67 @@ export async function exportLedgerCsv(db: Db, userId: string, f: { asset?: strin
   return csv(
     ['entryId', 'time_utc', 'time_gmt7', 'asset', 'type', 'deltaAvailable', 'deltaLocked', 'availableAfter', 'lockedAfter', 'refType', 'refId'],
     rows.map(serializeLedger).map((e) => [e.id, e.createdAt, gmt7(e.createdAt), e.asset, e.type, e.deltaAvailable, e.deltaLocked, e.availableAfter, e.lockedAfter, e.refType, e.refId]),
+  );
+}
+
+/**
+ * The user's own withholding records as CSV ("tax withheld statement - test"), newest first, at most MAX_EXPORT_ROWS.
+ * Columns follow TAX_EXPORT_COLUMNS of the contract (imported, not retyped); an empty cell is null.
+ */
+export async function exportTaxCsv(db: Db, userId: string, f: Omit<WithholdingFilter, 'userId'>): Promise<string> {
+  const rows = (await withholdingRows(db, { ...f, userId }, { take: MAX_EXPORT_ROWS })).map(serializeWithholding);
+  return csv(
+    TAX_EXPORT_COLUMNS,
+    rows.map((r) => {
+      const cell: Record<(typeof TAX_EXPORT_COLUMNS)[number], string | null> = {
+        withholdingId: r.id,
+        tradeId: r.tradeId,
+        orderId: r.orderId,
+        time_utc: r.createdAt,
+        time_gmt7: gmt7(r.createdAt),
+        symbol: r.symbol,
+        quantity: r.quantity,
+        price: r.price,
+        grossQuote: r.grossQuote,
+        asset: r.asset,
+        taxRate: r.taxRate,
+        taxAmount: r.taxAmount,
+        category: r.category,
+        vndRate: r.vndRate,
+        grossVnd: r.grossVnd,
+        taxVnd: r.taxVnd,
+      };
+      return TAX_EXPORT_COLUMNS.map((c) => cell[c]);
+    }),
+  );
+}
+
+/** Statement of every user's withholdings (admin, `tax.read`); same filters plus an optional userId. */
+export async function exportAdminTaxCsv(db: Db, f: WithholdingFilter): Promise<string> {
+  const rows = (await withholdingRows(db, f, { take: MAX_EXPORT_ROWS })).map(serializeAdminWithholding);
+  return csv(
+    ADMIN_TAX_EXPORT_COLUMNS,
+    rows.map((r) => {
+      const cell: Record<(typeof ADMIN_TAX_EXPORT_COLUMNS)[number], string | null> = {
+        withholdingId: r.id,
+        tradeId: r.tradeId,
+        orderId: r.orderId,
+        time_utc: r.createdAt,
+        time_gmt7: gmt7(r.createdAt),
+        userId: r.userId,
+        symbol: r.symbol,
+        quantity: r.quantity,
+        price: r.price,
+        grossQuote: r.grossQuote,
+        asset: r.asset,
+        taxRate: r.taxRate,
+        taxAmount: r.taxAmount,
+        category: r.category,
+        vndRate: r.vndRate,
+        grossVnd: r.grossVnd,
+        taxVnd: r.taxVnd,
+      };
+      return ADMIN_TAX_EXPORT_COLUMNS.map((c) => cell[c]);
+    }),
   );
 }

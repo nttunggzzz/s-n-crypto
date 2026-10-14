@@ -64,6 +64,13 @@
       "when": 1791960526422,
       "tag": "0008_tax_t2",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1791962773113,
+      "tag": "0009_tax_t3_trade_category",
+      "breakpoints": true
     }
   ]
 }

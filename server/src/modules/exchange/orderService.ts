@@ -34,7 +34,7 @@ import type { OpenOrderIndex } from './openOrderIndex.ts';
 import { Outcome } from './outcome.ts';
 import type { NotificationService } from './notificationService.ts';
 import { applyFillsToPosition } from './positions.ts';
-import { withholdingTerms } from './tax.ts';
+import { sellTaxContext } from './tax.ts';
 
 export type PlaceOrderInput = z.output<typeof PlaceOrderRequest>;
 export type PlaceOcoInput = z.output<typeof PlaceOcoRequest>;
@@ -448,7 +448,7 @@ export class OrderService {
 
     if (!fills.some((f) => f.qty.gt(0))) throw new Error(`settleFills called with no quantity for order ${order.id}`);
     // Vietnam tax (module T §3.2): SELL only, decided at the fill, per fill on the gross value, rounded up.
-    const taxTerms = await withholdingTerms(tx, this.config, order.userId, order.side);
+    const { category: taxCategory, terms: taxTerms } = await sellTaxContext(tx, this.config, order.userId, order.side);
     const parts = fills
       .filter((f) => f.qty.gt(0))
       .map((f) => {
@@ -498,7 +498,8 @@ export class OrderService {
     } else {
       changes.push({ userId: order.userId, asset: quote, type: 'TRADE_CREDIT', deltaAvailable: quoteSum, ...ref });
       if (feeSum.gt(0)) changes.push({ userId: order.userId, asset: quote, type: 'FEE', deltaAvailable: feeSum.neg(), ...ref });
-      // proceeds ≥ fee + tax (each ≤ 1%), so this never goes negative
+      // fee and tax are each at most 1% of the fill's gross value, so the proceeds cover them. The only way one fill's net
+      // could go negative is a quoteQty below about 2e-8 (both round up to 1e-8), which no real pair produces.
       if (taxSum.gt(0)) changes.push({ userId: order.userId, asset: quote, type: 'TAX_WITHHOLDING', deltaAvailable: taxSum.neg(), ...ref });
     }
     out.addBalances((await applyBalanceChanges(tx, changes)).values());
@@ -518,6 +519,7 @@ export class OrderService {
           fee: fx(p.fee),
           feeAsset: isBuy ? base : quote,
           tax: fx(p.tax),
+          taxCategory,
           liquidity,
           realizedPnl: fxn(realized[i]),
           marketEventAt: eventAt,
