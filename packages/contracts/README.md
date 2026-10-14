@@ -352,17 +352,22 @@ tháng 9 có) và 2 bản ghi của người khác (tháng 10, một `FOREIGN_OR
 `setMockTax({ taxMode: 'OFF' })`, `setMockTax({ category: 'DOMESTIC_ORG' })`, `setMockTax({ taxVndRate: null })`.
 
 ## 16. Tin tức và sự kiện vĩ mô cho hệ phân tích — Module N (v0.17.0, chỉ Admin)
-Kế hoạch: `docs/plans/module-N-tin-tuc-va-vi-mo.md`. Không có endpoint cho người dùng thường (C-D1); 2 endpoint `adminNews*` cần quyền `news.view` (support/admin/owner).
+Kế hoạch: `docs/plans/module-N-tin-tuc-va-vi-mo.md`. Không có endpoint cho người dùng thường (C-D1); 3 endpoint `adminNews*` cần quyền `news.view` (support/admin/owner).
 ```ts
-await api.adminNewsItems({ query: { symbol: 'BTCUSDT', eventType: 'ETF', source, from, to, limit: 50, cursor } }); // mới nhất trước theo firstSeenAt
-await api.adminNewsSources({}); // { items: NewsSourceHealth[] }: LIVE / STALE / UNAVAILABLE, trễ trung vị, số lần lỗi liên tiếp
+await api.adminNewsItems({ query: { symbol: 'BTCUSDT', eventType: 'ETF', sourceId, from, to, limit: 50, cursor } }); // (firstSeenAt, id) giảm dần
+await api.adminNewsSources({});     // { items: NewsSourceHealth[] }: LIVE / STALE / UNAVAILABLE, trễ trung vị (ms), số lần lỗi liên tiếp
+await api.adminNewsMacroEvents({ query: { from, to, code, importance } }); // { items: SnapshotMacroEvent[] } scheduledAt tăng dần, khoảng ≤ 400 ngày
 ```
-- Mốc thời gian của tin là `firstSeenAt` (lúc hệ thấy tin); `from`/`to` lọc theo mốc này. `publishedAt` có thể `null` (RSS không ghi giờ).
-- `tone` (chuỗi thập phân) chỉ có ở nguồn GDELT, nguồn khác là `null` — `null` không phải "0". Sự kiện vĩ mô chưa công bố: `actual: null`.
+- Mốc thời gian của tin là `firstSeenAt` (lúc hệ thấy tin); `from`/`to` lọc theo mốc này. `publishedAt` có thể `null` (RSS không ghi giờ; GDELT không có giờ đăng).
+- `cursor` là chuỗi mờ: chỉ đưa lại đúng giá trị `nextCursor`; cursor hỏng → `VALIDATION_ERROR`. Lọc `symbol` không trả tin vĩ mô chung (`symbols: []`).
+- `tone` (chuỗi thập phân) chỉ có ở nguồn GDELT, nguồn khác là `null` — `null` không phải "0". Sự kiện vĩ mô chưa công bố: `actual: null` (v0 luôn null).
+- `medianLagMs` có thể âm (nguồn ghi giờ đăng ở tương lai so với đồng hồ của mình); `null` = chưa đo được. Hiện đúng như vậy, không đổi thành 0.
 - `CryptoMarketSnapshot.news` / `macroEvents` và `CryptoMarketAnalysisReport.newsContext` là `.nullable().optional()`: snapshot/báo cáo cũ vẫn hợp lệ;
-  `null` hoặc vắng = chưa có lớp tin tức. `news.status = LIVE` với `items: []` nghĩa là "nguồn sống, không có tin".
-- `newsContext.tilt.validated` luôn `false` ("chưa kiểm chứng, chưa tính vào hướng"): UI phải ghi nhãn này cạnh số tin tích cực/tiêu cực.
+  `null` hoặc vắng = chưa có lớp tin tức. `news.status = LIVE` với `items: []` nghĩa là "nguồn sống, không có tin". `news.sources[]` cho độ tươi từng nguồn tại `asOf`.
+- `newsContext.tilt` (null khi `status` là UNAVAILABLE): tin không có tone nằm ở `unscored`, không phải trung tính; `validated` luôn `false`
+  ("chưa kiểm chứng, chưa tính vào hướng"): UI phải ghi nhãn này cạnh số tin tích cực/tiêu cực. `impact` ít nhất 1 giá trị; `CONTEXT_ONLY`/`UNAVAILABLE` đứng một mình.
 - `AnalysisDepartmentId` có thêm `news_event_risk`: nơi dùng `Record<AnalysisDepartmentId, …>` phải bổ sung.
+- **Ghi nguồn bắt buộc:** nơi nào hiện tin hoặc điểm giọng điệu lấy từ GDELT phải ghi "GDELT Project" kèm liên kết https://www.gdeltproject.org/.
 
-**Mock:** 6 tin mẫu (có/không tone, `publishedAt: null`, tin vĩ mô chung `symbols: []`), 4 nguồn (LIVE, STALE, UNAVAILABLE, tắt); fixture `fixtureSnapshotNews`, `fixtureMacroEvents` (CPI mức HIGH sắp tới), `fixtureAnalysisNewsContext`.
-
+**Mock:** 8 tin mẫu (có/không tone, `publishedAt: null`, tin vĩ mô chung `symbols: []`, 3 tin cùng `firstSeenAt`), 5 nguồn (LIVE, STALE, LIVE lag âm, lịch tĩnh LIVE, tắt), 3 sự kiện vĩ mô (CPI và FOMC mức HIGH sắp tới, PCE đã có `actual`);
+fixture `fixtureSnapshotNews`, `fixtureMacroEvents`, `fixtureAnalysisNewsContext` (tin hack trên BTCUSDT → `BLOCKED`). Dữ liệu mẫu có ngày cố định (tháng 10/2026): `adminNewsMacroEvents` không có `from`/`to` lấy 400 ngày từ lúc gọi nên có thể trống, hãy truyền khoảng ngày.

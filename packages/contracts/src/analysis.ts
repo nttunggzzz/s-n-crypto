@@ -165,28 +165,52 @@ export type NewsEventType = z.infer<typeof NewsEventType>;
 export const SnapshotNewsItem = z.object({
   id: z.string().min(1),
   title: z.string().min(1),
-  url: z.string().min(1),
+  /** http(s) only (no `javascript:`, `data:`, `ftp:`), at most 2048 characters: the UI may render it as a link. */
+  url: z.url({ protocol: /^https?$/ }).max(2048),
   source: z.string().min(1),
   publishedAt: IsoDateTime.nullable(),
   firstSeenAt: IsoDateTime,
   symbols: z.array(SymbolCode),
-  eventTypes: z.array(NewsEventType),
+  /** At least one: the classifier returns `OTHER` when it is not sure. */
+  eventTypes: z.array(NewsEventType).min(1),
   tone: DecimalString.nullable(),
   classifierVersion: z.string().min(1),
 });
 export type SnapshotNewsItem = z.infer<typeof SnapshotNewsItem>;
 
+/** How a source delivers news (admin list `NewsSourceHealth.kind`, snapshot `sources[].kind`). */
+export const NewsSourceKind = z.enum(['GDELT', 'RSS', 'OFFICIAL_CALENDAR', 'FRED']);
+export type NewsSourceKind = z.infer<typeof NewsSourceKind>;
+
+/** Freshness of one ENABLED source as of the snapshot's `asOf` (not "now"). */
+export const SnapshotNewsSource = z.object({
+  name: z.string().min(1),
+  kind: NewsSourceKind,
+  status: DataStatus,
+  lastSuccessAt: IsoDateTime.nullable(),
+});
+export type SnapshotNewsSource = z.infer<typeof SnapshotNewsSource>;
+
 /**
  * News slice of a snapshot. `LIVE` + `items: []` ("sources alive, no news") differs from `UNAVAILABLE` ("no sources").
- * `sourcesLive` / `sourcesTotal` show freshness of the feeds behind it.
+ * `sources` lists every ENABLED source (static calendar sources included) with its freshness at `asOf`.
+ * `sourcesTotal` = `sources.length`, `sourcesLive` = number of `sources` whose status is LIVE (checked by a refine);
+ * disabled sources are in neither.
  */
-export const SnapshotNews = z.object({
-  status: DataStatus,
-  observedAt: IsoDateTime.nullable(),
-  sourcesLive: z.number().int().nonnegative(),
-  sourcesTotal: z.number().int().nonnegative(),
-  items: z.array(SnapshotNewsItem),
-});
+export const SnapshotNews = z
+  .object({
+    status: DataStatus,
+    observedAt: IsoDateTime.nullable(),
+    sourcesLive: z.number().int().nonnegative(),
+    sourcesTotal: z.number().int().nonnegative(),
+    sources: z.array(SnapshotNewsSource),
+    items: z.array(SnapshotNewsItem),
+  })
+  .refine((n) => n.sourcesTotal === n.sources.length, { message: 'sourcesTotal must equal sources.length', path: ['sourcesTotal'] })
+  .refine((n) => n.sourcesLive === n.sources.filter((x) => x.status === 'LIVE').length, {
+    message: 'sourcesLive must equal the number of LIVE sources',
+    path: ['sourcesLive'],
+  });
 export type SnapshotNews = z.infer<typeof SnapshotNews>;
 
 export const MacroEventCode = z.enum(['FOMC_DECISION', 'CPI', 'NFP', 'PCE', 'OTHER']);
@@ -195,7 +219,12 @@ export type MacroEventCode = z.infer<typeof MacroEventCode>;
 export const MacroEventImportance = z.enum(['HIGH', 'MEDIUM', 'LOW']);
 export type MacroEventImportance = z.infer<typeof MacroEventImportance>;
 
-/** A scheduled macro release. `actual` / `actualKnownAt` are null until the number is out (never "0"). All times UTC. */
+/**
+ * A scheduled macro release. All times UTC.
+ * `actual` / `actualKnownAt` are null until the number is out (never "0"). Point-in-time rule: `actual` may hold a value
+ * only when `actualKnownAt` <= the snapshot's `asOf`; whoever builds the snapshot must drop values not yet known at `asOf`.
+ * Meaning and unit of `actual` are defined when the FRED source arrives (N-D3); in v0 it is always null.
+ */
 export const SnapshotMacroEvent = z.object({
   code: MacroEventCode,
   name: z.string().min(1),
@@ -462,35 +491,52 @@ export const AnalysisAuditMetadata = z.object({
 });
 export type AnalysisAuditMetadata = z.infer<typeof AnalysisAuditMetadata>;
 
+/** How the news changed an advice. `CONTEXT_ONLY` and `UNAVAILABLE` never combine with another value. */
+export const NewsImpact = z.enum(['BLOCKED', 'UNCERTAINTY_RAISED', 'CONTEXT_ONLY', 'UNAVAILABLE']);
+export type NewsImpact = z.infer<typeof NewsImpact>;
+
+/**
+ * Tone counts of the items used. Only items WITH a tone are classified: positive / negative / neutral by thresholds that
+ * belong to each item's `classifierVersion` (defined server-side, not in the contract); items whose tone is null are
+ * `unscored` — never counted as neutral. Always shown, but `validated: false` ("not validated, not counted in the
+ * direction") until N3/N5 prove it. `meanTone` is the mean over scored items, null when none is scored.
+ * positive + negative + neutral + unscored = `itemsUsed.length` (checked by a refine on the context).
+ */
+export const AnalysisNewsTilt = z.object({
+  positive: z.number().int().nonnegative(),
+  negative: z.number().int().nonnegative(),
+  neutral: z.number().int().nonnegative(),
+  unscored: z.number().int().nonnegative(),
+  meanTone: DecimalString.nullable(),
+  validated: z.literal(false),
+});
+export type AnalysisNewsTilt = z.infer<typeof AnalysisNewsTilt>;
+
 /**
  * News and events behind one report (Module N §4.1): every advice combines market data and news, and says so.
- * `tilt` is always shown but `validated: false` — "not validated, not counted in the direction" until N3/N5 prove it.
+ * `itemsUsed` are the full items; per-source freshness is read from the snapshot (`news.sources`), not repeated here.
+ * `tilt` is null when `status` is UNAVAILABLE (no news data to count).
  */
-export const AnalysisNewsContext = z.object({
-  status: DataStatus,
-  itemsUsed: z.array(
-    z.object({
-      id: z.string().min(1),
-      title: z.string().min(1),
-      source: z.string().min(1),
-      firstSeenAt: IsoDateTime,
-      eventTypes: z.array(NewsEventType),
-      tone: DecimalString.nullable(),
-    }),
-  ),
-  upcomingEvents: z.array(SnapshotMacroEvent),
-  tilt: z.object({
-    positive: z.number().int().nonnegative(),
-    negative: z.number().int().nonnegative(),
-    neutral: z.number().int().nonnegative(),
-    /** Mean tone of the items that have one; null when none has. */
-    meanTone: DecimalString.nullable(),
-    validated: z.literal(false),
-  }),
-  impact: z.array(z.enum(['BLOCKED', 'UNCERTAINTY_RAISED', 'CONTEXT_ONLY', 'UNAVAILABLE'])),
-  /** One "Tin tức: …" sentence saying whether news changed the advice and why. */
-  summaryLine: z.string().min(1),
-});
+export const AnalysisNewsContext = z
+  .object({
+    status: DataStatus,
+    itemsUsed: z.array(SnapshotNewsItem),
+    upcomingEvents: z.array(SnapshotMacroEvent),
+    tilt: AnalysisNewsTilt.nullable(),
+    impact: z.array(NewsImpact).min(1),
+    /** One "Tin tức: …" sentence saying whether news changed the advice and why. */
+    summaryLine: z.string().min(1),
+  })
+  .refine((c) => c.tilt === null || c.tilt.positive + c.tilt.negative + c.tilt.neutral + c.tilt.unscored === c.itemsUsed.length, {
+    message: 'tilt counts must add up to itemsUsed.length',
+    path: ['tilt'],
+  })
+  .refine((c) => c.status !== 'UNAVAILABLE' || c.tilt === null, { message: 'tilt must be null when status is UNAVAILABLE', path: ['tilt'] })
+  .refine((c) => new Set(c.impact).size === c.impact.length, { message: 'impact must not repeat a value', path: ['impact'] })
+  .refine((c) => !(c.impact.length > 1 && (c.impact.includes('CONTEXT_ONLY') || c.impact.includes('UNAVAILABLE'))), {
+    message: 'CONTEXT_ONLY and UNAVAILABLE must stand alone',
+    path: ['impact'],
+  });
 export type AnalysisNewsContext = z.infer<typeof AnalysisNewsContext>;
 
 export const CryptoMarketAnalysisReport = z.object({

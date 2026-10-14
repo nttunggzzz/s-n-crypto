@@ -131,7 +131,7 @@ import {
   UpdateTaxProfileRequest,
   UpdateTaxSettingsRequest,
 } from './tax.ts';
-import { AdminNewsItemsQuery, AdminNewsSources, NewsItemAdmin } from './news.ts';
+import { AdminNewsItemsQuery, AdminNewsMacroEvents, AdminNewsMacroEventsQuery, AdminNewsSources, NewsItemAdmin } from './news.ts';
 
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 /**
@@ -343,10 +343,12 @@ export const endpoints = {
   adminTaxExport: ep({ method: 'GET', path: '/api/v1/admin/tax/export.csv', auth: 'staff', permission: 'tax.read', query: AdminTaxWithholdingQuery, response: Csv, format: 'csv' }),
 
   // Module N (0.17.0) — news layer of the analysis system, admin only (C-D1); see news.ts
-  /** Stored news items, newest firstSeenAt first; filter symbol / eventType / source / from / to (on firstSeenAt) + cursor paging. */
+  /** Stored news items, newest firstSeenAt first; filter symbol / eventType / sourceId / from / to (on firstSeenAt); order (firstSeenAt, id) DESC, opaque cursor. */
   adminNewsItems: ep({ method: 'GET', path: '/api/v1/admin/news/items', auth: 'staff', permission: 'news.view', query: AdminNewsItemsQuery, response: paginated(NewsItemAdmin) }),
   /** Health of every ingestion source (LIVE / STALE / UNAVAILABLE, lag, failures). */
   adminNewsSources: ep({ method: 'GET', path: '/api/v1/admin/news/sources', auth: 'staff', permission: 'news.view', response: AdminNewsSources }),
+  /** Scheduled macro events, scheduledAt ascending; filter code / importance / from / to (window <= 400 days). For "upcoming events" screens. */
+  adminNewsMacroEvents: ep({ method: 'GET', path: '/api/v1/admin/news/macro-events', auth: 'staff', permission: 'news.view', query: AdminNewsMacroEventsQuery, response: AdminNewsMacroEvents }),
 
   // ---- futures (phase F) — simulated USDT-M perpetuals, isolated margin, ≤ 20×
   futuresExchangeInfo: ep({ method: 'GET', path: '/api/v1/futures/exchange-info', auth: 'public', response: FuturesExchangeInfo }),
