@@ -29,10 +29,12 @@ export const Permission = z.enum([
   'tax.read',
   /** Vietnam tax: change taxMode / taxRate / VND reference rate (audited) */
   'tax.manage',
+  /** Module N (0.17.0): read the news items and source health behind the analysis system (read-only, no user data). */
+  'news.view',
 ]);
 export type Permission = z.infer<typeof Permission>;
 
-const SUPPORT: Permission[] = ['users.read', 'exchange.read', 'reconciliation.read', 'tax.read'];
+const SUPPORT: Permission[] = ['users.read', 'exchange.read', 'reconciliation.read', 'tax.read', 'news.view'];
 const ADMIN: Permission[] = [
   ...SUPPORT,
   'users.lock',

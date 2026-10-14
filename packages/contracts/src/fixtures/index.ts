@@ -756,3 +756,4 @@ export * from './journal.ts';
 
 // ───────────────────────────── Vietnam tax (0.15.0)
 export * from './tax.ts';
+export * from './news.ts';
