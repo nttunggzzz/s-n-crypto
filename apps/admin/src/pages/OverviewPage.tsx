@@ -8,7 +8,6 @@ import type { AdminOverview } from '@cex/contracts';
 import {
   Users,
   TrendingUp,
-  Receipt,
   Scale,
   ShieldCheck,
   AlertTriangle,
@@ -16,7 +15,6 @@ import {
   Clock,
   ArrowUpRight,
   Activity,
-  FileCheck,
   Building,
   UserPlus,
 } from 'lucide-react';
@@ -247,101 +245,7 @@ export const OverviewPage: React.FC<{ onNavigate?: (path: string) => void }> = (
         </div>
       </div>
 
-      {/* SECTION 2: VIETNAM CRYPTO TAX COMPLIANCE & CASHFLOW OVERVIEW */}
-      <div className="bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)] rounded-xl p-6 shadow-md space-y-5">
-        <div className="flex items-start justify-between flex-wrap gap-4 border-b border-[var(--line,#1d1e21)] pb-4">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-xl bg-amber-950/40 text-amber-400 border border-amber-800/40">
-              <Receipt size={22} />
-            </div>
-            <div>
-              <div className="flex items-center gap-2">
-                <h2 className="text-lg font-bold text-[var(--text,#f4f4f5)]">
-                  Quản Lý Thuế & Dòng Tiền Thuế Giữ Hộ (Vietnam Tax Compliance)
-                </h2>
-                <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-[var(--accent,#818cf8)]/15 text-[var(--accent,#818cf8)] border border-[var(--accent,#818cf8)]/30">
-                  TT 32/2026/TT-BTC
-                </span>
-              </div>
-              <p className="text-xs text-[var(--text-2,#a1a1aa)] mt-1">
-                Khấu trừ tự động 0.1% thuế TNCN tại nguồn trên mọi giao dịch bán (SELL). Tiền thuế khoanh giữ riêng tại tài khoản <code className="text-amber-400 font-mono">LIABILITY:VN_TAX_WITHHELD</code>.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => goTo('/admin/tax')}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--line,#1d1e21)] hover:bg-[var(--line,#1d1e21)]/80 text-xs font-semibold text-[var(--text,#f4f4f5)] border border-[var(--line,#1d1e21)] transition-colors"
-            >
-              <span>Xem Sổ Chi Tiết Thuế</span>
-              <ArrowUpRight size={14} />
-            </button>
-          </div>
-        </div>
-
-        {/* 3 Tax Cashflow Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="p-4 rounded-xl bg-[var(--bg,#000000)] border border-[var(--line,#1d1e21)] space-y-1">
-            <div className="text-xs text-[var(--text-3,#63636b)] flex items-center justify-between">
-              <span>Quỹ Thuế Phong Tỏa Đang Giữ Hộ</span>
-              <span className="text-[10px] font-mono font-bold text-amber-400">LIABILITY</span>
-            </div>
-            <div className="text-xl font-bold font-mono text-[var(--text,#f4f4f5)]">
-              60,420,000 <span className="text-xs text-[var(--text-3,#63636b)] font-sans">VND</span>
-            </div>
-            <div className="text-[11px] text-[var(--text-2,#a1a1aa)]">
-              Tương đương: <span className="text-[var(--accent,#818cf8)] font-mono font-semibold">$2,416.80 USDT</span>
-            </div>
-          </div>
-
-          <div className="p-4 rounded-xl bg-[var(--bg,#000000)] border border-[var(--line,#1d1e21)] space-y-1">
-            <div className="text-xs text-[var(--text-3,#63636b)] flex items-center justify-between">
-              <span>Thuế Khấu Trừ Tự Động 24h</span>
-              <span className="text-[10px] font-bold text-[var(--up,#1fc27a)]">0.1% TẠI NGUỒN</span>
-            </div>
-            <div className="text-xl font-bold font-mono text-[var(--up,#1fc27a)]">
-              12,850,000 <span className="text-xs text-[var(--text-3,#63636b)] font-sans">VND</span>
-            </div>
-            <div className="text-[11px] text-[var(--text-2,#a1a1aa)]">
-              Từ 1,428 lệnh bán thành công (Làm tròn lên Dec.ROUND_UP)
-            </div>
-          </div>
-
-          <div className="p-4 rounded-xl bg-[var(--bg,#000000)] border border-[var(--line,#1d1e21)] space-y-1">
-            <div className="text-xs text-[var(--text-3,#63636b)] flex items-center justify-between">
-              <span>Đã Nộp Kho Bạc Nhà Nước Kỳ Này</span>
-              <span className="text-[10px] font-bold text-[var(--accent,#818cf8)]">KBNN TP.HCM</span>
-            </div>
-            <div className="text-xl font-bold font-mono text-[var(--text,#f4f4f5)]">
-              125,000,000 <span className="text-xs text-[var(--text-3,#63636b)] font-sans">VND</span>
-            </div>
-            <div className="text-[11px] text-[var(--text-2,#a1a1aa)]">
-              Biên lai điện tử KBNN số <span className="font-mono text-[var(--text,#f4f4f5)]">KB-2026-09-8812</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Legal & Accounting Banner */}
-        <div className="p-4 rounded-xl bg-[var(--bg,#000000)] border border-[var(--line,#1d1e21)] flex items-center justify-between flex-wrap gap-3 text-xs">
-          <div className="flex items-center gap-2.5 text-[var(--text-2,#a1a1aa)]">
-            <ShieldCheck size={18} className="text-[var(--up,#1fc27a)] flex-shrink-0" />
-            <span>
-              Hệ thống áp dụng cơ chế hạch toán sổ cái kép: <strong className="text-[var(--text,#f4f4f5)]">Doanh thu sàn</strong> và <strong className="text-[var(--text,#f4f4f5)]">Thuế giữ hộ Nhà nước</strong> được tách rời hoàn toàn, sẵn sàng kết xuất tờ khai e-Tax XML Mẫu 01/CNKD.
-            </span>
-          </div>
-
-          <button
-            onClick={() => goTo('/admin/tax')}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[var(--accent,#818cf8)]/10 hover:bg-[var(--accent,#818cf8)]/20 text-[var(--accent,#818cf8)] font-semibold border border-[var(--accent,#818cf8)]/30 transition-colors"
-          >
-            <FileCheck size={14} />
-            <span>Xuất tờ khai thuế e-Tax XML</span>
-          </button>
-        </div>
-      </div>
-
-      {/* SECTION 3: QUICK MANAGEMENT SHORTCUTS */}
+      {/* SECTION 2: QUICK MANAGEMENT SHORTCUTS */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div
           onClick={() => goTo('/admin/users')}
