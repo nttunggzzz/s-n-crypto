@@ -2,8 +2,21 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { getApiClient } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { ConfirmDialog } from '../components/ConfirmDialog';
-import { appLinks, type AdminUserDetail, type Order, type LedgerEntry, type FuturesPosition, type GridBot, type DcaPlan, type LoginEvent, type Role } from '@cex/contracts';
-import { Copy, Check, ExternalLink, ShieldAlert, ArrowDownUp, AlertCircle, Shield, Trash2, Radio, Receipt, UserX, X, Building } from 'lucide-react';
+import {
+  appLinks,
+  type AdminUserDetail,
+  type Order,
+  type LedgerEntry,
+  type FuturesPosition,
+  type GridBot,
+  type DcaPlan,
+  type LoginEvent,
+  type Role,
+  type AdminTaxWithholding,
+  exportUrl,
+} from '@cex/contracts';
+import { formatDecimal, formatDate } from '@cex/ui';
+import { Copy, Check, ExternalLink, ShieldAlert, ArrowDownUp, AlertCircle, Shield, Trash2, Radio, Receipt, UserX, X, Building, Download } from 'lucide-react';
 
 interface UserDetailPageProps {
   userId: string;
@@ -29,6 +42,9 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
   const [positionsType, setPositionsType] = useState<'true' | 'false'>('true');
   const [userBots, setUserBots] = useState<{ grid: GridBot[]; dca: DcaPlan[] }>({ grid: [], dca: [] });
   const [allLogins, setAllLogins] = useState<LoginEvent[]>([]);
+  const [taxWithholdings, setTaxWithholdings] = useState<AdminTaxWithholding[]>([]);
+  const [taxLoading, setTaxLoading] = useState(false);
+  const [taxNextCursor, setTaxNextCursor] = useState<string | null>(null);
 
   // Role change modal state
   const [roleModalOpen, setRoleModalOpen] = useState(false);
@@ -110,8 +126,29 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
       api.adminUserLoginHistory({ params: { userId: actualId }, query: { limit: 50 } })
         .then((r) => setAllLogins(r.items))
         .catch(() => {});
+    } else if (activeTab === 'tax') {
+      setTaxLoading(true);
+      api.adminTaxWithholdings({ query: { userId: actualId, limit: 50 } })
+        .then((r) => {
+          setTaxWithholdings(r.items);
+          setTaxNextCursor(r.nextCursor);
+        })
+        .catch(() => {
+          setTaxWithholdings([]);
+          setTaxNextCursor(null);
+        })
+        .finally(() => setTaxLoading(false));
     }
   }, [actualId, activeTab, ordersType, positionsType, api]);
+
+  const loadMoreTax = async () => {
+    if (!taxNextCursor || !actualId) return;
+    try {
+      const r = await api.adminTaxWithholdings({ query: { userId: actualId, cursor: taxNextCursor, limit: 50 } });
+      setTaxWithholdings((prev) => [...prev, ...r.items]);
+      setTaxNextCursor(r.nextCursor);
+    } catch {}
+  };
 
   if (!detail) {
     return <div className="p-8 text-center text-[var(--text-2,#a1a1aa)]">Đang tải thông tin chi tiết người dùng...</div>;
@@ -198,7 +235,7 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
       setRoleModalOpen(false);
       loadUserData();
     } catch (e: any) {
-      alert(e?.message || 'Có lỗi xảy ra khi cập nhật vai trò');
+      setAuditNotification(`Lỗi: ${e?.message || 'Có lỗi xảy ra khi cập nhật vai trò'}`);
     } finally {
       setIsSubmittingRole(false);
     }
@@ -219,7 +256,7 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
       setAuditNotification(`Đã ${nextVal ? 'cấp' : 'thu hồi'} quyền tín hiệu giao dịch cho ${detail.user.email}`);
       loadUserData();
     } catch (e: any) {
-      alert(e?.message || 'Lỗi khi cập nhật quyền tín hiệu');
+      setAuditNotification(`Lỗi: ${e?.message || 'Lỗi khi cập nhật quyền tín hiệu'}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -831,104 +868,87 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
         </div>
       )}
 
-      {/* Tax Profile Tab (TT 32/2026/TT-BTC & TT 41/2026/TT-BTC) */}
+      {/* Tax Profile Tab */}
       {activeTab === 'tax' && (
         <div className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="p-4 rounded-xl bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)]">
-              <div className="text-xs text-[var(--text-2,#a1a1aa)] uppercase font-semibold">Định danh thuế (TIN / MST)</div>
-              <div className="text-lg font-mono font-bold text-[var(--text,#f4f4f5)] mt-1">
-                {u.email.includes('admin') ? '0109988776-001' : `VN-84${u.uid.padStart(8, '0')}`}
-              </div>
-              <div className="flex items-center gap-2 mt-2">
-                <span className="px-2 py-0.5 rounded bg-[var(--up,#1fc27a)]/10 text-[var(--up,#1fc27a)] border border-[var(--up,#1fc27a)]/20 text-xs font-medium">
-                  Đã liên kết VNeID mức 2
-                </span>
-              </div>
-            </div>
-
-            <div className="p-4 rounded-xl bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)]">
-              <div className="text-xs text-[var(--text-2,#a1a1aa)] uppercase font-semibold">Phân loại & Thuế suất</div>
-              <div className="text-lg font-bold text-amber-400 mt-1">
-                0.1% Khấu trừ tại nguồn
-              </div>
-              <div className="text-xs text-[var(--text-3,#63636b)] mt-2">
-                Áp dụng cho mọi lệnh BÁN khớp theo TT 32/2026/TT-BTC
-              </div>
-            </div>
-
-            <div className="p-4 rounded-xl bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)]">
-              <div className="text-xs text-[var(--text-2,#a1a1aa)] uppercase font-semibold">Quỹ giữ hộ (LIABILITY:VN_TAX)</div>
-              <div className="text-lg font-mono font-bold text-[var(--accent,#818cf8)] mt-1">
-                1,250,000 VND <span className="text-xs font-normal text-[var(--text-2,#a1a1aa)]">(~48.5 USDT)</span>
-              </div>
-              <div className="text-xs text-[var(--up,#1fc27a)] mt-2">
-                Sẵn sàng kết xuất bảng kê e-Tax
-              </div>
-            </div>
-          </div>
-
           <div className="bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)] rounded-xl overflow-hidden shadow">
             <div className="p-4 border-b border-[var(--line,#1d1e21)] flex flex-wrap items-center justify-between gap-3">
               <div>
-                <h3 className="text-sm font-bold text-[var(--text,#f4f4f5)]">Nhật ký khấu trừ thuế tại nguồn của khách</h3>
-                <p className="text-xs text-[var(--text-3,#63636b)]">Được ghi nhận tự động khi lệnh SELL khớp thành công</p>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-bold text-[var(--text,#f4f4f5)]">Nhật ký khấu trừ thuế của khách</h3>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                    Thử nghiệm
+                  </span>
+                </div>
+                <p className="text-xs text-[var(--text-3,#63636b)] mt-0.5">
+                  Ghi nhận tự động khi lệnh bán Spot khớp thành công (sàn thử nghiệm, không nộp cho cơ quan nào)
+                </p>
               </div>
               <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => alert('Đang xuất bảng kê khấu trừ định dạng CSV...')}
-                  className="px-3 py-1.5 rounded-lg border border-[var(--line,#1d1e21)] text-xs text-[var(--text,#f4f4f5)] hover:bg-[var(--line,#1d1e21)]/40 transition-colors"
+                <a
+                  href={actualId ? exportUrl('adminTaxExport', { userId: actualId }) : '#'}
+                  download
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[var(--line,#1d1e21)] text-xs text-[var(--text,#f4f4f5)] hover:bg-[var(--line,#1d1e21)]/40 transition-colors"
                 >
-                  Xuất CSV
-                </button>
-                <button
-                  type="button"
-                  onClick={() => alert('Đang tải tệp chứng từ khấu trừ e-Tax XML theo mẫu Cục Thuế...')}
-                  className="px-3 py-1.5 rounded-lg bg-[var(--accent,#818cf8)] text-white text-xs font-medium hover:brightness-110 transition-all"
-                >
-                  Tải chứng từ XML (e-Tax)
-                </button>
+                  <Download size={14} />
+                  <span>Xuất CSV</span>
+                </a>
               </div>
             </div>
 
             <table className="w-full text-left text-sm">
               <thead className="bg-[var(--line,#1d1e21)]/30 border-b border-[var(--line,#1d1e21)] text-xs text-[var(--text-2,#a1a1aa)]">
                 <tr>
-                  <th className="px-4 py-3">Mã lệnh Bán</th>
+                  <th className="px-4 py-3">Thời gian</th>
                   <th className="px-4 py-3">Cặp GD</th>
                   <th className="px-4 py-3">Giá trị bán gộp</th>
-                  <th className="px-4 py-3">Tỷ lệ</th>
-                  <th className="px-4 py-3">Thuế khấu trừ (VND)</th>
-                  <th className="px-4 py-3">Mã e-Tax</th>
-                  <th className="px-4 py-3">Trạng thái</th>
+                  <th className="px-4 py-3">Thuế suất</th>
+                  <th className="px-4 py-3">Thuế khấu trừ (USDT)</th>
+                  <th className="px-4 py-3">Tỷ giá VND</th>
+                  <th className="px-4 py-3">Thuế VND</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--line,#1d1e21)] font-mono text-xs">
-                <tr className="hover:bg-[var(--line,#1d1e21)]/10">
-                  <td className="px-4 py-3 text-[var(--text-3,#63636b)]">ord-sell-90214</td>
-                  <td className="px-4 py-3 font-semibold text-[var(--text,#f4f4f5)]">BTC/USDT</td>
-                  <td className="px-4 py-3">500,000,000 VND</td>
-                  <td className="px-4 py-3 text-amber-400">0.1%</td>
-                  <td className="px-4 py-3 font-bold text-amber-400">500,000 VND</td>
-                  <td className="px-4 py-3 text-[var(--accent,#818cf8)]">VNTAX-2026-09124</td>
-                  <td className="px-4 py-3 font-sans">
-                    <span className="px-2 py-0.5 rounded bg-[var(--up,#1fc27a)]/10 text-[var(--up,#1fc27a)] text-[10px]">Đã nộp quỹ</span>
-                  </td>
-                </tr>
-                <tr className="hover:bg-[var(--line,#1d1e21)]/10">
-                  <td className="px-4 py-3 text-[var(--text-3,#63636b)]">ord-sell-88412</td>
-                  <td className="px-4 py-3 font-semibold text-[var(--text,#f4f4f5)]">ETH/USDT</td>
-                  <td className="px-4 py-3">750,000,000 VND</td>
-                  <td className="px-4 py-3 text-amber-400">0.1%</td>
-                  <td className="px-4 py-3 font-bold text-amber-400">750,000 VND</td>
-                  <td className="px-4 py-3 text-[var(--accent,#818cf8)]">VNTAX-2026-08819</td>
-                  <td className="px-4 py-3 font-sans">
-                    <span className="px-2 py-0.5 rounded bg-[var(--up,#1fc27a)]/10 text-[var(--up,#1fc27a)] text-[10px]">Đã nộp quỹ</span>
-                  </td>
-                </tr>
+                {taxLoading && taxWithholdings.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="px-4 py-8 text-center text-[var(--text-3,#63636b)] font-sans">
+                      Đang tải dữ liệu khấu trừ thuế...
+                    </td>
+                  </tr>
+                )}
+                {!taxLoading && taxWithholdings.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="px-4 py-8 text-center text-[var(--text-3,#63636b)] font-sans">
+                      Chưa có bản ghi khấu trừ nào.
+                    </td>
+                  </tr>
+                )}
+                {taxWithholdings.map((wh) => (
+                  <tr key={wh.withholdingId} className="hover:bg-[var(--line,#1d1e21)]/10" data-testid="admin-tax-withholding-row" data-trade-id={wh.tradeId}>
+                    <td className="px-4 py-3 text-[var(--text-3,#63636b)]">{formatDate(wh.createdAt)}</td>
+                    <td className="px-4 py-3 font-semibold text-[var(--text,#f4f4f5)]">{wh.symbol}</td>
+                    <td className="px-4 py-3">{formatDecimal(wh.grossQuote, { decimals: 4 })} USDT</td>
+                    <td className="px-4 py-3 text-amber-400">{(Number(wh.taxRate) * 100).toFixed(2)}%</td>
+                    <td className="px-4 py-3 font-bold text-amber-400">{formatDecimal(wh.taxAmount, { decimals: 8 })} USDT</td>
+                    <td className="px-4 py-3 text-[var(--text-2,#a1a1aa)]">{wh.vndRate ? `${formatDecimal(wh.vndRate, { decimals: 0 })} ₫` : '—'}</td>
+                    <td className="px-4 py-3 text-[var(--text-2,#a1a1aa)]">{wh.taxVnd ? `${formatDecimal(wh.taxVnd, { decimals: 0 })} ₫` : '—'}</td>
+                  </tr>
+                ))}
               </tbody>
             </table>
+
+            {taxNextCursor && (
+              <div className="p-4 border-t border-[var(--line,#1d1e21)] text-center">
+                <button
+                  type="button"
+                  onClick={loadMoreTax}
+                  disabled={taxLoading}
+                  className="px-4 py-2 rounded-lg bg-[var(--line,#1d1e21)] text-xs text-[var(--text,#f4f4f5)] hover:bg-[var(--line,#1d1e21)]/80 transition-colors"
+                >
+                  {taxLoading ? 'Đang tải...' : 'Xem thêm bản ghi'}
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
