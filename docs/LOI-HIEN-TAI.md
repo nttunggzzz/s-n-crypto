@@ -15,6 +15,15 @@ Rà soát: **2026-10-11** (Claude Code). Cập nhật lần cuối: 2026-10-11 t
 >
 > **Rà soát lần 4 (UI `a225402`, 2026-10-13): [docs/reports/2026-10-13-ra-soat-ui-lan-4.md](reports/2026-10-13-ra-soat-ui-lan-4.md)** — **gộp được**: verify 232/232, e2e 39/39, K-01…K-08 + PROMPT-12 đạt (có test). Còn L-01…L-05 (P3, Antigravity). Bản sửa keep-alive L-06 (Claude Code) cần `npm run host -- update` để lên sàn thật.
 
+>
+> **Rà soát lần 5 (UI `8bb9f96`, 2026-10-15): [docs/reports/2026-10-15-ra-soat-ui-lan-5.md](reports/2026-10-15-ra-soat-ui-lan-5.md)** — **chưa gộp được**, dù cổng máy xanh (verify 498/498, e2e 50 đạt / 1 bỏ qua; đủ 8 ca thuế, PROMPT-13 đạt). Có **4 mục P1** cho Antigravity:
+> - **M-01**: Antigravity sửa `server/`, bỏ 2FA cho staff khi `NODE_ENV=development`. Trả 2 file server về bản `main`.
+> - **M-02**: số liệu và chứng từ thuế bịa trên tổng quan admin (Kho bạc, biên lai KBNN, e-Tax XML).
+> - **M-03**: tab Thuế ở chi tiết người dùng có mã số thuế bịa, VNeID, nút `alert()`.
+> - **M-04**: form cài đặt thuế admin có thể xóa tỷ giá VND hoặc tắt thuế ngoài ý muốn.
+>
+> Ngoài ra: 7 mục P2 (M-05…M-11), 5 mục P3 (M-12…M-16), và L-01, L-03, L-04, L-05 còn từ lần 4. Thứ tự sửa ở mục 5 của báo cáo.
+
 ## Backend → UI (Claude Code cập nhật mỗi khi đổi backend/hợp đồng; Antigravity đọc đầu mỗi phiên, cùng `packages/contracts/CHANGELOG.md`)
 
 | Ngày | Thay đổi backend / hợp đồng | UI cần làm gì | Trạng thái |
@@ -30,7 +39,8 @@ Rà soát: **2026-10-11** (Claude Code). Cập nhật lần cuối: 2026-10-11 t
 | 2026-10-14 | **Có rồi (contracts 0.13.0, `781e246`):** kiểu dữ liệu hệ phân tích (`analysis.ts`), chỉ export, **không có endpoint** | Không làm gì (chưa có giao diện cho phân tích ở GĐ4; trang Admin tín hiệu là PROMPT-15, sau C1) | **Có rồi** |
 | 2026-10-14 | **Có rồi (contracts 0.14.0, `35aab16`): hợp đồng Nhật ký giao dịch** — 12 endpoint `journal*`, định dạng phản hồi nhị phân (`journalAttachmentUrl`), mã lỗi 413/415, mock chạy cùng hàm tính với server. **Server chưa có route** (A2–A4) | [PROMPT-14](antigravity/PROMPT-14-nhat-ky-giao-dich.md): làm trên mock (`VITE_USE_MOCKS=true`), sau PROMPT-13 và L-01…L-05 | Chờ Antigravity (server: chờ A2–A4) |
 | 2026-10-14 | **Có rồi (contracts 0.15.0, `ca59bc2`): Thuế crypto Việt Nam (Module T, T1+T2)** — `Trade.tax`, `exchangeInfo.taxMode/taxRate/taxVndRate/taxVndRateUpdatedAt`, loại sổ cái `TAX_WITHHOLDING` (cần nhãn ở `WalletPage.tsx:260`), audit `TAX_SETTINGS_UPDATE` (thêm option ở `AuditLogsPage.tsx:55`), quyền `tax.read` (support/admin/owner) và `tax.manage` (admin/owner), CSV giao dịch thêm cột `tax` sau `feeAsset`. Server đã có `taxProfile`, `taxUpdateProfile`, `adminTaxSettings`, `adminUpdateTaxSettings`; **6 endpoint báo cáo (`taxSummary`, `taxWithholdings`, `taxExport`, `adminTax*`) chờ T3** — trên server thật trả 404 tới lúc đó. Thuế mặc định OFF | [PROMPT-16](antigravity/PROMPT-16-thue-viet-nam.md) (contracts 0.16.0: thêm cài đặt thuế trên `exchange:status`; server đã có đủ 10 endpoint thuế) | Chờ Antigravity |
-| (không đổi) | Hợp đồng hiện tại: **0.16.0**. Không có endpoint nào bị xóa/đổi tên gần đây | — | — |
+| 2026-10-14 | **Có rồi (contracts 0.17.0, `60d48ea`): Module N, tin tức real-time và sự kiện vĩ mô cho hệ phân tích (đợt N1)** — `SnapshotNews`/`SnapshotMacroEvent` trong snapshot, `newsContext` trong báo cáo phân tích, phòng ban `news_event_risk`, 3 endpoint Admin `adminNewsItems`, `adminNewsSources`, `adminNewsMacroEvents`, quyền `news.view` (support/admin/owner — `me.permissions` của các vai trò này có thêm giá trị). **Server đã có route** (N2b, `75ea9d0`); chưa có job tải tin (N2c), nên danh sách tin còn rỗng, chỉ nguồn lịch LIVE | Chưa làm gì. Giao diện Admin "Tin tức và sự kiện" là đợt N6, sẽ có PROMPT riêng ([kế hoạch](plans/module-N-tin-tuc-va-vi-mo.md)) | **Có rồi** |
+| (không đổi) | Hợp đồng hiện tại: **0.17.0**. Không có endpoint nào bị xóa/đổi tên gần đây | — | — |
 
 ## 0. Bức tranh tổng thể
 

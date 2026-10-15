@@ -1,5 +1,30 @@
 # Changelog — @cex/contracts
 
+## 0.17.0 — 2026-10-14 (Module N — đợt N1: tin tức và sự kiện vĩ mô cho hệ phân tích)
+Chỉ thêm. 3 endpoint Admin mới, tổng 153. Không có endpoint cho người dùng thường (C-D1). Hướng dẫn: README mục 16.
+Trạng thái server: chưa có route cho `adminNewsItems`, `adminNewsSources`, `adminNewsMacroEvents` (đợt N2).
+
+**Thêm**
+- `analysis.ts`:
+  - `NewsEventType` (10 giá trị, có `OTHER`), `NewsSourceKind`, `SnapshotNewsItem`, `SnapshotNewsSource`, `SnapshotNews`, `MacroEventCode`, `MacroEventImportance`, `SnapshotMacroEvent`, `NewsImpact`, `AnalysisNewsTilt`, `AnalysisNewsContext`.
+  - `SnapshotNewsItem`: `firstSeenAt` bắt buộc; `publishedAt` và `tone` nullable; `url` chỉ http/https, tối đa 2048 ký tự; `eventTypes` ít nhất 1 giá trị (bộ phân loại trả `OTHER` khi không chắc).
+  - `SnapshotNews.sources[]`: độ tươi từng nguồn đang BẬT tại `asOf` (tên, loại, `status`, `lastSuccessAt`). `sourcesTotal` = `sources.length`, `sourcesLive` = số nguồn LIVE (có kiểm); nguồn lịch tĩnh được tính, nguồn tắt thì không.
+  - `SnapshotMacroEvent.actual`: chỉ có giá trị khi `actualKnownAt` ≤ `asOf`; người dựng snapshot bỏ giá trị chưa biết. Nghĩa và đơn vị chốt khi có FRED (N-D3); v0 luôn null.
+  - `AnalysisNewsContext`: `itemsUsed` là tin đầy đủ (`SnapshotNewsItem`); `tilt` nullable (null khi `status` là UNAVAILABLE). `tilt` chỉ phân loại tin CÓ tone theo ngưỡng của `classifierVersion`; tin `tone: null` vào `unscored`, không bao giờ vào neutral; positive + negative + neutral + unscored = `itemsUsed.length` (có kiểm); `validated` chỉ nhận `false`. `impact` dùng enum `NewsImpact`: ít nhất 1 giá trị, không trùng, `CONTEXT_ONLY` và `UNAVAILABLE` đứng một mình.
+- `CryptoMarketSnapshot.news`, `.macroEvents` và `CryptoMarketAnalysisReport.newsContext`: `.nullable().optional()` để snapshot/báo cáo đã lưu và mã dựng hiện có vẫn hợp lệ. `null` hoặc vắng = chưa có lớp tin tức (không phải "không có tin").
+- `AnalysisDepartmentId` thêm `news_event_risk`. `SnapshotHeadline` giữ nguyên, ghi chú cũ (`@deprecated`).
+- `news.ts`: `NewsSourceHealth` (`medianLagMs` là số nguyên ms, **cho phép âm**: nguồn ghi giờ đăng ở tương lai so với đồng hồ của mình, không kẹp về 0; null khi chưa đo được), `NewsItemAdmin` (thêm `sourceId`, `sourceKind`, `ingestedRunId`), `AdminNewsItemsQuery`, `AdminNewsSources`, `AdminNewsMacroEventsQuery`, `AdminNewsMacroEvents`, hằng `NEWS_MACRO_EVENTS_MAX_DAYS` (400).
+- Endpoint (cả ba `auth: 'staff'`, quyền mới `news.view`):
+  - `adminNewsItems` GET `/api/v1/admin/news/items`: lọc `symbol`/`eventType`/`sourceId`/`from`/`to` (theo `firstSeenAt`); thứ tự `(firstSeenAt DESC, id DESC)`; cursor mờ (base64url của `firstSeenAt|id`, trang sau = mọi tin đứng trước nó); cursor hỏng → 400 `VALIDATION_ERROR`; `from` > `to` → 400 `VALIDATION_ERROR`. Lọc `symbol` không trả tin vĩ mô chung (`symbols: []`).
+  - `adminNewsSources` GET `/api/v1/admin/news/sources`: sức khỏe từng nguồn, kể cả nguồn tắt.
+  - `adminNewsMacroEvents` GET `/api/v1/admin/news/macro-events`: lọc `code`/`importance`/`from`/`to` theo `scheduledAt`, sắp tăng dần, khoảng ≤ 400 ngày (quá → `VALIDATION_ERROR`; thiếu một đầu thì lấy 400 ngày từ đầu có sẵn; không có đầu nào thì 400 ngày từ lúc gọi).
+- `news.view` gán cho support, admin, owner: chỉ đọc, không chứa dữ liệu cá nhân của người dùng.
+- Fixture `fixtures/news.ts` (theo kết quả N0: tin GDELT `publishedAt: null`, nguồn GDELT `medianLagMs: null`, nguồn lịch tĩnh LIVE; 3 tin cùng `firstSeenAt`), resolver mock `mocks/news.ts` (cùng luật quyền, cursor và kiểm tra đầu vào như server), test `mocks/mocks-news.test.ts`.
+
+**Thay đổi nhỏ có thể ảnh hưởng UI**
+- `AnalysisDepartmentId` có thêm giá trị `news_event_risk`: nơi nào dùng `Record<AnalysisDepartmentId, …>` hoặc `switch` đầy đủ sẽ báo lỗi typecheck và cần bổ sung nhãn.
+- `Permission` có thêm `news.view`: `Record<Permission, …>` phải bổ sung. `me.permissions` của support/admin/owner có thêm `news.view`.
+
 ## 0.16.0 — 2026-10-14 (Thuế — đợt T3F: cài đặt thuế đi qua `exchange:status`)
 Chỉ thêm trường; không thêm endpoint (vẫn 150). Hướng dẫn: README mục 15.
 

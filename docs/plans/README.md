@@ -7,6 +7,7 @@ Lập: 2026-10-13, kỹ sư chính (Claude Code). Chủ dự án chọn **A + C*
 | **A — Nhật ký giao dịch & thống kê cá nhân** | GĐ5 | Mỗi giao dịch có ghi chú, setup, kế hoạch, ảnh. Thống kê thật: win rate, kỳ vọng R, drawdown, theo setup/coin | [module-A-nhat-ky-giao-dich.md](module-A-nhat-ky-giao-dich.md) |
 | **C — Engine tín hiệu** | GĐ4 → cổng M3 | Tín hiệu LONG/SHORT từ hệ phân tích đa tác tử, lưu theo phiên bản engine, chấm kết quả bằng dữ liệu chạy thật, trang Admin "Hiệu quả tín hiệu". Qua cổng M3 chỉ mở bước **xem xét** phát hành; bán tín hiệu cần phê duyệt riêng | [module-C-engine-tin-hieu.md](module-C-engine-tin-hieu.md) |
 | **T — Thuế crypto Việt Nam** (thêm 2026-10-14, đã duyệt) | ngoài GĐ, làm trước A2 | Trích 0,1% người bán khi khớp Spot theo TT 32/41/2026, sổ thuế riêng, đối soát, báo cáo người dùng/admin; mọi loại giao dịch xử lý đúng luật | [module-T-thue-viet-nam.md](module-T-thue-viet-nam.md) |
+| **N — Tin tức real-time & sự kiện vĩ mô** (đã duyệt 2026-10-14; N-D3 chờ khóa FRED) | GĐ4, bổ sung cho C | Hệ phân tích có thêm tin tức (GDELT, RSS) và lịch vĩ mô theo đúng thời điểm hệ biết tin; v0 là cổng rủi ro (không mở tín hiệu sát sự kiện lớn, chặn cặp vừa có tin nóng); dùng tin để dự báo hướng chỉ khi nghiên cứu sự kiện chứng minh được | [module-N-tin-tuc-va-vi-mo.md](module-N-tin-tuc-va-vi-mo.md) |
 
 Hai module dùng chung **[quy ước R và tách nguồn dữ liệu](quy-uoc-R-va-nguon-du-lieu.md)** — mọi sub-agent đọc trước khi làm.
 

@@ -23,6 +23,7 @@ import { seedSimRules, SimFeed, simSpecs } from './modules/market/sim/feed.ts';
 import { acquireInstanceLock, startStandbyServer } from './ops/singleInstance.ts';
 import { createAlerter, FeedWatcher } from './ops/alerts.ts';
 import { startMemoryLog } from './ops/memoryLog.ts';
+import { startNews } from './modules/news/index.ts';
 
 const config = loadConfig();
 const version = process.env.RAILWAY_GIT_COMMIT_SHA?.slice(0, 7) ?? 'dev';
@@ -50,6 +51,8 @@ await standby.close();
 const database = createDatabase(config.DATABASE_URL);
 await runMigrations(database.db);
 await seedAssets(database.db);
+// Module N: source catalogue + macro calendar (a bad calendar file is logged and alerted, never fatal)
+const news = await startNews(database.db, config, { alerter });
 
 const feedOn = config.MARKET_FEED === 'binance';
 const sim = config.MARKET_FEED === 'sim';
@@ -167,6 +170,7 @@ async function shutdown(signal: string) {
   exchange.portfolio.stop();
   exchangeConfig.stop();
   stopMemoryLog();
+  news.stop();
   hub.close();
   server.close();
   await database.close();

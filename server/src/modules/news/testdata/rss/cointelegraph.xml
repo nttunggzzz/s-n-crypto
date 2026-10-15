@@ -1,0 +1,91 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Test fixture: trimmed from cointelegraph RSS fetched 2026-10-14T16:23Z. Titles/links/dates only (no article text). -->
+<rss version="2.0" xmlns:dc="http://purl.org/dc/elements/1.1/">
+  <channel>
+    <title>Cointelegraph.com News</title>
+    <item>
+      <title>Bitcoin price dips below $82K as high oil prices spike US CPI inflation</title>
+      <link><![CDATA[https://cointelegraph.com/markets/bitcoin-price-dips-yields-surge-as-high-oil-prices-spike-us-cpi-inflation?utm_source=rss_feed&utm_medium=rss&utm_campaign=rss_partner_inbound]]></link>
+      <guid isPermaLink="true">https://cointelegraph.com/markets/bitcoin-price-dips-yields-surge-as-high-oil-prices-spike-us-cpi-inflation</guid>
+      <pubDate>Wed, 14 Oct 2026 14:21:15 +0000</pubDate>
+      <category>Markets</category>
+    </item>
+    <item>
+      <title>Here’s what happened in crypto today</title>
+      <link><![CDATA[https://cointelegraph.com/news/what-happened-in-crypto-today?utm_source=rss_feed&utm_medium=rss&utm_campaign=rss_partner_inbound]]></link>
+      <guid isPermaLink="true">https://cointelegraph.com/news/what-happened-in-crypto-today</guid>
+      <pubDate>Wed, 14 Oct 2026 13:36:56 +0000</pubDate>
+      <category>Latest News</category>
+    </item>
+    <item>
+      <title>‘Bunker mode’ won’t protect your crypto, critics say </title>
+      <link><![CDATA[https://cointelegraph.com/magazine/bunker-mode-wont-protect-your-crypto-critics-say?utm_source=rss_feed&utm_medium=rss&utm_campaign=rss_partner_inbound]]></link>
+      <guid isPermaLink="true">https://cointelegraph.com/magazine/bunker-mode-wont-protect-your-crypto-critics-say</guid>
+      <pubDate>Wed, 14 Oct 2026 13:30:00 +0000</pubDate>
+      <category>Magazine</category>
+    </item>
+    <item>
+      <title>Canada crypto remittances to Asian countries surge 141% to $2.36B: Chainalysis</title>
+      <link><![CDATA[https://cointelegraph.com/news/canada-crypto-remittances-asia-surge-chainalysis?utm_source=rss_feed&utm_medium=rss&utm_campaign=rss_partner_inbound]]></link>
+      <guid isPermaLink="true">https://cointelegraph.com/news/canada-crypto-remittances-asia-surge-chainalysis</guid>
+      <pubDate>Wed, 14 Oct 2026 13:00:00 +0000</pubDate>
+      <category>Latest News</category>
+    </item>
+    <item>
+      <title>Qivalis wins Dutch e-money license for euro stablecoin</title>
+      <link><![CDATA[https://cointelegraph.com/news/qivalis-authorization-dutch-central-bank-euro-stablecoin?utm_source=rss_feed&utm_medium=rss&utm_campaign=rss_partner_inbound]]></link>
+      <guid isPermaLink="true">https://cointelegraph.com/news/qivalis-authorization-dutch-central-bank-euro-stablecoin</guid>
+      <pubDate>Wed, 14 Oct 2026 12:53:41 +0000</pubDate>
+      <category>Latest News</category>
+    </item>
+    <item>
+      <title>Kraken parent to buy Lithuanian Saldo Bank amid TradFi expansion </title>
+      <link><![CDATA[https://cointelegraph.com/news/krakens-parent-buy-lithuanian-saldo-bank-tradfi-expansion?utm_source=rss_feed&utm_medium=rss&utm_campaign=rss_partner_inbound]]></link>
+      <guid isPermaLink="true">https://cointelegraph.com/news/krakens-parent-buy-lithuanian-saldo-bank-tradfi-expansion</guid>
+      <pubDate>Wed, 14 Oct 2026 12:26:05 +0000</pubDate>
+      <category>Latest News</category>
+    </item>
+    <item>
+      <title>Can crypto users trust the supply chain behind hardware wallets?</title>
+      <link><![CDATA[https://cointelegraph.com/news/hardware-wallet-supply-chain-risk-ledger-incident?utm_source=rss_feed&utm_medium=rss&utm_campaign=rss_partner_inbound]]></link>
+      <guid isPermaLink="true">https://cointelegraph.com/news/hardware-wallet-supply-chain-risk-ledger-incident</guid>
+      <pubDate>Wed, 14 Oct 2026 11:59:42 +0000</pubDate>
+      <category>Latest News</category>
+    </item>
+    <item>
+      <title>Coins.ph says Philippine central bank license intact amid revocation claims</title>
+      <link><![CDATA[https://cointelegraph.com/news/coinsph-says-bsp-license-intact-amid-claims-of-potential-revocation?utm_source=rss_feed&utm_medium=rss&utm_campaign=rss_partner_inbound]]></link>
+      <guid isPermaLink="true">https://cointelegraph.com/news/coinsph-says-bsp-license-intact-amid-claims-of-potential-revocation</guid>
+      <pubDate>Wed, 14 Oct 2026 11:05:00 +0000</pubDate>
+      <category>Latest News</category>
+    </item>
+    <item>
+      <title>CryptoQuant’s 3 charts keeping Bitcoin’s ‘Uptober’ thesis valid</title>
+      <link><![CDATA[https://cointelegraph.com/markets/cryptoquant-charts-bitcoin-uptober-thesis-valid?utm_source=rss_feed&utm_medium=rss&utm_campaign=rss_partner_inbound]]></link>
+      <guid isPermaLink="true">https://cointelegraph.com/markets/cryptoquant-charts-bitcoin-uptober-thesis-valid</guid>
+      <pubDate>Wed, 14 Oct 2026 10:38:22 +0000</pubDate>
+      <category>Markets</category>
+    </item>
+    <item>
+      <title>Sam Bankman-Fried’s lawyer lays out ex-FTX CEO’s Supreme Court case </title>
+      <link><![CDATA[https://cointelegraph.com/news/ftx-sam-bankman-fried-lawyer-supreme-court-appeal?utm_source=rss_feed&utm_medium=rss&utm_campaign=rss_partner_inbound]]></link>
+      <guid isPermaLink="true">https://cointelegraph.com/news/ftx-sam-bankman-fried-lawyer-supreme-court-appeal</guid>
+      <pubDate>Wed, 14 Oct 2026 10:29:47 +0000</pubDate>
+      <category>Latest News</category>
+    </item>
+    <item>
+      <title>Bitcoin will become ‘less volatile’ and larger than gold: ‘The Bitcoin Standard’ author </title>
+      <link><![CDATA[https://cointelegraph.com/news/bitcoin-less-volatile-larger-gold-bitcoin-standard-author?utm_source=rss_feed&utm_medium=rss&utm_campaign=rss_partner_inbound]]></link>
+      <guid isPermaLink="true">https://cointelegraph.com/news/bitcoin-less-volatile-larger-gold-bitcoin-standard-author</guid>
+      <pubDate>Wed, 14 Oct 2026 10:25:53 +0000</pubDate>
+      <category>Latest News</category>
+    </item>
+    <item>
+      <title>Standard Chartered expands Bitcoin and Ether trading to professional investors in UAE </title>
+      <link><![CDATA[https://cointelegraph.com/news/standard-chartered-bitcoin-ether-trading-professional-investors-uae?utm_source=rss_feed&utm_medium=rss&utm_campaign=rss_partner_inbound]]></link>
+      <guid isPermaLink="true">https://cointelegraph.com/news/standard-chartered-bitcoin-ether-trading-professional-investors-uae</guid>
+      <pubDate>Wed, 14 Oct 2026 10:07:03 +0000</pubDate>
+      <category>Latest News</category>
+    </item>
+  </channel>
+</rss>
