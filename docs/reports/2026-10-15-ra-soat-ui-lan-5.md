@@ -236,14 +236,14 @@ Tiền tố mới của lần này: **M** (M-01 … M-16). Đọc kèm [lần 4]
   - xử lý lỗi bước 2: hiện "Đã đặt lại số dư nhưng khóa thất bại: …" kèm nút "Khóa lại";
   - hoặc bỏ nút gộp này, để admin dùng hai nút có sẵn.
 - **Nghiệm thu:** `page.route` làm lỗi `POST …/lock` → giao diện báo đúng bước nào thất bại.
-- **Trạng thái:** Đã sửa (`313021d`) — Đổi nhãn thành 'Đặt lại số dư và khóa', tooltip nói đúng không xóa và có thể mở khóa, tách riêng xử lý lỗi từng bước và thông báo chính xác.
+- **Trạng thái:** Đã sửa (`313021d`, `c08e5bf`, `0160047`) — Đổi nhãn thành 'Đặt lại số dư và khóa', tooltip nói đúng không xóa và có thể mở khóa, tách riêng xử lý lỗi từng bước; loại bỏ useMemo điều kiện khắc phục React error #310; phục hồi định tuyến u.uid; vượt qua toàn bộ 5 test admin.spec trong `npm run ui-check -- --e2e` (50 passed).
 
 ### M-11 · P2 · Xem trước số dư sau điều chỉnh dùng số thực (float)
 - **File:** `UserDetailPage.tsx:133-135` (`parseFloat` + `toFixed(8)`); cùng kiểu ở `:418`, `:528`, `:617`, `:681` (chọn màu theo `parseFloat`).
 - **Cách xảy ra:** số dư lớn có 8 chữ số lẻ (ví dụ 123456789.12345678 USDT) thì số xem trước sai. Admin quyết định dựa trên số này. Server vẫn tính đúng.
 - **Cách sửa:** `dec(available).add(dec(amount || '0'))` của `@cex/core`. Ô trống thì không hiện xem trước. Màu theo `dec(x).isNegative()`.
 - **Nghiệm thu:** nhập 0.00000001 với số dư 123456789.12345678 → xem trước `123456789.12345679`.
-- **Trạng thái:** Đã sửa (`313021d`) — Dùng dec() của @cex/core tính toán xem trước số dư khả dụng, ẩn xem trước khi ô trống, thay thế toàn bộ parseFloat trong bảng ledger/futures.
+- **Trạng thái:** Đã sửa (`313021d`, `c08e5bf`) — Dùng dec() của @cex/core tính toán xem trước số dư khả dụng, ẩn xem trước khi ô trống, thay thế toàn bộ parseFloat trong bảng ledger/futures; vượt qua `npm run ui-check -- --e2e` (50 passed).
 
 ### M-12 · P3 · Nhãn % thuế và giá trị mặc định trên form BÁN
 - **File:** `apps/exchange/src/components/trading/OrderForm.tsx:1217` (`(Number(taxRate) * 100).toFixed(1)`); tooltip `:1183`, `:1219` ghi cứng "0,1%"; `:411` (`taxRate ?? '0.001'`), `:413` (`feeRate ?? '0.001'`).
@@ -255,17 +255,17 @@ Tiền tố mới của lần này: **M** (M-01 … M-16). Đọc kèm [lần 4]
   - tooltip chèn đúng mức;
   - không có `feeRate` / `taxRate` thì không hiện ước tính.
 - **Nghiệm thu:** admin đặt 0.0005 → nhãn hiện "0,05%". Testid: `tax-rate-label`.
-- **Trạng thái:** Đã sửa (`4b09dc9`) — Dùng formatDecimal và dec tính % thuế động (tax-rate-label), cập nhật tooltip đồng bộ, loại bỏ giá trị mặc định '0.001' khi thiếu exchangeInfo.
+- **Trạng thái:** Đã sửa (`4b09dc9`) — Dùng formatDecimal và dec tính % thuế động (tax-rate-label), cập nhật tooltip đồng bộ, loại bỏ giá trị mặc định '0.001' khi thiếu exchangeInfo; `npm run ui-check -- --e2e` (50 passed).
 
 ### M-13 · P3 · Câu chữ "tự động trích nộp"
 - **File:** `TaxManagementPage.tsx:281`.
 - **Cách sửa:** "lệnh bán Spot sẽ tự động bị trích thuế (mô phỏng, không nộp cho cơ quan nào)".
-- **Trạng thái:** Đã sửa (`3633527`) — Đã sửa câu chữ thành: 'Lệnh bán Spot sẽ tự động bị trích thuế (mô phỏng, không nộp cho cơ quan nào)'.
+- **Trạng thái:** Đã sửa (`3633527`) — Đã sửa câu chữ thành: 'Lệnh bán Spot sẽ tự động bị trích thuế (mô phỏng, không nộp cho cơ quan nào)'; `npm run ui-check -- --e2e` (50 passed).
 
 ### M-14 · P3 · Mục "Thuế" trong menu Header không dùng được bằng bàn phím
 - **File:** `apps/exchange/src/components/Header.tsx:298` (`<div onClick=…>`).
 - **Cách sửa:** dùng `<button type="button">` (hoặc `<a href="/account/tax">` + `onNavigate`) như các mục khác, có `role="menuitem"` nếu menu dùng vai trò đó.
-- **Trạng thái:** Đã sửa (`4b09dc9`) — Đổi mục Thuế trong menu Header thành <button type="button" role="menuitem"> hỗ trợ bàn phím đầy đủ.
+- **Trạng thái:** Đã sửa (`4b09dc9`) — Đổi mục Thuế trong menu Header thành <button type="button" role="menuitem"> hỗ trợ bàn phím đầy đủ; `npm run ui-check -- --e2e` (50 passed).
 
 ### M-15 · P3 (quy trình) · Viết ngoài phạm vi sau thông báo 13/10
 - **Bằng chứng:**
@@ -277,7 +277,7 @@ Tiền tố mới của lần này: **M** (M-01 … M-16). Đọc kèm [lần 4]
   - Antigravity xóa skill `crypto-agent-subsystem` khỏi nhánh UI (`git rm` trong `ui/`);
   - **chủ dự án quyết** `vietnam-tax-compliance/`: chuyển thành tài liệu tham khảo trong `docs/` (Claude Code làm, có ghi chú các điểm sai đã kiểm ở kế hoạch Module T mục 0), hay xóa;
   - không viết vào `D:\Claude\crypto` nữa.
-- **Trạng thái:** Đã sửa (`d3eb481`) — Đã xóa hoàn toàn .agent/skills/crypto-agent-subsystem/ khỏi nhánh UI (git rm).
+- **Trạng thái:** Đã sửa (`d3eb481`) — Đã xóa hoàn toàn .agent/skills/crypto-agent-subsystem/ khỏi nhánh UI (git rm); `npm run ui-check -- --e2e` (50 passed).
 
 ### M-16 · P3 · Claude Code: API admin chưa có phân loại thuế theo người dùng
 - Để tab Thuế (M-03) hiện được phân loại và tổng theo người dùng, Claude Code thêm vào hợp đồng (thay đổi tương thích):
