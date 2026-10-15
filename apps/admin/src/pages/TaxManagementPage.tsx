@@ -8,6 +8,7 @@ import {
   ApiError,
 } from '@cex/contracts';
 import { getApiClient } from '../services/api';
+import { formatApiError } from '../services/errors';
 import { useAuth } from '../context/AuthContext';
 import { Button, formatDecimal } from '@cex/ui';
 import {
@@ -21,11 +22,13 @@ import {
   Settings2,
   Table as TableIcon,
   CheckCircle2,
+  Filter,
 } from 'lucide-react';
 
 export const TaxManagementPage: React.FC = () => {
   const { hasPerm } = useAuth();
   const api = getApiClient();
+  const canRead = hasPerm('tax.read');
   const canManage = hasPerm('tax.manage');
 
   // Vietnam default current month (UTC+7): YYYY-MM
@@ -33,82 +36,119 @@ export const TaxManagementPage: React.FC = () => {
     return new Date(Date.now() + 7 * 3600_000).toISOString().slice(0, 7);
   }, []);
 
-  // Settings State
+  // Settings State (M-04)
+  const [loadedSettings, setLoadedSettings] = useState<TaxSettings | null>(null);
+  const [settingsLoading, setSettingsLoading] = useState(true);
+  const [settingsError, setSettingsError] = useState<string | null>(null);
   const [taxMode, setTaxMode] = useState<TaxMode | ''>('');
-  const [taxRate, setTaxRate] = useState<string>('0.001');
+  const [taxRate, setTaxRate] = useState<string>('');
   const [taxVndRate, setTaxVndRate] = useState<string>('');
   const [reason, setReason] = useState<string>('');
-  const userEditedRef = React.useRef(false);
-  const [settingsLoading, setSettingsLoading] = useState(true);
+  const [dirty, setDirty] = useState<{ taxMode: boolean; taxRate: boolean; taxVndRate: boolean }>({
+    taxMode: false,
+    taxRate: false,
+    taxVndRate: false,
+  });
   const [savingSettings, setSavingSettings] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<{ taxRate?: string; symbols?: string[]; general?: string }>({});
 
-  // Summary State
+  // Summary State (M-07, M-09)
   const [period, setPeriod] = useState<string>(defaultVietnamPeriod);
   const [summary, setSummary] = useState<AdminTaxSummary | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(true);
+  const [summaryError, setSummaryError] = useState<string | null>(null);
 
-  // Withholdings State
+  // Withholdings State (M-08)
   const [withholdings, setWithholdings] = useState<AdminTaxWithholding[]>([]);
   const [withholdingsLoading, setWithholdingsLoading] = useState(true);
+  const [withholdingsError, setWithholdingsError] = useState<string | null>(null);
+  const [filterUser, setFilterUser] = useState<string>('');
+  const [filterSymbol, setFilterSymbol] = useState<string>('');
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
 
-  // Fetch Tax Settings
+  // Fetch Tax Settings (M-04)
   const fetchSettings = useCallback(async () => {
     setSettingsLoading(true);
+    setSettingsError(null);
     try {
       const s = await api.adminTaxSettings();
-      if (!userEditedRef.current) {
-        setTaxMode(s.taxMode);
-        setTaxRate(s.taxRate);
-        setTaxVndRate(s.taxVndRate || '');
-      }
-    } catch {
-      // Ignore or set error
+      setLoadedSettings(s);
+      setDirty((prev) => {
+        if (!prev.taxMode) setTaxMode(s.taxMode);
+        if (!prev.taxRate) setTaxRate(s.taxRate);
+        if (!prev.taxVndRate) setTaxVndRate(s.taxVndRate || '');
+        return prev;
+      });
+    } catch (err) {
+      setLoadedSettings(null);
+      setSettingsError(formatApiError(err, 'Không thể tải cấu hình thuế từ máy chủ.'));
     } finally {
       setSettingsLoading(false);
     }
   }, [api]);
 
-  // Fetch Period Summary
+  // Fetch Period Summary (M-09)
   const fetchSummary = useCallback(async (p: string) => {
     setSummaryLoading(true);
+    setSummaryError(null);
     try {
       const res = await api.adminTaxSummary({ query: { period: p } });
       setSummary(res);
-    } catch {
+    } catch (err) {
       setSummary(null);
+      setSummaryError(formatApiError(err, 'Không thể tải tổng hợp kỳ thuế.'));
     } finally {
       setSummaryLoading(false);
     }
   }, [api]);
 
-  // Fetch Withholding List
-  const fetchWithholdings = useCallback(async () => {
+  // Fetch Withholding List (M-08)
+  const fetchWithholdings = useCallback(async (cursor?: string) => {
     setWithholdingsLoading(true);
+    setWithholdingsError(null);
     try {
-      const res = await api.adminTaxWithholdings({ query: { limit: 100 } });
-      setWithholdings(res.items || []);
-    } catch {
-      setWithholdings([]);
+      const q: { limit: number; userId?: string; symbol?: string; cursor?: string; from?: string; to?: string } = { limit: 50 };
+      if (filterUser.trim()) q.userId = filterUser.trim();
+      if (filterSymbol.trim()) q.symbol = filterSymbol.trim();
+      if (cursor) {
+        q.cursor = cursor;
+      } else if (summary?.from && summary?.to) {
+        q.from = summary.from;
+        q.to = summary.to;
+      }
+      const res = await api.adminTaxWithholdings({ query: q });
+      if (cursor) {
+        setWithholdings((prev) => [...prev, ...(res.items || [])]);
+      } else {
+        setWithholdings(res.items || []);
+      }
+      setNextCursor(res.nextCursor || null);
+    } catch (err) {
+      if (!cursor) setWithholdings([]);
+      setWithholdingsError(formatApiError(err, 'Không thể tải danh sách khấu trừ thuế.'));
     } finally {
       setWithholdingsLoading(false);
     }
-  }, [api]);
+  }, [api, filterUser, filterSymbol, summary?.from, summary?.to]);
 
   useEffect(() => {
-    fetchSettings();
-    fetchWithholdings();
-  }, [fetchSettings, fetchWithholdings]);
+    if (canRead) {
+      fetchSettings();
+      fetchWithholdings();
+    }
+  }, [canRead, fetchSettings, fetchWithholdings]);
 
   useEffect(() => {
-    fetchSummary(period);
-  }, [fetchSummary, period]);
+    if (canRead) {
+      fetchSummary(period);
+    }
+  }, [canRead, fetchSummary, period]);
 
-  // Save Settings Handler
+  // Save Settings Handler (M-04)
   const handleSaveSettings = async () => {
     const trimmedReason = reason.trim();
-    if (trimmedReason.length < 5) return;
+    if (trimmedReason.length < 5 || settingsLoading || !!settingsError || !loadedSettings) return;
 
     setSavingSettings(true);
     setFieldErrors({});
@@ -116,19 +156,41 @@ export const TaxManagementPage: React.FC = () => {
 
     try {
       const payload: {
-        taxMode: TaxMode;
-        taxRate: string;
-        taxVndRate: string | null;
         reason: string;
+        taxMode?: TaxMode;
+        taxRate?: string;
+        taxVndRate?: string | null;
       } = {
-        taxMode: taxMode || 'OFF',
-        taxRate,
-        taxVndRate: taxVndRate.trim() === '' ? null : taxVndRate.trim(),
         reason: trimmedReason,
       };
 
+      if (dirty.taxMode && taxMode) {
+        payload.taxMode = taxMode;
+      } else if (loadedSettings && taxMode && taxMode !== loadedSettings.taxMode) {
+        payload.taxMode = taxMode;
+      }
+
+      if (dirty.taxRate && taxRate.trim()) {
+        payload.taxRate = taxRate.trim();
+      } else if (loadedSettings && taxRate.trim() && taxRate.trim() !== loadedSettings.taxRate) {
+        payload.taxRate = taxRate.trim();
+      }
+
+      if (dirty.taxVndRate) {
+        payload.taxVndRate = taxVndRate.trim() === '' ? null : taxVndRate.trim();
+      } else if (loadedSettings && (taxVndRate.trim() || null) !== loadedSettings.taxVndRate) {
+        payload.taxVndRate = taxVndRate.trim() === '' ? null : taxVndRate.trim();
+      }
+
+      if (payload.taxMode === undefined && payload.taxRate === undefined && payload.taxVndRate === undefined) {
+        setFieldErrors({ general: 'Chưa có thay đổi nào trong cấu hình để lưu.' });
+        setSavingSettings(false);
+        return;
+      }
+
       const updated = await api.adminUpdateTaxSettings({ body: payload });
-      userEditedRef.current = false;
+      setLoadedSettings(updated);
+      setDirty({ taxMode: false, taxRate: false, taxVndRate: false });
       setTaxMode(updated.taxMode);
       setTaxRate(updated.taxRate);
       setTaxVndRate(updated.taxVndRate || '');
@@ -162,8 +224,22 @@ export const TaxManagementPage: React.FC = () => {
   };
 
   const csvDownloadUrl = useMemo(() => {
-    return exportUrl('adminTaxExport', {});
-  }, []);
+    return exportUrl('adminTaxExport', {
+      userId: filterUser.trim() || undefined,
+      symbol: filterSymbol.trim() || undefined,
+      from: summary?.from,
+      to: summary?.to,
+    });
+  }, [filterUser, filterSymbol, summary?.from, summary?.to]);
+
+  if (!canRead) {
+    return (
+      <div className="p-8 text-center text-[var(--text-2,#a1a1aa)]" data-testid="admin-tax-forbidden">
+        <h2 className="text-xl font-bold mb-2 text-[var(--text,#f4f4f5)]">Không có quyền truy cập</h2>
+        <p>Bạn không có quyền tax.read để xem thông tin quản trị thuế.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-6 max-w-7xl mx-auto" data-testid="admin-tax-page">
@@ -173,7 +249,7 @@ export const TaxManagementPage: React.FC = () => {
           <div className="flex items-center gap-2.5">
             <h1 className="text-xl font-bold text-[var(--text,#f4f4f5)] flex items-center gap-2">
               <Receipt className="text-indigo-400" size={22} />
-              Quản lý Thuế Crypto (Việt Nam)
+              Quản trị Thuế Tiền Mã Hóa (Module T)
             </h1>
             <span
               data-testid="tax-test-label"
@@ -192,7 +268,6 @@ export const TaxManagementPage: React.FC = () => {
             variant="secondary"
             size="sm"
             onClick={() => {
-              userEditedRef.current = false;
               fetchSettings();
               fetchSummary(period);
               fetchWithholdings();
@@ -247,6 +322,22 @@ export const TaxManagementPage: React.FC = () => {
             )}
           </div>
 
+          {/* Settings Error Alert (M-04) */}
+          {settingsError && (
+            <div
+              data-testid="admin-tax-settings-error"
+              className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-xs text-red-300 flex items-center justify-between"
+            >
+              <div className="flex items-center gap-2">
+                <AlertTriangle size={14} className="text-red-400 shrink-0" />
+                <span>{settingsError}</span>
+              </div>
+              <Button variant="secondary" size="sm" onClick={fetchSettings}>
+                Thử lại
+              </Button>
+            </div>
+          )}
+
           {fieldErrors.general && (
             <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-xs text-red-300 flex items-center gap-2">
               <AlertTriangle size={14} className="text-red-400 shrink-0" />
@@ -263,22 +354,19 @@ export const TaxManagementPage: React.FC = () => {
               <select
                 data-testid="admin-tax-mode"
                 value={taxMode}
+                disabled={settingsLoading || !!settingsError}
                 onChange={(e) => {
-                  userEditedRef.current = true;
+                  setDirty((prev) => ({ ...prev, taxMode: true }));
                   setTaxMode(e.target.value as TaxMode);
                 }}
-                onInput={(e) => {
-                  userEditedRef.current = true;
-                  setTaxMode((e.target as HTMLSelectElement).value as TaxMode);
-                }}
-                className="w-full bg-[var(--bg,#000000)] border border-[var(--line,#1d1e21)] rounded-lg px-3 py-2 text-[var(--text,#f4f4f5)] outline-none focus:border-indigo-500"
+                className="w-full bg-[var(--bg,#000000)] border border-[var(--line,#1d1e21)] rounded-lg px-3 py-2 text-[var(--text,#f4f4f5)] outline-none focus:border-indigo-500 disabled:opacity-50"
               >
                 <option value="" hidden>— Đang tải —</option>
                 <option value="OFF">OFF (Tắt khấu trừ thuế)</option>
                 <option value="WITHHOLD">WITHHOLD (Khấu trừ thuế 0,1% lệnh bán Spot)</option>
               </select>
               <span className="text-[11px] text-[var(--text-3,#71717a)] mt-1 block">
-                Khi tắt (OFF), form bán Spot sẽ không hiển thị khối thuế. Khi bật (WITHHOLD), lệnh bán Spot sẽ tự động trích nộp.
+                Khi tắt (OFF), form bán Spot sẽ không hiển thị khối thuế. Khi bật (WITHHOLD), lệnh bán Spot sẽ tự động bị trích thuế (mô phỏng, không nộp cho cơ quan nào).
               </span>
             </div>
 
@@ -291,12 +379,13 @@ export const TaxManagementPage: React.FC = () => {
                 type="text"
                 data-testid="admin-tax-rate"
                 value={taxRate}
+                disabled={settingsLoading || !!settingsError}
                 onChange={(e) => {
-                  userEditedRef.current = true;
+                  setDirty((prev) => ({ ...prev, taxRate: true }));
                   setTaxRate(e.target.value);
                 }}
                 placeholder="0.001"
-                className="w-full bg-[var(--bg,#000000)] border border-[var(--line,#1d1e21)] rounded-lg px-3 py-2 font-mono text-[var(--text,#f4f4f5)] outline-none focus:border-indigo-500"
+                className="w-full bg-[var(--bg,#000000)] border border-[var(--line,#1d1e21)] rounded-lg px-3 py-2 font-mono text-[var(--text,#f4f4f5)] outline-none focus:border-indigo-500 disabled:opacity-50"
               />
               {fieldErrors.taxRate ? (
                 <span className="text-[11px] text-red-400 mt-1 block">{fieldErrors.taxRate}</span>
@@ -316,12 +405,13 @@ export const TaxManagementPage: React.FC = () => {
                 type="text"
                 data-testid="admin-tax-vnd-rate"
                 value={taxVndRate}
+                disabled={settingsLoading || !!settingsError}
                 onChange={(e) => {
-                  userEditedRef.current = true;
+                  setDirty((prev) => ({ ...prev, taxVndRate: true }));
                   setTaxVndRate(e.target.value);
                 }}
                 placeholder="Để trống để xóa tỷ giá (null)"
-                className="w-full bg-[var(--bg,#000000)] border border-[var(--line,#1d1e21)] rounded-lg px-3 py-2 font-mono text-[var(--text,#f4f4f5)] outline-none focus:border-indigo-500"
+                className="w-full bg-[var(--bg,#000000)] border border-[var(--line,#1d1e21)] rounded-lg px-3 py-2 font-mono text-[var(--text,#f4f4f5)] outline-none focus:border-indigo-500 disabled:opacity-50"
               />
               <span className="text-[11px] text-[var(--text-3,#71717a)] mt-1 block">
                 Để trống và lưu = xóa tỷ giá (server lưu null). Khi xóa tỷ giá, các trường VND sẽ hiển thị "—".
@@ -337,26 +427,30 @@ export const TaxManagementPage: React.FC = () => {
                 type="text"
                 data-testid="admin-tax-reason"
                 value={reason}
-                onChange={(e) => {
-                  userEditedRef.current = true;
-                  setReason(e.target.value);
-                }}
+                disabled={settingsLoading || !!settingsError}
+                onChange={(e) => setReason(e.target.value)}
                 placeholder="Nhập lý do thay đổi để ghi nhật ký audit (tối thiểu 5 ký tự)..."
-                className="w-full bg-[var(--bg,#000000)] border border-[var(--line,#1d1e21)] rounded-lg px-3 py-2 text-[var(--text,#f4f4f5)] outline-none focus:border-indigo-500"
+                className="w-full bg-[var(--bg,#000000)] border border-[var(--line,#1d1e21)] rounded-lg px-3 py-2 text-[var(--text,#f4f4f5)] outline-none focus:border-indigo-500 disabled:opacity-50"
               />
               <span className="text-[11px] text-[var(--text-3,#71717a)] mt-1 block">
                 Hành động sẽ được ghi nhận vào nhật ký kiểm toán với mã TAX_SETTINGS_UPDATE.
               </span>
             </div>
 
-            {/* Save Button Guarded by tax.manage permission */}
+            {/* Save Button Guarded by tax.manage permission (M-04) */}
             {canManage && (
               <div className="pt-2">
                 <Button
                   data-testid="admin-tax-save"
                   variant="primary"
                   loading={savingSettings}
-                  disabled={savingSettings || reason.trim().length < 5}
+                  disabled={
+                    savingSettings ||
+                    settingsLoading ||
+                    !!settingsError ||
+                    !loadedSettings ||
+                    reason.trim().length < 5
+                  }
                   onClick={handleSaveSettings}
                   className="w-full font-medium"
                 >
@@ -367,7 +461,7 @@ export const TaxManagementPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Period Summary & Totals (5 cols) */}
+        {/* Period Summary & Totals (5 cols) (M-07, M-09) */}
         <div className="lg:col-span-5 p-5 rounded-xl bg-[var(--panel,#141416)] border border-[var(--line,#1d1e21)] flex flex-col justify-between space-y-4">
           <div>
             <div className="flex items-center justify-between border-b border-[var(--line,#1d1e21)] pb-3 mb-4">
@@ -387,74 +481,115 @@ export const TaxManagementPage: React.FC = () => {
               />
             </div>
 
-            {/* Period Total */}
-            <div className="p-4 rounded-xl bg-[var(--bg,#000000)] border border-[var(--line,#1d1e21)]">
-              <span className="text-[11px] text-[var(--text-3,#71717a)] block mb-1">
-                Tổng thuế khấu trừ trong kỳ ({period})
-              </span>
-              <div className="flex items-baseline gap-2">
-                <span
-                  data-testid="admin-tax-total"
-                  data-value={summary?.totals?.taxAmount || '0'}
-                  className="text-2xl font-bold font-mono text-amber-400"
-                >
-                  {formatDecimal(summary?.totals?.taxAmount || '0', { decimals: 8 })}
+            {/* Summary Error (M-09) */}
+            {summaryError && (
+              <div
+                data-testid="admin-tax-summary-error"
+                className="p-4 rounded-xl bg-red-500/10 border border-red-500/30 text-xs text-red-300 flex items-center justify-between mb-4"
+              >
+                <span>{summaryError}</span>
+                <Button variant="secondary" size="sm" onClick={() => fetchSummary(period)}>
+                  Thử lại
+                </Button>
+              </div>
+            )}
+
+            {summaryLoading && !summaryError && (
+              <div className="p-8 text-center text-xs text-[var(--text-3,#71717a)]">
+                Đang tải dữ liệu tổng hợp kỳ...
+              </div>
+            )}
+
+            {/* Period Total (M-07) */}
+            {summary && !summaryLoading && (
+              <div className="p-4 rounded-xl bg-[var(--bg,#000000)] border border-[var(--line,#1d1e21)]">
+                <span className="text-[11px] text-[var(--text-3,#71717a)] block mb-1">
+                  Tổng thuế khấu trừ trong kỳ ({period})
                 </span>
-                <span className="text-xs text-[var(--text-3,#71717a)] font-medium">USDT</span>
+                <div className="flex items-baseline gap-2">
+                  <span
+                    data-testid="admin-tax-total"
+                    data-value={summary.totals.taxAmount}
+                    className="text-2xl font-bold font-mono text-amber-400"
+                  >
+                    {formatDecimal(summary.totals.taxAmount, { decimals: 8 })}
+                  </span>
+                  <span className="text-xs text-[var(--text-3,#71717a)] font-medium">USDT</span>
+                </div>
+
+                {/* Total VND & Missing rate note (M-07) */}
+                <div className="mt-2 text-xs text-[var(--text-2,#a1a1aa)]" data-testid="admin-tax-total-vnd">
+                  <span>Quy đổi VND: </span>
+                  {summary.totals.taxVnd ? (
+                    <span className="font-mono font-semibold text-[var(--text,#f4f4f5)]">
+                      {formatDecimal(summary.totals.taxVnd, { decimals: 0 })} ₫
+                    </span>
+                  ) : (
+                    <span>
+                      —{' '}
+                      {summary.totals.vndMissingCount > 0 && (
+                        <span className="text-amber-400" data-testid="tax-vnd-missing">
+                          ({summary.totals.vndMissingCount} bản ghi chưa có tỷ giá)
+                        </span>
+                      )}
+                    </span>
+                  )}
+                </div>
+
+                <div className="mt-3 pt-2 border-t border-[var(--line,#1d1e21)] text-[11px] text-[var(--text-3,#71717a)] flex justify-between">
+                  <span>Số người nộp thuế:</span>
+                  <span className="font-mono text-[var(--text,#f4f4f5)]">{summary.totals.userCount}</span>
+                </div>
+                <div className="text-[11px] text-[var(--text-3,#71717a)] flex justify-between mt-1">
+                  <span>Số lượt khấu trừ:</span>
+                  <span className="font-mono text-[var(--text,#f4f4f5)]">{summary.totals.withholdingCount}</span>
+                </div>
+                <div className="text-[11px] text-[var(--text-3,#71717a)] flex justify-between mt-1">
+                  <span>Tổng giá trị bán gộp:</span>
+                  <span className="font-mono text-[var(--text,#f4f4f5)]">
+                    {formatDecimal(summary.totals.withheldGrossQuote, { decimals: 2 })} USDT
+                  </span>
+                </div>
               </div>
-              <div className="mt-2 pt-2 border-t border-[var(--line,#1d1e21)] text-[11px] text-[var(--text-3,#71717a)] flex justify-between">
-                <span>Số người nộp thuế:</span>
-                <span className="font-mono text-[var(--text,#f4f4f5)]">{summary?.totals?.userCount ?? 0}</span>
-              </div>
-              <div className="text-[11px] text-[var(--text-3,#71717a)] flex justify-between mt-1">
-                <span>Số lượt khấu trừ:</span>
-                <span className="font-mono text-[var(--text,#f4f4f5)]">{summary?.totals?.withholdingCount ?? 0}</span>
-              </div>
-              <div className="text-[11px] text-[var(--text-3,#71717a)] flex justify-between mt-1">
-                <span>Tổng giá trị bán gộp:</span>
-                <span className="font-mono text-[var(--text,#f4f4f5)]">
-                  {formatDecimal(summary?.totals?.withheldGrossQuote || '0', { decimals: 2 })} USDT
-                </span>
-              </div>
-            </div>
+            )}
 
             {/* Breakdown by Category */}
-            <div className="mt-4">
-              <span className="text-xs font-semibold text-[var(--text-2,#a1a1aa)] block mb-2">
-                Theo phân loại đối tượng
-              </span>
-              <div className="space-y-1.5 text-xs">
-                {summary?.byCategory?.map((cat) => (
-                  <div
-                    key={cat.category}
-                    className="p-2.5 rounded-lg bg-[var(--bg,#000000)] border border-[var(--line,#1d1e21)] flex items-center justify-between"
-                  >
-                    <div>
-                      <div className="font-medium text-[var(--text,#f4f4f5)]">
-                        {cat.category === 'INDIVIDUAL'
-                          ? 'Cá nhân (INDIVIDUAL)'
-                          : cat.category === 'FOREIGN_ORG'
-                          ? 'Tổ chức nước ngoài (FOREIGN_ORG)'
-                          : 'Tổ chức trong nước (DOMESTIC_ORG)'}
+            {summary && !summaryLoading && (
+              <div className="mt-4">
+                <span className="text-xs font-semibold text-[var(--text-2,#a1a1aa)] block mb-2">
+                  Theo phân loại đối tượng
+                </span>
+                <div className="space-y-1.5 text-xs">
+                  {summary.byCategory.map((cat) => (
+                    <div
+                      key={cat.category}
+                      className="p-2.5 rounded-lg bg-[var(--bg,#000000)] border border-[var(--line,#1d1e21)] flex items-center justify-between"
+                    >
+                      <div>
+                        <div className="font-medium text-[var(--text,#f4f4f5)]">
+                          {cat.category === 'INDIVIDUAL'
+                            ? 'Cá nhân (INDIVIDUAL)'
+                            : cat.category === 'FOREIGN_ORG'
+                            ? 'Tổ chức nước ngoài (FOREIGN_ORG)'
+                            : 'Tổ chức trong nước (DOMESTIC_ORG)'}
+                        </div>
+                        <div className="text-[10px] text-[var(--text-3,#71717a)]">
+                          {cat.userCount} người dùng • {cat.withholdingCount} lượt trích
+                        </div>
                       </div>
-                      <div className="text-[10px] text-[var(--text-3,#71717a)]">
-                        {cat.userCount} người dùng • {cat.withholdingCount} lượt trích
+                      <div className="text-right">
+                        <div className="font-mono font-medium text-amber-400">
+                          {formatDecimal(cat.taxAmount, { decimals: 8 })} USDT
+                        </div>
+                        <div className="text-[10px] text-[var(--text-3,#71717a)]">
+                          {cat.taxVnd ? `${formatDecimal(cat.taxVnd, { decimals: 0 })} ₫` : '—'}
+                        </div>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <div className="font-mono font-medium text-amber-400">
-                        {formatDecimal(cat.taxAmount, { decimals: 8 })} USDT
-                      </div>
-                      <div className="text-[10px] text-[var(--text-3,#71717a)]">
-                        {cat.taxVnd ? `${formatDecimal(cat.taxVnd, { decimals: 0 })} ₫` : '—'}
-                      </div>
-                    </div>
-                  </div>
-                )) || (
-                  <div className="text-xs text-[var(--text-3,#71717a)] text-center py-4">Chưa có dữ liệu kỳ</div>
-                )}
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
           </div>
         </div>
       </div>
@@ -512,7 +647,7 @@ export const TaxManagementPage: React.FC = () => {
               ) : (
                 <tr>
                   <td colSpan={6} className="px-4 py-8 text-center text-[var(--text-3,#71717a)]">
-                    Không có cặp giao dịch nào phát sinh thuế trong kỳ {period}.
+                    {summaryLoading ? 'Đang tải dữ liệu...' : `Không có cặp giao dịch nào phát sinh thuế trong kỳ ${period}.`}
                   </td>
                 </tr>
               )}
@@ -521,14 +656,53 @@ export const TaxManagementPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Withholdings Detail Table */}
+      {/* Withholdings Detail Table (M-08) */}
       <div className="rounded-xl bg-[var(--panel,#141416)] border border-[var(--line,#1d1e21)] overflow-hidden">
-        <div className="p-4 border-b border-[var(--line,#1d1e21)] flex items-center justify-between">
+        <div className="p-4 border-b border-[var(--line,#1d1e21)] flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-2 font-semibold text-sm text-[var(--text,#f4f4f5)]">
             <TableIcon size={16} className="text-indigo-400" />
             Nhật ký khấu trừ toàn hệ thống
           </div>
+
+          {/* Filters (M-08) */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <input
+              type="text"
+              data-testid="admin-tax-filter-user"
+              value={filterUser}
+              onChange={(e) => setFilterUser(e.target.value)}
+              placeholder="Lọc User ID..."
+              className="bg-[var(--bg,#000000)] border border-[var(--line,#1d1e21)] rounded px-2.5 py-1 text-xs text-[var(--text,#f4f4f5)] font-mono outline-none focus:border-indigo-500 w-36"
+            />
+            <input
+              type="text"
+              data-testid="admin-tax-filter-symbol"
+              value={filterSymbol}
+              onChange={(e) => setFilterSymbol(e.target.value)}
+              placeholder="Lọc Cặp (vd BTCUSDT)..."
+              className="bg-[var(--bg,#000000)] border border-[var(--line,#1d1e21)] rounded px-2.5 py-1 text-xs text-[var(--text,#f4f4f5)] font-mono outline-none focus:border-indigo-500 w-36"
+            />
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => fetchWithholdings()}
+              loading={withholdingsLoading}
+              className="flex items-center gap-1"
+            >
+              <Filter size={12} />
+              Lọc
+            </Button>
+          </div>
         </div>
+
+        {withholdingsError && (
+          <div className="p-4 bg-red-500/10 border-b border-red-500/30 text-xs text-red-300 flex items-center justify-between">
+            <span>{withholdingsError}</span>
+            <Button variant="secondary" size="sm" onClick={() => fetchWithholdings()}>
+              Thử lại
+            </Button>
+          </div>
+        )}
 
         <div className="overflow-x-auto">
           <table className="w-full text-xs text-left">
@@ -547,12 +721,19 @@ export const TaxManagementPage: React.FC = () => {
             <tbody className="divide-y divide-[var(--line,#1d1e21)]/60">
               {withholdings.length > 0 ? (
                 withholdings.map((w) => (
-                  <tr key={w.id} className="hover:bg-[var(--bg,#000000)] transition-colors">
+                  <tr
+                    key={w.id}
+                    data-testid="admin-tax-withholding-row"
+                    data-trade-id={w.tradeId}
+                    className="hover:bg-[var(--bg,#000000)] transition-colors"
+                  >
                     <td className="px-4 py-3 font-mono text-[var(--text-3,#71717a)]">
                       {new Date(w.createdAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}
                     </td>
                     <td className="px-4 py-3 font-mono text-indigo-400 text-[11px]">
-                      {w.userId.slice(0, 8)}...
+                      <a href={`/admin/users/${w.userId}`} className="hover:underline">
+                        {w.userId.slice(0, 8)}...
+                      </a>
                     </td>
                     <td className="px-4 py-3 font-semibold text-[var(--text,#f4f4f5)]">
                       {w.symbol}
@@ -577,13 +758,28 @@ export const TaxManagementPage: React.FC = () => {
               ) : (
                 <tr>
                   <td colSpan={8} className="px-4 py-8 text-center text-[var(--text-3,#71717a)]">
-                    Chưa có bản ghi khấu trừ nào trên hệ thống.
+                    {withholdingsLoading ? 'Đang tải danh sách khấu trừ...' : 'Chưa có bản ghi khấu trừ nào trên hệ thống.'}
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
+
+        {/* Load More Button (M-08) */}
+        {nextCursor && (
+          <div className="p-4 border-t border-[var(--line,#1d1e21)] text-center">
+            <button
+              type="button"
+              data-testid="admin-tax-more"
+              onClick={() => fetchWithholdings(nextCursor)}
+              disabled={withholdingsLoading}
+              className="px-4 py-2 rounded-lg bg-[var(--line,#1d1e21)] text-xs text-[var(--text,#f4f4f5)] hover:bg-[var(--line,#1d1e21)]/80 transition-colors"
+            >
+              {withholdingsLoading ? 'Đang tải...' : 'Xem thêm bản ghi'}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

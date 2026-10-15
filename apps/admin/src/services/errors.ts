@@ -1,11 +1,16 @@
 import { ApiError } from '@cex/contracts';
 
-export function getErrorMessage(error: unknown): string {
-  if (error instanceof ApiError) {
-    return error.message;
+export function formatApiError(err: unknown, fallback = 'Đã có lỗi xảy ra. Vui lòng thử lại.'): string {
+  if (err instanceof ApiError) {
+    if (err.status === 403 || err.code === 'FORBIDDEN') return 'Bạn không có quyền thực hiện thao tác này.';
+    if (err.status === 429 || err.code === 'RATE_LIMITED') return 'Quá nhiều yêu cầu. Vui lòng thử lại sau.';
+    if (err.message) return err.message;
   }
-  if (error instanceof Error) {
-    return error.message;
+  if (err instanceof Error && err.message) {
+    return err.message;
   }
-  return 'Lỗi không xác định';
+  return fallback;
 }
+
+export const getErrorMessage = formatApiError;
+
