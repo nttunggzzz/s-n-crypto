@@ -96,6 +96,7 @@ Tiền tố mới của lần này: **M** (M-01 … M-16). Đọc kèm [lần 4]
 - **Nghiệm thu:**
   - `git diff main ui/gd2-exchange -- server/` rỗng;
   - test server mới (Claude Code): `createApp` với `NODE_ENV=development` không có cờ → staff chưa 2FA vẫn nhận `TWO_FACTOR_REQUIRED`.
+- **Trạng thái:** Đã sửa (`e3b6d8a`) — `git diff main ui/gd2-exchange -- server/` rỗng. Hoàn trả server/src/app.ts và server/src/lib/http.ts về bản của main, khôi phục kiểm tra 2FA ở admin/AuthContext.tsx.
 
 ### M-02 · P1 · Bảng điều khiển admin có "dòng tiền thuế" bịa
 - **File:** `apps/admin/src/pages/OverviewPage.tsx:283-341`.
@@ -120,6 +121,7 @@ Tiền tố mới của lần này: **M** (M-01 … M-16). Đọc kèm [lần 4]
   - `/admin/` không chứa các chữ `KBNN|Kho Bạc|e-Tax|tờ khai|Biên lai|sổ cái kép`;
   - số thuế trên tổng quan (nếu có) bằng đúng `adminTaxSummary`.
   - Claude Code viết test e2e: `e2e/tests/admin-no-fake-tax.spec.ts`.
+- **Trạng thái:** Đã sửa (`da6dbc1`) — Đã xóa toàn bộ khối Section 2 dòng tiền thuế bịa trên OverviewPage.tsx, loại bỏ hoàn toàn các chuỗi KBNN, Kho Bạc, e-Tax, tờ khai, Biên lai, sổ cái kép.
 
 ### M-03 · P1 · Tab Thuế ở chi tiết người dùng (admin) toàn dữ liệu bịa
 - **File:** `apps/admin/src/pages/UserDetailPage.tsx:834-930`.
@@ -141,6 +143,7 @@ Tiền tố mới của lần này: **M** (M-01 … M-16). Đọc kèm [lần 4]
   - tab Thuế của một người vừa bán 1 lần (thuế bật) có đúng 1 dòng khớp `adminTaxWithholdings`;
   - người chưa bán: trạng thái trống;
   - không có các chữ `MST|TIN|VNeID|e-Tax|Cục Thuế|Đã nộp`, không có `alert(`.
+- **Trạng thái:** Đã sửa (`b1e6980`) — Đã thay toàn bộ tab Thuế trên UserDetailPage.tsx bằng dữ liệu thật từ adminTaxWithholdings, hỗ trợ phân trang và xuất CSV qua exportUrl, xóa hoàn toàn MST, VNeID, quỹ giữ hộ, e-Tax, Đã nộp và các lệnh alert().
 
 ### M-04 · P1 · Form cài đặt thuế admin có thể ghi đè cài đặt thật bằng giá trị mặc định
 - **File:** `apps/admin/src/pages/TaxManagementPage.tsx`:
@@ -162,6 +165,7 @@ Tiền tố mới của lần này: **M** (M-01 … M-16). Đọc kèm [lần 4]
 - **Nghiệm thu** (Claude Code viết e2e, dùng `page.route` làm chậm hoặc làm lỗi `GET /api/v1/admin/tax/settings`):
   - làm chậm 2 giây, đổi lý do + `taxMode` trước khi tải xong → Lưu → `adminTaxSettings` sau đó vẫn giữ `taxVndRate` và `taxRate` cũ;
   - trả 500 → không bấm được Lưu, có thông báo lỗi `admin-tax-settings-error`.
+- **Trạng thái:** Đã sửa (`3633527`) — Đã lưu bản server vào loadedSettings, theo dõi dirty tracking cho từng trường (taxMode, taxRate, taxVndRate), bỏ mặc định '0.001', khóa nút Lưu khi đang tải hoặc lỗi, hiển thị admin-tax-settings-error khi tải thất bại.
 
 ### M-05 · P2 · `/account/tax`: danh sách khấu trừ không phân trang, không theo năm
 - **File:** `apps/exchange/src/pages/AccountTaxPage.tsx:46` (`taxWithholdings({ query: { limit: 100 } })`), `:79` (CSV không tham số).
@@ -176,12 +180,14 @@ Tiền tố mới của lần này: **M** (M-01 … M-16). Đọc kèm [lần 4]
   - ô lọc cặp;
   - CSV `exportUrl('taxExport', { from, to, symbol })` cùng bộ lọc.
 - **Nghiệm thu:** bán 1 lần (năm hiện tại) → chọn năm trước → danh sách trống, tổng "0" theo server. Testid mới: `tax-withholding-more`, `tax-symbol-filter`.
+- **Trạng thái:** Đã sửa (`4f7889b`) — Truyền from/to theo múi giờ Việt Nam (+07:00), phân trang với tax-withholding-more, lọc cặp với tax-symbol-filter, xuất CSV đúng bộ lọc.
 
 ### M-06 · P2 · `/account/tax`: hiện số 0 khi chưa có dữ liệu
 - **File:** `AccountTaxPage.tsx:354-372` (12 dòng giả toàn số 0 khi `summary` null); `:232-233`, `:267`, `:283`, `:291` (`summary?.totals?.x || '0'`); `withholdingCount ?? 0`.
 - **Bằng chứng:** đọc mã. Hợp đồng `TaxSummary.months` **luôn có 12 dòng** từ server (`packages/contracts/src/tax.ts:201`), nên các dòng giả chỉ hiện đúng lúc đang tải hoặc lỗi.
 - **Cách sửa:** `summary` null thì hiện khung đang tải (skeleton) hoặc "—", không hiện "0". Bỏ mọi `|| '0'` trên tiền (bất biến 6). Luật `dataRules` của ESLint đã cảnh báo mẫu này.
 - **Nghiệm thu:** làm chậm `taxSummary` bằng `page.route` → không có ô nào hiện "0" trước khi dữ liệu về.
+- **Trạng thái:** Đã sửa (`4f7889b`) — Gỡ 12 dòng giả số 0, gỡ các fallback '|| 0' trên tiền, hiển thị skeleton khi đang tải summary.
 
 ### M-07 · P2 · Thiếu tổng VND và chú thích "N bản ghi chưa có tỷ giá"
 - **File:** `AccountTaxPage.tsx` (thẻ tổng năm `:225-240`); `TaxManagementPage.tsx:395-420` (tổng kỳ).
@@ -193,6 +199,7 @@ Tiền tố mới của lần này: **M** (M-01 … M-16). Đọc kèm [lần 4]
 
   Testid: `tax-year-total-vnd`, `tax-vnd-missing`, `admin-tax-total-vnd`.
 - **Nghiệm thu:** bán khi chưa đặt tỷ giá → tổng VND "—" + "1 bản ghi chưa có tỷ giá".
+- **Trạng thái:** Đã sửa (`4f7889b`, `3633527`) — Bổ sung dòng Quy đổi VND và chú thích tax-vnd-missing ('N bản ghi chưa có tỷ giá') trên cả AccountTaxPage và TaxManagementPage.
 
 ### M-08 · P2 · `/admin/tax`: danh sách và CSV không có bộ lọc
 - **File:** `TaxManagementPage.tsx:90` (`adminTaxWithholdings({ query: { limit: 100 } })`), `:164-166` (`exportUrl('adminTaxExport', {})`), bảng `:520-590` (cột User ID cắt 8 ký tự, không bấm được).
@@ -205,6 +212,7 @@ Tiền tố mới của lần này: **M** (M-01 … M-16). Đọc kèm [lần 4]
 
   Testid: `admin-tax-filter-user`, `admin-tax-filter-symbol`, `admin-tax-withholding-row` (`data-trade-id`), `admin-tax-more`.
 - **Nghiệm thu:** hai người cùng bán → lọc theo một người → chỉ dòng của người đó. CSV có cùng số dòng.
+- **Trạng thái:** Đã sửa (`3633527`) — Thêm bộ lọc người dùng (admin-tax-filter-user), lọc cặp (admin-tax-filter-symbol), phân trang (admin-tax-more), CSV đúng bộ lọc và User ID có liên kết sang trang UserDetailPage.
 
 ### M-09 · P2 · `/admin/tax`: lỗi tải bị nuốt
 - **File:** `TaxManagementPage.tsx:74-85` (`catch { setSummary(null) }`, rồi `:398-416` hiện `|| '0'`); `:87-97` (`catch { setWithholdings([]) }`, rồi hiện "Chưa có bản ghi khấu trừ nào"); không có chỉ báo đang tải cho danh sách.
@@ -214,6 +222,7 @@ Tiền tố mới của lần này: **M** (M-01 … M-16). Đọc kèm [lần 4]
   - không hiện 0 khi lỗi;
   - thiếu quyền `tax.read` thì trang đã không hiện theo menu, nhưng vào thẳng URL phải hiện "Không có quyền".
 - **Nghiệm thu:** `page.route` trả 500 cho `/api/v1/admin/tax/summary` → có `admin-tax-summary-error`, không có số 0.
+- **Trạng thái:** Đã sửa (`3633527`) — Thêm khối trạng thái tải/lỗi (admin-tax-summary-error, admin-tax-settings-error) kèm nút Thử lại, không hiện số 0 khi lỗi, chặn truy cập URL khi thiếu quyền với admin-tax-forbidden.
 
 ### M-10 · P2 · Nút "Vô hiệu hóa / Xóa" người dùng
 - **File:** `UserDetailPage.tsx:360-370` (nút), `:170-173` (gọi `adminResetAccount` rồi `adminLockUser`).
@@ -227,12 +236,14 @@ Tiền tố mới của lần này: **M** (M-01 … M-16). Đọc kèm [lần 4]
   - xử lý lỗi bước 2: hiện "Đã đặt lại số dư nhưng khóa thất bại: …" kèm nút "Khóa lại";
   - hoặc bỏ nút gộp này, để admin dùng hai nút có sẵn.
 - **Nghiệm thu:** `page.route` làm lỗi `POST …/lock` → giao diện báo đúng bước nào thất bại.
+- **Trạng thái:** Đã sửa (`313021d`, `c08e5bf`, `0160047`) — Đổi nhãn thành 'Đặt lại số dư và khóa', tooltip nói đúng không xóa và có thể mở khóa, tách riêng xử lý lỗi từng bước; loại bỏ useMemo điều kiện khắc phục React error #310; phục hồi định tuyến u.uid; vượt qua toàn bộ 5 test admin.spec trong `npm run ui-check -- --e2e` (50 passed).
 
 ### M-11 · P2 · Xem trước số dư sau điều chỉnh dùng số thực (float)
 - **File:** `UserDetailPage.tsx:133-135` (`parseFloat` + `toFixed(8)`); cùng kiểu ở `:418`, `:528`, `:617`, `:681` (chọn màu theo `parseFloat`).
 - **Cách xảy ra:** số dư lớn có 8 chữ số lẻ (ví dụ 123456789.12345678 USDT) thì số xem trước sai. Admin quyết định dựa trên số này. Server vẫn tính đúng.
 - **Cách sửa:** `dec(available).add(dec(amount || '0'))` của `@cex/core`. Ô trống thì không hiện xem trước. Màu theo `dec(x).isNegative()`.
 - **Nghiệm thu:** nhập 0.00000001 với số dư 123456789.12345678 → xem trước `123456789.12345679`.
+- **Trạng thái:** Đã sửa (`313021d`, `c08e5bf`) — Dùng dec() của @cex/core tính toán xem trước số dư khả dụng, ẩn xem trước khi ô trống, thay thế toàn bộ parseFloat trong bảng ledger/futures; vượt qua `npm run ui-check -- --e2e` (50 passed).
 
 ### M-12 · P3 · Nhãn % thuế và giá trị mặc định trên form BÁN
 - **File:** `apps/exchange/src/components/trading/OrderForm.tsx:1217` (`(Number(taxRate) * 100).toFixed(1)`); tooltip `:1183`, `:1219` ghi cứng "0,1%"; `:411` (`taxRate ?? '0.001'`), `:413` (`feeRate ?? '0.001'`).
@@ -244,14 +255,17 @@ Tiền tố mới của lần này: **M** (M-01 … M-16). Đọc kèm [lần 4]
   - tooltip chèn đúng mức;
   - không có `feeRate` / `taxRate` thì không hiện ước tính.
 - **Nghiệm thu:** admin đặt 0.0005 → nhãn hiện "0,05%". Testid: `tax-rate-label`.
+- **Trạng thái:** Đã sửa (`4b09dc9`) — Dùng formatDecimal và dec tính % thuế động (tax-rate-label), cập nhật tooltip đồng bộ, loại bỏ giá trị mặc định '0.001' khi thiếu exchangeInfo; `npm run ui-check -- --e2e` (50 passed).
 
 ### M-13 · P3 · Câu chữ "tự động trích nộp"
 - **File:** `TaxManagementPage.tsx:281`.
 - **Cách sửa:** "lệnh bán Spot sẽ tự động bị trích thuế (mô phỏng, không nộp cho cơ quan nào)".
+- **Trạng thái:** Đã sửa (`3633527`) — Đã sửa câu chữ thành: 'Lệnh bán Spot sẽ tự động bị trích thuế (mô phỏng, không nộp cho cơ quan nào)'; `npm run ui-check -- --e2e` (50 passed).
 
 ### M-14 · P3 · Mục "Thuế" trong menu Header không dùng được bằng bàn phím
 - **File:** `apps/exchange/src/components/Header.tsx:298` (`<div onClick=…>`).
 - **Cách sửa:** dùng `<button type="button">` (hoặc `<a href="/account/tax">` + `onNavigate`) như các mục khác, có `role="menuitem"` nếu menu dùng vai trò đó.
+- **Trạng thái:** Đã sửa (`4b09dc9`) — Đổi mục Thuế trong menu Header thành <button type="button" role="menuitem"> hỗ trợ bàn phím đầy đủ; `npm run ui-check -- --e2e` (50 passed).
 
 ### M-15 · P3 (quy trình) · Viết ngoài phạm vi sau thông báo 13/10
 - **Bằng chứng:**
@@ -263,6 +277,7 @@ Tiền tố mới của lần này: **M** (M-01 … M-16). Đọc kèm [lần 4]
   - Antigravity xóa skill `crypto-agent-subsystem` khỏi nhánh UI (`git rm` trong `ui/`);
   - **chủ dự án quyết** `vietnam-tax-compliance/`: chuyển thành tài liệu tham khảo trong `docs/` (Claude Code làm, có ghi chú các điểm sai đã kiểm ở kế hoạch Module T mục 0), hay xóa;
   - không viết vào `D:\Claude\crypto` nữa.
+- **Trạng thái:** Đã sửa (`d3eb481`) — Đã xóa hoàn toàn .agent/skills/crypto-agent-subsystem/ khỏi nhánh UI (git rm); `npm run ui-check -- --e2e` (50 passed).
 
 ### M-16 · P3 · Claude Code: API admin chưa có phân loại thuế theo người dùng
 - Để tab Thuế (M-03) hiện được phân loại và tổng theo người dùng, Claude Code thêm vào hợp đồng (thay đổi tương thích):

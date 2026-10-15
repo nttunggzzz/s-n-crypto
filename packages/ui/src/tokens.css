@@ -1,0 +1,147 @@
+@layer base {
+  :root {
+    /* V2 OKX-style Professional Dark Theme */
+    --bg: #000000;
+    --panel: #0a0a0b;
+    --panel-2: #141416;
+    --line: #1d1e21;
+    --text: #f4f4f5;
+    --text-2: #a1a1aa;
+    --text-3: #63636b;
+    --up: #1fc27a;
+    --down: #f2475f;
+    --accent: #818cf8;
+    --warn: #f5b544;
+
+    /* Backward compatibility aliases */
+    --color-bg-base: var(--bg);
+    --color-bg-surface: var(--panel);
+    --color-bg-elevated: var(--panel-2);
+    --color-bg-overlay: rgba(0, 0, 0, 0.85);
+
+    --color-border-subtle: var(--line);
+    --color-border-default: #272a33;
+    --color-border-focus: var(--accent);
+
+    --color-text-primary: var(--text);
+    --color-text-secondary: var(--text-2);
+    --color-text-muted: var(--text-3);
+
+    --color-accent-primary: var(--accent);
+    --color-accent-secondary: #67e8f9;
+
+    --color-buy: var(--up);
+    --color-buy-bg: color-mix(in srgb, var(--up) 12%, transparent);
+    --color-sell: var(--down);
+    --color-sell-bg: color-mix(in srgb, var(--down) 12%, transparent);
+
+    --color-warning: var(--warn);
+    --color-warning-bg: color-mix(in srgb, var(--warn) 12%, transparent);
+    --color-info: #60a5fa;
+    --color-info-bg: rgba(96, 165, 250, 0.12);
+
+    --radius-sm: 4px;
+    --radius-md: 8px;
+    --radius-lg: 10px;
+    --radius-full: 9999px;
+  }
+
+  /* Reversed color mode for users who prefer Red up / Green down */
+  :root[data-color-reversed="true"] {
+    --up: #f2475f;
+    --down: #1fc27a;
+    --color-buy: var(--up);
+    --color-buy-bg: color-mix(in srgb, var(--up) 12%, transparent);
+    --color-sell: var(--down);
+    --color-sell-bg: color-mix(in srgb, var(--down) 12%, transparent);
+  }
+
+  /* V2 Light Theme */
+  :root[data-theme="light"] {
+    --bg: #ffffff;
+    --panel: #ffffff;
+    --panel-2: #f5f5f7;
+    --line: #ebebef;
+    --text: #0a0a0b;
+    --text-2: #52525b;
+    --text-3: #a1a1aa;
+    --up: #12a866;
+    --down: #e0314b;
+    --accent: #5b5bd6;
+    --warn: #c98a0b;
+
+    /* Backward compatibility aliases */
+    --color-bg-base: var(--bg);
+    --color-bg-surface: var(--panel);
+    --color-bg-elevated: var(--panel-2);
+    --color-bg-overlay: rgba(255, 255, 255, 0.85);
+
+    --color-border-subtle: var(--line);
+    --color-border-default: #e2e8f0;
+    --color-border-focus: var(--accent);
+
+    --color-text-primary: var(--text);
+    --color-text-secondary: var(--text-2);
+    --color-text-muted: var(--text-3);
+
+    --color-accent-primary: var(--accent);
+    --color-accent-secondary: #06b6d4;
+
+    --color-buy: var(--up);
+    --color-buy-bg: color-mix(in srgb, var(--up) 12%, transparent);
+    --color-sell: var(--down);
+    --color-sell-bg: color-mix(in srgb, var(--down) 12%, transparent);
+
+    --color-warning: var(--warn);
+    --color-warning-bg: color-mix(in srgb, var(--warn) 12%, transparent);
+    --color-info: #2563eb;
+    --color-info-bg: rgba(37, 99, 235, 0.1);
+  }
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+@keyframes shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes flash-green {
+  0%, 100% {
+    color: var(--color-buy);
+    background-color: transparent;
+  }
+  25% {
+    color: #ffffff;
+    background-color: var(--color-buy);
+  }
+}
+
+@keyframes flash-red {
+  0%, 100% {
+    color: var(--color-sell);
+    background-color: transparent;
+  }
+  25% {
+    color: #ffffff;
+    background-color: var(--color-sell);
+  }
+}
+
+.animate-shimmer {
+  animation: shimmer 1.8s infinite;
+}
+
+.animate-flash-buy {
+  animation: flash-green 0.4s ease-out;
+}
+
+.animate-flash-sell {
+  animation: flash-red 0.4s ease-out;
+}

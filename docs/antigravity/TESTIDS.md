@@ -82,8 +82,16 @@ Test mở **hai trình duyệt cùng lúc**: admin thao tác ở `/admin/…`, n
 | `admin-lock-open` / `admin-unlock-open` | Nút Khóa / Mở khóa | Chỉ render khi có quyền `users.lock` |
 | `confirm-reason` | Ô **lý do** trong hộp xác nhận dùng chung của mọi thao tác thay đổi dữ liệu | ≥ 5 ký tự |
 | `confirm-phrase` | Ô gõ chữ xác nhận (`HALT`, `RESUME`, `RESET`) | Chỉ có ở thao tác nguy hiểm |
-| `confirm-submit` | Nút xác nhận | Khóa khi chưa đủ lý do / gõ sai chữ |
 | `audit-row` | Mỗi dòng ở `/admin/audit-logs` | Dòng chứa cả **lý do** |
+
+## Biểu đồ nến & Lệnh / Điểm khớp (PROMPT-12) — `chart-orders.spec.ts`
+| id | Phần tử | Ghi chú |
+|---|---|---|
+| `chart-my-orders-toggle` | Nút "Lệnh của tôi" trên thanh công cụ chart | Thuộc tính `aria-pressed="true"` / `"false"`. Mặc định bật khi đăng nhập |
+| `chart-order-lines` | Danh sách `<ul>` chứa các đường lệnh đang mở trên biểu đồ | Nằm trong DOM `sr-only` để test và screen reader đọc được |
+| `chart-order-line` | Mỗi dòng `<li>` lệnh đang mở | Thuộc tính `data-order-id`, `data-side="BUY"` / `"SELL"`, `data-price` (giá chuỗi gốc từ API) |
+| `chart-fill-markers` | Danh sách `<ul>` chứa các điểm khớp lệnh (B/S) trên biểu đồ | Nằm trong DOM `sr-only` |
+| `chart-fill-marker` | Mỗi dòng `<li>` điểm khớp | Thuộc tính `data-side="BUY"` / `"SELL"`, `data-price` (giá trung bình khớp), `data-time` (giây UTC), `data-count` (số lần khớp) |
 
 ## Thuế Việt Nam (Module T) — `tax.spec.ts`
 Sàn thử nghiệm: mọi màn thuế có nhãn "thử nghiệm", không dùng tên/số của biểu mẫu nhà nước, không có ô nhập giấy tờ.
@@ -100,6 +108,11 @@ Sàn thử nghiệm: mọi màn thuế có nhãn "thử nghiệm", không dùng 
 | `tax-net` | trong `tax-breakdown` | Thực nhận ước tính = gộp − phí − thuế, `data-value` |
 | `tax-vnd` | trong `tax-breakdown` | Quy đổi VND của thuế, `data-value` = `roundUp(thuế × taxVndRate, 0)`. **Không có** khi `taxVndRate = null` |
 | `tax-test-label` | trong `tax-breakdown` | Nhãn "thử nghiệm" |
+
+**Bảng Lịch sử khớp lệnh (`apps/exchange`, `/trade/:symbol`)**
+| id | Ở đâu | Nội dung |
+|---|---|---|
+| `trade-tax` | Bảng Lịch sử khớp (`UserOrdersTabs`) | Ô thuế khấu trừ của lượt khớp, `data-value` = `tr.tax ?? '0'`. Hiển thị số tiền thuế hoặc `'—'` nếu = 0 |
 
 **Trang Thuế của người dùng (`/account/tax`)**
 | id | Nội dung |
@@ -125,3 +138,4 @@ Sàn thử nghiệm: mọi màn thuế có nhãn "thử nghiệm", không dùng 
 | `admin-tax-total` | Tổng thuế của kỳ, `data-value` = `adminTaxSummary.totals.taxAmount` |
 | `admin-tax-by-symbol-row` | Mỗi cặp có bản ghi; `data-symbol` |
 | `admin-tax-export-csv` | Nút tải bảng kê CSV; tiêu đề = `ADMIN_TAX_EXPORT_COLUMNS` |
+

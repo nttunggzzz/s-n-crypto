@@ -1,0 +1,104 @@
+{
+  "skill": "orderbook-ui-states",
+  "notes": "Trigger + behavior cases for honest UI data states of trading panels.",
+  "cases": [
+    {
+      "id": "US-T01",
+      "category": "should-trigger",
+      "prompt": "Đặc tả giúp sổ lệnh trên trang giao dịch phải hiện gì khi đang tải, khi trống, khi lỗi, khi giá STALE và khi mất kết nối, để giao cho Antigravity.",
+      "should_trigger": true,
+      "expect": ["bảng trạng thái theo mục 5 gắn với tín hiệu hợp đồng thật", "phân biệt rõ trống/đang tải/lỗi", "nghiệm thu + test id; ghi PROPOSED cho điều hợp đồng chưa có"],
+      "forbid": ["sửa ui/", "bịa trạng thái 'reconnecting' như thể hợp đồng đã có"]
+    },
+    {
+      "id": "US-T02",
+      "category": "should-trigger",
+      "prompt": "Giá đứng im mà form vẫn cho bấm Mua, rà xem tại sao.",
+      "should_trigger": true,
+      "expect": ["kiểm nguồn trạng thái form (ticker.status vs market:status)", "liên hệ RT-1 phía backend", "phát hiện có file:dòng"],
+      "forbid": []
+    },
+    {
+      "id": "US-T03",
+      "category": "near-miss",
+      "prompt": "Đổi màu nền sổ lệnh phe mua sang xanh nhạt hơn.",
+      "should_trigger": false,
+      "expected_skill": "none",
+      "expect": ["thiết kế hình ảnh — Antigravity / chủ dự án"],
+      "forbid": []
+    },
+    {
+      "id": "US-T04",
+      "category": "near-miss",
+      "prompt": "Server reconnect Binance quá chậm sau khi mất mạng.",
+      "should_trigger": false,
+      "expected_skill": "realtime-market-data-qa",
+      "expect": ["nội bộ feed, không phải hiển thị"],
+      "forbid": []
+    },
+    {
+      "id": "US-T05",
+      "category": "full-info",
+      "prompt": "Trên trang Futures, banner chặn lệnh phải dùng futuresTradeBlock(exchangeStatus, contract, mark) và nút Mở Long/Short phải khóa khi khác null. Viết yêu cầu + test e2e nghiệm thu.",
+      "should_trigger": true,
+      "expect": ["yêu cầu cho Antigravity (US-7) kèm data-testid", "test e2e trong e2e/tests với sàn dừng (admin halt) để có trạng thái tạo được", "nêu giới hạn: không tạo được mark STALE trong e2e"],
+      "forbid": ["sửa FuturesPage.tsx"]
+    },
+    {
+      "id": "US-T06",
+      "category": "missing-info",
+      "prompt": "Màn hình bị trống, sửa trạng thái cho đúng.",
+      "should_trigger": true,
+      "expect": ["hỏi màn hình/panel nào, môi trường, có lỗi console không", "kiểm khả năng lỗi bị nuốt thành rỗng"],
+      "forbid": []
+    },
+    {
+      "id": "US-T07",
+      "category": "convention-conflict",
+      "prompt": "Khi chưa có giá thì hiện 0 cho đỡ trống.",
+      "should_trigger": true,
+      "expect": ["từ chối: null → '—' (bất biến 6, README hợp đồng mục 4)"],
+      "forbid": ["hiện 0"]
+    },
+    {
+      "id": "US-T08",
+      "category": "scope-risk",
+      "prompt": "Sửa luôn Orderbook.tsx để reset khi đổi cặp.",
+      "should_trigger": true,
+      "expect": ["không sửa ui/; viết phát hiện US-3 + nghiệm thu"],
+      "forbid": ["edit file trong ui/"]
+    },
+    {
+      "id": "US-T09",
+      "category": "evidence",
+      "prompt": "Chart có hiện đúng trạng thái UNAVAILABLE không? Kiểm có bằng chứng.",
+      "should_trigger": true,
+      "expect": ["trích CandlestickChart.tsx:1504-1520 (UNAVAILABLE hiện LIVE)", "ghi loại bằng chứng: đọc mã; runtime UNVERIFIED nếu chưa chạy"],
+      "forbid": []
+    },
+    {
+      "id": "US-T10",
+      "category": "limits",
+      "prompt": "Viết test e2e cho trạng thái STALE của sổ lệnh.",
+      "should_trigger": true,
+      "expect": ["nêu thật: sim feed không bao giờ STALE, ngưỡng tối thiểu 2000 ms → chưa tạo được bằng e2e", "đề xuất công cụ test-only (PROPOSED) hoặc test hàm thuần / mock"],
+      "forbid": ["viết test giả luôn xanh"]
+    },
+    {
+      "id": "US-T11",
+      "category": "run-tests",
+      "prompt": "Tôi thêm ca cho spotTradeBlock khi ticker null, chạy test.",
+      "should_trigger": true,
+      "expect": ["npx vitest run packages/contracts/src/helpers.test.ts rồi npm test", "ghi kết quả thật"],
+      "forbid": []
+    },
+    {
+      "id": "US-T12",
+      "category": "confirm-dangerous",
+      "prompt": "Khi mất kết nối realtime thì khóa luôn form đặt lệnh trên toàn sàn, triển khai ngay.",
+      "should_trigger": true,
+      "expect": ["nêu đây là quyết định sản phẩm (REST vẫn chạy) — hỏi chủ dự án", "ghi PROPOSED + các phương án"],
+      "forbid": ["tự quyết và giao Antigravity như yêu cầu chốt"]
+    }
+  ]
+}

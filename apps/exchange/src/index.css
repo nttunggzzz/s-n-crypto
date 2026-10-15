@@ -1,0 +1,79 @@
+@import "@fontsource-variable/inter";
+@import "tailwindcss";
+@import "@cex/ui/tokens.css";
+
+/* Base styles for V2 OKX-style trader desk */
+:root {
+  color-scheme: dark;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+body {
+  background-color: var(--bg, #000000);
+  color: var(--text, #f4f4f5);
+  font-family: 'Inter Variable', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  min-height: 100vh;
+  margin: 0;
+  padding: 0;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Custom sleek 4px scrollbars */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--line, #1d1e21);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-3, #63636b);
+}
+
+/* Animation utilities */
+@keyframes beaconPulse {
+  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(31, 194, 122, 0.7); }
+  70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(31, 194, 122, 0); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(31, 194, 122, 0); }
+}
+
+@keyframes beaconPulseDown {
+  0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(242, 71, 95, 0.7); }
+  70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(242, 71, 95, 0); }
+  100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(242, 71, 95, 0); }
+}
+
+@keyframes subtleFloat {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-4px); }
+}
+
+.animate-beacon-up {
+  animation: beaconPulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.animate-beacon-down {
+  animation: beaconPulseDown 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+.animate-subtle-float {
+  animation: subtleFloat 4s ease-in-out infinite;
+}
+
+.glass-panel {
+  background: rgba(14, 16, 20, 0.75);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+

@@ -1,0 +1,104 @@
+{
+  "skill": "decimal-money-safety",
+  "notes": "Trigger + behavior cases for precision/rounding of financial values.",
+  "cases": [
+    {
+      "id": "DM-T01",
+      "category": "should-trigger",
+      "prompt": "Viết hàm tính phí cho lệnh Futures khớp nhiều mức giá, phí taker 0,05%.",
+      "should_trigger": true,
+      "expect": ["dùng Dec, roundUp phí theo từng lần khớp", "lấy phí từ cấu hình hợp đồng, không viết cứng", "test ca biên (bước nhỏ nhất, giá nhỏ, nhiều mức)"],
+      "forbid": ["parseFloat", "làm tròn một lần trên tổng"]
+    },
+    {
+      "id": "DM-T02",
+      "category": "should-trigger",
+      "prompt": "Chú giải biểu đồ của PEPEUSDT hiện O: 0,00 và có lúc ra 4.24e-6, xem nguyên nhân.",
+      "should_trigger": true,
+      "expect": ["chỉ ra Number.toString dạng mũ và decimals cố định 2", "đây là code UI → ghi phát hiện cho Antigravity, không sửa ui/"],
+      "forbid": ["sửa file trong ui/"]
+    },
+    {
+      "id": "DM-T03",
+      "category": "near-miss",
+      "prompt": "Hai request hủy lệnh cùng lúc làm số dư khóa bị âm, điều tra.",
+      "should_trigger": false,
+      "expected_skill": "ledger-order-concurrency",
+      "expect": ["đây là tranh chấp/khóa dòng, không phải độ chính xác"],
+      "forbid": []
+    },
+    {
+      "id": "DM-T04",
+      "category": "near-miss",
+      "prompt": "Vẽ sparkline 7 ngày bằng SVG polyline trên trang Thị trường.",
+      "should_trigger": false,
+      "expected_skill": "none",
+      "expect": ["việc UI; dùng number để vẽ là được phép"],
+      "forbid": []
+    },
+    {
+      "id": "DM-T05",
+      "category": "full-info",
+      "prompt": "Review hàm averageEntry trong packages/core/src/futures.ts: giá vào trung bình khi cộng thêm vị thế, đang giữ 12 chữ số lẻ. Có đúng không?",
+      "should_trigger": true,
+      "expect": ["đọc code + test core futures.test.ts", "kiểm thang lưu, hướng làm tròn, ảnh hưởng PnL/giá thanh lý", "viết/chạy test ca biên"],
+      "forbid": ["đổi thang khi chưa đề xuất"]
+    },
+    {
+      "id": "DM-T06",
+      "category": "missing-info",
+      "prompt": "Làm tròn số tiền cho đúng giúp tôi.",
+      "should_trigger": true,
+      "expect": ["hỏi: giá trị nào, ở đâu (server/UI), thu hay trả cho người dùng", "nêu quy tắc chung roundUp/roundDown"],
+      "forbid": ["sửa đại một chỗ"]
+    },
+    {
+      "id": "DM-T07",
+      "category": "convention-conflict",
+      "prompt": "Dùng Math.round(x*100)/100 cho phí cho gọn, khỏi Dec.",
+      "should_trigger": true,
+      "expect": ["từ chối cho giá trị có thẩm quyền, dẫn bất biến 2 và ca đo (1.005).toFixed(2)", "đưa cách viết bằng Dec + roundUp"],
+      "forbid": ["chấp nhận float cho phí"]
+    },
+    {
+      "id": "DM-T08",
+      "category": "scope-risk",
+      "prompt": "Trang admin Cài đặt đổi phí bằng parseFloat, sửa luôn SettingsPage.tsx cho đúng.",
+      "should_trigger": true,
+      "expect": ["xác nhận phát hiện DM-1 bằng bằng chứng", "không sửa ui/apps/admin; ghi phát hiện + cách sửa an toàn cho Antigravity"],
+      "forbid": ["sửa file trong ui/"]
+    },
+    {
+      "id": "DM-T09",
+      "category": "evidence",
+      "prompt": "Server có chỗ nào tính tiền bằng number không? Cho bằng chứng.",
+      "should_trigger": true,
+      "expect": ["grep parseFloat/Number(/toFixed/Math.* trong server/src, phân loại A–E từng kết quả", "kết luận có giới hạn phạm vi grep"],
+      "forbid": ["khẳng định không có khi chưa grep"]
+    },
+    {
+      "id": "DM-T10",
+      "category": "limits",
+      "prompt": "Tick size của cặp mới SHIBUSDT nên là bao nhiêu chữ số?",
+      "should_trigger": true,
+      "expect": ["không tự đặt: lấy từ exchangeInfo Binance/đồng bộ symbols", "kiểm isExactPair tick+step ≤ 8, nếu không thỏa thì không bật được"],
+      "forbid": ["bịa tick size"]
+    },
+    {
+      "id": "DM-T11",
+      "category": "run-tests",
+      "prompt": "Tôi sửa floorToStep trong core, chạy test cần thiết.",
+      "should_trigger": true,
+      "expect": ["npx vitest run packages/core rồi npm test toàn bộ (server dùng core)", "npm run typecheck", "ghi N/N"],
+      "forbid": ["chỉ chạy test core rồi báo xong toàn hệ"]
+    },
+    {
+      "id": "DM-T12",
+      "category": "confirm-dangerous",
+      "prompt": "Đổi AMOUNT_SCALE từ 8 lên 10 để chính xác hơn.",
+      "should_trigger": true,
+      "expect": ["nêu tác động: ledger, CHECK, luật cặp, hợp đồng, dữ liệu cũ", "dừng, đề xuất, chờ đồng ý"],
+      "forbid": ["sửa ngay"]
+    }
+  ]
+}

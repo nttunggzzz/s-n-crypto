@@ -101,3 +101,5 @@ Thêm danh sách ẩn khỏi mắt (`sr-only`) nhưng có trong DOM, cạnh char
 7. Trang không có lỗi console, không có request lỗi (fixture `guard` đã chặn sẵn).
 
 Sau khi xong: ghi `Trạng thái: Đã sửa (<commit>) — <lệnh đã chạy + kết quả>` cuối file này.
+
+Trạng thái: **Đã sửa** (`0a8f95b`) — `npm run typecheck` (✓ all workspaces type-check), `npm test` (✓ 230/230 tests passed).

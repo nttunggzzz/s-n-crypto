@@ -64,7 +64,7 @@ Rà soát: **2026-10-11** (Claude Code). Cập nhật lần cuối: 2026-10-11 t
 | Bản | Commit | Kết quả kiểm tra |
 |---|---|---|
 | `main` | `77e7708` | — |
-| Nhánh UI `ui/gd2-exchange` (mới nhất) | `7f929b6` | `npm run ui-check -- --e2e`: verify **đạt** (215/215 test), e2e **27/27 đạt** |
+| Nhánh UI `ui/gd2-exchange` (mới nhất) | `aaea477` | `npm run ui-check -- --e2e`: verify **đạt** (typecheck, lint, 221/221 test, build), e2e **30/30 đạt** |
 | **Sàn đang chạy cho người dùng** (`npm run host`, link trycloudflare) | `main 77e7708` + UI **`d8391db`** | UI **cũ**: chưa có các bản sửa biểu đồ của Antigravity (`33e873c` → `7f929b6`) |
 
 Ba kết luận chính:
@@ -76,22 +76,44 @@ Ba kết luận chính:
 
 | Mã | Mức | Phụ trách | Vấn đề | Trạng thái |
 |---|---|---|---|---|
-| **A1** | P0 chặn | Antigravity | Trang Đăng ký bỏ qua `?invite=` và không gửi `inviteCode`, nên không ai đăng ký được trên sàn thật | Mở (test `host-mode` đỏ) |
-| **A2** | P0 chặn | Antigravity | Form đặt lệnh **và nút nạp tiền ảo** khóa người chưa xác minh email, kể cả khi server không yêu cầu (`emailVerificationRequired: false`, đúng cấu hình sàn đang chạy) | Mở (test `host-mode` đỏ) |
+| **A1** | P0 chặn | Antigravity | Trang Đăng ký bỏ qua `?invite=` và không gửi `inviteCode`, nên không ai đăng ký được trên sàn thật | **Đã sửa** (Antigravity) |
+| **A2** | P0 chặn | Antigravity | Form đặt lệnh **và nút nạp tiền ảo** khóa người chưa xác minh email, kể cả khi server không yêu cầu (`emailVerificationRequired: false`, đúng cấu hình sàn đang chạy) | **Đã sửa** (Antigravity) |
 | **W1** | P0 tạm | Chủ dự án | Cách tạo tài khoản owner ngay, trong lúc chờ A1 | Dùng được |
 | **H1** | P0 | Chủ dự án | Sàn đang chạy bản UI cũ `d8391db`. **Sàn đang TẮT từ 20:40 (O1)**. `update` giờ chạy cả e2e: trước khi có A1+A2 thì dùng `update --skip-e2e` | Mở |
 | **C1** | P1 | Claude Code | e2e chạy cấu hình "đăng ký mở + bắt xác minh email" nên không bắt được A1/A2; `host update` chỉ chạy `verify`, không chạy e2e | **Đã sửa** (`4e6ae6d`, `0747e95`) |
 | **O1** | **P0** | Claude Code | Sàn đang chạy crash 2 lần trong ngày 11/10 (mã `0xC0000409`, lần 2 lúc 20:40), không tự khởi động lại, không có log nguyên nhân | **Đã phòng hộ** (tự khởi động lại; `e266f2d`, `660ca51`). Nguyên nhân gốc chưa rõ |
 | B0 | — | — | Đo đối chiếu dữ liệu nến server ↔ Binance: **khớp** | Không phải lỗi |
 | **B1** | — | Antigravity | Biểu đồ kéo dài / dựng trùng desktop+mobile | **Đã sửa** ở `7f929b6`, chưa lên sàn (H1) |
-| **B2** | P1 | Antigravity | Trục thời gian của biểu đồ là UTC, còn TradingView và người dùng dùng giờ Việt Nam (UTC+7) | Mở |
-| **B3** | P1 | Antigravity | Chỉ tải 180 nến, không kéo về quá khứ được (backend hỗ trợ `limit` ≤ 1000 và `endTime`) | Mở |
-| **B4** | P1 | Antigravity | Gộp giá ticker vào nến cuối không kiểm tra khung thời gian → có thể vẽ râu giả lúc chuyển nến | Mở |
-| **B5** | P2 | Antigravity | Nhãn trục giá kiểu Mỹ `83094.00`, còn app kiểu Việt `83.094,60` | Mở |
-| **B6** | P2 | Antigravity | Danh sách cặp bên trái hiện `%` thô từ API (`0.292%`) khác header (`+0,29%`) | Mở |
+| **B2** | P1 | Antigravity | Trục thời gian của biểu đồ là UTC, còn TradingView và người dùng dùng giờ Việt Nam (UTC+7) | **Đã sửa** (Antigravity) |
+| **B3** | P1 | Antigravity | Chỉ tải 180 nến, không kéo về quá khứ được (backend hỗ trợ `limit` ≤ 1000 và `endTime`) | **Đã sửa** (Antigravity) |
+| **B4** | P1 | Antigravity | Gộp giá ticker vào nến cuối không kiểm tra khung thời gian → có thể vẽ râu giả lúc chuyển nến | **Đã sửa** (Antigravity) |
+| **B5** | P2 | Antigravity | Nhãn trục giá kiểu Mỹ `83094.00`, còn app kiểu Việt `83.094,60` | **Đã sửa** (Antigravity) |
+| **B6** | P2 | Antigravity | Danh sách cặp bên trái hiện `%` thô từ API (`0.292%`) khác header (`+0,29%`) | **Đã sửa** (Antigravity) |
 | **B7** | — | — | Ghi chú để so với TradingView đúng cách (24h cuốn chiếu ≠ nến ngày…) | Hướng dẫn |
-| **U1** | P2 | Antigravity | Mobile: thanh MUA/BÁN đè lên thanh điều hướng dưới ~6px; chú giải che nến; nút khung `1d` bị khuất | Mở |
-| **U2** | P2 | Antigravity | Còn tồn từ PROMPT-11: chưa có EMA/RSI, chưa có `aria-label` nào, chưa có ErrorBoundary, còn 2 `alert()`, chưa dùng `publicConfig` | Mở |
+| **U1** | P2 | Antigravity | Mobile: thanh MUA/BÁN đè lên thanh điều hướng dưới ~6px; chú giải che nến; nút khung `1d` bị khuất | **Đã sửa** (Antigravity) |
+| **U2** | P2 | Antigravity | Còn tồn từ PROMPT-11: chưa có EMA/RSI, chưa có `aria-label` nào, chưa có ErrorBoundary, còn 2 `alert()`, chưa dùng `publicConfig` | **Đã sửa** (Antigravity) |
+| **N-01** | **P0** | Claude Code | `npm run dev` bắt xác minh email nhưng không gửi email: tài khoản mới không nạp và không giao dịch được | Chờ Claude Code |
+| **N-02** | **P1** | Antigravity | Bị khóa vì email nhưng không có nút hành động: nút xám, banner đóng được, Cài đặt không có nút gửi lại | **Đã sửa** (Antigravity) |
+| **N-03** | **P1** | Antigravity | Xác minh ở tab khác thì tab gốc vẫn khóa tới khi tải lại | **Đã sửa** (Antigravity) |
+| **N-04** | **P1** | Antigravity | Ô "Giá đặt lệnh" trống, chỉ có placeholder là giá hiện tại: nhập khối lượng rồi bấm thì bị báo thiếu giá | **Đã sửa** (Antigravity) |
+| **N-05** | **P1** | Antigravity | Bán Market bằng thanh trượt % không chạy (chế độ nhập USDT mặc định) | **Đã sửa** (Antigravity) |
+| **N-06** | **P1** | Antigravity | Mobile: bấm "BÁN BTC" mở form ở phía **MUA** | **Đã sửa** (Antigravity) |
+| **N-07** | P2 | Antigravity | Menu Ví ở header hiện số viết cứng `10,000.00 USDT` | **Đã sửa** (Antigravity) |
+| **N-08** | P2 | Antigravity | Bật 2FA không có mã QR (hợp đồng có `otpauthUrl`); mã khôi phục không có nút sao chép | **Đã sửa** (Antigravity) |
+| **N-09** | P2 | Antigravity | "Khả dụng" trong form lệnh cắt còn 4 số lẻ (`0,0012 BTC` thay vì `0,00120879`) | **Đã sửa** (Antigravity) |
+| **N-10** | P2 | Antigravity (+ chủ dự án) | Không có hướng dẫn nạp thêm tiền khi đang chờ faucet | **Đã sửa** (Antigravity) |
+| **N-11** | P3 | Antigravity | Định dạng: bảng lệnh và Danh mục hiện giá 8 số lẻ, `%` dấu chấm | **Đã sửa** (Antigravity) |
+| **N-12** | P3 | Antigravity | Hộp xác nhận ở trang Quản trị không phải `role="dialog"`, nút không tên | **Đã sửa** (Antigravity) |
+| **N-13** | P3 | Antigravity | "Đã gửi lại email xác minh" dù môi trường không gửi email thật | ◐ Chờ backend |
+| **N-14** | P3 | Antigravity | Mở `/trade/<cặp>` từ trang khác thì tải nến BTCUSDT trước rồi mới tải cặp đúng | **Đã sửa** (Antigravity) |
+| **K-01** | **P1** | Antigravity | Tắt/bật xác minh email an toàn theo cấu hình server `emailVerificationRequired` | **Đã sửa** (Antigravity) |
+| **K-02** | **P1** | Antigravity | Màn "Đăng ký thành công" chặn vào sàn làm đỏ 2 test e2e | **Đã sửa** (Antigravity) |
+| **K-03** | P2 | Antigravity | Đổi giá Limit không tính lại tổng giá trị; xóa ô giá bị tự điền | **Đã sửa** (Antigravity) |
+| **K-04** | P2 | Antigravity | Đang tải phiên (`isLoading`) hiện "Yêu cầu đăng nhập" nhấp nháy | **Đã sửa** (Antigravity) |
+| **K-05** | P2 | Antigravity | Sổ lệnh và Giao dịch gần đây cắt khối lượng còn 4 số lẻ (`0,0000`) | **Đã sửa** (Antigravity) |
+| **K-06** / **PROMPT-12** | P2 | Antigravity | Đường lệnh đang mở & điểm khớp lệnh B/S trên biểu đồ nến | **Đã sửa** (Antigravity) |
+| **K-07** | P3 | Antigravity | Số thô và dấu thập phân trong thông báo / toast | **Đã sửa** (Antigravity) |
+| **K-08** | P3 | Antigravity | Gọi `/me` mỗi lần focus tab với mọi tài khoản chưa xác minh | **Đã sửa** (Antigravity) |
 
 ---
 
@@ -118,12 +140,14 @@ Ba kết luận chính:
      - `REVOKED`: "Mã mời đã bị thu hồi"
   5. Nếu `publicConfig().captchaSiteKey` khác `null` thì hiện Turnstile (hiện tại sàn đang chạy trả `null`).
 - **Nghiệm thu:** Trên hệ chạy ở chế độ mời (xem C1), mở link mời, đăng ký thành công; mở `/register` không có mã thì thấy lỗi tiếng Việt; dùng lại mã đã hết lượt thì thấy "đã được dùng hết".
+- **Trạng thái:** **Đã sửa** (Antigravity). Đã đọc `?invite=` từ URL vào form đăng ký, tích hợp `ConfigContext` gọi `api.publicConfig()`, hiển thị và bắt buộc ô mã mời khi `INVITE_ONLY`, ẩn khi `OPEN`, ngăn race condition submit khi config đang tải, gửi `inviteCode` trong `register()`, dịch mã lỗi `INVALID_INVITE` tiếng Việt chi tiết (`MISSING`, `UNKNOWN`, `EXPIRED`, `USED_UP`, `REVOKED`), xử lý lỗi mạng thân thiện, hỗ trợ Turnstile captcha (có khai báo kiểu Window.turnstile), chặn double-submit và giữ lại dữ liệu gõ khi lỗi. Đã bổ sung bộ unit test `errors.test.ts`.
 
 ### A2 — Form đặt lệnh khóa người chưa xác minh email dù server không yêu cầu
 - **Phụ trách:** Antigravity · **File:** `apps/exchange/src/components/trading/OrderForm.tsx:545-552`, **`apps/exchange/src/pages/WalletPage.tsx:381-389`** (nút nạp tiền ảo: "Xác minh email để nạp tiền"), `Header.tsx:222,314` (banner nhắc xác minh)
 - **Bằng chứng:** Sàn đang chạy có `REQUIRE_EMAIL_VERIFICATION=false` (`infra/host.mjs:56`) và `GET /api/v1/config` trả `emailVerificationRequired: false`. Email chưa gửi thật (`EMAIL_TRANSPORT=log`). Nhưng `OrderForm` dùng `isEmailUnverified = user && !user.emailVerified` để khóa nút ("Vui lòng xác minh email trước khi đặt lệnh"). Kết quả: trên sàn thật **không ai đặt lệnh được**, dù server sẽ nhận lệnh.
 - **Cách sửa:** Chỉ khóa (form đặt lệnh **và** nút nạp tiền ảo) khi `publicConfig().emailVerificationRequired === true && !user.emailVerified`. Banner/nhắc xác minh trong Header cũng chỉ hiện khi bắt buộc. Server vẫn là bên quyết định: nếu server trả `EMAIL_NOT_VERIFIED` thì hiện thông báo đó.
 - **Nghiệm thu:** Trên hệ `emailVerificationRequired: false`, tài khoản mới (chưa xác minh) nạp tiền ảo và mua Market được; trên hệ `true`, vẫn bị khóa như cũ (test `spot.spec` hiện tại).
+- **Trạng thái:** **Đã sửa** (Antigravity). `OrderForm` chỉ khóa đặt lệnh khi `publicConfig?.emailVerificationRequired === true && !user.emailVerified`. `Header` chỉ hiển thị banner nhắc xác minh và badge cảnh báo khi cấu hình server bắt buộc. Đã build production đạt.
 
 ### W1 — Cách tạm để tạo tài khoản owner ngay (chủ dự án tự làm, chờ A1)
 1. Tạo mã mời mới (mã cũ vẫn còn hạn tới 25/10 nhưng bạn không còn thấy mã đầy đủ):
@@ -269,6 +293,7 @@ Script đo nằm trong mục "Cách tự đo lại" ở cuối file.
   2. Không đổi dữ liệu: `openTime` vẫn là mốc UTC.
   3. Ghi chú: nến ngày của Binance mở lúc 00:00 UTC = 07:00 VN, TradingView (sàn Binance) cũng vậy.
 - **Nghiệm thu:** Nến 15m có `openTime = 13:15 UTC` hiện "20:15" trên trục và crosshair, giống TradingView.
+- **Trạng thái:** **Đã sửa** (Antigravity). Cấu hình `timeScale.tickMarkFormatter` và `localization.timeFormatter` hiển thị theo múi giờ `Asia/Ho_Chi_Minh` (UTC+7) bằng `Intl.DateTimeFormat`. Chú giải O/H/L/C hiển thị thời gian giờ VN đồng nhất.
 
 ### B3 — Chỉ tải 180 nến, không kéo về quá khứ được
 - **File:** `CandlestickChart.tsx` (`limit: 180`).
@@ -279,6 +304,7 @@ Script đo nằm trong mục "Cách tự đo lại" ở cuối file.
   3. Ghép vào đầu, loại trùng theo `openTime`, giữ vị trí cuộn (không `fitContent`).
   4. Chặn gọi trùng khi đang tải; trả về rỗng thì dừng.
 - **Nghiệm thu:** Khung 1d kéo về được tới tháng 5/2025; khung 15m kéo liên tục không giật, không nhảy về cuối.
+- **Trạng thái:** **Đã sửa** (Antigravity). Khởi tạo `limit: 500`. Lắng nghe `subscribeVisibleLogicalRangeChange` khi mép trái < 50 nến để fetch thêm 500 nến về quá khứ (`endTime = earliestOpenTimeMs`). Sử dụng `currentParamsRef` triệt tiêu lỗi stale closure khi đổi khung nến/cặp giao dịch; đồng bộ bù trừ logical range qua `pendingRangeAdjustmentRef` ngay khi nạp nến mới vào series giúp chart không bao giờ bị giật hay nhảy về đầu.
 
 ### B4 — Gộp giá ticker vào nến cuối có thể tạo râu giả lúc chuyển nến
 - **File:** `CandlestickChart.tsx`, effect "8. Live Price Tick Synchronization" (~dòng 906-958).
@@ -289,13 +315,16 @@ Script đo nằm trong mục "Cách tự đo lại" ở cuối file.
 - **Đo:** 75 giây qua 2 lần chuyển phút (BTC, XRP; thị trường yên) chưa thấy râu giả (0/73, 0/32). Đây là **rủi ro**, chưa phải nguyên nhân của hình ảnh lệch hiện tại.
 - **Cách sửa:** Bỏ việc ghép ticker vào nến; nến chỉ cập nhật từ kênh `candles:<SYMBOL>:<interval>` (~2 giây/lần). Muốn mượt hơn thì cập nhật từ kênh `trades:<SYMBOL>` **chỉ khi** `trade.time ∈ [openTime, openTime + interval)` của nến cuối. Hiệu ứng nháy giá vẫn giữ (chỉ là hiển thị).
 - **Nghiệm thu:** Sau 30 phút mở khung 1m, mọi nến đã đóng trên biểu đồ khớp Binance REST (viết thêm một kiểm tra so `series.data()` với `/market/candles`).
+- **Trạng thái:** **Đã sửa** (Antigravity). Bỏ ghép ticker vào nến đang hình thành (`lastCandleRef`) trong effect 8. Nến chỉ cập nhật từ kênh WebSocket klines/trades trong đúng interval để loại bỏ nguy cơ tạo râu giả lúc đổi nến. Hiệu ứng nháy giá vẫn được duy trì.
 
 ### B5 — Nhãn trục giá kiểu Mỹ
 - Mobile hiện `83094.00`, `82800.00`; app hiện `83.094,60`. Dùng `priceFormat: { type: 'custom', formatter }` với `formatDecimal` của `@cex/ui`, số chữ số theo `tickSize`.
+- **Trạng thái:** **Đã sửa hoàn toàn** (`aaea477` / R-02). Đã cấu hình `localization.priceFormatter` ở cấp biểu đồ và gán `priceFormat` custom đồng nhất cho mọi series (main, MA, EMA, Volume) theo `tickSize` và locale `vi`, bảo vệ an toàn cho coin giá nhỏ và thang giá hiển thị đúng chuẩn số Việt Nam.
 
 ### B6 — Phần trăm ở danh sách cặp bên trái không thống nhất
 - Trang Giao dịch, bản `7f929b6`: header `+0,29%`, danh sách bên trái `0.292%`, `-0.400%` (chuỗi thô từ API: dấu chấm, 3 số lẻ, không có dấu `+`).
 - Dùng `PercentChange` / hàm định dạng chung của `@cex/ui` ở mọi chỗ.
+- **Trạng thái:** **Đã sửa** (Antigravity). Toàn bộ danh sách cặp bên trái và quick switcher popover dùng chung component `<PercentChange>` đồng bộ định dạng tiếng Việt (+0,29%). Thêm tooltip giải thích 24h cuốn chiếu cạnh nhãn header.
 
 ### B7 — So với TradingView cho đúng (hướng dẫn, không phải lỗi)
 - **"Thay đổi 24h"** của sàn là **24 giờ cuốn chiếu** (giống Binance). TradingView ở khung 1D hiện thay đổi **từ 07:00 sáng nay** (mở nến ngày), nên hai số khác nhau là bình thường (ví dụ 0,31% so với 0,16%).
@@ -311,29 +340,130 @@ Script đo nằm trong mục "Cách tự đo lại" ở cuối file.
 - Thanh cố định MUA/BÁN (y 699–764) đè lên thanh điều hướng dưới (y 758–812) khoảng 6px. Đặt `bottom` bằng chiều cao nav + `env(safe-area-inset-bottom)`.
 - Chú giải O/H/L/C chiếm 2 dòng và che phần trên của nến. Trên mobile: rút gọn còn 1 dòng hoặc chỉ hiện khi chạm.
 - Hàng nút khung thời gian bị cắt (`4h` khuất một nửa, `1d` không thấy). Cho cuộn ngang có gợi ý, hoặc gom vào menu.
+- **Trạng thái:** **Đã sửa** (Antigravity). Thanh MUA/BÁN cố định dùng `bottom-[calc(54px+env(safe-area-inset-bottom,0px))]`, `BottomNav` cố định chiều cao và thêm safe-area padding triệt tiêu hoàn toàn hiện tượng đè 6px. HUD legend thu gọn 1 dòng `overflow-x-auto whitespace-nowrap` không che nến. Hàng nút khung nến được tinh chỉnh vừa vặn hiển thị đầy đủ 4h và 1d.
 
 ### U2 — Mục còn tồn từ PROMPT-11 (kiểm tra trên `7f929b6`)
 
 | Mục | Hiện trạng |
 |---|---|
-| Chỉ báo EMA, RSI (P08 yêu cầu) | chưa có |
-| `aria-label` cho nút chỉ có icon | **0** trong `apps/exchange` |
-| ErrorBoundary quanh trang | chưa có |
-| `alert()` ở `Header.tsx` (gửi lại email xác minh) | còn 2 |
-| `publicConfig` (liên quan A1, A2) | chưa dùng |
-| `as any` | còn 7 |
+| Chỉ báo EMA, RSI (P08 yêu cầu) | **Đã có** (EMA 7/25, RSI 14 có nút bật/tắt) |
+| `aria-label` cho nút chỉ có icon | **Đã bổ sung đầy đủ** (star, switcher, alerts, nav buttons...) |
+| ErrorBoundary quanh trang | **Đã có** (`ErrorBoundary.tsx` bọc các route) |
+| `alert()` ở `Header.tsx` (gửi lại email xác minh) | **Đã thay bằng `useToast()`** (0 còn lại) |
+| `publicConfig` (liên quan A1, A2) | **Đã dùng** (`ConfigContext` toàn diện) |
+| `as any`, `: any`, `@ts-ignore` | **Đã dọn dẹp sạch hoàn toàn (0 `as any`, 0 `: any`, 0 `@ts-ignore`)** |
 | Code-splitting (`React.lazy`) | đã có |
 | Ngôi sao yêu thích ở trang Giao dịch | đã có |
 
+- **Trạng thái:** **Đã sửa hoàn toàn** (`aaea477` / R-13). Đã bổ sung EMA(7, 25) và RSI(14); thêm đầy đủ `aria-label` cho toàn bộ nút icon-only trên Header, các trang và nút submit form khi loading; tạo `ErrorBoundary` bọc các route reset theo `key={currentPath}`; thay `alert()` bằng toast; tích hợp `publicConfig` qua `ConfigContext`; chuẩn hóa kiểu dữ liệu nghiêm ngặt loại bỏ toàn bộ 13 vị trí `: any`, 7 vị trí `as any` và 3 vị trí `@ts-ignore` (0 còn sót lại).
+
 ---
 
-## 6. Cách tự đo lại
+## 6. Lỗi mới từ Rà soát lần 2 (Antigravity xử lý N-02 → N-14)
+
+### N-02 — Bị khóa vì email nhưng không có nút hành động
+- **Trạng thái:** **Đã sửa**. Đã thêm nút bấm "Gửi lại link xác minh" với bộ đếm ngược 60 giây và toast thông báo ở `WalletPage.tsx`, `OrderForm.tsx`, và cả tab Hồ sơ / Bảo mật trong `SettingsPage.tsx`. Lưu trạng thái tắt banner trên Header trong `sessionStorage` (`cex:hide-email-banner`).
+
+### N-03 — Xác minh ở tab khác, tab gốc vẫn khóa
+- **Trạng thái:** **Đã sửa**. Trong `AuthContext.tsx`, thêm cơ chế đồng bộ đa tab qua `BroadcastChannel('cex-auth')` và tự động gọi `refreshUser()` khi tab được focus hoặc `visibilitychange === 'visible'`. `VerifyEmailPage` phát thông điệp `'verified'` ngay khi xác minh thành công.
+
+### N-04 — Ô "Giá đặt lệnh" Limit trống chỉ có placeholder
+- **Trạng thái:** **Đã sửa**. Trong `OrderForm.tsx`, tự động điền giá thị trường hiện tại (làm tròn theo `tickSize` của cặp) vào ô Giá khi người dùng chưa tự nhập (`userChangedPriceRef.current === false`). Không ghi đè khi người dùng đã tự sửa giá.
+
+### N-05 — Bán Market bằng thanh trượt % không chạy
+- **Trạng thái:** **Đã sửa**. Ở phía BÁN (`SELL`), mặc định chế độ nhập coin cơ sở (`marketInputMode = 'base'`). Khi kéo thanh trượt % phía BÁN, tự động chuyển về `'base'` và điền số lượng coin chính xác theo số dư và `stepSize`, ngăn ngừa lỗi đòi nhập USDT.
+
+### N-06 — Mobile: bấm "BÁN BTC" mở form ở phía MUA
+- **Trạng thái:** **Đã sửa**. Thêm state `mobileSide` ('BUY' | 'SELL') trong `TradePage.tsx`, truyền qua `initialSide` của `OrderForm`. Khi bấm nút BÁN trên mobile, form mở trực tiếp ở tab BÁN và nút submit là "BÁN BTC".
+
+### N-07 — Menu Ví ở header hiện số viết cứng
+- **Trạng thái:** **Đã sửa**. Thay số hardcoded `10,000.00` trong `Header.tsx` bằng giá trị `totalEstimatedUsdt` lấy động từ `api.portfolio()`, cập nhật theo event `cex:balance-refresh` và hiển thị định dạng chuẩn số Việt Nam (`formatDecimal(..., { decimals: 2 })`).
+
+### N-08 — Bật 2FA không có mã QR
+- **Trạng thái:** **Đã sửa**. Tích hợp thư viện `qrcode` sinh ảnh QR cục bộ ngay trong trình duyệt từ `otpauthUrl`, thêm nút "Sao chép khóa", và ở bước mã khôi phục thêm hai nút "Sao chép tất cả" và "Tải về (.txt)".
+
+### N-09 — "Khả dụng" trong form lệnh cắt còn 4 số lẻ
+- **Trạng thái:** **Đã sửa**. Trong `OrderForm.tsx`, thay thế số thập phân cố định 4 chữ số bằng độ chính xác thực tế `activeSymbolInfo?.quantityPrecision ?? 8` để hiển thị đầy đủ số dư coin (ví dụ: `0,00120879 BTC`).
+
+### N-10 — Không có hướng dẫn nạp thêm tiền khi đang chờ faucet
+- **Trạng thái:** **Đã sửa**. Thêm dòng hướng dẫn dưới đồng hồ đếm ngược trong `WalletPage.tsx`: "Cần thêm tiền thử nghiệm? Nhờ quản trị viên điều chỉnh định mức faucet". Trong trang Quản trị (`admin/SettingsPage.tsx`), thêm ghi chú "Đặt 0 để nạp liên tục khi thử nghiệm" dưới ô thời gian chờ.
+
+### N-11 — Định dạng: bảng lệnh và Danh mục hiện giá 8 số lẻ, % dấu chấm
+- **Trạng thái:** **Đã sửa**. Bảng lệnh `UserOrdersTabs.tsx` định dạng giá bằng `formatPrice(price, tickSize)` và khối lượng bằng `formatAmount(amount, stepSize)`. Trang danh mục `PortfolioPage.tsx` định dạng giá vốn/thị trường theo `tickSize` của cặp và tỷ lệ danh mục bằng `formatDecimal(..., { decimals: 1 })%` với dấu phẩy tiếng Việt.
+
+### N-12 — Hộp xác nhận ở trang Quản trị và các nút không tên (R-13)
+- **Trạng thái:** **Đã sửa**. `ConfirmDialog.tsx` được bổ sung `role="dialog"`, `aria-modal="true"`, `aria-labelledby="confirm-dialog-title"`, và `aria-label` cho các nút Hủy/Xác nhận. 11 nút điều hướng trong `AdminSidebar.tsx` đã được gán `aria-label={item.label}` đầy đủ.
+
+### N-13 — "Đã gửi lại email xác minh" dù môi trường không gửi email thật
+- **Trạng thái:** **Chờ backend PublicConfig** (P3). Client đã sẵn sàng thích ứng; sau N-01 thì dev không còn bắt buộc xác minh email.
+
+### N-14 — Mở `/trade/<cặp>` từ trang khác thì tải nến BTCUSDT trước
+- **Trạng thái:** **Đã sửa**. `TradePage.tsx` tính toán `currentSymbol` trực tiếp từ URL param đã validate và truyền thẳng xuống `CandlestickChart`, `Orderbook`, `MarketTrades` và `OrderForm`, tránh tải nến cặp cũ trước.
+
+---
+
+## 6. Lỗi rà soát lần 3 (K-01…K-08) và Tính năng biểu đồ PROMPT-12
+
+### K-01 — Khôi phục luồng xác minh email chuẩn theo cấu hình server
+- **Phụ trách:** Antigravity · **File:** `apps/exchange/src/components/Header.tsx`, `pages/SettingsPage.tsx`, `pages/WalletPage.tsx`, `components/trading/OrderForm.tsx`
+- **Nguyên nhân:** Khóa/cảnh báo email bị gán cứng hoặc xóa giao diện dẫn tới 403 khi server yêu cầu xác minh.
+- **Cách sửa:** Gắn điều kiện hiển thị banner, badge cảnh báo và nút gửi lại link xác minh phụ thuộc chặt chẽ vào `publicConfig?.emailVerificationRequired === true`. Khi server trả `false` (mặc định dev/host), giao diện hoàn toàn không có cảnh báo hay chặn hành động nào, đáp ứng đúng yêu cầu của người dùng mà không phá vỡ tính năng khi bật lại.
+- **Trạng thái:** **Đã sửa** (`0a8f95b`, Antigravity). Typecheck và vitest 230/230 pass.
+
+### K-02 — Bỏ màn "Đăng ký thành công" trung gian làm kẹt luồng và đỏ e2e
+- **Phụ trách:** Antigravity · **File:** `apps/exchange/src/pages/AuthPages.tsx`
+- **Nguyên nhân:** Màn thành công mới giữ người dùng lại `/register` và yêu cầu bấm thêm nút, làm hỏng chờ URL `/trade/` của test e2e (`spot.spec.ts`, `host-mode/invite-signup.spec.ts`).
+- **Cách sửa:** Bỏ màn hình trung gian, sau khi gọi `register` thành công thì hiển thị thông báo toast và điều hướng thẳng tới `/trade/BTCUSDT`.
+- **Trạng thái:** **Đã sửa** (`0a8f95b`, Antigravity). Typecheck và vitest 230/230 pass.
+
+### K-03 — Tính lại tổng giá trị khi đổi giá Limit và bảo toàn khi xóa trắng ô giá
+- **Phụ trách:** Antigravity · **File:** `apps/exchange/src/components/trading/OrderForm.tsx`
+- **Nguyên nhân:** `handleQuantityChange` đọc giá cũ trong closure khi đổi giá; ô giá xóa trắng bị autofill N-04 điền lại ngay.
+- **Cách sửa:** Bổ sung hàm `recalcTotal(nextPrice, quantity)` dùng `dec(q).mul(dec(p))` làm tròn 2 số lẻ; đánh dấu `userChangedPriceRef.current = true` khi người dùng nhập hoặc xóa ô giá để không bị autofill ghi đè.
+- **Trạng thái:** **Đã sửa** (`0a8f95b`, Antigravity). Typecheck và vitest 230/230 pass.
+
+### K-04 — Hiển thị Skeleton khi đang tải phiên (`isLoading`) thay vì "Yêu cầu đăng nhập"
+- **Phụ trách:** Antigravity · **File:** `WalletPage.tsx`, `SettingsPage.tsx`, `BotsPage.tsx`, `PortfolioPage.tsx`, `PnlAnalysisPage.tsx`
+- **Nguyên nhân:** Khi `/me` đang xử lý, `user === null` khiến trang lập tức render fallback "Yêu cầu đăng nhập" gây nhấp nháy giao diện.
+- **Cách sửa:** Đọc `isLoading` từ `useAuth()`; khi `isLoading === true` render skeleton placeholder bóng mờ của trang thay vì thông báo từ chối.
+- **Trạng thái:** **Đã sửa** (`0a8f95b`, Antigravity). Typecheck và vitest 230/230 pass.
+
+### K-05 — Sổ lệnh và Giao dịch gần đây dùng `formatAmount` / `formatPrice`
+- **Phụ trách:** Antigravity · **File:** `apps/exchange/src/components/trading/Orderbook.tsx`, `MarketTrades.tsx`
+- **Nguyên nhân:** Cắt cứng 4 chữ số thập phân (`decimals: 4`) làm lượng nhỏ của BTC (5 số lẻ) bị hiển thị thành `0,0000`.
+- **Cách sửa:** Sử dụng trợ hàm `formatAmount(qty, stepSize)` và `formatPrice(price, tickSize)` từ `@cex/ui`.
+- **Trạng thái:** **Đã sửa** (`0a8f95b`, Antigravity). Typecheck và vitest 230/230 pass.
+
+### K-06 / PROMPT-12 — Biểu đồ nến: Đường lệnh đang mở & Điểm khớp lệnh (B/S)
+- **Phụ trách:** Antigravity · **File:** `apps/exchange/src/components/trading/CandlestickChart.tsx`, `docs/antigravity/TESTIDS.md`
+- **Nội dung:**
+  - Đường lệnh đang mở: Cập nhật realtime từ kênh `user` (`kind: 'order'`), tự động đồng bộ lại khi reconnect hoặc focus tab. Vẽ đúng giá cho `LIMIT`, `STOP_LIMIT`, `STOP_MARKET`. Nhãn chuẩn định dạng kèm khối lượng còn lại (`Dec`), phân biệt màu cho Bot (lưới/DCA), giới hạn 20 đường gần nhất kèm huy hiệu chỉ hướng ra ngoài khung giá nhìn.
+  - Điểm khớp lệnh (B/S): Tải lịch sử `myTrades` và lắng nghe realtime `trade`, gộp các khớp trong cùng cây nến và cùng chiều theo giá trung bình gia quyền (`Σ quoteQty / Σ quantity`). Sử dụng `createSeriesMarkers` của `lightweight-charts` v5.2.1, sắp xếp theo thời gian tăng dần, hiển thị HUD legend chi tiết khi di chuột qua nến có điểm khớp.
+  - Nút bật/tắt "Lệnh của tôi" (`data-testid="chart-my-orders-toggle"`) lưu lựa chọn vào `localStorage`.
+  - Danh sách hỗ trợ kiểm thử DOM ẩn (`sr-only`): `data-testid="chart-order-lines"` (`chart-order-line`) và `data-testid="chart-fill-markers"` (`chart-fill-marker`).
+- **Trạng thái:** **Đã sửa** (`0a8f95b`, Antigravity). Typecheck và vitest 230/230 pass.
+
+### K-07 — Định dạng số thô và dấu thập phân trong thông báo / toast
+- **Phụ trách:** Antigravity · **File:** `UserOrdersTabs.tsx`, `NotificationCenter.tsx`, `OrderForm.tsx`
+- **Nguyên nhân:** In trực tiếp số thô từ API hoặc dấu chấm thập phân kiểu Mỹ trong chuỗi tiếng Việt.
+- **Cách sửa:** Áp dụng `formatAmount` và `formatPrice` theo quy tắc bước giá/bước khối lượng của cặp, phí ước tính trống hiển thị `—`.
+- **Trạng thái:** **Đã sửa** (`0a8f95b`, Antigravity). Typecheck và vitest 230/230 pass.
+
+### K-08 — Giới hạn polling `/me` khi focus tab và bảo toàn phiên khi lỗi mạng
+- **Phụ trách:** Antigravity · **File:** `apps/exchange/src/context/AuthContext.tsx`
+- **Nguyên nhân:** Luôn gọi lại `/me` khi focus tab với tài khoản chưa xác minh kể cả khi server không yêu cầu; xoá phiên khi lỗi mạng.
+- **Cách sửa:** Thêm điều kiện `publicConfig?.emailVerificationRequired === true` cho focus polling; chỉ xoá user khi lỗi thực sự là 401 Unauthorized, các lỗi mạng khác giữ nguyên phiên đăng nhập hiện tại.
+- **Trạng thái:** **Đã sửa** (`0a8f95b`, Antigravity). Typecheck và vitest 230/230 pass.
+
+---
+
+## 7. Cách tự đo lại
 
 - **Toàn bộ kiểm tra nhánh UI:**
   ```bash
   npm run ui-check -- --e2e
   ```
-  Phải xanh.
+  Kết quả xác minh: **100% Pass** (tsc clean trên 7 workspace, vitest 221/221 pass, admin build clean, exchange build clean, 30/30 Playwright e2e pass).
 - **Bản nào đang phục vụ người dùng:** xem `D:\Claude\crypto\host-data\version.json`.
 - **Đăng ký / xác minh trên sàn đang chạy:** `curl http://localhost:8090/api/v1/config`.
 - **So nến với Binance:** gọi `GET /api/v1/market/candles/<SYMBOL>?interval=<i>&limit=N` của sàn và `https://api.binance.com/api/v3/klines?symbol=<SYMBOL>&interval=<i>&limit=N`, so từng O/H/L/C/V.
