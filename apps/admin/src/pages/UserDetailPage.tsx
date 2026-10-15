@@ -28,6 +28,8 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
   const { user: currentUser, hasPerm } = useAuth();
   const [detail, setDetail] = useState<AdminUserDetail | null>(null);
   const [actualId, setActualId] = useState<string>('');
+  const [notFound, setNotFound] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'balances' | 'orders' | 'ledger' | 'futures' | 'bots' | 'logins' | 'tax'>('balances');
   const [copiedUid, setCopiedUid] = useState(false);
 
@@ -72,15 +74,30 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
   const exchangeOrigin = import.meta.env.VITE_EXCHANGE_ORIGIN;
 
   const loadUserData = useCallback(async () => {
+    setNotFound(false);
     try {
       let targetId = userId;
-      // If userId is a UID (all digits), lookup UUID via adminListUsers
+      // If userId is all digits:
       if (/^\d+$/.test(userId)) {
+        // Only accept exactly 8 digits as UID (P-02)
+        if (!/^\d{8}$/.test(userId)) {
+          setNotFound(true);
+          setDetail(null);
+          setActualId('');
+          return;
+        }
+
         const list = await api.adminListUsers({ query: { q: userId, limit: 1 } });
-        if (list.items.length > 0) {
+        if (list.items.length > 0 && list.items[0]?.uid === userId) {
           targetId = list.items[0]!.id;
+        } else {
+          setNotFound(true);
+          setDetail(null);
+          setActualId('');
+          return;
         }
       }
+
       setActualId(targetId);
 
       const d = await api.adminGetUser({ params: { userId: targetId } });
@@ -96,16 +113,25 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
         .catch(() => {});
     } catch (e) {
       console.error(e);
+      setNotFound(true);
+      setDetail(null);
+      setActualId('');
+    } finally {
+      setIsLoading(false);
     }
   }, [api, userId]);
 
   useEffect(() => {
+    setDetail(null);
+    setActualId('');
+    setNotFound(false);
+    setIsLoading(true);
     loadUserData();
   }, [loadUserData]);
 
   // Load tab-specific data when tab changes
   useEffect(() => {
-    if (!actualId) return;
+    if (!actualId || notFound) return;
 
     if (activeTab === 'orders') {
       api.adminUserOrders({ params: { userId: actualId }, query: { open: ordersType, limit: 50 } })
@@ -140,10 +166,10 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
         })
         .finally(() => setTaxLoading(false));
     }
-  }, [actualId, activeTab, ordersType, positionsType, api]);
+  }, [actualId, notFound, activeTab, ordersType, positionsType, api]);
 
   const loadMoreTax = async () => {
-    if (!taxNextCursor || !actualId) return;
+    if (!taxNextCursor || !actualId || notFound) return;
     try {
       const r = await api.adminTaxWithholdings({ query: { userId: actualId, cursor: taxNextCursor, limit: 50 } });
       setTaxWithholdings((prev) => [...prev, ...r.items]);
@@ -151,7 +177,39 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
     } catch {}
   };
 
-  if (!detail) {
+  if (notFound) {
+    return (
+      <div className="p-6 max-w-7xl mx-auto space-y-6" data-testid="admin-user-not-found">
+        {/* Top breadcrumb */}
+        <div className="flex items-center justify-between">
+          <button
+            onClick={() => onNavigate('/admin/users')}
+            className="text-sm text-[var(--text-2,#a1a1aa)] hover:text-[var(--text,#f4f4f5)] flex items-center gap-1.5 transition-colors"
+          >
+            ← Quay lại danh sách người dùng
+          </button>
+        </div>
+
+        <div className="p-12 text-center bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)] rounded-2xl flex flex-col items-center justify-center">
+          <div className="w-12 h-12 mb-4 rounded-full bg-[var(--down,#f6465d)]/10 flex items-center justify-center text-[var(--down,#f6465d)]">
+            <UserX size={24} />
+          </div>
+          <h2 className="text-lg font-semibold text-[var(--text,#f4f4f5)] mb-2">Không tìm thấy người dùng</h2>
+          <p className="text-sm text-[var(--text-2,#a1a1aa)] mb-6 max-w-md">
+            Không tìm thấy thông tin người dùng với định danh &ldquo;{userId}&rdquo;. Vui lòng kiểm tra lại UID hoặc UUID.
+          </p>
+          <button
+            onClick={() => onNavigate('/admin/users')}
+            className="px-4 py-2 bg-[var(--accent,#818cf8)] text-white text-sm font-medium rounded-lg hover:bg-[var(--accent,#818cf8)]/90 transition-colors"
+          >
+            Quay lại danh sách người dùng
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (isLoading || !detail) {
     return <div className="p-8 text-center text-[var(--text-2,#a1a1aa)]">Đang tải thông tin chi tiết người dùng...</div>;
   }
 
