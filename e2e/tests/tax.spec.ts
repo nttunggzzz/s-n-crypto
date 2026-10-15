@@ -241,3 +241,28 @@ test('Admin: tổng hợp thuế kỳ khớp API, có dòng theo cặp, CSV đú
   await expect(page.getByRole('button', { name: /chốt|nộp|phát hành/i }), 'sàn thử nghiệm: không có chốt sổ / nộp thuế').toHaveCount(0);
   await user.context().close();
 });
+
+test('Lịch sử khớp có cột Thuế: dòng BÁN trade-tax = Trade.tax của API, dòng MUA hiện "—" (P-01)', async ({ page, browser, baseURL }) => {
+  await signUpStaff(page, 'admin');
+  await setTax(page, { taxMode: 'WITHHOLD', taxRate: RATE });
+  const user = await trader(browser, baseURL);
+  const { step } = await lotRules(user);
+  await sellMarket(user, toStep(0.00333333, step));
+  const trades = (await apiGet<{ items: Trade[] }>(user, '/api/v1/trades?symbol=BTCUSDT')).items;
+  const sell = trades.find((t) => t.side === 'SELL')!;
+  const buy = trades.find((t) => t.side === 'BUY')!;
+  expect(dec(sell.tax).gt(0), 'thuế đang bật: lần bán phải có thuế').toBe(true);
+
+  await user.goto('/trade/BTCUSDT');
+  await user.getByRole('tab', { name: 'Lịch sử khớp' }).or(user.getByRole('button', { name: 'Lịch sử khớp', exact: true })).first().click();
+  const cells = user.getByTestId('trade-tax');
+  await expect(cells).toHaveCount(trades.length);
+  const values = await cells.evaluateAll((els) => els.map((e) => ({ v: e.getAttribute('data-value') ?? '', text: (e.textContent ?? '').trim() })));
+  const sellCell = values.find((c) => dec(c.v || '0').eq(sell.tax));
+  expect(sellCell, 'có ô thuế = Trade.tax của lần bán').toBeTruthy();
+  expect(sellCell!.text).not.toBe('—');
+  expect(values.filter((c) => dec(c.v || '0').isZero()).length, 'lần mua không có thuế').toBeGreaterThanOrEqual(1);
+  expect(values.find((c) => dec(c.v || '0').isZero())!.text).toBe('—');
+  expect(dec(buy.tax || '0').isZero()).toBe(true);
+  await user.context().close();
+});
