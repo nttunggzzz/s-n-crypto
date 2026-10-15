@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { getApiClient } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { ConfirmDialog } from '../components/ConfirmDialog';
@@ -15,6 +15,7 @@ import {
   type AdminTaxWithholding,
   exportUrl,
 } from '@cex/contracts';
+import { dec } from '@cex/core';
 import { formatDecimal } from '@cex/ui';
 import { Copy, Check, ExternalLink, ShieldAlert, ArrowDownUp, AlertCircle, Shield, Trash2, Radio, Receipt, UserX, X, Building, Download } from 'lucide-react';
 
@@ -165,11 +166,17 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
     setTimeout(() => setCopiedUid(false), 2000);
   };
 
-  // Preview for balance adjustment
+  // Preview for balance adjustment (M-11)
   const currentAssetBal = detail.balances.find((b) => b.asset === adjustAsset);
-  const currentAvailable = currentAssetBal ? parseFloat(currentAssetBal.available) : 0;
-  const adjustAmt = parseFloat(adjustAmount) || 0;
-  const calculatedAfter = (currentAvailable + adjustAmt).toFixed(8).replace(/\.?0+$/, '');
+  const currentAvailable = currentAssetBal?.available ?? '0';
+  const calculatedAfter = useMemo(() => {
+    if (!adjustAmount || adjustAmount.trim() === '') return null;
+    try {
+      return dec(currentAvailable).add(dec(adjustAmount.trim())).toString();
+    } catch {
+      return null;
+    }
+  }, [currentAvailable, adjustAmount]);
 
   const handleAdjustSubmit = async () => {
     if (!adjustReason || adjustReason.trim().length < 5) return;
@@ -206,9 +213,23 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
       } else if (confirmAction === 'RESET') {
         await api.adminResetAccount({ params: { userId: detail.user.id }, body: { reason, confirm: 'RESET' } });
       } else if (confirmAction === 'DEACTIVATE_USER') {
-        await api.adminResetAccount({ params: { userId: detail.user.id }, body: { reason: `Vô hiệu hóa: ${reason}`, confirm: 'RESET' } });
-        await api.adminLockUser({ params: { userId: detail.user.id }, body: { reason: `Khóa vĩnh viễn: ${reason}` } });
-        setAuditNotification(`Đã vô hiệu hóa toàn diện tài khoản ${detail.user.email}`);
+        try {
+          await api.adminResetAccount({ params: { userId: detail.user.id }, body: { reason: `Đặt lại số dư: ${reason}`, confirm: 'RESET' } });
+        } catch (resetErr: unknown) {
+          const msg = resetErr instanceof Error ? resetErr.message : 'Thao tác thất bại';
+          setAuditNotification(`Lỗi đặt lại số dư: ${msg}`);
+          setConfirmOpen(false);
+          loadUserData();
+          return;
+        }
+
+        try {
+          await api.adminLockUser({ params: { userId: detail.user.id }, body: { reason: `Khóa tài khoản: ${reason}` } });
+          setAuditNotification(`Đã đặt lại số dư và khóa tài khoản ${detail.user.email}`);
+        } catch (lockErr: unknown) {
+          const msg = lockErr instanceof Error ? lockErr.message : 'Lỗi khóa';
+          setAuditNotification(`Đã đặt lại số dư nhưng khóa thất bại: ${msg}`);
+        }
       } else if (confirmAction === 'STOP_BOT' && selectedBotId) {
         await api.adminStopGridBot({ params: { userId: detail.user.id, botId: selectedBotId }, body: { reason, sellBase: false } });
       } else if (confirmAction === 'CANCEL_DCA' && selectedPlanId) {
@@ -399,10 +420,10 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
                   data-testid="admin-delete-user-open"
                   onClick={() => { setConfirmAction('DEACTIVATE_USER'); setConfirmOpen(true); }}
                   className="px-3.5 py-2 rounded-lg bg-rose-950/40 hover:bg-rose-950/60 text-sm font-medium text-rose-400 border border-rose-800/40 transition-colors flex items-center gap-1.5"
-                  title="Vô hiệu hóa toàn diện tài khoản (Hủy lệnh, đưa số dư về 0, khóa vĩnh viễn và bảo toàn sổ cái)"
+                  title="Đặt lại mọi số dư về 0 và khóa tài khoản (có thể mở khóa lại sau)"
                 >
-                  <Trash2 size={15} />
-                  <span>Vô hiệu hóa / Xóa</span>
+                  <UserX size={15} />
+                  <span>Đặt lại số dư và khóa</span>
                 </button>
               )}
             </div>
@@ -452,8 +473,8 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
                       <div key={ld.id} className="flex items-center justify-between font-mono">
                         <span className="text-[var(--text-3,#63636b)]">{new Date(ld.createdAt).toLocaleTimeString('vi-VN')}</span>
                         <span className="font-semibold text-[var(--text,#f4f4f5)]">{ld.asset}</span>
-                        <span className={parseFloat(ld.deltaAvailable) >= 0 ? 'text-[var(--up,#1fc27a)]' : 'text-[var(--down,#f2475f)]'}>
-                          {parseFloat(ld.deltaAvailable) > 0 ? `+${ld.deltaAvailable}` : ld.deltaAvailable}
+                        <span className={dec(ld.deltaAvailable).gte(0) ? 'text-[var(--up,#1fc27a)]' : 'text-[var(--down,#f2475f)]'}>
+                          {dec(ld.deltaAvailable).gt(0) ? `+${ld.deltaAvailable}` : ld.deltaAvailable}
                         </span>
                         <span className="text-[var(--text-3,#63636b)]">{ld.type}</span>
                       </div>
@@ -562,7 +583,7 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
               </div>
               <div className="bg-[var(--bg,#000000)] p-3 rounded-lg border border-[var(--line,#1d1e21)]">
                 <div className="text-xs text-[var(--text-3,#63636b)] mb-1">PnL chưa thực hiện</div>
-                <div className={`font-bold ${parseFloat(detail.futures.unrealizedPnl || '0') >= 0 ? 'text-[var(--up,#1fc27a)]' : 'text-[var(--down,#f2475f)]'}`}>
+                <div className={`font-bold ${dec(detail.futures.unrealizedPnl || '0').gte(0) ? 'text-[var(--up,#1fc27a)]' : 'text-[var(--down,#f2475f)]'}`}>
                   {detail.futures.unrealizedPnl || '0.00000000'} USDT
                 </div>
               </div>
@@ -651,8 +672,8 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
                 <tr key={l.id} className="hover:bg-[var(--line,#1d1e21)]/10">
                   <td className="px-4 py-3 text-[var(--text-3,#63636b)]">{new Date(l.createdAt).toLocaleString('vi-VN')}</td>
                   <td className="px-4 py-3 font-bold text-[var(--text,#f4f4f5)]">{l.asset}</td>
-                  <td className={`px-4 py-3 font-bold ${parseFloat(l.deltaAvailable) >= 0 ? 'text-[var(--up,#1fc27a)]' : 'text-[var(--down,#f2475f)]'}`}>
-                    {parseFloat(l.deltaAvailable) > 0 ? `+${l.deltaAvailable}` : l.deltaAvailable}
+                  <td className={`px-4 py-3 font-bold ${dec(l.deltaAvailable).gte(0) ? 'text-[var(--up,#1fc27a)]' : 'text-[var(--down,#f2475f)]'}`}>
+                    {dec(l.deltaAvailable).gt(0) ? `+${l.deltaAvailable}` : l.deltaAvailable}
                   </td>
                   <td className="px-4 py-3">{l.availableAfter}</td>
                   <td className="px-4 py-3 text-[var(--text-2,#a1a1aa)]">{l.type}</td>
@@ -715,7 +736,7 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
                   <td className="px-4 py-3">{p.quantity}</td>
                   <td className="px-4 py-3">{p.entryPrice}</td>
                   <td className="px-4 py-3">{p.markPrice || '—'}</td>
-                  <td className={`px-4 py-3 font-bold ${parseFloat(p.unrealizedPnl || '0') >= 0 ? 'text-[var(--up,#1fc27a)]' : 'text-[var(--down,#f2475f)]'}`}>
+                  <td className={`px-4 py-3 font-bold ${dec(p.unrealizedPnl || '0').gte(0) ? 'text-[var(--up,#1fc27a)]' : 'text-[var(--down,#f2475f)]'}`}>
                     {p.unrealizedPnl || '0.00000000'} USDT
                   </td>
                 </tr>
@@ -930,7 +951,7 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
                     </td>
                     <td className="px-4 py-3 font-semibold text-[var(--text,#f4f4f5)]">{wh.symbol}</td>
                     <td className="px-4 py-3">{formatDecimal(wh.grossQuote, { decimals: 4 })} USDT</td>
-                    <td className="px-4 py-3 text-amber-400">{(Number(wh.taxRate) * 100).toFixed(2)}%</td>
+                    <td className="px-4 py-3 text-amber-400">{dec(wh.taxRate).mul(100).toString()}%</td>
                     <td className="px-4 py-3 font-bold text-amber-400">{formatDecimal(wh.taxAmount, { decimals: 8 })} USDT</td>
                     <td className="px-4 py-3 text-[var(--text-2,#a1a1aa)]">{wh.vndRate ? `${formatDecimal(wh.vndRate, { decimals: 0 })} ₫` : '—'}</td>
                     <td className="px-4 py-3 text-[var(--text-2,#a1a1aa)]">{wh.taxVnd ? `${formatDecimal(wh.taxVnd, { decimals: 0 })} ₫` : '—'}</td>
@@ -1093,14 +1114,14 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
               />
             </div>
 
-            {adjustAmount && (
+            {adjustAmount && calculatedAfter && (
               <div
                 data-testid="adjust-preview"
                 className="p-3 rounded-lg bg-[var(--bg,#000000)] border border-[var(--line,#1d1e21)] text-xs font-mono"
               >
                 <div className="text-[var(--text-3,#63636b)] mb-1">Xem trước số dư:</div>
                 <div className="text-[var(--text,#f4f4f5)] font-semibold">
-                  {currentAvailable.toFixed(2)} → {calculatedAfter} {adjustAsset} ({adjustAmt >= 0 ? `+${adjustAmt}` : adjustAmt})
+                  {currentAvailable} → {calculatedAfter} {adjustAsset}
                 </div>
               </div>
             )}
@@ -1150,7 +1171,7 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
           confirmAction === 'RESET' ? 'Reset toàn bộ tài khoản' :
           confirmAction === 'STOP_BOT' ? 'Dừng Grid Trading Bot' :
           confirmAction === 'CANCEL_DCA' ? 'Hủy kế hoạch mua định kỳ' :
-          confirmAction === 'DEACTIVATE_USER' ? 'Vô hiệu hóa / Xóa tài khoản khách hàng' :
+          confirmAction === 'DEACTIVATE_USER' ? 'Đặt lại số dư và khóa tài khoản' :
           'Xác nhận thao tác'
         }
         consequenceText={
@@ -1159,7 +1180,7 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
           confirmAction === 'RESET' ? 'Hủy toàn bộ lệnh mở, đưa toàn bộ số dư về 0, xóa lịch sử faucet. Không thể hoàn tác!' :
           confirmAction === 'STOP_BOT' ? 'Hủy toàn bộ lệnh đang mở của bot này. Thao tác sẽ được ghi vào nhật ký.' :
           confirmAction === 'CANCEL_DCA' ? 'Hủy kế hoạch định kỳ này. Thao tác sẽ được ghi vào nhật ký.' :
-          confirmAction === 'DEACTIVATE_USER' ? 'Tài khoản sẽ bị hủy toàn bộ lệnh mở, đưa số dư về 0 (ACCOUNT_RESET), khóa vĩnh viễn và chấm dứt mọi phiên đăng nhập để tuân thủ AML / kiểm toán thuế. Không thể hoàn tác!' :
+          confirmAction === 'DEACTIVATE_USER' ? 'Tài khoản sẽ bị hủy toàn bộ lệnh mở, đưa toàn bộ số dư về 0 (ACCOUNT_RESET) và khóa tài khoản. Số dư không thể hoàn tác, nhưng tài khoản có thể mở khóa lại sau.' :
           'Hành động này sẽ được ghi nhận vào nhật ký quản trị của sàn.'
         }
         quickReasons={
@@ -1169,10 +1190,10 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
             'Nghi chiếm tài khoản',
             'Yêu cầu hỗ trợ từ khách hàng',
           ] : confirmAction === 'DEACTIVATE_USER' ? [
-            'Khách hàng yêu cầu xóa / đóng tài khoản (Right to erasure)',
+            'Khách hàng yêu cầu đóng tài khoản',
             'Vi phạm nghiêm trọng quy chế giao dịch & AML',
             'Tài khoản giả mạo / spam',
-            'Tuân thủ theo yêu cầu của cơ quan quản lý',
+            'Xử lý vi phạm theo quy định nội bộ',
           ] : undefined
         }
         requirePhrase={
