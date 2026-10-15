@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { getApiClient } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { ConfirmDialog } from '../components/ConfirmDialog';
@@ -169,14 +169,14 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
   // Preview for balance adjustment (M-11)
   const currentAssetBal = detail.balances.find((b) => b.asset === adjustAsset);
   const currentAvailable = currentAssetBal?.available ?? '0';
-  const calculatedAfter = useMemo(() => {
-    if (!adjustAmount || adjustAmount.trim() === '') return null;
+  let calculatedAfter: string | null = null;
+  if (adjustAmount && adjustAmount.trim() !== '') {
     try {
-      return dec(currentAvailable).add(dec(adjustAmount.trim())).toString();
+      calculatedAfter = dec(currentAvailable).add(dec(adjustAmount.trim())).toString();
     } catch {
-      return null;
+      calculatedAfter = null;
     }
-  }, [currentAvailable, adjustAmount]);
+  }
 
   const handleAdjustSubmit = async () => {
     if (!adjustReason || adjustReason.trim().length < 5) return;
