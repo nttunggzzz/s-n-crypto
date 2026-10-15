@@ -15,7 +15,7 @@ import {
   type AdminTaxWithholding,
   exportUrl,
 } from '@cex/contracts';
-import { formatDecimal, formatDate } from '@cex/ui';
+import { formatDecimal } from '@cex/ui';
 import { Copy, Check, ExternalLink, ShieldAlert, ArrowDownUp, AlertCircle, Shield, Trash2, Radio, Receipt, UserX, X, Building, Download } from 'lucide-react';
 
 interface UserDetailPageProps {
@@ -924,8 +924,10 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
                   </tr>
                 )}
                 {taxWithholdings.map((wh) => (
-                  <tr key={wh.withholdingId} className="hover:bg-[var(--line,#1d1e21)]/10" data-testid="admin-tax-withholding-row" data-trade-id={wh.tradeId}>
-                    <td className="px-4 py-3 text-[var(--text-3,#63636b)]">{formatDate(wh.createdAt)}</td>
+                  <tr key={wh.id} className="hover:bg-[var(--line,#1d1e21)]/10" data-testid="admin-tax-withholding-row" data-trade-id={wh.tradeId}>
+                    <td className="px-4 py-3 text-[var(--text-3,#63636b)]">
+                      {new Date(wh.createdAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}
+                    </td>
                     <td className="px-4 py-3 font-semibold text-[var(--text,#f4f4f5)]">{wh.symbol}</td>
                     <td className="px-4 py-3">{formatDecimal(wh.grossQuote, { decimals: 4 })} USDT</td>
                     <td className="px-4 py-3 text-amber-400">{(Number(wh.taxRate) * 100).toFixed(2)}%</td>
