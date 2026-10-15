@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import type { Order, Trade, OrderList } from '@cex/contracts';
+import { dec } from '@cex/core';
 import { getApiClient } from '../../services/api.ts';
 import { useAuth } from '../../context/AuthContext.tsx';
 import { useMarket } from '../../context/MarketContext.tsx';
@@ -154,7 +155,10 @@ export const UserOrdersTabs: React.FC<UserOrdersTabsProps> = ({
         const formattedPrice = sym ? formatPrice(tr.price, sym.tickSize) : tr.price;
         const sideText = tr.side === 'BUY' ? 'Mua' : 'Bán';
         const base = sym?.baseAsset ? ` ${sym.baseAsset}` : '';
-        success(`Khớp lệnh ${sideText}: ${formattedQty}${base} @ ${formattedPrice}`);
+        const taxText = tr.side === 'SELL' && tr.tax && dec(tr.tax).gt(0)
+          ? ` · thuế ${formatDecimal(tr.tax)} ${tr.feeAsset || 'USDT'}`
+          : '';
+        success(`Khớp lệnh ${sideText}: ${formattedQty}${base} @ ${formattedPrice}${taxText}`);
       }
     });
 
@@ -609,6 +613,7 @@ export const UserOrdersTabs: React.FC<UserOrdersTabsProps> = ({
                   <TableHead className="text-right">Khối lượng</TableHead>
                   <TableHead className="text-right">Tổng giá trị</TableHead>
                   <TableHead className="text-right">Phí</TableHead>
+                  <TableHead className="text-right">Thuế</TableHead>
                   <TableHead className="text-right">Lãi/Lỗ đã chốt</TableHead>
                 </TableRow>
               </TableHeader>
@@ -639,6 +644,15 @@ export const UserOrdersTabs: React.FC<UserOrdersTabsProps> = ({
                       </TableCell>
                       <TableCell className="text-right font-mono text-xs text-[var(--color-text-secondary,#9ca3af)]">
                         {formatDecimal(tr.fee)} {tr.feeAsset}
+                      </TableCell>
+                      <TableCell
+                        data-testid="trade-tax"
+                        data-value={tr.tax ?? '0'}
+                        className="text-right font-mono text-xs text-[var(--color-text-secondary,#9ca3af)]"
+                      >
+                        {dec(tr.tax || '0').gt(0)
+                          ? `${formatDecimal(tr.tax)} ${tr.feeAsset || 'USDT'}`
+                          : '—'}
                       </TableCell>
                       <TableCell className="text-right font-mono text-xs font-bold">
                         {pnl === null ? (

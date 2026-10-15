@@ -195,6 +195,15 @@ export function floorToInterval(timeSec: number, interval: CandleInterval): numb
   }
 }
 
+export const INTERVAL_MS_MAP: Record<CandleInterval, number> = {
+  '1m': 60 * 1000,
+  '5m': 300 * 1000,
+  '15m': 900 * 1000,
+  '1h': 3600 * 1000,
+  '4h': 14400 * 1000,
+  '1d': 86400 * 1000,
+};
+
 export interface GroupedMarkerItem {
   time: UTCTimestamp;
   side: 'BUY' | 'SELL';
@@ -202,6 +211,7 @@ export interface GroupedMarkerItem {
   totalQty: Dec;
   totalQuoteQty: Dec;
   totalFee: Dec;
+  totalTax: Dec;
   feeAsset: string;
   avgPrice: string;
   avgPriceNum: number;
@@ -304,6 +314,10 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
   const api = getApiClient();
   const { activeSymbolInfo, activeTicker, exchangeInfo, realtimeClient, connectionStatus } = useMarket();
   const { isAuthenticated } = useAuth();
+  const isAuthRef = useRef(isAuthenticated);
+  useEffect(() => {
+    isAuthRef.current = isAuthenticated;
+  }, [isAuthenticated]);
   const [openOrders, setOpenOrders] = useState<Order[]>([]);
   const [openOrdersError, setOpenOrdersError] = useState(false);
   const [myTrades, setMyTrades] = useState<Trade[]>([]);
@@ -641,12 +655,14 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
       const qtyDec = dec(tr.quantity);
       const quoteDec = tr.quoteQty ? dec(tr.quoteQty) : qtyDec.mul(dec(tr.price));
       const feeDec = tr.fee ? dec(tr.fee) : dec('0');
+      const taxDec = tr.tax ? dec(tr.tax) : dec('0');
 
       if (existing) {
         existing.count += 1;
         existing.totalQty = existing.totalQty.add(qtyDec);
         existing.totalQuoteQty = existing.totalQuoteQty.add(quoteDec);
         existing.totalFee = existing.totalFee.add(feeDec);
+        existing.totalTax = existing.totalTax.add(taxDec);
         if (tradeTimeSec > existing.latestTime) {
           existing.latestTime = tradeTimeSec;
         }
@@ -658,6 +674,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
           totalQty: qtyDec,
           totalQuoteQty: quoteDec,
           totalFee: feeDec,
+          totalTax: taxDec,
           feeAsset: tr.feeAsset || '',
           avgPrice: tr.price,
           avgPriceNum: parseFloat(tr.price),
@@ -1119,20 +1136,43 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
 
         isLoadingMoreRef.current = true;
         try {
-          const res = curMarketType === 'futures'
-            ? await api.futuresCandles({
+          const intervalMs = INTERVAL_MS_MAP[curInterval] || 900 * 1000;
+          const candlesPromise = curMarketType === 'futures'
+            ? api.futuresCandles({
                 params: { symbol: curSymbol },
                 query: { interval: curInterval, limit: 500, endTime: earliestOpenTimeMs },
               })
-            : await api.candles({
+            : api.candles({
                 params: { symbol: curSymbol },
                 query: { interval: curInterval, limit: 500, endTime: earliestOpenTimeMs },
               });
+
+          const tradesPromise = (isAuthRef.current && curMarketType !== 'futures')
+            ? api.myTrades({
+                query: {
+                  symbol: curSymbol,
+                  from: new Date(earliestOpenTimeMs - 500 * intervalMs).toISOString(),
+                  to: new Date(earliestOpenTimeMs).toISOString(),
+                  limit: 200,
+                },
+              }).catch(() => null)
+            : Promise.resolve(null);
+
+          const [res, tradesRes] = await Promise.all([candlesPromise, tradesPromise]);
 
           // R-05: Check if current params changed while fetching
           const currentKey = `${currentParamsRef.current.symbol}|${currentParamsRef.current.interval}|${currentParamsRef.current.marketType}`;
           if (requestKey !== currentKey) {
             return;
+          }
+
+          if (tradesRes && tradesRes.items && tradesRes.items.length > 0) {
+            setMyTrades((prev) => {
+              const existingIds = new Set(prev.map((t) => t.id));
+              const newTrades = tradesRes.items.filter((t) => !existingIds.has(t.id));
+              if (newTrades.length === 0) return prev;
+              return [...prev, ...newTrades];
+            });
           }
 
           if (!res.items || res.items.length === 0) {
@@ -1216,9 +1256,10 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
             const priceText = formatPrice(f.avgPrice, tickSize);
             const countText = `${f.count} lần khớp`;
             const feeText = f.totalFee.gt(0) ? ` · phí ${formatAmount(f.totalFee.toString(), stepSize)} ${f.feeAsset}` : '';
+            const taxText = f.totalTax.gt(0) ? ` · thuế ${formatAmount(f.totalTax.toString(), stepSize)} ${f.feeAsset || 'USDT'}` : '';
             const d = new Date(f.latestTime * 1000);
             const timeStr = d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false });
-            return `${sideText} ${qtyText} ${baseAsset} @ ${priceText} · ${countText}${feeText} · ${timeStr}`;
+            return `${sideText} ${qtyText} ${baseAsset} @ ${priceText} · ${countText}${feeText}${taxText} · ${timeStr}`;
           });
           setHoveredTradeMarkerInfo(summaries.join(' | '));
         } else {

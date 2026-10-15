@@ -109,6 +109,11 @@ Sàn thử nghiệm: mọi màn thuế có nhãn "thử nghiệm", không dùng 
 | `tax-vnd` | trong `tax-breakdown` | Quy đổi VND của thuế, `data-value` = `roundUp(thuế × taxVndRate, 0)`. **Không có** khi `taxVndRate = null` |
 | `tax-test-label` | trong `tax-breakdown` | Nhãn "thử nghiệm" |
 
+**Bảng Lịch sử khớp lệnh (`apps/exchange`, `/trade/:symbol`)**
+| id | Ở đâu | Nội dung |
+|---|---|---|
+| `trade-tax` | Bảng Lịch sử khớp (`UserOrdersTabs`) | Ô thuế khấu trừ của lượt khớp, `data-value` = `tr.tax ?? '0'`. Hiển thị số tiền thuế hoặc `'—'` nếu = 0 |
+
 **Trang Thuế của người dùng (`/account/tax`)**
 | id | Nội dung |
 |---|---|
