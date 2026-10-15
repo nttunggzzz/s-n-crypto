@@ -72,11 +72,7 @@ export function createApp(deps: AppDeps) {
   const { config } = deps;
   const app = express();
   const origins = allowedOrigins(config);
-  const opts: RouteOptions = {
-    requireEmailVerification: config.REQUIRE_EMAIL_VERIFICATION,
-    validateResponses: !config.isProd,
-    requireStaffTwoFactor: config.NODE_ENV !== 'development',
-  };
+  const opts: RouteOptions = { requireEmailVerification: config.REQUIRE_EMAIL_VERIFICATION, validateResponses: !config.isProd };
 
   app.disable('x-powered-by');
   app.set('trust proxy', 1); // Railway / Cloudflare in front

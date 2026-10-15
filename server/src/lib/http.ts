@@ -29,7 +29,6 @@ export interface RouteOptions {
   requireEmailVerification: boolean;
   /** Validate responses against the contract (on in dev/test, off in production). */
   validateResponses: boolean;
-  requireStaffTwoFactor?: boolean;
 }
 
 /**
@@ -55,7 +54,7 @@ export function route<N extends EndpointName>(
       if (level === 'staff') {
         // Order matters for the UI: not staff → 403; staff without 2FA (or not signed in with it) → TWO_FACTOR_REQUIRED.
         if (!STAFF_ROLES.includes(auth.user.role)) throw new AppError('FORBIDDEN', 'Staff only');
-        if (opts.requireStaffTwoFactor !== false && (!auth.user.twoFactorEnabledAt || !auth.session.mfaVerified)) {
+        if (!auth.user.twoFactorEnabledAt || !auth.session.mfaVerified) {
           throw new AppError('TWO_FACTOR_REQUIRED', 'Enable two-factor authentication and sign in with it to use the admin area');
         }
         const perm = (def as { permission?: Permission }).permission;

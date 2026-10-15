@@ -85,8 +85,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
   }
 
-  // Tạm thời bỏ qua yêu cầu 2FA trên localhost/dev theo yêu cầu người dùng
-  if (user && !user.twoFactorEnabled && !import.meta.env.DEV) {
+  // Tài khoản quản trị bắt buộc phải bật xác thực hai bước (2FA)
+  if (user && !user.twoFactorEnabled) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-bg text-text">
         <div className="bg-panel p-6 rounded-lg border border-line max-w-md text-center">
