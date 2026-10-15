@@ -32,6 +32,15 @@ Rà soát: **2026-10-11** (Claude Code). Cập nhật lần cuối: 2026-10-11 t
 >   - P-02 (P3): nhận diện uid ở chi tiết người dùng admin;
 >   - L-03.
 
+>
+> **Rà soát lần 7 (UI `6b93ac2`, 2026-10-15 tối): [docs/reports/2026-10-15-ra-soat-ui-lan-7.md](reports/2026-10-15-ra-soat-ui-lan-7.md)** — **gộp được**.
+> - P-01 và P-02 đã sửa; L-03 mới sửa một phần. verify 629/629; e2e 50/50 (1 bỏ qua); ca nghiệm thu P-01 mới đạt.
+> - Việc tiếp cho Antigravity:
+>   - **Q-01 (P2)**: chú thích B/S trên chart cắt phí/thuế thành 0 ở DOGE, PEPE (làm tròn theo bước khối lượng);
+>   - Q-03 (P3): admin báo "Không tìm thấy người dùng" cho mọi lỗi;
+>   - Q-02 (P3): phần còn thiếu của L-03;
+>   - Q-04: không ghi vào thư mục `main`.
+
 ## Backend → UI (Claude Code cập nhật mỗi khi đổi backend/hợp đồng; Antigravity đọc đầu mỗi phiên, cùng `packages/contracts/CHANGELOG.md`)
 
 | Ngày | Thay đổi backend / hợp đồng | UI cần làm gì | Trạng thái |

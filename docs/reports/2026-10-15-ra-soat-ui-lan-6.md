@@ -39,7 +39,7 @@ Tiền tố mới của lần này: **P** (P-01 … P-04).
 | M-15 skill `crypto-agent-subsystem` | ✅ | không còn trong cây `ui/gd2-exchange`. Phần `vietnam-tax-compliance/` vẫn chờ chủ dự án quyết |
 | M-16 (Claude Code) | ❌ Còn | chưa làm |
 | L-01 `rt.onClose` | ✅ | `AuthContext.tsx:121` |
-| L-03 chart tối đa 1.000 lần khớp | ❌ Còn | `CandlestickChart.tsx:439` (P3) |
+| L-03 chart tối đa 1.000 lần khớp | ✅ | `CandlestickChart.tsx` (P3) — gọi `myTrades({ symbol, from, to })` khi cuộn tải thêm nến cũ |
 | L-04 `toFixed` sổ lệnh | ✅ | không còn trong `Orderbook.tsx` |
 | L-05 testid form lệnh | ✅ | `order-price`, `order-quantity`, `order-total` có. Lặp tên nhưng nằm trong các nhánh loại trừ nhau, mỗi lúc chỉ một phần tử |
 
@@ -82,6 +82,7 @@ Tiền tố mới của lần này: **P** (P-01 … P-04).
 - **Nghiệm thu** (Claude Code thêm ca vào `e2e/tests/tax.spec.ts`):
   - bật thuế → bán qua form → tab "Lịch sử khớp" có dòng với `trade-tax` `data-value` = `Trade.tax` của API (≠ 0);
   - lệnh MUA → "—".
+- **Trạng thái:** Đã sửa (`d7e367c`) — Thêm cột "Thuế" ngay sau "Phí" trong `UserOrdersTabs.tsx` (`data-testid="trade-tax"`, `data-value={tr.tax ?? '0'}`), hiện "—" khi = 0; bổ sung thuế vào toast khớp lệnh BÁN; cộng `totalTax` và hiện thuế vào chú thích B/S trên `CandlestickChart.tsx`; cập nhật `docs/antigravity/TESTIDS.md`. L-03: gọi `myTrades({ symbol, from, to })` song song khi cuộn nến cũ trên chart.
 
 ### P-02 · P3 · Nhận diện uid quá rộng ở chi tiết người dùng (admin)
 - **File:** `apps/admin/src/pages/UserDetailPage.tsx:78-81`: `/^\d+$/.test(userId)` → `adminListUsers({ q: userId, limit: 1 })` → lấy `items[0]`.
@@ -92,6 +93,7 @@ Tiền tố mới của lần này: **P** (P-01 … P-04).
   - dùng `/^\d{8}$/`;
   - sau khi tìm, kiểm `items[0].uid === userId`; không khớp thì hiện "Không tìm thấy người dùng".
 - **Nghiệm thu:** `/admin/users/12` → "Không tìm thấy", không mở chi tiết của ai.
+- **Trạng thái:** Đã sửa (`35eee8a`) — Siết regex nhận diện UID thành `/^\d{8}$/`; nếu chuỗi toàn số nhưng khác 8 chữ số thì báo không tìm thấy ngay lập tức, không truy vấn server; khi đúng 8 chữ số kiểm tra bắt buộc `items[0]?.uid === userId`; hiển thị giao diện "Không tìm thấy người dùng" có `data-testid="admin-user-not-found"` và nút quay lại danh sách.
 
 ### P-03 · P3 · Claude Code: Phân tích lãi lỗ chưa nói tới thuế
 - `packages/contracts/src/analytics.ts:6` ghi "spot: realized PnL … already net of fees". Từ 0.15.0, `Trade.realizedPnl` đã trừ cả **thuế**.
