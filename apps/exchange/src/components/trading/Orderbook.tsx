@@ -144,7 +144,7 @@ export const Orderbook: React.FC<OrderbookProps> = ({ symbol, marketType = 'spot
       const bidD = dec(bestBid);
       const spread = askD.minus(bidD);
       if (spread.lt(ZERO)) return null;
-      const spreadPct = spread.div(askD).mul(100).toNumber();
+      const spreadPct = spread.div(askD).mul(100).toString();
       return {
         spread: spread.toString(),
         spreadPct,
@@ -273,7 +273,7 @@ export const Orderbook: React.FC<OrderbookProps> = ({ symbol, marketType = 'spot
                     onSelectPrice(p);
                   }}
                   className="relative grid grid-cols-2 px-3 h-[19px] min-h-[19px] items-center cursor-pointer hover:bg-[var(--panel-2,#141416)] text-[11.5px]"
-                  title={`Tổng ${formatAmount(item.total.toString(), activeSymbolInfo?.stepSize)} ${activeSymbolInfo?.baseAsset} | ~${formatDecimal((item.total * parseFloat(item.price)).toString(), {decimals:2})} USDT`}
+                  title={`Tổng ${formatAmount(item.total.toString(), activeSymbolInfo?.stepSize)} ${activeSymbolInfo?.baseAsset} | ~${formatDecimal(dec(item.total.toString()).mul(dec(item.price)).toString(), { decimals: 2 })} USDT`}
                 >
                   <div
                     className="absolute right-0 top-0 bottom-0 bg-[var(--down,#f2475f)] opacity-15 pointer-events-none transition-[width] duration-200 ease-out"
@@ -312,7 +312,7 @@ export const Orderbook: React.FC<OrderbookProps> = ({ symbol, marketType = 'spot
             </div>
             {spreadInfo && (
               <div className="text-[10px] text-[var(--text-3,#63636b)] font-mono" title="Chênh lệch giá mua bán tốt nhất">
-                Spread {formatPrice(spreadInfo.spread, activeSymbolInfo?.tickSize)} ({spreadInfo.spreadPct.toFixed(2)}%)
+                Spread {formatPrice(spreadInfo.spread, activeSymbolInfo?.tickSize)} ({formatDecimal(spreadInfo.spreadPct, { decimals: 2 })}%)
               </div>
             )}
           </div>
@@ -328,7 +328,7 @@ export const Orderbook: React.FC<OrderbookProps> = ({ symbol, marketType = 'spot
                     onSelectPrice(p);
                   }}
                   className="relative grid grid-cols-2 px-3 h-[19px] min-h-[19px] items-center cursor-pointer hover:bg-[var(--panel-2,#141416)] text-[11.5px]"
-                  title={`Tổng ${formatAmount(item.total.toString(), activeSymbolInfo?.stepSize)} ${activeSymbolInfo?.baseAsset} | ~${formatDecimal((item.total * parseFloat(item.price)).toString(), {decimals:2})} USDT`}
+                  title={`Tổng ${formatAmount(item.total.toString(), activeSymbolInfo?.stepSize)} ${activeSymbolInfo?.baseAsset} | ~${formatDecimal(dec(item.total.toString()).mul(dec(item.price)).toString(), { decimals: 2 })} USDT`}
                 >
                   <div
                     className="absolute right-0 top-0 bottom-0 bg-[var(--up,#1fc27a)] opacity-15 pointer-events-none transition-[width] duration-200 ease-out"
@@ -346,7 +346,7 @@ export const Orderbook: React.FC<OrderbookProps> = ({ symbol, marketType = 'spot
           )}
 
           {/* Ratio Bar */}
-          <div className="mx-3 mt-1 h-1 flex rounded-full overflow-hidden shrink-0" title={`Mua ${ratioBid.toFixed(1)}% | Bán ${ratioAsk.toFixed(1)}%`}>
+          <div className="mx-3 mt-1 h-1 flex rounded-full overflow-hidden shrink-0" title={`Mua ${formatDecimal(ratioBid.toString(), { decimals: 1 })}% | Bán ${formatDecimal(ratioAsk.toString(), { decimals: 1 })}%`}>
             <div className="bg-[var(--up,#1fc27a)] h-full" style={{ width: `${ratioBid}%` }}></div>
             <div className="bg-[var(--down,#f2475f)] h-full" style={{ width: `${ratioAsk}%` }}></div>
           </div>

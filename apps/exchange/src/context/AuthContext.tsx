@@ -118,17 +118,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           );
         }
       });
-      const rtWithClose = rt as unknown as { onClose?: (cb: (ev: CloseEvent) => void) => () => void };
-      if (typeof rtWithClose.onClose === 'function') {
-        unsubClose = rtWithClose.onClose((ev: CloseEvent) => {
-          if (ev?.code === 4401) {
-            setUser(null);
-            setSessionEnded(true);
-            setSessionEndedMessage('Phiên đăng nhập đã kết thúc');
-            window.location.href = '/login';
-          }
-        });
-      }
+      unsubClose = rt.onClose((ev) => {
+        if (ev?.code === 4401) {
+          setUser(null);
+          setSessionEnded(true);
+          setSessionEndedMessage('Phiên đăng nhập đã kết thúc');
+          window.location.href = '/login';
+        }
+      });
     } catch {}
 
     return () => {

@@ -295,7 +295,12 @@ export const Header: React.FC<HeaderProps> = ({ currentPath, onNavigate }) => {
                         <Bot size={16} className="text-[var(--text-2,#a1a1aa)]" />
                         Bot của tôi
                       </div>
-                      <div onClick={() => onNavigate('/account/tax')} className="px-4 py-2 hover:bg-[var(--panel-2)] cursor-pointer text-[13px] text-[var(--text,#f4f4f5)] flex items-center justify-between">
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={() => onNavigate('/account/tax')}
+                        className="w-full text-left px-4 py-2 hover:bg-[var(--panel-2)] cursor-pointer text-[13px] text-[var(--text,#f4f4f5)] flex items-center justify-between transition-colors"
+                      >
                         <div className="flex items-center gap-2">
                           <Receipt size={16} className="text-[var(--text-2,#a1a1aa)]" />
                           Thuế (Việt Nam)
@@ -303,7 +308,7 @@ export const Header: React.FC<HeaderProps> = ({ currentPath, onNavigate }) => {
                         <span className="text-[9px] uppercase font-bold text-amber-400 bg-amber-400/10 px-1.5 py-0.5 rounded border border-amber-400/20">
                           Thử nghiệm
                         </span>
-                      </div>
+                      </button>
                       <div onClick={() => onNavigate('/settings')} className="px-4 py-2 hover:bg-[var(--panel-2)] cursor-pointer text-[13px] text-[var(--text,#f4f4f5)] flex items-center gap-2">
                         <Settings size={16} className="text-[var(--text-2,#a1a1aa)]" />
                         Cài đặt chung

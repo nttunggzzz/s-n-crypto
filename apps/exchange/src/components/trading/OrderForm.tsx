@@ -408,13 +408,22 @@ export const OrderForm: React.FC<OrderFormProps> = ({
 
   // Vietnam Tax calculation (Module T)
   const taxMode = exchangeStatus?.taxMode ?? exchangeInfo?.taxMode ?? 'OFF';
-  const taxRate = exchangeStatus?.taxRate ?? exchangeInfo?.taxRate ?? '0.001';
+  const taxRate = exchangeStatus?.taxRate ?? exchangeInfo?.taxRate ?? null;
   const taxVndRate = exchangeStatus ? exchangeStatus.taxVndRate : (exchangeInfo?.taxVndRate ?? null);
-  const feeRate = exchangeInfo?.feeRate ?? '0.001';
+  const feeRate = exchangeInfo?.feeRate ?? null;
+
+  const formattedTaxRatePercent = useMemo(() => {
+    if (!taxRate) return '—';
+    try {
+      return `${formatDecimal(dec(taxRate).mul(100).toString(), { locale: 'vi', trimTrailingZeros: true })}%`;
+    } catch {
+      return '—';
+    }
+  }, [taxRate]);
 
   const taxCalculation = useMemo(() => {
     if (side !== 'SELL' || taxMode !== 'WITHHOLD') return null;
-    if (!quantity || !activeSymbolInfo) return null;
+    if (!quantity || !activeSymbolInfo || !feeRate || !taxRate) return null;
     try {
       const q = dec(quantity);
       if (q.lte(0)) return null;
@@ -960,6 +969,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({
         {/* LIMIT PRICE (for Limit, Stop-Limit, OCO) */}
         {(orderType === 'LIMIT' || orderType === 'STOP_LIMIT' || orderType === 'OCO') && (
           <DecimalInput
+            data-testid="order-price"
             label={orderType === 'OCO' ? 'Giá chốt lời (Limit)' : 'Giá đặt lệnh (Price)'}
             value={price}
             onValueChange={(v) => {
@@ -1011,6 +1021,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({
 
             {marketInputMode === 'quote' ? (
               <DecimalInput
+                data-testid="order-total"
                 label="Tổng số tiền USDT"
                 value={quoteOrderQty}
                 onValueChange={(v) => { setQuoteOrderQty(v); setSliderValue(0); }}
@@ -1020,6 +1031,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({
               />
             ) : (
               <DecimalInput
+                data-testid="order-quantity"
                 label="Khối lượng cần mua/bán"
                 value={quantity}
                 onValueChange={(v) => { setQuantity(v); setSliderValue(0); }}
@@ -1032,6 +1044,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({
         ) : (orderType === 'STOP_MARKET' || orderType === 'TRAILING') && side === 'BUY' ? (
           /* Buy Stop-Market & Buy Trailing must specify quoteOrderQty (USDT) */
           <DecimalInput
+            data-testid="order-total"
             label="Số tiền USDT chi trả (Bắt buộc)"
             value={quoteOrderQty}
             onValueChange={(v) => { setQuoteOrderQty(v); setSliderValue(0); }}
@@ -1043,6 +1056,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({
           /* Standard Quantity input */
           <>
             <DecimalInput
+              data-testid="order-quantity"
               label="Khối lượng"
               value={quantity}
               onValueChange={handleQuantityChange}
@@ -1053,6 +1067,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({
 
             {(orderType === 'LIMIT' || orderType === 'STOP_LIMIT') && (
               <DecimalInput
+                data-testid="order-total"
                 label="Tổng giá trị"
                 value={quoteOrderQty}
                 onValueChange={handleTotalChange}
@@ -1180,7 +1195,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({
                 <span
                   data-testid="tax-test-label"
                   className="px-1.5 py-0.2 text-[9px] font-semibold tracking-wider uppercase rounded bg-amber-500/20 text-amber-400 border border-amber-500/30"
-                  title="Sàn khấu trừ thuế 0,1% trên giá trị bán theo TT 32/2026/TT-BTC (sàn thử nghiệm: số liệu mô phỏng)."
+                  title={`Sàn khấu trừ thuế ${formattedTaxRatePercent} trên giá trị bán (sàn thử nghiệm: số liệu mô phỏng).`}
                 >
                   thử nghiệm
                 </span>
@@ -1214,9 +1229,9 @@ export const OrderForm: React.FC<OrderFormProps> = ({
 
             <div className="flex items-center justify-between text-[var(--color-text-muted,#6b7280)]">
               <span className="flex items-center gap-1">
-                Thuế ước tính ({(Number(taxRate) * 100).toFixed(1)}%):
+                Thuế ước tính (<span data-testid="tax-rate-label">{formattedTaxRatePercent}</span>):
                 <span
-                  title="Sàn khấu trừ thuế 0,1% trên giá trị bán theo TT 32/2026/TT-BTC (sàn thử nghiệm: số liệu mô phỏng)."
+                  title={`Sàn khấu trừ thuế ${formattedTaxRatePercent} trên giá trị bán (sàn thử nghiệm: số liệu mô phỏng).`}
                   className="cursor-help text-[var(--color-text-muted,#6b7280)] hover:text-amber-400"
                 >
                   <Info className="w-3 h-3" />
