@@ -19,6 +19,8 @@ import {
   reconciliationRuns,
   sessions,
   symbols,
+  taxWithholdings,
+  userTaxProfiles,
   users,
 } from '../../db/schema.ts';
 import type { Db } from '../../db/client.ts';
@@ -214,7 +216,7 @@ export class AdminService {
 
   async getUser(id: string): Promise<AdminUserDetail> {
     const u = await this.loadUser(id);
-    const [bal, [counts], [claimed], futures, [bots]] = await Promise.all([
+    const [bal, [counts], [claimed], futures, [bots], [taxProfile], [withheld]] = await Promise.all([
       getBalances(this.db, id),
       this.db
         .select({
@@ -233,6 +235,11 @@ export class AdminService {
           dca: sql<number>`(SELECT count(*) FROM ${dcaPlans} WHERE ${dcaPlans.userId} = ${id} AND ${dcaPlans.status} = 'ACTIVE')::int`,
         })
         .from(sql`(SELECT 1) AS one`),
+      this.db.select({ category: userTaxProfiles.category, updatedAt: userTaxProfiles.updatedAt }).from(userTaxProfiles).where(eq(userTaxProfiles.userId, id)),
+      this.db
+        .select({ count: sql<number>`count(*)::int`, total: sql<string | null>`sum(${taxWithholdings.taxAmount})` })
+        .from(taxWithholdings)
+        .where(eq(taxWithholdings.userId, id)),
     ]);
     const v = valuateBalances(bal, this.priceOf);
     return {
@@ -245,6 +252,12 @@ export class AdminService {
       faucetTotalClaimed: toFixedStr(dec(claimed?.total ?? '0')),
       futures,
       bots: { runningGrid: bots?.grid ?? 0, activeDca: bots?.dca ?? 0 },
+      tax: {
+        category: taxProfile?.category ?? 'INDIVIDUAL',
+        categoryUpdatedAt: taxProfile?.updatedAt.toISOString() ?? null,
+        withheldCount: withheld?.count ?? 0,
+        withheldTotal: toFixedStr(dec(withheld?.total ?? '0')),
+      },
     };
   }
 

@@ -101,9 +101,11 @@ Tiền tố mới của lần này: **P** (P-01 … P-04).
   - sửa chú thích;
   - thêm `spotTax` (tổng thuế trong kỳ, thay đổi tương thích) để trang Phân tích lãi lỗ hiện "trong đó thuế …".
 - Ghi dòng "Backend → UI" khi xong.
+- **Trạng thái:** Đã sửa phía server (contracts 0.18.0): `pnlAnalysis.spotTax`, chú thích đã sửa. UI hiện "trong đó thuế" — xem dòng "Backend → UI".
 
 ### P-04 · P3 · Claude Code: M-16 còn mở
 Như M-16 lần 5.
+- **Trạng thái:** Đã sửa phía server (contracts 0.18.0): `adminGetUser(...).tax`. UI dùng ở tab Thuế — xem dòng "Backend → UI" ngày 2026-10-15.
 
 ## 5. Thứ tự đề xuất
 - **Antigravity:**
