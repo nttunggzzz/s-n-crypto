@@ -378,6 +378,7 @@ export const endpoints = {
   futuresPositions: ep({ method: 'GET', path: '/api/v1/futures/positions', auth: 'user', response: z.object({ items: z.array(FuturesPosition) }) }),
   futuresPositionHistory: ep({ method: 'GET', path: '/api/v1/futures/positions/history', auth: 'user', query: FuturesHistoryQuery.extend(PaginationQuery.shape), response: paginated(FuturesPosition) }),
   /** Market close (all, or `quantity`). Returns the closing order. */
+  // Market close; when the visible book is thinner than the position it fills what it holds and returns status EXPIRED (executedQty < quantity)
   futuresClosePosition: ep({ method: 'POST', path: '/api/v1/futures/positions/:symbol/close', auth: 'verified', params: PositionSymbolParam, body: ClosePositionRequest, response: FuturesOrder }),
   futuresAdjustMargin: ep({ method: 'POST', path: '/api/v1/futures/positions/:symbol/margin', auth: 'verified', params: PositionSymbolParam, body: AdjustMarginRequest, response: FuturesPosition }),
   futuresSetTpSl: ep({ method: 'PUT', path: '/api/v1/futures/positions/:symbol/tpsl', auth: 'verified', params: PositionSymbolParam, body: SetPositionTpSlRequest, response: FuturesPosition }),

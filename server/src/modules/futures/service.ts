@@ -314,8 +314,12 @@ export class FuturesService {
     // take liquidity now: market orders, and the marketable part of a limit
     const levels = this.market.bookSide(input.symbol, input.side);
     const walk = walkBook(input.side, levels, { kind: 'base', qty }, c.step, limitPrice ?? undefined);
-    // like spot: a market order must be fillable in full from the visible book
-    if (input.type === 'MARKET' && !walk.complete) throw new AppError('INSUFFICIENT_LIQUIDITY', 'Order book is not deep enough for this order');
+    // like spot: a market order must be fillable in full from the visible book. Exception: a reduce-only MARKET order (closing
+    // a position) takes what the visible 20 levels hold and ends EXPIRED/INSUFFICIENT_LIQUIDITY below, so that a position larger
+    // than the book can still be closed step by step; with nothing to take at all it is rejected like any other market order.
+    if (input.type === 'MARKET' && !walk.complete && !(reduceOnly && walk.fills.length > 0)) {
+      throw new AppError('INSUFFICIENT_LIQUIDITY', 'Order book is not deep enough for this order');
+    }
     for (const f of walk.fills) {
       order = await this.applyFill(tx, out, order, c, f, 'TAKER', false);
       if (order.status !== 'NEW' && order.status !== 'PARTIALLY_FILLED') break; // reduce-only ran out of position

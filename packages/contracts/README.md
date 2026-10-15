@@ -142,6 +142,9 @@ Mock: `setMockPrice('BTCUSDT', 75000)` đẩy giá để xem stop kích hoạt, 
 - Ví Futures riêng: phải **chuyển tiền** từ Spot sang (`futuresTransfer`) trước khi giao dịch.
 - BUY mở/tăng Long hoặc giảm Short; SELL ngược lại. Lệnh ngược chiều lớn hơn vị thế sẽ đóng vị thế rồi mở chiều kia.
 - `reduceOnly`: chỉ giảm vị thế. Nút "Đóng vị thế" dùng `futuresClosePosition`.
+- **Đóng vị thế lớn hơn sổ lệnh:** khớp chỉ dùng 20 mức realtime. Lệnh MARKET `reduceOnly` (kể cả `futuresClosePosition`) mà sổ không đủ thì **khớp phần sổ có**,
+  phần còn lại hủy; phản hồi là `FuturesOrder` có `status: 'EXPIRED'`, `closeReason: 'INSUFFICIENT_LIQUIDITY'`, `executedQty` < `quantity`. Sổ trống hẳn → 400 `INSUFFICIENT_LIQUIDITY` như cũ.
+  Giao diện phải so `executedQty` với `quantity` (đừng báo "đã đóng toàn bộ" khi chưa đủ) và gợi ý đóng tiếp phần còn lại. Lệnh mở (không `reduceOnly`) vẫn cần sổ đủ khối lượng.
 - TP/SL theo **mark price**, khi chạm sẽ đóng bằng lệnh Market. Thanh lý cũng theo mark price, và mất **tối đa** phần ký quỹ của vị thế (số dư không bao giờ âm).
 - Funding theo đúng mốc của Binance (thường 8 giờ): `rate > 0` thì Long trả, Short nhận; trừ hoặc cộng vào ký quỹ vị thế.
 - Phí: maker 0,02%, taker 0,05%, thanh lý 0,5%. Lấy từ `futuresExchangeInfo().fees`, không viết cứng trong UI.
