@@ -292,7 +292,7 @@ export const UsersPage: React.FC<{ onNavigate: (path: string) => void }> = ({ on
                   key={u.id}
                   data-testid="admin-user-row"
                   className="hover:bg-[var(--line,#1d1e21)]/20 cursor-pointer transition-colors"
-                  onClick={() => onNavigate(`/admin/users/${u.id}`)}
+                  onClick={() => onNavigate(`/admin/users/${u.uid}`)}
                 >
                   <td className="px-4 py-3 font-mono text-[var(--accent,#818cf8)] font-medium">
                     <div className="flex items-center gap-1.5">
@@ -372,7 +372,7 @@ export const UsersPage: React.FC<{ onNavigate: (path: string) => void }> = ({ on
 
                       {/* Detail navigation arrow */}
                       <button
-                        onClick={() => onNavigate(`/admin/users/${u.id}`)}
+                        onClick={() => onNavigate(`/admin/users/${u.uid}`)}
                         className="p-1.5 rounded-lg bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)] text-[var(--text-2,#a1a1aa)] hover:text-[var(--text,#f4f4f5)] transition-colors"
                         title="Xem chi tiết"
                       >
