@@ -40,6 +40,7 @@ Rà soát: **2026-10-11** (Claude Code). Cập nhật lần cuối: 2026-10-11 t
 >   - Q-03 (P3): admin báo "Không tìm thấy người dùng" cho mọi lỗi;
 >   - Q-02 (P3): phần còn thiếu của L-03;
 >   - Q-04: không ghi vào thư mục `main`.
+> - **Đã gộp `ui/gd2-exchange` (6b93ac2) vào `main` (7b229bf)**; `npm run verify` trên `main` đạt 629/629. Chưa `host update`, chưa push.
 
 ## Backend → UI (Claude Code cập nhật mỗi khi đổi backend/hợp đồng; Antigravity đọc đầu mỗi phiên, cùng `packages/contracts/CHANGELOG.md`)
 
