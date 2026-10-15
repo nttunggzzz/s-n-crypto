@@ -225,6 +225,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'chart' | 'info'>('chart');
   const [interval, setIntervalState] = useState<CandleInterval>('15m');
+  const userSelectedIntervalRef = useRef(false);
   const [chartType, setChartType] = useState<ChartType>('candles');
   const [showIndicators, setShowIndicators] = useState({ ma: true, ema: false, rsi: false, vol: true });
   const [countdown, setCountdown] = useState<string | null>(null);
@@ -346,7 +347,9 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
     if (isAuthenticated) {
       api.getPreferences()
         .then((pref) => {
-          if (pref.defaultInterval) setIntervalState(pref.defaultInterval);
+          if (!userSelectedIntervalRef.current && pref.defaultInterval) {
+            setIntervalState(pref.defaultInterval);
+          }
         })
         .catch(() => {});
     }
@@ -1852,7 +1855,10 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
                 {INTERVALS.map((inv) => (
                   <button
                     key={inv}
-                    onClick={() => setIntervalState(inv)}
+                    onClick={() => {
+                      userSelectedIntervalRef.current = true;
+                      setIntervalState(inv);
+                    }}
                     className={`px-1.5 py-0.5 sm:px-2.5 sm:py-1 rounded cursor-pointer transition-all duration-150 shrink-0 ${
                       interval === inv
                         ? 'bg-[var(--accent,#818cf8)]/15 text-[var(--accent,#818cf8)] font-bold border border-[var(--accent,#818cf8)]/30'
