@@ -50,6 +50,7 @@ Tiền tố mới của lần này: **Q** (Q-01 … Q-04).
 - **Ảnh hưởng:** người dùng thấy "thuế 0 USDT" trong khi bảng Lịch sử khớp ghi 0,6, hai chỗ mâu thuẫn nhau.
 - **Cách sửa an toàn:** không dùng `stepSize` cho phí và thuế. Dùng `formatDecimal(f.totalFee.toString(), { decimals: 8, trimTrailingZeros: true })` (tương tự cho thuế), giống bảng Lịch sử khớp đang dùng `formatDecimal(tr.fee)`.
 - **Nghiệm thu:** cặp DOGEUSDT, bán 6.000 DOGE khi thuế bật → chú thích có "phí 0,6 USDT · thuế 0,6 USDT", khớp ô `trade-tax`. (Chú thích nằm trên canvas, e2e chưa đọc được. Nếu Antigravity thêm `data-fee`/`data-tax` vào `chart-fill-marker` (`:2285`) thì Claude Code viết ca kiểm.)
+- **Trạng thái Q-01:** DONE — Nguyên nhân gốc: chú thích dùng formatAmount kèm stepSize của coin gốc (cắt về 0 cho DOGE/PEPE). Đã sửa `CandlestickChart.tsx` dùng `formatDecimal(..., { decimals: 8, trimTrailingZeros: true })` và thêm `data-fee`, `data-tax` vào `chart-fill-marker`.
 
 ### Q-02 · P3 · Ký hiệu B/S trên chart vẫn có thể thiếu (L-03 một phần)
 - **File:** `CandlestickChart.tsx:455-462` (lúc mở trang: tối đa 5 × 200 = 1.000 lần khớp mới nhất), `:1154-1162` (khi cuộn: một lần gọi `limit: 200`, không theo `nextCursor`).
@@ -59,12 +60,14 @@ Tiền tố mới của lần này: **Q** (Q-01 … Q-04).
   3. `fetchTrades` chạy lại mỗi khi đổi `activeSymbolInfo` (`:488`) và gán đè `setMyTrades(allTrades)` → các lần khớp tải thêm khi cuộn bị xóa, trong khi nến cũ vẫn còn trên chart.
 - **Cách sửa an toàn:** khi tải lần khớp cho một khoảng thời gian, lặp theo `nextCursor` (giới hạn số trang). Lúc mở trang, lấy theo `from` = mốc mở của nến cũ nhất đang hiện thay vì "1.000 mới nhất". Khi `fetchTrades` chạy lại, gộp theo `id` thay vì gán đè.
 - **Nghiệm thu:** tài khoản có 1.500 lần khớp BTCUSDT trong 2 ngày (bot lưới) → mọi nến có lần khớp đều có ký hiệu (`chart-fill-marker` đếm khớp số nhóm tính từ API).
+- **Trạng thái Q-02:** DONE — Nguyên nhân gốc: giới hạn cứng 5 trang (1.000 lệnh) và gán đè toàn bộ mảng khi fetch lại; cuộn nến chỉ lấy 1 trang 200 lệnh. Đã sửa `CandlestickChart.tsx` với `fetchAllTradesForQuery` lặp `nextCursor`, merge theo ID bảo tồn dữ liệu và reset khi đổi cặp/thị trường.
 
 ### Q-03 · P3 · Admin: mọi lỗi đều hiện "Không tìm thấy người dùng"
 - **File:** `apps/admin/src/pages/UserDetailPage.tsx:114-118`: `catch (e) { …; setNotFound(true) }`.
 - **Cách xảy ra:** server trả 500, mất mạng, hoặc phiên admin hết hạn (401) khi mở chi tiết người dùng có thật → màn hình báo "Không tìm thấy người dùng… Vui lòng kiểm tra lại UID hoặc UUID". Admin tưởng tài khoản bị xóa hoặc nhập sai.
 - **Cách sửa an toàn:** chỉ đặt `notFound` khi lỗi là 404 (`ApiError` có `status === 404` / mã `NOT_FOUND`). Lỗi khác: hiện trạng thái lỗi có nút "Thử lại" gọi lại `loadUserData`.
 - **Nghiệm thu:** chặn `GET /api/v1/admin/users/:id` trả 500 → hiện thông báo lỗi + "Thử lại", không có `admin-user-not-found`.
+- **Trạng thái Q-03:** DONE — Nguyên nhân gốc: khối catch gom mọi lỗi thành notFound = true. Đã sửa `UserDetailPage.tsx` phân biệt rõ 404 vs 5xx/mất mạng; hiển thị `data-testid="admin-user-error"` kèm nút retry `data-testid="admin-user-retry"`.
 
 ### Q-04 · P3 · Quy trình: ghi vào thư mục `main`
 - `git status` của `D:\Claude\crypto` (nhánh `main`) có `M docs/reports/2026-10-15-ra-soat-ui-lan-6.md` chưa commit, nội dung trùng phần Antigravity đã commit ở `6b93ac2` trên nhánh UI.

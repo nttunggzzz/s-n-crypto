@@ -16,7 +16,7 @@ import {
   type ISeriesMarkersPluginApi,
   type SeriesMarkerPrice,
 } from 'lightweight-charts';
-import type { Candle, CandleInterval, Order, FuturesPosition, Trade } from '@cex/contracts';
+import type { Candle, CandleInterval, Order, FuturesPosition, Trade, ApiClient } from '@cex/contracts';
 import { ASSET_TAG_LABELS } from '@cex/contracts';
 import { dec, floorToStep, Dec } from '@cex/core';
 import { getApiClient } from '../../services/api.ts';
@@ -216,6 +216,54 @@ export interface GroupedMarkerItem {
   avgPrice: string;
   avgPriceNum: number;
   latestTime: number;
+}
+
+/**
+ * Q-02: Paginated fetch of all user trades for a given symbol and optional time range.
+ * Traverses nextCursor until !res.nextCursor, res.items.length < limit, or maxPages is reached.
+ * Deduplicates with seenIds and prevents infinite loops with seenCursors.
+ */
+export async function fetchAllTradesForQuery(
+  api: ApiClient,
+  query: { symbol: string; from?: string; to?: string; limit?: number },
+  maxPages = 30
+): Promise<Trade[]> {
+  const limit = query.limit ?? 200;
+  const allTrades: Trade[] = [];
+  const seenIds = new Set<string>();
+  const seenCursors = new Set<string>();
+  let cursor: string | undefined = undefined;
+
+  for (let page = 0; page < maxPages; page++) {
+    if (cursor) {
+      if (seenCursors.has(cursor)) break;
+      seenCursors.add(cursor);
+    }
+
+    const res = await api.myTrades({
+      query: {
+        symbol: query.symbol,
+        ...(query.from ? { from: query.from } : {}),
+        ...(query.to ? { to: query.to } : {}),
+        limit,
+        ...(cursor ? { cursor } : {}),
+      },
+    });
+
+    for (const item of res.items) {
+      if (!seenIds.has(item.id)) {
+        seenIds.add(item.id);
+        allTrades.push(item);
+      }
+    }
+
+    if (!res.nextCursor || res.items.length < limit) {
+      break;
+    }
+    cursor = res.nextCursor;
+  }
+
+  return allTrades;
 }
 
 export const CandlestickChart: React.FC<CandlestickChartProps> = ({
@@ -443,7 +491,7 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
     }
   }, [api, isAuthenticated, marketType, symbol]);
 
-  // Fetch user trades history (Section B)
+  // Fetch user trades history (Section B, Q-02)
   const fetchTrades = useCallback(async () => {
     if (!isAuthenticated || marketType === 'futures') {
       setMyTrades([]);
@@ -451,19 +499,25 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
     }
     setMyTradesError(false);
     try {
-      let allTrades: Trade[] = [];
-      let cursor: string | undefined = undefined;
-      for (let page = 0; page < 5; page++) {
-        const res = await api.myTrades({ query: { symbol, limit: 200, cursor } });
-        allTrades = allTrades.concat(res.items);
-        if (!res.nextCursor || res.items.length < 200) break;
-        cursor = res.nextCursor;
+      const allTrades = await fetchAllTradesForQuery(api, { symbol });
+      if (currentParamsRef.current.symbol !== symbol || currentParamsRef.current.marketType !== marketType) {
+        return;
       }
-      setMyTrades(allTrades);
+      setMyTrades((prev) => {
+        const prevForSymbol = prev.filter((t) => t.symbol === symbol);
+        const fetchedIds = new Set(allTrades.map((t) => t.id));
+        const remainingPrev = prevForSymbol.filter((t) => !fetchedIds.has(t.id));
+        return [...allTrades, ...remainingPrev];
+      });
     } catch {
       setMyTradesError(true);
     }
   }, [api, isAuthenticated, marketType, symbol]);
+
+  // Reset user trades when switching symbol or market type (Q-02)
+  useEffect(() => {
+    setMyTrades([]);
+  }, [symbol, marketType]);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -1151,15 +1205,16 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
               });
 
           const tradesPromise = (isAuthRef.current && curMarketType !== 'futures')
-            ? api.myTrades({
-                query: {
+            ? fetchAllTradesForQuery(
+                api,
+                {
                   symbol: curSymbol,
                   from: new Date(earliestOpenTimeMs - 500 * intervalMs).toISOString(),
                   to: new Date(earliestOpenTimeMs).toISOString(),
-                  limit: 200,
                 },
-              }).catch(() => null)
-            : Promise.resolve(null);
+                20
+              ).catch(() => [] as Trade[])
+            : Promise.resolve([] as Trade[]);
 
           const [res, tradesRes] = await Promise.all([candlesPromise, tradesPromise]);
 
@@ -1169,10 +1224,10 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
             return;
           }
 
-          if (tradesRes && tradesRes.items && tradesRes.items.length > 0) {
+          if (tradesRes && tradesRes.length > 0) {
             setMyTrades((prev) => {
               const existingIds = new Set(prev.map((t) => t.id));
-              const newTrades = tradesRes.items.filter((t) => !existingIds.has(t.id));
+              const newTrades = tradesRes.filter((t) => !existingIds.has(t.id));
               if (newTrades.length === 0) return prev;
               return [...prev, ...newTrades];
             });
@@ -1258,8 +1313,8 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
             const qtyText = formatAmount(f.totalQty.toString(), stepSize);
             const priceText = formatPrice(f.avgPrice, tickSize);
             const countText = `${f.count} lần khớp`;
-            const feeText = f.totalFee.gt(0) ? ` · phí ${formatAmount(f.totalFee.toString(), stepSize)} ${f.feeAsset}` : '';
-            const taxText = f.totalTax.gt(0) ? ` · thuế ${formatAmount(f.totalTax.toString(), stepSize)} ${f.feeAsset || 'USDT'}` : '';
+            const feeText = f.totalFee.gt(0) ? ` · phí ${formatDecimal(f.totalFee.toString(), { decimals: 8, trimTrailingZeros: true })} ${f.feeAsset || 'USDT'}` : '';
+            const taxText = f.totalTax.gt(0) ? ` · thuế ${formatDecimal(f.totalTax.toString(), { decimals: 8, trimTrailingZeros: true })} ${f.feeAsset || 'USDT'}` : '';
             const d = new Date(f.latestTime * 1000);
             const timeStr = d.toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit', hour12: false });
             return `${sideText} ${qtyText} ${baseAsset} @ ${priceText} · ${countText}${feeText}${taxText} · ${timeStr}`;
@@ -2288,6 +2343,8 @@ export const CandlestickChart: React.FC<CandlestickChartProps> = ({
                 data-price={item.avgPrice}
                 data-time={String(item.time)}
                 data-count={String(item.count)}
+                data-fee={item.totalFee.toString()}
+                data-tax={item.totalTax.toString()}
               >
                 {`${sideText} ${qtyText} ${activeSymbolInfo?.baseAsset || ''} @ ${priceText} lúc ${timeStr}`}
               </li>

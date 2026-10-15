@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import {
   appLinks,
+  ApiError,
   type AdminUserDetail,
   type Order,
   type LedgerEntry,
@@ -15,6 +16,7 @@ import {
   type AdminTaxWithholding,
   exportUrl,
 } from '@cex/contracts';
+import { formatApiError } from '../services/errors';
 import { dec } from '@cex/core';
 import { formatDecimal } from '@cex/ui';
 import { Copy, Check, ExternalLink, ShieldAlert, ArrowDownUp, AlertCircle, Shield, Trash2, Radio, Receipt, UserX, X, Building, Download } from 'lucide-react';
@@ -29,6 +31,7 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
   const [detail, setDetail] = useState<AdminUserDetail | null>(null);
   const [actualId, setActualId] = useState<string>('');
   const [notFound, setNotFound] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'balances' | 'orders' | 'ledger' | 'futures' | 'bots' | 'logins' | 'tax'>('balances');
   const [copiedUid, setCopiedUid] = useState(false);
@@ -74,7 +77,9 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
   const exchangeOrigin = import.meta.env.VITE_EXCHANGE_ORIGIN;
 
   const loadUserData = useCallback(async () => {
+    setIsLoading(true);
     setNotFound(false);
+    setFetchError(null);
     try {
       let targetId = userId;
       // If userId is all digits:
@@ -82,6 +87,7 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
         // Only accept exactly 8 digits as UID (P-02)
         if (!/^\d{8}$/.test(userId)) {
           setNotFound(true);
+          setFetchError(null);
           setDetail(null);
           setActualId('');
           return;
@@ -92,6 +98,7 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
           targetId = list.items[0]!.id;
         } else {
           setNotFound(true);
+          setFetchError(null);
           setDetail(null);
           setActualId('');
           return;
@@ -111,9 +118,16 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
       api.adminUserLedger({ params: { userId: targetId }, query: { limit: 5 } })
         .then((r) => setRecentLedger(r.items))
         .catch(() => {});
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
-      setNotFound(true);
+      const is404 = e?.status === 404 || e?.code === 'NOT_FOUND' || (e instanceof ApiError && e.status === 404);
+      if (is404) {
+        setNotFound(true);
+        setFetchError(null);
+      } else {
+        setNotFound(false);
+        setFetchError(formatApiError(e, 'Có lỗi xảy ra khi tải thông tin người dùng. Vui lòng thử lại.'));
+      }
       setDetail(null);
       setActualId('');
     } finally {
@@ -125,6 +139,7 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
     setDetail(null);
     setActualId('');
     setNotFound(false);
+    setFetchError(null);
     setIsLoading(true);
     loadUserData();
   }, [loadUserData]);
@@ -204,6 +219,48 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
           >
             Quay lại danh sách người dùng
           </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (fetchError && !notFound) {
+    return (
+      <div className="p-6 max-w-7xl mx-auto space-y-6" data-testid="admin-user-error">
+        {/* Top breadcrumb */}
+        <div className="flex items-center justify-between">
+          <button
+            onClick={() => onNavigate('/admin/users')}
+            className="text-sm text-[var(--text-2,#a1a1aa)] hover:text-[var(--text,#f4f4f5)] flex items-center gap-1.5 transition-colors"
+          >
+            ← Quay lại danh sách người dùng
+          </button>
+        </div>
+
+        <div className="p-12 text-center bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)] rounded-2xl flex flex-col items-center justify-center">
+          <div className="w-12 h-12 mb-4 rounded-full bg-[var(--down,#f6465d)]/10 flex items-center justify-center text-[var(--down,#f6465d)]">
+            <AlertCircle size={24} />
+          </div>
+          <h2 className="text-lg font-semibold text-[var(--text,#f4f4f5)] mb-2">Có lỗi xảy ra</h2>
+          <p className="text-sm text-[var(--text-2,#a1a1aa)] mb-6 max-w-md">
+            {fetchError}
+          </p>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => loadUserData()}
+              disabled={isLoading}
+              data-testid="admin-user-retry"
+              className="px-4 py-2 bg-[var(--accent,#818cf8)] text-white text-sm font-medium rounded-lg hover:bg-[var(--accent,#818cf8)]/90 disabled:opacity-50 transition-colors"
+            >
+              Thử lại
+            </button>
+            <button
+              onClick={() => onNavigate('/admin/users')}
+              className="px-4 py-2 bg-[var(--line,#1d1e21)] text-[var(--text,#f4f4f5)] text-sm font-medium rounded-lg hover:bg-[var(--line,#1d1e21)]/80 transition-colors"
+            >
+              Quay lại danh sách người dùng
+            </button>
+          </div>
         </div>
       </div>
     );
