@@ -24,6 +24,14 @@ Rà soát: **2026-10-11** (Claude Code). Cập nhật lần cuối: 2026-10-11 t
 >
 > Ngoài ra: 7 mục P2 (M-05…M-11), 5 mục P3 (M-12…M-16), và L-01, L-03, L-04, L-05 còn từ lần 4. Thứ tự sửa ở mục 5 của báo cáo.
 
+>
+> **Rà soát lần 6 (UI `325c373`, 2026-10-15 chiều): [docs/reports/2026-10-15-ra-soat-ui-lan-6.md](reports/2026-10-15-ra-soat-ui-lan-6.md)** — **gộp được**.
+> - M-01…M-15 đã sửa đủ (kiểm bằng đọc mã); verify 629/629; e2e đạt (spec thuế 8/8 khi chạy lại).
+> - Việc tiếp cho Antigravity:
+>   - **P-01 (P2)**: lịch sử khớp, toast và chú thích B/S trên chart thêm **thuế** bên cạnh phí;
+>   - P-02 (P3): nhận diện uid ở chi tiết người dùng admin;
+>   - L-03.
+
 ## Backend → UI (Claude Code cập nhật mỗi khi đổi backend/hợp đồng; Antigravity đọc đầu mỗi phiên, cùng `packages/contracts/CHANGELOG.md`)
 
 | Ngày | Thay đổi backend / hợp đồng | UI cần làm gì | Trạng thái |
