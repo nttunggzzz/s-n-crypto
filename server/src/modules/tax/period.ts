@@ -21,6 +21,23 @@ export function periodRange(period: string): { from: Date; to: Date } {
   return { from: vnMonthStart(y!, first!), to: new Date(vnMonthStart(y!, first! + count!).getTime() - 1) };
 }
 
+/**
+ * 00:00 UTC+7 of the Vietnam calendar day that contains `at`, as a UTC instant. Same rule as the PnL analysis
+ * (`gmt7Day` in pnlService.ts: the day label of `at + 7 h`), written as arithmetic - UTC+7 has no daylight saving.
+ */
+export function vnDayStart(at: Date): Date {
+  return new Date(Math.floor((at.getTime() + VN_OFFSET_MS) / 86_400_000) * 86_400_000 - VN_OFFSET_MS);
+}
+
+/** The Vietnam calendar month (1..12) `at` falls in. */
+export function vnMonthOf(at: Date): { year: number; month: number } {
+  const d = new Date(at.getTime() + VN_OFFSET_MS);
+  return { year: d.getUTCFullYear(), month: d.getUTCMonth() + 1 };
+}
+
+/** "YYYY-MM" of the Vietnam month `month` (1..12) of `year`. */
+export const vnMonthLabel = (year: number, month: number): string => `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}`;
+
 /** The year it is now in Vietnam. */
 export const vnYearNow = (now = new Date()): number => new Date(now.getTime() + VN_OFFSET_MS).getUTCFullYear();
 

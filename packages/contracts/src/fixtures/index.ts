@@ -5,6 +5,7 @@
  */
 import { ASSET_CATALOG } from '../assetCatalog.ts';
 import { fixtureTaxedTrades, fixtureTaxSettings } from './tax.ts';
+import { fixtureAccountTradingStats, fixtureEmptyTradingStats } from './accountStats.ts';
 import type {
   AdminAnnouncement,
   AdminOverview,
@@ -702,6 +703,7 @@ export function fixtureAdminUserDetail(userId: string): AdminUserDetail | null {
       : { asset: 'USDT', walletBalance: '0.00000000', available: '0.00000000', positionMargin: '0.00000000', orderMargin: '0.00000000', unrealizedPnl: '0.00000000', equity: '0.00000000', openPositions: 0 },
     bots: { runningGrid: 0, activeDca: isDemo ? 1 : 0 },
     tax: { category: 'INDIVIDUAL', categoryUpdatedAt: null, withheldCount: 0, withheldTotal: '0.00000000' },
+    trading: isDemo ? fixtureAccountTradingStats : fixtureEmptyTradingStats(T0, '2026-10', '2026-09', 'WITHHOLD'),
   };
 }
 
@@ -757,4 +759,5 @@ export * from './journal.ts';
 
 // ───────────────────────────── Vietnam tax (0.15.0)
 export * from './tax.ts';
+export * from './accountStats.ts';
 export * from './news.ts';

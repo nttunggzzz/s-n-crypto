@@ -216,7 +216,7 @@ export class AdminService {
 
   async getUser(id: string): Promise<AdminUserDetail> {
     const u = await this.loadUser(id);
-    const [bal, [counts], [claimed], futures, [bots], [taxProfile], [withheld]] = await Promise.all([
+    const [bal, [counts], [claimed], futures, [bots], [taxProfile], [withheld], trading] = await Promise.all([
       getBalances(this.db, id),
       this.db
         .select({
@@ -240,6 +240,8 @@ export class AdminService {
         .select({ count: sql<number>`count(*)::int`, total: sql<string | null>`sum(${taxWithholdings.taxAmount})` })
         .from(taxWithholdings)
         .where(eq(taxWithholdings.userId, id)),
+      // the same service and numbers as the user's own GET /account/stats
+      this.ex.stats.forUser(id),
     ]);
     const v = valuateBalances(bal, this.priceOf);
     return {
@@ -258,6 +260,7 @@ export class AdminService {
         withheldCount: withheld?.count ?? 0,
         withheldTotal: toFixedStr(dec(withheld?.total ?? '0')),
       },
+      trading,
     };
   }
 
