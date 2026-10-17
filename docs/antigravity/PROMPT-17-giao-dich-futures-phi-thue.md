@@ -142,4 +142,14 @@ Lưu lỗi → trả ngôi sao về trạng thái cũ + `toastError(formatApiErr
 **Nghiệm thu:** người dùng có BTC + USDT → bảng 2 dòng có giá trị và %, tổng = `totalValueUsdt`; `admin-user-tax-total` = `detail.tax.withheldTotal`.
 
 ---
+## Theo dõi khi đang sửa (Claude Code rà commit `8f77399`, `ddd5b0b`, `c6e483d`, `31a57d7`)
+S-01…S-04: đúng hướng, công thức ký quỹ/phí/tối đa đúng (`initialMargin` làm tròn lên, phí `roundUp(giá trị × taker)`, tối đa = min(số dư, 20 mức sổ)). Còn:
+
+### S-16 · P3 · Số "mặc định" tự đặt khi dữ liệu chưa tải
+- `FuturesPage.tsx`: `takerFee || '0.0005'`, `makerFee || '0.0002'`, `minNotional || '5'` (BTC thật là **50**), `minQty || '0.001'`, `fundingRate || '0'`.
+- `OrderForm.tsx` (`c6e483d`): `(exchangeInfo as any)?.makerFeeRate ?? (exchangeInfo as any)?.takerFeeRate ?? exchangeInfo?.feeRate ?? '0.001'` — hợp đồng Spot chỉ có `feeRate`; bỏ `as any` và hai trường không tồn tại.
+- Sửa: chưa có `futuresExchangeInfo` / `exchangeInfo` / `markPrice` thì hiện "—" và **khóa nút đặt lệnh** với lý do "Đang tải thông tin hợp đồng…", không đoán số. `fundingRate` null → "—".
+**Nghiệm thu:** chặn `GET /api/v1/futures/exchange-info` → form hiện "—", nút khóa, không có "0,05%".
+
+---
 Đợt 3: lỗi web admin — xem `PROMPT-18-web-admin.md`.
