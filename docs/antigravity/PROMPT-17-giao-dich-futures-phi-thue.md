@@ -126,6 +126,7 @@ Lưu lỗi → trả ngôi sao về trạng thái cũ + `toastError(formatApiErr
 - Sửa: xóa `isLocalhost`. Đọc `publicConfig().staffTwoFactorRequired` (đã có `ConfigContext`/gọi `publicConfig` lúc khởi động — dùng lại). Chỉ hiện màn "bắt buộc bật 2FA" khi `staffTwoFactorRequired === true && !user.twoFactorEnabled`. Khi cờ là `false`: hiện dải nhỏ trên cùng "Máy chủ dev: admin không yêu cầu 2FA" (`data-testid="admin-no-2fa-notice"`).
 - Thêm xử lý chung: lời gọi admin nào trả `TWO_FACTOR_REQUIRED` → chuyển sang màn 2FA (hướng dẫn bật 2FA rồi đăng nhập lại bằng 2FA), không hiện thành "không có quyền" hay danh sách trống.
 **Nghiệm thu:** `npm run dev` → admin chưa bật 2FA vào được và thấy dữ liệu. `npm run e2e` (server mặc định bắt 2FA) → staff chưa bật 2FA thấy `admin-2fa-required`.
+**Trạng thái:** Hoàn thành. Đã chỉnh sửa `apps/admin/src/context/AuthContext.tsx` và `apps/admin/src/services/api.ts`: bỏ biến `isLocalhost`, dùng cờ `staffTwoFactorRequired` từ `api.publicConfig()`. Hiển thị dải `data-testid="admin-no-2fa-notice"` khi dev không bắt 2FA. Bắt lỗi `TWO_FACTOR_REQUIRED` từ mọi API admin qua fetch interceptor để tự động chuyển sang màn hình 2FA `data-testid="admin-2fa-required"`.
 
 ### S-14 · P1 · Hồ sơ: khối lượng giao dịch hôm nay / 7 ngày và thuế đã khấu trừ tháng này
 **File:** `apps/exchange/src/pages/SettingsPage.tsx:355+` (tab "Hồ sơ & Tài khoản").
