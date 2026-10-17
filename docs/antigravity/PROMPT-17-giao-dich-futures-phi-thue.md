@@ -115,6 +115,7 @@ Lưu lỗi → trả ngôi sao về trạng thái cũ + `toastError(formatApiErr
 
 ### S-12 · P3 · Cài đặt: thẻ "Telegram — Sắp có"
 **File:** `apps/exchange/src/pages/SettingsPage.tsx:524-537`. Chưa có tính năng → ẩn thẻ.
+**Trạng thái:** Hoàn thành. Đã chỉnh sửa `apps/exchange/src/pages/SettingsPage.tsx`: ẩn thẻ "Telegram — Sắp có" khỏi tab hồ sơ người dùng.
 
 ---
 ## Đợt 2 — hồ sơ người dùng, chi tiết người dùng admin, 2FA khi dev (cần `git merge main` để có contracts 0.20.0)

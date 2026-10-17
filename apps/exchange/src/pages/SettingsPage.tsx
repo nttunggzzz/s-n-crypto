@@ -520,21 +520,6 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate }) => {
                 </form>
               </div>
             </div>
-
-            {/* Social / Telegram */}
-            <div className="pt-6 border-t border-[var(--line,#1d1e21)]">
-              <h3 className="text-sm font-bold text-[var(--text,#f4f4f5)] mb-4">Liên kết mạng xã hội</h3>
-              <div className="flex items-center justify-between p-4 rounded-[var(--radius-lg,12px)] border border-[var(--line,#1d1e21)] bg-[var(--panel,#0a0a0b)]">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 bg-[#2AABEE]/20 text-[#2AABEE] rounded-full flex items-center justify-center font-bold">T</div>
-                  <div>
-                    <div className="text-sm font-semibold text-[var(--text,#f4f4f5)]">Telegram</div>
-                    <div className="text-xs text-[var(--text-3,#63636b)]">Nhận thông báo biến động và lệnh khớp qua Telegram</div>
-                  </div>
-                </div>
-                <Badge variant="secondary" size="sm">Sắp có</Badge>
-              </div>
-            </div>
           </div>
         )}
 
