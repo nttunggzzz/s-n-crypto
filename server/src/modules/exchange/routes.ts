@@ -48,6 +48,8 @@ function parseId(s: string, what: string): number {
 export function registerExchangeRoutes(router: Router, opts: RouteOptions, db: Db, ex: Exchange, market: MarketDataService, rateLimitScale = 1): void {
   const orderLimit = new RateLimiter(10 * rateLimitScale, 1000);
   const exportLimit = new RateLimiter(10 * rateLimitScale, 60_000);
+  /** The profile page aggregates the user's fills on every open: a page that polls cannot hammer the database. */
+  const statsLimit = new RateLimiter(30 * rateLimitScale, 60_000);
   const priceOf = makePriceOf(market);
 
   // ───── wallet
@@ -193,6 +195,13 @@ export function registerExchangeRoutes(router: Router, opts: RouteOptions, db: D
   route(router, opts, 'portfolio', async ({ auth }) => ex.portfolio.get(auth.user.id));
   route(router, opts, 'portfolioHistory', async ({ auth, query }) => ex.portfolio.history(auth.user.id, query.range));
   route(router, opts, 'pnlAnalysis', async ({ auth, query }) => ex.pnl.analyze(auth.user.id, query.range));
+
+  // ───── profile numbers: the caller's own volume and withheld tax (no id in the path - nothing to 404 on)
+
+  route(router, opts, 'accountTradingStats', async ({ auth }) => {
+    statsLimit.consume(`user:${auth.user.id}`);
+    return ex.stats.forUser(auth.user.id);
+  });
 
   // ───── CSV exports
 

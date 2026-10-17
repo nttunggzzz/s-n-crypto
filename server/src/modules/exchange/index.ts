@@ -11,6 +11,7 @@ import { OrderService } from './orderService.ts';
 import { PortfolioService } from './portfolioService.ts';
 import { PreferencesService } from './preferencesService.ts';
 import { PnlService } from './pnlService.ts';
+import { AccountStatsService } from './statsService.ts';
 
 export interface Exchange {
   config: ExchangeConfig;
@@ -24,6 +25,8 @@ export interface Exchange {
   portfolio: PortfolioService;
   preferences: PreferencesService;
   pnl: PnlService;
+  /** Volume + withheld tax of one user (profile page and admin user detail). */
+  stats: AccountStatsService;
 }
 
 export async function createExchange(db: Db, market: MarketDataService, config: ExchangeConfig, now?: () => Date): Promise<Exchange> {
@@ -37,8 +40,9 @@ export async function createExchange(db: Db, market: MarketDataService, config: 
   const portfolio = new PortfolioService(db, market, now);
   const preferences = new PreferencesService(db, config);
   const pnl = new PnlService(db, now);
+  const stats = new AccountStatsService(db, config, now);
   await orders.loadOpenOrders();
   await alerts.load();
   matcher.attach();
-  return { config, events, index, orders, faucet, matcher, alerts, notifications, portfolio, preferences, pnl };
+  return { config, events, index, orders, faucet, matcher, alerts, notifications, portfolio, preferences, pnl, stats };
 }

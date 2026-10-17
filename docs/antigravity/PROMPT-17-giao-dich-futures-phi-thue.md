@@ -83,4 +83,79 @@ Thêm mọi `data-testid` mới vào `docs/antigravity/TESTIDS.md` (mục "Futur
 **Trạng thái:** Hoàn thành. Đã chỉnh sửa `apps/exchange/src/App.tsx`: route `/__ui` chỉ kích hoạt khi `import.meta.env.DEV`, môi trường production tự động chuyển hướng về trang Thị trường; trong `Header.tsx` icon UI Kit đổi title thành "Bộ giao diện (chỉ môi trường dev)".
 
 ---
-Đợt 2 (sẽ gửi): S-1x hồ sơ người dùng — khối lượng giao dịch hôm nay/7 ngày, thuế đã khấu trừ tháng này (cần backend 0.19.0); trang chi tiết người dùng admin; các lỗi web admin.
+## Đợt 1b — nút giả và lỗi bị nuốt (soát toàn bộ `apps/exchange`)
+
+### S-07 · P2 · Menu "Tín hiệu — Sắp có" giả nút bị khóa
+**File:** `apps/exchange/src/components/Header.tsx:171-176` — `<button>` trông như bị khóa (`opacity-50 cursor-not-allowed`) nhưng không có `disabled`, vẫn nhận bấm.
+Tín hiệu hiện **chỉ dành cho Admin** (quyết định C-D1), chưa có lịch mở cho người dùng → **bỏ mục này khỏi menu** người dùng. Không hứa tính năng chưa có.
+**Nghiệm thu:** header không còn "Tín hiệu".
+
+### S-08 · P2 · Menu tài khoản: "Nạp ảo (Faucet)" và "Lịch sử giao dịch" đều chỉ mở đầu trang Tài sản
+**File:** `Header.tsx:234-245` — cả 3 mục cùng `onNavigate('/assets')`.
+- "Nạp ảo (Faucet)" → `/assets#faucet`: trang Tài sản cuộn tới thẻ Faucet (`WalletPage.tsx:382`, thêm `id="faucet"`) và làm nổi thẻ 1–2 giây.
+- "Lịch sử giao dịch" → `/assets#ledger`: cuộn tới bảng sổ cái (thêm `id="ledger"`).
+- `App.tsx` / router: giữ phần `#…` khi điều hướng; `WalletPage` đọc `location.hash` sau khi dữ liệu tải xong rồi `scrollIntoView`.
+**Nghiệm thu:** bấm "Nạp ảo (Faucet)" → thẻ Faucet nằm trong khung nhìn.
+
+### S-09 · P2 · Đánh dấu cặp yêu thích lỗi mà vẫn như đã lưu
+**File:** `apps/exchange/src/pages/MarketsPage.tsx:179` — `api.updatePreferences(...).catch(() => {})`.
+Lưu lỗi → trả ngôi sao về trạng thái cũ + `toastError(formatApiError(e, 'Không lưu được danh sách yêu thích'))`. Tương tự: rà mọi `.catch(() => {})` mà **thao tác do người dùng bấm** (khoảng 20 chỗ); chỉ được nuốt lỗi với tải nền không quan trọng, còn thao tác của người dùng phải báo.
+**Nghiệm thu:** chặn `PATCH /api/v1/account/preferences` trả 500 → ngôi sao trở lại, có thông báo lỗi.
+
+### S-10 · P3 · "Chế độ Pro" trên trang Giao dịch trông như nút nhưng không làm gì
+**File:** `apps/exchange/src/pages/TradePage.tsx:313-319`. Đổi thành nhãn (`<span>`, không hover) hoặc bỏ. Không để nút không có chức năng.
+
+### S-11 · P3 · Futures: nút "Cô lập (Isolated)" bị khóa không giải thích
+**File:** `FuturesPage.tsx:1111-1116`. Sàn chỉ hỗ trợ ký quỹ cô lập (`futuresExchangeInfo().marginModes = ['ISOLATED']`). Hiện dạng nhãn "Ký quỹ: Cô lập" kèm `title="Sàn chỉ hỗ trợ ký quỹ cô lập"`, không phải nút bị khóa.
+
+### S-12 · P3 · Cài đặt: thẻ "Telegram — Sắp có"
+**File:** `apps/exchange/src/pages/SettingsPage.tsx:524-537`. Chưa có tính năng → ẩn thẻ.
+
+---
+## Đợt 2 — hồ sơ người dùng, chi tiết người dùng admin, 2FA khi dev (cần `git merge main` để có contracts 0.20.0)
+
+### S-13 · P1 · Admin: bỏ đoán "localhost", dùng cờ của server
+**File:** `apps/admin/src/context/AuthContext.tsx:88-90` (commit `7179707`).
+- Chủ dự án quyết: **dev không cần 2FA** cho tới khi làm lại bảo mật. Server đã có cờ (contracts 0.19.0): `npm run dev` chạy với `STAFF_REQUIRE_2FA=false`, mọi endpoint staff chỉ kiểm vai trò + quyền. Production từ chối cờ này.
+- Sửa: xóa `isLocalhost`. Đọc `publicConfig().staffTwoFactorRequired` (đã có `ConfigContext`/gọi `publicConfig` lúc khởi động — dùng lại). Chỉ hiện màn "bắt buộc bật 2FA" khi `staffTwoFactorRequired === true && !user.twoFactorEnabled`. Khi cờ là `false`: hiện dải nhỏ trên cùng "Máy chủ dev: admin không yêu cầu 2FA" (`data-testid="admin-no-2fa-notice"`).
+- Thêm xử lý chung: lời gọi admin nào trả `TWO_FACTOR_REQUIRED` → chuyển sang màn 2FA (hướng dẫn bật 2FA rồi đăng nhập lại bằng 2FA), không hiện thành "không có quyền" hay danh sách trống.
+**Nghiệm thu:** `npm run dev` → admin chưa bật 2FA vào được và thấy dữ liệu. `npm run e2e` (server mặc định bắt 2FA) → staff chưa bật 2FA thấy `admin-2fa-required`.
+
+### S-14 · P1 · Hồ sơ: khối lượng giao dịch hôm nay / 7 ngày và thuế đã khấu trừ tháng này
+**File:** `apps/exchange/src/pages/SettingsPage.tsx:355+` (tab "Hồ sơ & Tài khoản").
+- Gọi `api.accountTradingStats()` (README hợp đồng mục 17). Thêm khối **"Hoạt động giao dịch"**:
+  | Ô | Nguồn | testid |
+  |---|---|---|
+  | Khối lượng hôm nay | `volume.today.total` USDT; dòng phụ "Spot X · Futures Y · N lần khớp" | `profile-volume-today` (`data-value`) |
+  | Khối lượng 7 ngày | `volume.last7d.*` | `profile-volume-7d` |
+  | Khối lượng 30 ngày | `volume.last30d.*` | `profile-volume-30d` |
+  | Thuế đã khấu trừ tháng {MM/YYYY} | `tax.thisMonth.withheldAmount` USDT + "{n} lần bán"; dòng phụ tháng trước | `profile-tax-month` (`data-value`) |
+- Chữ phải đúng nghĩa: thuế là **"đã khấu trừ"** (sàn trừ ngay khi bán), **không** viết "cần đóng" hay "phải nộp". Thêm câu nhỏ: "Thuế 0,1% được trừ thẳng vào tiền bán; bạn không cần nộp thêm (sàn thử nghiệm)." Khi `category = 'DOMESTIC_ORG'`: "Tổ chức trong nước tự kê khai — sàn không khấu trừ". Khi `taxMode = 'OFF'`: "Sàn đang tắt thuế".
+- `excludedNonUsdtFills > 0` → ghi chú "Chưa tính N lần khớp của cặp không phải USDT".
+- Có trạng thái tải / lỗi kèm "Thử lại"; không hiện 0 khi lỗi. Nút "Xem chi tiết thuế" → `/account/tax`.
+- Số tiền: `formatDecimal` (không `parseFloat`); khối lượng lớn dùng định dạng gọn có sẵn (`format.ts`).
+**Nghiệm thu:** mua 100 USDT BTC → `profile-volume-today` `data-value` = `quoteQty` của lần khớp. Thuế bật, bán → `profile-tax-month` = `Trade.tax`.
+
+### S-15 · P1 · Admin chi tiết người dùng: thuế, khối lượng, số dư, tài sản nắm giữ
+**File:** `apps/admin/src/pages/UserDetailPage.tsx:656-706` (tab số dư), phần đầu trang.
+- **Thẻ tóm tắt đầu trang** (luôn thấy, không phải bấm tab):
+  - Tổng tài sản: `detail.totalValueUsdt` USDT; nếu `unpricedAssets` không rỗng: "Chưa tính giá: X, Y" (`admin-unpriced-assets`).
+  - Ví Futures: `futures.equity` (null → "—"), `walletBalance`, ký quỹ vị thế + lệnh, PnL chưa thực hiện (null → "—", **không** `|| '0'` — xem AD-07).
+  - Khối lượng: hôm nay / 7 ngày / 30 ngày / **tháng trước** từ `detail.trading.volume` (Spot · Futures).
+  - Thuế: tháng này + tháng trước từ `detail.trading.tax`; tổng mọi thời gian `detail.tax.withheldTotal` (`admin-user-tax-total`); phân loại `detail.tax.category`.
+- **Tab Số dư = bảng tài sản nắm giữ:** mỗi dòng: coin, khả dụng, đang khóa, tổng, **giá trị USDT** (`Balance.valueUsdt`, null → "—"), **% danh mục**; sắp theo giá trị giảm dần; dòng cuối tổng.
+- Mọi số qua `formatDecimal`/`dec`; không cộng ở client những gì server đã trả tổng.
+**Nghiệm thu:** người dùng có BTC + USDT → bảng 2 dòng có giá trị và %, tổng = `totalValueUsdt`; `admin-user-tax-total` = `detail.tax.withheldTotal`.
+
+---
+## Theo dõi khi đang sửa (Claude Code rà commit `8f77399`, `ddd5b0b`, `c6e483d`, `31a57d7`)
+S-01…S-04: đúng hướng, công thức ký quỹ/phí/tối đa đúng (`initialMargin` làm tròn lên, phí `roundUp(giá trị × taker)`, tối đa = min(số dư, 20 mức sổ)). Còn:
+
+### S-16 · P3 · Số "mặc định" tự đặt khi dữ liệu chưa tải
+- `FuturesPage.tsx`: `takerFee || '0.0005'`, `makerFee || '0.0002'`, `minNotional || '5'` (BTC thật là **50**), `minQty || '0.001'`, `fundingRate || '0'`.
+- `OrderForm.tsx` (`c6e483d`): `(exchangeInfo as any)?.makerFeeRate ?? (exchangeInfo as any)?.takerFeeRate ?? exchangeInfo?.feeRate ?? '0.001'` — hợp đồng Spot chỉ có `feeRate`; bỏ `as any` và hai trường không tồn tại.
+- Sửa: chưa có `futuresExchangeInfo` / `exchangeInfo` / `markPrice` thì hiện "—" và **khóa nút đặt lệnh** với lý do "Đang tải thông tin hợp đồng…", không đoán số. `fundingRate` null → "—".
+**Nghiệm thu:** chặn `GET /api/v1/futures/exchange-info` → form hiện "—", nút khóa, không có "0,05%".
+
+---
+Đợt 3: lỗi web admin — xem `PROMPT-18-web-admin.md`.

@@ -22,3 +22,20 @@ export function devEmailEnv({ argv, env, envFileText }) {
   if (fileValue !== undefined) return { env: {}, required: fileValue !== 'false' };
   return { env: { REQUIRE_EMAIL_VERIFICATION: 'false' }, required: false };
 }
+
+// Owner decision 2026-10-17: until the security work is redone, `npm run dev` lets staff use the admin app without 2FA
+// (STAFF_REQUIRE_2FA=false; the server refuses that value in production). `--with-2fa`, or STAFF_REQUIRE_2FA in the
+// shell or .env, keeps the owner's choice. e2e and the live exchange are not touched (server default: true).
+
+/**
+ * @param {{ argv: string[], env: Record<string, string | undefined>, envFileText?: string }} input
+ * @returns {{ env: Record<string, string>, required: boolean }} what to add to the dev server's environment, and whether
+ *   staff need 2FA on it.
+ */
+export function devStaff2faEnv({ argv, env, envFileText }) {
+  const fileValue = /^[ \t]*STAFF_REQUIRE_2FA[ \t]*=[ \t]*(\S+)/m.exec(envFileText ?? '')?.[1];
+  if (argv.includes('--with-2fa')) return { env: { STAFF_REQUIRE_2FA: 'true' }, required: true };
+  if (env.STAFF_REQUIRE_2FA !== undefined) return { env: {}, required: env.STAFF_REQUIRE_2FA !== 'false' };
+  if (fileValue !== undefined) return { env: {}, required: fileValue !== 'false' };
+  return { env: { STAFF_REQUIRE_2FA: 'false' }, required: false };
+}

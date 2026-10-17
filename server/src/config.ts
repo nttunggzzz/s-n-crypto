@@ -27,6 +27,14 @@ const Env = z.object({
     .enum(['true', 'false'])
     .default('true')
     .transform((v) => v === 'true'),
+  /**
+   * Staff (admin) endpoints need 2FA + a session signed in with it. `false` = role + permission only — development only
+   * (`npm run dev` sets it until the security work is redone); refused in production.
+   */
+  STAFF_REQUIRE_2FA: z
+    .enum(['true', 'false'])
+    .default('true')
+    .transform((v) => v === 'true'),
   /** Cloudflare Turnstile secret; captcha is skipped when empty. */
   TURNSTILE_SECRET: z.string().default(''),
   /** Turnstile site key (public), handed to the apps by `publicConfig`; set together with the secret. */
@@ -86,6 +94,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   // exists may log emails instead — only invited people can sign up, and the operator reads the links in the log.
   if (parsed.NODE_ENV === 'production' && parsed.EMAIL_TRANSPORT !== 'resend' && !(parsed.EMAIL_TRANSPORT === 'log' && registration === 'invite')) {
     throw new Error(`EMAIL_TRANSPORT=${parsed.EMAIL_TRANSPORT} is not allowed in production (only "resend", or "log" with REGISTRATION=invite)`);
+  }
+  if (parsed.NODE_ENV === 'production' && !parsed.STAFF_REQUIRE_2FA) {
+    throw new Error('STAFF_REQUIRE_2FA=false (admin without two-factor authentication) is not allowed in production');
   }
   if (parsed.NODE_ENV === 'production' && parsed.MARKET_FEED === 'sim') {
     throw new Error('MARKET_FEED=sim (synthetic prices) is not allowed in production');

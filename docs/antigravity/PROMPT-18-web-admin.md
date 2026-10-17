@@ -1,0 +1,50 @@
+# PROMPT-18 — Rà soát lần 8, đợt 3: web admin
+
+Nguồn: rà toàn bộ `apps/admin` trên `ui/gd2-exchange` @ `7179707` (đọc mã, đối chiếu `packages/contracts` và `server/src/modules/admin`). Lead đã kiểm lại AD-02, AD-07, AD-10.
+Server vẫn chặn đúng mọi endpoint staff, **không có lỗ hổng lộ dữ liệu**; lỗi nằm ở giao diện: nút giả, lỗi bị nuốt, số bịa.
+AD-01 (bỏ 2FA theo hostname) đã chuyển thành **S-13** trong PROMPT-17 (dùng `publicConfig.staffTwoFactorRequired`).
+
+**Đầu phiên:** `git merge main` trong `D:\Claude\crypto\ui` (contracts 0.20.0). Chỉ ghi trong `D:\Claude\crypto\ui`. Mỗi mục một commit `fix(admin): AD-xx …`, ghi "Trạng thái" dưới mục. Thứ tự: hết P1 rồi mới P2. Hết đợt: `npm run ui-check -- --e2e`.
+Dùng chung cho cả đợt: **một** hàm dịch lỗi theo `code` cho admin (lấy mẫu `apps/exchange/src/services/errors.ts`, có `details`), **một** prop `error` cho `ConfirmDialog` (hiện lỗi trong hộp, giữ hộp mở, `data-testid="confirm-error"`), **một** mẫu trạng thái bảng: đang tải / lỗi + "Thử lại" (`list-error`) / trống / có dữ liệu.
+
+## P1
+| ID | File:dòng | Lỗi | Sửa | Nghiệm thu |
+|---|---|---|---|---|
+| AD-02 | `pages/UsersPage.tsx:612-622` | Tab "Tạo tài khoản trực tiếp" không gọi API nhưng báo "Hệ thống đã gửi lời mời xác thực" | Xóa tab (chưa có endpoint). Chỉ giữ luồng mã mời | Không còn chuỗi đó |
+| AD-03 | `pages/FuturesSymbolsPage.tsx:46-58,151-159` | Hộp "Cấu hình" hợp đồng không có ô nhập → gửi `{reason}` → server từ chối "change at least one field", lỗi bị nuốt | Modal: công tắc bật/tắt, đòn bẩy tối đa (theo schema `Leverage` của hợp đồng), MMR 0,001–0,1 (chuỗi, so sánh bằng `dec`), xem "cũ → mới", rồi lý do. Chỉ gửi trường đã đổi. Bỏ `parseFloat` (`:116`) | Đổi 20x → 10x: bảng hiện 10x; lỗi server hiện ở `futures-symbol-error` |
+| AD-04 | `pages/AssetsPage.tsx:57-69,160-168` | Hộp "Sửa" coin không có ô nhập nhưng vẫn ghi audit | Form tên, mô tả, chip tag (tối đa 5); không đổi gì → khóa nút lưu | Thêm tag MEME cho DOGE → bảng hiện MEME |
+| AD-05 | `pages/AnnouncementsPage.tsx:16,54-58,189` | Không sửa được thông báo; bản nháp không xuất bản được | Nút Sửa (điền sẵn, PATCH trường đổi), nút "Xuất bản" cho nháp (`announcement-publish`), ô `expiresAt` | Nháp → Xuất bản → web sàn thấy |
+| AD-06 | `pages/RolesPage.tsx:212-244` | Hộp đổi vai trò không đóng được, `ConfirmDialog` che ô chọn, đổi sang cùng vai trò vẫn báo "thành công" | Bước 1 modal chọn vai trò (Hủy/Tiếp tục), bước 2 xác nhận; đóng/thành công → `setTargetUser(null)`; vai trò mới = cũ → khóa nút | support → admin: bảng cập nhật, không còn lớp phủ |
+| AD-07 | `pages/UserDetailPage.tsx:701-702,854-855` | `unrealizedPnl` null hiện "0.00000000" màu xanh (vi phạm "null ≠ 0") | null → "—" + "Chưa có giá đánh dấu", màu trung tính | `admin-futures-upnl` = "—" khi mark STALE |
+| AD-08 | `UserDetailPage.tsx:380-399` | Bật/tắt quyền tín hiệu không hỏi xác nhận; lý do audit do giao diện tự viết | Mở `ConfirmDialog`, admin tự nhập lý do | Audit `USER_SIGNALS_ACCESS` mang đúng lý do đã nhập |
+| AD-09 | `OverviewPage.tsx:62-63`, `UserDetailPage.tsx:355`, `UsersPage.tsx:151,171`, `SymbolsPage.tsx:59`, `InvitesPage.tsx:54,71`, `AnnouncementsPage.tsx:67,81`, `AssetsPage.tsx:73`, `FuturesSymbolsPage.tsx:62` | Lỗi mọi thao tác ghi chỉ `console.error`, **kể cả nút DỪNG SÀN khẩn cấp** | Hiện lỗi bằng tiếng Việt trong hộp (`confirm-error`), giữ hộp mở | Admin khóa một admin khác → "…vai trò ngang hoặc cao hơn" |
+| AD-10 | `pages/OverviewPage.tsx:125-133,150,212,215,227-234` | Số bịa: `?? 50` cặp, "Độ trễ Binance < 150ms" ghi cứng, đối soát null hiện "Sai lệch: 0" màu xanh, có sai lệch vẫn banner xanh | Bỏ số ghi cứng; số cặp LIVE/STALE/UNAVAILABLE từ `market.symbols[].status` (`admin-market-health`); đối soát null → "Chưa chạy"; sai lệch → đỏ; tải lỗi → lỗi + Thử lại | Không còn "150ms", `?? 50` |
+| AD-11 | `pages/ReconciliationPage.tsx:89-116` | Chỉ thấy **số lượng** sai lệch, không xem được chi tiết | Mở rộng từng lần chạy: bảng kind/account/người dùng (link chi tiết)/asset/field/expected/actual/chênh (`dec`); phân trang; chạy xong tự mở lần mới nhất | Lần `ok=false` có `recon-mismatch-row` |
+
+## P2
+| ID | File:dòng | Lỗi | Sửa |
+|---|---|---|---|
+| AD-12 | `context/MarketContext.tsx:13,20` | Đọc trạng thái dừng sàn lỗi → vẫn "HOẠT ĐỘNG BÌNH THƯỜNG" | `boolean \| null`; null = "Không xác định", ẩn nút dừng/mở, có Thử lại (`admin-trading-state` `data-halted="unknown"`) |
+| AD-13 | `services/errors.ts:5`, mọi `.catch(() => {})` | Lỗi tải hiện thành danh sách trống; `TWO_FACTOR_REQUIRED`/`BOT_ACCOUNT_PROTECTED` bị báo "không có quyền"; không chặn route theo quyền | Mẫu 4 trạng thái; dịch theo `code`; `App.tsx` kiểm `hasPerm` theo route → `NoAccessPage` (`admin-no-access`) |
+| AD-14 | `UsersPage:65,214`, `AuditLogsPage:21`, `InvitesPage:33`, `AnnouncementsPage:29`, `RolesPage:29-31`, `UserDetailPage:152-168` | Bỏ `nextCursor`: không "Xem thêm"; số đếm sai ("Danh sách (50)") | "Xem thêm" theo cursor giữ bộ lọc (`list-more`); ghi "đã tải N" |
+| AD-15 | `UsersPage.tsx:96,247,498` | Vai trò `operator` không tồn tại (server trả lỗi → "Không tìm thấy"); mã mời giả vờ gán vai trò | Bỏ `operator`; bỏ ô "Vai trò dự kiến"; hiện cả `createdInvite.link` |
+| AD-16 | `pages/SettingsPage.tsx:36-39,68-78,289-300` | Phí bằng `parseFloat`/`toFixed(6)`: "0.00035" hiện "0.034999999999999996", tự làm tròn khi lưu, ô trống gửi "NaN"; khối "Công tắc tính năng — Đang mở" ghi cứng | `dec(x).mul(100)` / `dec(input).div(100)`; lỗi tại ô; xác nhận "cũ → mới"; **xóa** khối công tắc giả |
+| AD-17 | `pages/SymbolsPage.tsx:40,52` | Tắt cặp luôn hủy mọi lệnh mở | Checkbox "Hủy N lệnh đang mở" (mặc định tắt); thêm cột trạng thái dữ liệu |
+| AD-18 | `UserDetailPage.tsx:330-347,1295` | "Đặt lại số dư và khóa": reset trước rồi mới khóa; mô tả thiếu (đóng vị thế Futures, dừng bot, xóa giá vốn) | Khóa trước, reset sau; mô tả đủ hậu quả; báo bước nào lỗi |
+| AD-19 | `UserDetailPage.tsx:773-805` | Sổ cái trộn SPOT/FUTURES, thiếu deltaLocked, ref, bộ lọc | Cột account, deltaLocked, lockedAfter, ref; lọc asset/thời gian/`hideLocks`; phân trang; nhãn tiếng Việt |
+| AD-21 | `UserDetailPage.tsx:1206-1229` | Điều chỉnh số dư chỉ chọn được coin khách đã có; ô `type=number` nhận "1e3" | Danh sách coin từ `exchangeInfo`; ô text, regex ≤ 8 chữ số lẻ |
+| AD-22 | `pages/TaxManagementPage.tsx:114-119,133-140,745` | "Xem thêm" bỏ mất kỳ; lọc gọi API từng phím; lọc người dùng bắt UUID; giá PEPE cắt thành 0.00 | Luôn gửi from/to; lọc khi bấm "Lọc"; nhận UID → đổi id qua `adminListUsers`; giá theo `tickSize` |
+| AD-23 | `pages/AuditLogsPage.tsx:21,44-59,104` | Bộ lọc chỉ 10/23 hành động; không lọc người làm/đối tượng/thời gian; không có link | Đủ `AuditAction` + nhãn; lọc actorId/targetId (nhận UID)/from/to; link người dùng; tab "Nhật ký" ở chi tiết người dùng |
+| AD-24 | `pages/RolesPage.tsx:181` | Trạng thái nhân sự ghi cứng "Hoạt động" | Theo `u.status` + `lastSeenAt` |
+
+(AD-20 đã gộp vào **S-15** của PROMPT-17.)
+
+## P3
+- **AD-25** `UserDetailPage.tsx:1120-1123`, `UsersPage.tsx:655-656`: mô tả quyền vai trò sai (Admin "phân quyền nhân sự" — chỉ owner; User "nạp rút tiền" — sàn không có). Viết lại theo `packages/contracts/src/permissions.ts`.
+- **AD-26** `UserDetailPage.tsx:349,899,944,824-857`: cho hủy DCA đang PAUSED; checkbox "Bán coin của bot theo giá thị trường" (`sellBase`); bảng vị thế thêm ký quỹ, giá thanh lý, PnL đã chốt, phí, funding, lý do đóng.
+- **AD-27** `App.tsx:61`, `OverviewPage.tsx:250-297`, `AuthContext.tsx:27-31`: route lạ → trang 404; thẻ lối tắt ẩn khi thiếu quyền; `/me` lỗi khác 401 → "Thử lại", không trang trắng.
+- **AD-28** `UserDetailPage.tsx:589,743`, `ReconciliationPage.tsx:93`: hiện đủ ngày giờ; mã lệnh đầy đủ + nút sao chép.
+- **Nút "Sắp có"** (`RolesPage.tsx:87-95` tạo nhân sự, `SymbolsPage.tsx:83-91` thêm coin): giữ `disabled` + tooltip như hiện tại (đúng), không thêm nút giả mới.
+
+## Cần backend (Claude Code ghi vào kế hoạch, KHÔNG làm giả ở giao diện)
+Tìm lệnh/khớp lệnh toàn sàn · màn rủi ro (vị thế lớn, thanh lý, funding) · hủy một lệnh của khách · đăng xuất từng phiên · ghi chú/tag khách · điều chỉnh ví FUTURES · niêm yết cặp mới · công tắc tính năng · tạo nhân sự trực tiếp · mã mời gắn vai trò · xuất CSV audit/người dùng · trang tin tức (`adminNews*`, đợt N6).

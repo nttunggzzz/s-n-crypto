@@ -1,5 +1,28 @@
 # Changelog — @cex/contracts
 
+## 0.20.0 — 2026-10-17 (Hồ sơ: khối lượng giao dịch và thuế đã khấu trừ trong tháng — người dùng và admin)
+Chỉ thêm một endpoint (tổng 154) và một trường bắt buộc trong phản hồi. Hướng dẫn: README mục 17.
+
+**Thêm**
+- `accountStats.ts` (file mới): `VolumeBucket` (`spot`, `futures`, `total`, `fills`), `TradingVolume` (`today`, `last7d`, `last30d`, `thisMonth`, `previousMonth`, `excludedNonUsdtFills`), `MonthTax` (`month` dạng `YYYY-MM`, `withheldCount`, `withheldAmount`), `AccountTradingStats` (`asOf`, `volume`, `tax: { taxMode, category, thisMonth, previousMonth }`).
+- Endpoint `accountTradingStats` GET `/api/v1/account/stats` (`auth: 'user'`): số của chính người gọi, không nhận tham số.
+- `AdminUserDetail.trading` (`AccountTradingStats`): cùng phép tính cho người dùng đang xem; quyền vẫn là `users.read` của `adminGetUser`. Trường `tax` của 0.18.0 giữ nguyên.
+- Fixture `fixtureAccountTradingStats`, `fixtureEmptyTradingStats()`; `fixtureAdminUserDetail` có `trading`. Resolver mock `accountTradingStats` tính từ kho mock (lệnh Spot + Futures của người dùng demo, bản ghi thuế): người dùng không có lệnh khớp thì toàn số 0.
+
+**Nghĩa của các con số (server tính, giao diện chỉ hiện)**
+- Khối lượng = tổng `quoteQty` của các lần khớp **của chính người dùng** (kể cả lệnh do bot của người dùng đặt), cả MUA và BÁN, tính bằng USDT. Chỉ cộng cặp Spot quote USDT; lần khớp Spot của cặp quote khác (hoặc cặp sàn không còn niêm yết) trong 30 ngày gần nhất đếm vào `excludedNonUsdtFills`, **không** đổi bằng tỷ giá đoán. Futures (USDT-margined) cộng `quoteQty` của mọi lần khớp, cả mở và đóng.
+- Ngày và tháng theo giờ Việt Nam (GMT+7): `today` từ 00:00 hôm nay; `last7d` = hôm nay + 6 ngày trước; `last30d` = hôm nay + 29 ngày trước; `thisMonth` từ 00:00 ngày 1; `previousMonth` = cả tháng dương lịch trước (từ 00:00 ngày 1 tháng trước đến trước 00:00 ngày 1 tháng này). Một lần khớp nằm trong mọi cửa sổ chứa nó.
+- Thuế = thuế **đã khấu trừ** (đã trừ vào tiền bán ngay lúc khớp), **không** phải số còn phải nộp. `DOMESTIC_ORG` tự kê khai nên luôn 0; khi `taxMode = 'OFF'` các lần khớp mới không bị trích nhưng tháng có bản ghi cũ vẫn hiện số cũ.
+
+**Có thể ảnh hưởng UI:** `AdminUserDetail.trading` là bắt buộc — ai tự dựng một `AdminUserDetail` (ngoài mock/fixture) phải thêm trường này.
+
+## 0.19.0 — 2026-10-17 (Admin không cần 2FA trên server dev)
+Chỉ thêm trường; không thêm endpoint.
+
+**Thêm**
+- `PublicConfig.staffTwoFactorRequired` (boolean). Server đặt bằng `STAFF_REQUIRE_2FA` (mặc định `true`). `false` = endpoint staff chỉ kiểm vai trò + quyền, không cần 2FA. Chỉ dùng ở dev (`npm run dev` bật mặc định cho tới khi làm lại phần bảo mật); production từ chối khởi động với `false`.
+- App admin: thay kiểm tra `window.location.hostname === 'localhost'` bằng `publicConfig().staffTwoFactorRequired`.
+
 ## 0.18.0 — 2026-10-15 (Thuế — hiện thuế trong phân tích lãi lỗ và trong chi tiết người dùng của admin)
 Chỉ thêm trường; không thêm endpoint (vẫn 153). Hướng dẫn: README mục 15.
 
