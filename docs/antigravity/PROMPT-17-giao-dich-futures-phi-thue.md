@@ -111,6 +111,7 @@ Lưu lỗi → trả ngôi sao về trạng thái cũ + `toastError(formatApiErr
 
 ### S-11 · P3 · Futures: nút "Cô lập (Isolated)" bị khóa không giải thích
 **File:** `FuturesPage.tsx:1111-1116`. Sàn chỉ hỗ trợ ký quỹ cô lập (`futuresExchangeInfo().marginModes = ['ISOLATED']`). Hiện dạng nhãn "Ký quỹ: Cô lập" kèm `title="Sàn chỉ hỗ trợ ký quỹ cô lập"`, không phải nút bị khóa.
+**Trạng thái:** Hoàn thành. Đã chỉnh sửa `apps/exchange/src/pages/FuturesPage.tsx`: đổi nút bị khóa thành nhãn tĩnh `<span>Ký quỹ: Cô lập</span>` kèm `title="Sàn chỉ hỗ trợ ký quỹ cô lập"`.
 
 ### S-12 · P3 · Cài đặt: thẻ "Telegram — Sắp có"
 **File:** `apps/exchange/src/pages/SettingsPage.tsx:524-537`. Chưa có tính năng → ẩn thẻ.

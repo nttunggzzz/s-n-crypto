@@ -1418,12 +1418,12 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
         <div className="w-full lg:w-[320px] bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)] rounded-[var(--radius-lg,10px)] p-4 flex flex-col gap-3 shrink-0">
           {/* Top Control Chips: Margin Mode & Leverage */}
           <div className="grid grid-cols-2 gap-2">
-            <button
-              disabled
-              className="py-1.5 px-3 rounded-[var(--radius-md,6px)] bg-[var(--panel-2,#141416)] border border-[var(--line,#1d1e21)] font-semibold text-xs text-white text-center"
+            <span
+              title="Sàn chỉ hỗ trợ ký quỹ cô lập"
+              className="py-1.5 px-3 rounded-[var(--radius-md,6px)] bg-[var(--panel-2,#141416)] border border-[var(--line,#1d1e21)] font-semibold text-xs text-[var(--text-2,#a1a1aa)] text-center cursor-default flex items-center justify-center select-none"
             >
-              Cô lập (Isolated)
-            </button>
+              Ký quỹ: Cô lập
+            </span>
 
             <button
               onClick={() => setLeverageModalOpen(true)}
