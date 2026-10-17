@@ -21,7 +21,9 @@ import {
   EmptyState,
   ErrorState,
   formatDecimal,
+  useToast,
 } from '@cex/ui';
+import { formatApiError } from '../services/errors.ts';
 
 import { Star, Bell, X, Sparkles, TrendingUp, Zap, ArrowRight, Activity } from 'lucide-react';
 
@@ -62,6 +64,7 @@ export const MarketsPage: React.FC<MarketsPageProps> = ({ onNavigate }) => {
   const { symbols, tickers, exchangeInfo, isLoading, error, refreshMarketData, setActiveSymbol } = useMarket();
   const { user, isAuthenticated } = useAuth();
   const api = getApiClient();
+  const { error: toastError } = useToast();
 
   const btcTicker = tickers['BTCUSDT'] || null;
   const ethTicker = tickers['ETHUSDT'] || null;
@@ -170,18 +173,26 @@ export const MarketsPage: React.FC<MarketsPageProps> = ({ onNavigate }) => {
 
   const toggleFavorite = (e: React.MouseEvent, symbol: string) => {
     e.stopPropagation();
-    setFavorites((prev) => {
-      const next = prev.includes(symbol)
-        ? prev.filter((s) => s !== symbol)
-        : [...prev, symbol].slice(0, 30);
-      
-      if (isAuthenticated) {
-        api.updatePreferences({ body: { favorites: next } }).catch(() => {});
-      } else {
+    const prev = favorites;
+    const next = prev.includes(symbol)
+      ? prev.filter((s) => s !== symbol)
+      : [...prev, symbol].slice(0, 30);
+
+    setFavorites(next);
+
+    if (isAuthenticated) {
+      api.updatePreferences({ body: { favorites: next } }).catch((err) => {
+        setFavorites(prev);
+        toastError(formatApiError(err, 'Không lưu được danh sách yêu thích'));
+      });
+    } else {
+      try {
         localStorage.setItem('cex_favorites', JSON.stringify(next));
+      } catch (err) {
+        setFavorites(prev);
+        toastError('Không thể lưu vào bộ nhớ cục bộ');
       }
-      return next;
-    });
+    }
   };
 
   const activeAnnouncements = announcements.filter(

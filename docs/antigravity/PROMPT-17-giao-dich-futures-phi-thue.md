@@ -103,6 +103,7 @@ Tín hiệu hiện **chỉ dành cho Admin** (quyết định C-D1), chưa có l
 **File:** `apps/exchange/src/pages/MarketsPage.tsx:179` — `api.updatePreferences(...).catch(() => {})`.
 Lưu lỗi → trả ngôi sao về trạng thái cũ + `toastError(formatApiError(e, 'Không lưu được danh sách yêu thích'))`. Tương tự: rà mọi `.catch(() => {})` mà **thao tác do người dùng bấm** (khoảng 20 chỗ); chỉ được nuốt lỗi với tải nền không quan trọng, còn thao tác của người dùng phải báo.
 **Nghiệm thu:** chặn `PATCH /api/v1/account/preferences` trả 500 → ngôi sao trở lại, có thông báo lỗi.
+**Trạng thái:** Hoàn thành. Đã chỉnh sửa `apps/exchange/src/pages/MarketsPage.tsx`: khi `api.updatePreferences` thất bại, trạng thái `favorites` được hoàn tác về danh sách trước đó và hiển thị thông báo lỗi `toastError(formatApiError(err, 'Không lưu được danh sách yêu thích'))`.
 
 ### S-10 · P3 · "Chế độ Pro" trên trang Giao dịch trông như nút nhưng không làm gì
 **File:** `apps/exchange/src/pages/TradePage.tsx:313-319`. Đổi thành nhãn (`<span>`, không hover) hoặc bỏ. Không để nút không có chức năng.
