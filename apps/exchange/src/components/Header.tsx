@@ -198,14 +198,6 @@ export const Header: React.FC<HeaderProps> = ({ currentPath, onNavigate }) => {
               >
                 Danh mục
               </button>
-
-              {/* Tín hiệu */}
-              <button
-                className="h-full px-3 text-[13px] font-medium text-[var(--text-3,#63636b)] opacity-50 cursor-not-allowed flex items-center gap-1.5"
-                title="Sắp có"
-              >
-                Tín hiệu <span className="text-[9px] px-1 py-0.5 rounded bg-[var(--line)] text-[var(--text-2,#a1a1aa)]">Sắp có</span>
-              </button>
             </nav>
           </div>
 

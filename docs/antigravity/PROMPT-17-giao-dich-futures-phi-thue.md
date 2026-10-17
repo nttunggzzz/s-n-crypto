@@ -89,6 +89,7 @@ Thêm mọi `data-testid` mới vào `docs/antigravity/TESTIDS.md` (mục "Futur
 **File:** `apps/exchange/src/components/Header.tsx:171-176` — `<button>` trông như bị khóa (`opacity-50 cursor-not-allowed`) nhưng không có `disabled`, vẫn nhận bấm.
 Tín hiệu hiện **chỉ dành cho Admin** (quyết định C-D1), chưa có lịch mở cho người dùng → **bỏ mục này khỏi menu** người dùng. Không hứa tính năng chưa có.
 **Nghiệm thu:** header không còn "Tín hiệu".
+**Trạng thái:** Hoàn thành. Đã loại bỏ hoàn toàn nút "Tín hiệu — Sắp có" khỏi thanh điều hướng của Header người dùng.
 
 ### S-08 · P2 · Menu tài khoản: "Nạp ảo (Faucet)" và "Lịch sử giao dịch" đều chỉ mở đầu trang Tài sản
 **File:** `Header.tsx:234-245` — cả 3 mục cùng `onNavigate('/assets')`.
