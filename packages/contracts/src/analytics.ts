@@ -3,7 +3,8 @@ import { DecimalString, IsoDateTime, SymbolCode } from './common.ts';
 
 /**
  * PnL analysis (phase 2.6). Only REALIZED results — open positions are in portfolio / futuresAccount.
- *  - spot: realized PnL of SELL fills against the average cost, already net of fees;
+ *  - spot: realized PnL of SELL fills against the average cost, already net of fees AND of the Vietnam tax withheld
+ *    on those fills (0.15.0; `spotTax` shows how much of the difference that is);
  *  - futures: PnL of closing fills − fees + funding.
  * Days are calendar days in GMT+7. "Closed trades" (win rate) = spot SELL orders with a cost basis
  * + closed futures positions.
@@ -36,6 +37,11 @@ export const PnlAnalysis = z.object({
   totalRealized: DecimalString,
   spotRealized: DecimalString,
   futuresRealized: DecimalString,
+  /**
+   * Tax withheld on the same spot fills that make up spotRealized (a positive amount, "0.00000000" when none or when
+   * tax is off). spotRealized is already after it: spotRealized + spotTax = the result before tax.
+   */
+  spotTax: DecimalString,
   /** Futures fees and net funding inside futuresRealized (spot fees are inside spotRealized). */
   futuresFees: DecimalString,
   futuresFunding: DecimalString,

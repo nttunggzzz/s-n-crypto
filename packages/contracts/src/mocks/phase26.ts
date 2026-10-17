@@ -133,6 +133,7 @@ function pnlAnalysis(range: PnlRange): PnlAnalysis {
     to: new Date(end).toISOString(),
     totalRealized: f8(spotTotal + futTotal),
     spotRealized: f8(spotTotal),
+    spotTax: '0.00000000',
     futuresRealized: f8(futTotal),
     futuresFees: empty() ? '0.00000000' : '-14.20000000',
     futuresFunding: empty() ? '0.00000000' : '-1.36000000',

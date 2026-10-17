@@ -701,6 +701,7 @@ export function fixtureAdminUserDetail(userId: string): AdminUserDetail | null {
       ? { asset: 'USDT', walletBalance: '1000.00000000', available: '917.27725000', positionMargin: '82.72275000', orderMargin: '0.00000000', unrealizedPnl: '1.20000000', equity: '1001.20000000', openPositions: 1 }
       : { asset: 'USDT', walletBalance: '0.00000000', available: '0.00000000', positionMargin: '0.00000000', orderMargin: '0.00000000', unrealizedPnl: '0.00000000', equity: '0.00000000', openPositions: 0 },
     bots: { runningGrid: 0, activeDca: isDemo ? 1 : 0 },
+    tax: { category: 'INDIVIDUAL', categoryUpdatedAt: null, withheldCount: 0, withheldTotal: '0.00000000' },
   };
 }
 

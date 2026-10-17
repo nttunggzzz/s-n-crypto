@@ -129,6 +129,34 @@ describe('orders and positions (isolated, one-way)', () => {
     await reconciled();
   });
 
+  it('closing a position larger than the visible book fills what the book holds, step by step; opening orders still need the full book', async () => {
+    const u = await fundedUser('20000', '20000');
+    await svc().placeOrder(u, { symbol: 'BTCUSDT', side: 'BUY', type: 'MARKET', quantity: '1.2' }); // asks hold 3 BTC
+    setFuturesBook(env, 'BTCUSDT', [['80000.0', '0.400']], [['80010.0', '3.000']]); // bids: 0.4 BTC only
+
+    // a non-reduce-only SELL of the same size is rejected as before (it would not fill in full)
+    await expect(svc().placeOrder(u, { symbol: 'BTCUSDT', side: 'SELL', type: 'MARKET', quantity: '0.5' })).rejects.toSatisfy(code('INSUFFICIENT_LIQUIDITY'));
+
+    // close: takes the 0.4 BTC the book has, the rest of the order ends EXPIRED/INSUFFICIENT_LIQUIDITY, the position keeps 0.8
+    const first = await svc().closePosition(u, 'BTCUSDT');
+    expect([first.status, first.closeReason, dec(first.executedQty).toFixed(), dec(first.quantity).toFixed()]).toEqual(['EXPIRED', 'INSUFFICIENT_LIQUIDITY', '0.4', '1.2']);
+    expect(dec((await openPos(u))!.quantity).toFixed()).toBe('0.8');
+    expect((await futuresBalance(env, u)).locked).toBe(dec((await openPos(u))!.margin).toFixed(18));
+
+    // nothing at all on the bid side: rejected, the position is untouched
+    setFuturesBook(env, 'BTCUSDT', [], [['80010.0', '3.000']]);
+    await expect(svc().closePosition(u, 'BTCUSDT')).rejects.toSatisfy(code('INSUFFICIENT_LIQUIDITY'));
+    expect(dec((await openPos(u))!.quantity).toFixed()).toBe('0.8');
+
+    // the book comes back: the rest closes in one go and the position is gone
+    setFuturesBook(env, 'BTCUSDT', [['80000.0', '5.000']], [['80010.0', '3.000']]);
+    const last = await svc().closePosition(u, 'BTCUSDT');
+    expect([last.status, dec(last.executedQty).toFixed()]).toEqual(['FILLED', '0.8']);
+    expect(await openPos(u)).toBeUndefined();
+    expect((await futuresBalance(env, u)).locked).toBe('0.000000000000000000');
+    await reconciled();
+  });
+
   it('TP/SL validation and trigger: TP hit by the mark closes at market', async () => {
     const u = await fundedUser();
     await expect(svc().placeOrder(u, { symbol: 'BTCUSDT', side: 'BUY', type: 'MARKET', quantity: '0.01', tpsl: { takeProfitPrice: '79000.0' } })).rejects.toSatisfy(code('INVALID_TPSL'));

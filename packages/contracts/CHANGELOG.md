@@ -1,5 +1,14 @@
 # Changelog — @cex/contracts
 
+## 0.18.0 — 2026-10-15 (Thuế — hiện thuế trong phân tích lãi lỗ và trong chi tiết người dùng của admin)
+Chỉ thêm trường; không thêm endpoint (vẫn 153). Hướng dẫn: README mục 15.
+
+**Thêm**
+- `PnlAnalysis.spotTax` (P-03): tổng thuế đã trích trên chính các lần bán Spot nằm trong `spotRealized` (số dương, `"0.00000000"` khi thuế tắt). `spotRealized` đã trừ phí **và** thuế, nên `spotRealized + spotTax` = kết quả trước thuế. Chú thích "net of fees" sửa thành "net of fees and tax".
+- `AdminUserDetail.tax` (`AdminUserTax`, P-04 / M-16): `category` (mặc định `INDIVIDUAL`), `categoryUpdatedAt` (null = chưa chọn), `withheldCount`, `withheldTotal` (USDT, cộng mọi lần). Cùng quyền `users.read` của `adminGetUser`; danh sách bản ghi vẫn là `adminTaxWithholdings`.
+
+**Ảnh hưởng UI:** hai trường mới là bắt buộc trong phản hồi (server luôn trả); mã dựng tay một `PnlAnalysis` / `AdminUserDetail` (hiếm, ngoài mock/fixture) cần thêm chúng.
+
 ## 0.17.0 — 2026-10-14 (Module N — đợt N1: tin tức và sự kiện vĩ mô cho hệ phân tích)
 Chỉ thêm. 3 endpoint Admin mới, tổng 153. Không có endpoint cho người dùng thường (C-D1). Hướng dẫn: README mục 16.
 Trạng thái server: chưa có route cho `adminNewsItems`, `adminNewsSources`, `adminNewsMacroEvents` (đợt N2).

@@ -142,6 +142,9 @@ Mock: `setMockPrice('BTCUSDT', 75000)` đẩy giá để xem stop kích hoạt, 
 - Ví Futures riêng: phải **chuyển tiền** từ Spot sang (`futuresTransfer`) trước khi giao dịch.
 - BUY mở/tăng Long hoặc giảm Short; SELL ngược lại. Lệnh ngược chiều lớn hơn vị thế sẽ đóng vị thế rồi mở chiều kia.
 - `reduceOnly`: chỉ giảm vị thế. Nút "Đóng vị thế" dùng `futuresClosePosition`.
+- **Đóng vị thế lớn hơn sổ lệnh:** khớp chỉ dùng 20 mức realtime. Lệnh MARKET `reduceOnly` (kể cả `futuresClosePosition`) mà sổ không đủ thì **khớp phần sổ có**,
+  phần còn lại hủy; phản hồi là `FuturesOrder` có `status: 'EXPIRED'`, `closeReason: 'INSUFFICIENT_LIQUIDITY'`, `executedQty` < `quantity`. Sổ trống hẳn → 400 `INSUFFICIENT_LIQUIDITY` như cũ.
+  Giao diện phải so `executedQty` với `quantity` (đừng báo "đã đóng toàn bộ" khi chưa đủ) và gợi ý đóng tiếp phần còn lại. Lệnh mở (không `reduceOnly`) vẫn cần sổ đủ khối lượng.
 - TP/SL theo **mark price**, khi chạm sẽ đóng bằng lệnh Market. Thanh lý cũng theo mark price, và mất **tối đa** phần ký quỹ của vị thế (số dư không bao giờ âm).
 - Funding theo đúng mốc của Binance (thường 8 giờ): `rate > 0` thì Long trả, Short nhận; trừ hoặc cộng vào ký quỹ vị thế.
 - Phí: maker 0,02%, taker 0,05%, thanh lý 0,5%. Lấy từ `futuresExchangeInfo().fees`, không viết cứng trong UI.
@@ -331,6 +334,7 @@ const page = await api.taxWithholdings({ query: { symbol, from, to, limit: 50, c
 - VND: `null` khi chưa có tỷ giá → hiện "—". Tổng VND là `null` nếu **một** bản ghi trong nhóm thiếu tỷ giá (`vndMissingCount > 0`): hiện
   "N lần khấu trừ chưa có tỷ giá". `grossVnd` làm tròn xuống, `taxVnd` làm tròn lên tới đồng; chỉ để tham khảo, sổ sách bằng USDT.
 - Futures: ghi chú "Futures chưa có căn cứ thuế — không trích".
+- **Phân tích lãi lỗ (v0.18.0):** `pnlAnalysis.spotTax` = thuế trên các lần bán nằm trong `spotRealized`; `spotRealized` đã trừ phí và thuế. Hiện "trong đó thuế …" khi `spotTax` ≠ 0; không tự cộng thêm hay trừ thêm.
 
 **Admin** (`tax.read`: support, admin, owner; `tax.manage`: admin, owner)
 ```ts
@@ -346,6 +350,8 @@ await api.adminTaxWithholdings({ query: { userId, symbol, from: sum.from, to: su
 - Ràng buộc bật thuế: `adminUpdateTaxSettings` từ chối `taxMode: 'WITHHOLD'` khi đang bật một cặp có quote khác USDT (400 `VALIDATION_ERROR`, field `taxMode`):
   báo cáo thuế cộng số của một đồng quote (USDT), nên chỉ bật thuế khi mọi cặp đang bật đều quote USDT. Tắt cặp quote khác trước rồi mới bật thuế. Chiều ngược lại cũng bị chặn: khi `taxMode = 'WITHHOLD'`, `adminUpdateSymbol` từ chối bật (`enabled: true`) một cặp quote khác USDT (400 `VALIDATION_ERROR`, field `enabled`).
 - `byCategory` luôn 3 dòng theo thứ tự enum (`DOMESTIC_ORG` luôn 0); `bySymbol` xếp theo thuế giảm dần.
+
+- **Chi tiết người dùng (admin, v0.18.0):** `adminGetUser(...).tax` = `{ category, categoryUpdatedAt, withheldCount, withheldTotal }` (mọi thời gian) — dùng cho đầu tab Thuế; danh sách bản ghi lấy từ `adminTaxWithholdings({ userId })`.
 
 **Mock:** bắt đầu ở `WITHHOLD` 0,1%, tỷ giá 26350 (server thật bắt đầu `OFF`); có 2 lần bán cũ của người dùng demo (tháng 8 chưa có tỷ giá,
 tháng 9 có) và 2 bản ghi của người khác (tháng 10, một `FOREIGN_ORG`). Bán trong mock bị trích đúng công thức trên. Đổi trạng thái:

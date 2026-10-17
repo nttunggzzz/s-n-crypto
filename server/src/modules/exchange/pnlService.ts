@@ -36,7 +36,7 @@ export class PnlService {
     const since = (col: Parameters<typeof gte>[0]): SQL[] => (from ? [gte(col, from)] : []);
 
     const spot = await this.db
-      .select({ orderId: trades.orderId, symbol: trades.symbol, pnl: trades.realizedPnl, at: trades.createdAt })
+      .select({ orderId: trades.orderId, symbol: trades.symbol, pnl: trades.realizedPnl, tax: trades.tax, at: trades.createdAt })
       .from(trades)
       .where(and(eq(trades.userId, userId), isNotNull(trades.realizedPnl), ...since(trades.createdAt)));
     const fFills = await this.db
@@ -62,12 +62,14 @@ export class PnlService {
       if (d) d[key] = d[key].add(v);
     };
     let spotTotal = ZERO;
+    let spotTax = ZERO;
     let fees = ZERO;
     let funding = ZERO;
     let futPnl = ZERO;
     for (const r of spot) {
       const v = dec(r.pnl!);
       spotTotal = spotTotal.add(v);
+      spotTax = spotTax.add(dec(r.tax));
       add(r.at, 'spot', v);
     }
     for (const r of fFills) {
@@ -124,6 +126,7 @@ export class PnlService {
       to: to.toISOString(),
       totalRealized: toFixedStr(spotTotal.add(futuresTotal)),
       spotRealized: toFixedStr(spotTotal),
+      spotTax: toFixedStr(spotTax),
       futuresRealized: toFixedStr(futuresTotal),
       futuresFees: toFixedStr(fees.neg()),
       futuresFunding: toFixedStr(funding),

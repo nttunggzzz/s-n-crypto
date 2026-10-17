@@ -4,6 +4,7 @@ import { AssetTag, MarketStatus, SymbolInfo } from './market.ts';
 import { Balance, LedgerEntry, WalletAccount } from './wallet.ts';
 import { FuturesAccount, FuturesFees } from './futures.ts';
 import { DcaPlan, GridBot } from './bots.ts';
+import { TaxCategory } from './tax.ts';
 
 /** Every admin action that changes data must say why (stored in the audit log). */
 export const Reason = z.string().trim().min(5, 'at least 5 characters').max(500);
@@ -34,6 +35,17 @@ export const AdminUserListQuery = z.object({
   status: z.enum(['active', 'locked']).optional(),
 });
 
+/** Tax overview of one user for the admin screen (module T, 0.18.0). Sums cover ALL time; the records are `adminTaxWithholdings`. */
+export const AdminUserTax = z.object({
+  /** Self-declared category; INDIVIDUAL when the user never chose (updatedAt null). */
+  category: TaxCategory,
+  categoryUpdatedAt: IsoDateTime.nullable(),
+  /** Number of withheld SELL fills and the sum of their tax, in USDT. 0 / "0.00000000" while tax was never on. */
+  withheldCount: z.number().int(),
+  withheldTotal: DecimalString,
+});
+export type AdminUserTax = z.infer<typeof AdminUserTax>;
+
 export const AdminUserDetail = z.object({
   user: AdminUserSummary,
   balances: z.array(Balance),
@@ -45,6 +57,7 @@ export const AdminUserDetail = z.object({
   /** Futures wallet (unrealized PnL at the live mark). */
   futures: FuturesAccount,
   bots: z.object({ runningGrid: z.number().int(), activeDca: z.number().int() }),
+  tax: AdminUserTax,
 });
 export type AdminUserDetail = z.infer<typeof AdminUserDetail>;
 
