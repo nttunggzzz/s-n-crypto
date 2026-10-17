@@ -66,6 +66,7 @@ Thêm mọi `data-testid` mới vào `docs/antigravity/TESTIDS.md` (mục "Futur
 - Chủ dự án yêu cầu bỏ. Chỉ render banner khi `tradingHalted = true` (banner đỏ "TẠM DỪNG GIAO DỊCH KHẨN CẤP" **giữ nguyên** — đó là trạng thái an toàn, không phải quảng cáo).
 - **Không** bỏ nhãn "thử nghiệm" trên các màn **Thuế** (quy tắc hợp đồng module T, README mục 15).
 **Nghiệm thu:** trang thường không còn dòng mô phỏng; admin dừng sàn → banner đỏ vẫn hiện.
+**Trạng thái:** Hoàn thành. Đã chỉnh sửa `packages/ui/src/TradingBadges.tsx`: `SimulatedBanner` chỉ render khi `tradingHalted === true`, trả về `null` khi sàn đang hoạt động bình thường, giữ nguyên nhãn "thử nghiệm" trên các màn Thuế.
 
 ### S-05 · P2 · Header: nút "Giao diện" (mặt trăng) và "Ngôn ngữ" (quả địa cầu) bấm không có tác dụng
 **File:** `apps/exchange/src/components/Header.tsx:346-351` — hai `<button>` không có `onClick`.

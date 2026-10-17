@@ -126,30 +126,17 @@ export const SimulatedBanner: React.FC<SimulatedBannerProps> = ({
   tradingHalted = false,
   className = '',
 }) => {
+  if (!tradingHalted) return null;
+
   return (
     <div
-      className={`w-full py-1.5 px-3 flex items-center justify-between text-xs font-medium select-none ${
-        tradingHalted
-          ? 'bg-[#dc2626] text-white'
-          : 'bg-[var(--panel-2)] text-[var(--text-2)] border-b border-[var(--line)]'
-      } ${className}`}
+      className={`w-full py-1.5 px-3 flex items-center justify-between text-xs font-medium select-none bg-[#dc2626] text-white ${className}`}
     >
       <div className="flex items-center gap-2 mx-auto">
-        {tradingHalted ? (
-          <>
-            <ShieldAlertIcon size={14} className="text-white shrink-0 animate-pulse" />
-            <span className="font-bold tracking-wide uppercase">
-              HỆ THỐNG ĐANG TẠM DỪNG GIAO DỊCH KHẨN CẤP
-            </span>
-          </>
-        ) : (
-          <>
-            <span className="w-2 h-2 rounded-full bg-[var(--color-accent-primary,#818cf8)] animate-pulse" />
-            <span>
-              SÀN MÔ PHỎNG SPOT — TIỀN ẢO, DỮ LIỆU GIÁ THẬT BINANCE — KHÔNG CÓ GIÁ TRỊ TIỀN THẬT
-            </span>
-          </>
-        )}
+        <ShieldAlertIcon size={14} className="text-white shrink-0 animate-pulse" />
+        <span className="font-bold tracking-wide uppercase">
+          HỆ THỐNG ĐANG TẠM DỪNG GIAO DỊCH KHẨN CẤP
+        </span>
       </div>
     </div>
   );
