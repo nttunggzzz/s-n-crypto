@@ -87,8 +87,38 @@ export const WalletPage: React.FC<WalletPageProps> = ({ onNavigate }) => {
   const [loading, setLoading] = useState(true);
   const [faucetClaiming, setFaucetClaiming] = useState(false);
   const [countdown, setCountdown] = useState<string | null>(null);
+  const [highlightFaucet, setHighlightFaucet] = useState(false);
 
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Handle hash scrolling for #faucet and #ledger
+  useEffect(() => {
+    if (!loading) {
+      const handleHashScroll = () => {
+        const hash = window.location.hash;
+        if (hash === '#faucet') {
+          const el = document.getElementById('faucet');
+          if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            setHighlightFaucet(true);
+            setTimeout(() => setHighlightFaucet(false), 2000);
+          }
+        } else if (hash === '#ledger') {
+          const el = document.getElementById('ledger');
+          if (el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          }
+        }
+      };
+      // Delay slightly for DOM rendering
+      const timer = setTimeout(handleHashScroll, 100);
+      window.addEventListener('hashchange', handleHashScroll);
+      return () => {
+        clearTimeout(timer);
+        window.removeEventListener('hashchange', handleHashScroll);
+      };
+    }
+  }, [loading]);
 
   // Fetch Balances, Faucet, and Futures info
   const fetchWalletData = useCallback(async () => {
@@ -380,7 +410,15 @@ export const WalletPage: React.FC<WalletPageProps> = ({ onNavigate }) => {
             </Card>
 
             {/* Faucet Testnet Card */}
-            <Card variant="surface" className="p-6 flex flex-col justify-between">
+            <Card
+              id="faucet"
+              variant="surface"
+              className={`p-6 flex flex-col justify-between transition-all duration-700 ${
+                highlightFaucet
+                  ? 'ring-2 ring-[var(--color-accent-primary,#818cf8)] shadow-[0_0_25px_rgba(129,140,248,0.45)]'
+                  : ''
+              }`}
+            >
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <h3 className="font-bold text-sm text-[var(--color-text-primary,#f3f4f6)]">
@@ -552,7 +590,7 @@ export const WalletPage: React.FC<WalletPageProps> = ({ onNavigate }) => {
           </div>
 
           {/* Ledger History */}
-          <div className="space-y-3 pt-4 border-t border-[var(--color-border-subtle,#1e212b)]">
+          <div id="ledger" className="space-y-3 pt-4 border-t border-[var(--color-border-subtle,#1e212b)]">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <h2 className="text-base font-bold text-[var(--color-text-primary,#f3f4f6)]">
                 Lịch sử biến động tài sản Spot (Sổ cái)

@@ -259,11 +259,11 @@ export const Header: React.FC<HeaderProps> = ({ currentPath, onNavigate }) => {
                       <Wallet size={16} className="text-[var(--text-2,#a1a1aa)]" />
                       Tổng quan tài sản
                     </div>
-                    <div onClick={() => onNavigate('/assets')} className="px-4 py-2.5 hover:bg-[var(--panel-2)] cursor-pointer text-[13px] text-[var(--text,#f4f4f5)] flex items-center gap-2">
+                    <div onClick={() => onNavigate('/assets#faucet')} className="px-4 py-2.5 hover:bg-[var(--panel-2)] cursor-pointer text-[13px] text-[var(--text,#f4f4f5)] flex items-center gap-2">
                       <CreditCard size={16} className="text-[var(--text-2,#a1a1aa)]" />
                       Nạp ảo (Faucet)
                     </div>
-                    <div onClick={() => onNavigate('/assets')} className="px-4 py-2.5 hover:bg-[var(--panel-2)] cursor-pointer text-[13px] text-[var(--text,#f4f4f5)] flex items-center gap-2">
+                    <div onClick={() => onNavigate('/assets#ledger')} className="px-4 py-2.5 hover:bg-[var(--panel-2)] cursor-pointer text-[13px] text-[var(--text,#f4f4f5)] flex items-center gap-2">
                       <History size={16} className="text-[var(--text-2,#a1a1aa)]" />
                       Lịch sử giao dịch
                     </div>

@@ -27,48 +27,61 @@ const AccountTaxPage = lazy(() => import('./pages/AccountTaxPage.tsx').then((m) 
 const UiShowcasePage = lazy(() => import('./pages/UiShowcasePage.tsx').then((m) => ({ default: m.UiShowcasePage })));
 
 const AppContent: React.FC = () => {
-  const [currentPath, setCurrentPath] = useState<string>(window.location.pathname || '/markets');
+  const [currentPath, setCurrentPath] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      return (window.location.pathname || '/markets') + (window.location.hash || '');
+    }
+    return '/markets';
+  });
   const { tradingHalted } = useMarket();
 
-  // Handle popstate (browser back/forward)
+  // Handle popstate & hashchange (browser back/forward & hash links)
   useEffect(() => {
     const handlePopState = () => {
-      setCurrentPath(window.location.pathname || '/markets');
+      setCurrentPath((window.location.pathname || '/markets') + (window.location.hash || ''));
     };
     window.addEventListener('popstate', handlePopState);
-    return () => window.removeEventListener('popstate', handlePopState);
+    window.addEventListener('hashchange', handlePopState);
+    return () => {
+      window.removeEventListener('popstate', handlePopState);
+      window.removeEventListener('hashchange', handlePopState);
+    };
   }, []);
 
   const navigate = (path: string) => {
     window.history.pushState({}, '', path);
     setCurrentPath(path);
-    window.scrollTo(0, 0);
+    if (!path.includes('#')) {
+      window.scrollTo(0, 0);
+    }
   };
 
   // Render current route
   const renderPage = () => {
-    if (currentPath === '/markets') {
+    const pathname = currentPath.split('#')[0] || '/';
+    if (pathname === '/markets') {
       return <MarketsPage onNavigate={navigate} />;
     }
-    if (currentPath.startsWith('/trade')) {
-      const parts = currentPath.split('/');
+    if (pathname.startsWith('/trade')) {
+      const parts = pathname.split('/');
       const symbol = parts[2] || 'BTCUSDT';
       return <TradePage symbolParam={symbol} onNavigate={navigate} />;
     }
-    if (currentPath.startsWith('/futures')) {
-      const parts = currentPath.split('/');
+    if (pathname.startsWith('/futures')) {
+      const parts = pathname.split('/');
       const symbol = parts[2] || 'BTCUSDT';
       return <FuturesPage symbolParam={symbol} onNavigate={navigate} />;
     }
-    if (currentPath === '/portfolio') {
+    if (pathname === '/portfolio') {
       return <PortfolioPage onNavigate={navigate} />;
     }
-    if (currentPath === '/assets/analysis') {
+    if (pathname === '/assets/analysis') {
       return <PnlAnalysisPage onNavigate={navigate} />;
     }
-    if (currentPath === '/assets' || currentPath === '/wallet') {
-      if (currentPath === '/wallet') {
-        window.history.replaceState({}, '', '/assets');
+    if (pathname === '/assets' || pathname === '/wallet') {
+      if (pathname === '/wallet') {
+        const hash = currentPath.includes('#') ? '#' + currentPath.split('#')[1] : '';
+        window.history.replaceState({}, '', '/assets' + hash);
       }
       return <WalletPage onNavigate={navigate} />;
     }

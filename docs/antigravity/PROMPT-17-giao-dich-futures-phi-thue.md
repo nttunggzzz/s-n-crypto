@@ -97,6 +97,7 @@ Tín hiệu hiện **chỉ dành cho Admin** (quyết định C-D1), chưa có l
 - "Lịch sử giao dịch" → `/assets#ledger`: cuộn tới bảng sổ cái (thêm `id="ledger"`).
 - `App.tsx` / router: giữ phần `#…` khi điều hướng; `WalletPage` đọc `location.hash` sau khi dữ liệu tải xong rồi `scrollIntoView`.
 **Nghiệm thu:** bấm "Nạp ảo (Faucet)" → thẻ Faucet nằm trong khung nhìn.
+**Trạng thái:** Hoàn thành. Đã chỉnh sửa: Header liên kết Nạp ảo (Faucet) tới `/assets#faucet` và Lịch sử giao dịch tới `/assets#ledger`. `App.tsx` giữ nguyên hash khi điều hướng và lắng nghe sự kiện `hashchange`. `WalletPage.tsx` tự động cuộn mượt đến phần tử mục tiêu (`#faucet` và `#ledger`) sau khi dữ liệu tải xong và thêm hiệu ứng highlight thẻ Faucet.
 
 ### S-09 · P2 · Đánh dấu cặp yêu thích lỗi mà vẫn như đã lưu
 **File:** `apps/exchange/src/pages/MarketsPage.tsx:179` — `api.updatePreferences(...).catch(() => {})`.
