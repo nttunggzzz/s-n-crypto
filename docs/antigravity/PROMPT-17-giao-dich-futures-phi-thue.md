@@ -77,4 +77,33 @@ Thêm mọi `data-testid` mới vào `docs/antigravity/TESTIDS.md` (mục "Futur
 **Nghiệm thu:** bản build (`npm run e2e` dùng bản build) mở `/__ui` → không thấy "Design System Showcase".
 
 ---
+## Đợt 1b — nút giả và lỗi bị nuốt (soát toàn bộ `apps/exchange`)
+
+### S-07 · P2 · Menu "Tín hiệu — Sắp có" giả nút bị khóa
+**File:** `apps/exchange/src/components/Header.tsx:171-176` — `<button>` trông như bị khóa (`opacity-50 cursor-not-allowed`) nhưng không có `disabled`, vẫn nhận bấm.
+Tín hiệu hiện **chỉ dành cho Admin** (quyết định C-D1), chưa có lịch mở cho người dùng → **bỏ mục này khỏi menu** người dùng. Không hứa tính năng chưa có.
+**Nghiệm thu:** header không còn "Tín hiệu".
+
+### S-08 · P2 · Menu tài khoản: "Nạp ảo (Faucet)" và "Lịch sử giao dịch" đều chỉ mở đầu trang Tài sản
+**File:** `Header.tsx:234-245` — cả 3 mục cùng `onNavigate('/assets')`.
+- "Nạp ảo (Faucet)" → `/assets#faucet`: trang Tài sản cuộn tới thẻ Faucet (`WalletPage.tsx:382`, thêm `id="faucet"`) và làm nổi thẻ 1–2 giây.
+- "Lịch sử giao dịch" → `/assets#ledger`: cuộn tới bảng sổ cái (thêm `id="ledger"`).
+- `App.tsx` / router: giữ phần `#…` khi điều hướng; `WalletPage` đọc `location.hash` sau khi dữ liệu tải xong rồi `scrollIntoView`.
+**Nghiệm thu:** bấm "Nạp ảo (Faucet)" → thẻ Faucet nằm trong khung nhìn.
+
+### S-09 · P2 · Đánh dấu cặp yêu thích lỗi mà vẫn như đã lưu
+**File:** `apps/exchange/src/pages/MarketsPage.tsx:179` — `api.updatePreferences(...).catch(() => {})`.
+Lưu lỗi → trả ngôi sao về trạng thái cũ + `toastError(formatApiError(e, 'Không lưu được danh sách yêu thích'))`. Tương tự: rà mọi `.catch(() => {})` mà **thao tác do người dùng bấm** (khoảng 20 chỗ); chỉ được nuốt lỗi với tải nền không quan trọng, còn thao tác của người dùng phải báo.
+**Nghiệm thu:** chặn `PATCH /api/v1/account/preferences` trả 500 → ngôi sao trở lại, có thông báo lỗi.
+
+### S-10 · P3 · "Chế độ Pro" trên trang Giao dịch trông như nút nhưng không làm gì
+**File:** `apps/exchange/src/pages/TradePage.tsx:313-319`. Đổi thành nhãn (`<span>`, không hover) hoặc bỏ. Không để nút không có chức năng.
+
+### S-11 · P3 · Futures: nút "Cô lập (Isolated)" bị khóa không giải thích
+**File:** `FuturesPage.tsx:1111-1116`. Sàn chỉ hỗ trợ ký quỹ cô lập (`futuresExchangeInfo().marginModes = ['ISOLATED']`). Hiện dạng nhãn "Ký quỹ: Cô lập" kèm `title="Sàn chỉ hỗ trợ ký quỹ cô lập"`, không phải nút bị khóa.
+
+### S-12 · P3 · Cài đặt: thẻ "Telegram — Sắp có"
+**File:** `apps/exchange/src/pages/SettingsPage.tsx:524-537`. Chưa có tính năng → ẩn thẻ.
+
+---
 Đợt 2 (sẽ gửi): S-1x hồ sơ người dùng — khối lượng giao dịch hôm nay/7 ngày, thuế đã khấu trừ tháng này (cần backend 0.19.0); trang chi tiết người dùng admin; các lỗi web admin.
