@@ -33,6 +33,7 @@ Test nằm ở `e2e/tests/*.spec.ts` — đọc test để biết chính xác lu
 | `tpsl-take-profit` / `tpsl-stop-loss` / `tpsl-save` | Hai ô giá và nút lưu trong hộp TP/SL | |
 | `position-close` | Nút "Đóng" trong dòng | |
 | `close-confirm` | Nút xác nhận đóng (mặc định: đóng toàn bộ, giá thị trường) | |
+| `futures-order-block-reason` | Dòng lý do khóa nút đặt lệnh Futures (thiếu tiền, chưa đủ minQty/minNotional, sàn tạm dừng, gián đoạn giá, cặp bị tắt) | Hiện ngay dưới 2 nút Mở Long/Short khi có điều kiện chặn; nếu thiếu tiền có kèm link Chuyển từ Spot |
 
 ## Trang Bot (`/bots`) — `bots.spec.ts`
 `/bots?symbol=BTCUSDT` chọn sẵn cặp cho cả bot lưới và mua định kỳ (dùng cho nút "Tạo bot" ở trang Giao dịch).

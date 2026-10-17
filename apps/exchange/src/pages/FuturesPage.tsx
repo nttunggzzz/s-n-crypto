@@ -9,6 +9,7 @@ import type {
   FundingEvent,
   FuturesTrade,
   FuturesSymbolInfo,
+  FuturesExchangeInfo,
   UserEvent,
   FuturesPlaceOrderRequest,
 } from '@cex/contracts';
@@ -16,7 +17,7 @@ import { countdown, resolveFuturesSymbol, ApiError, TRADE_BLOCK_LABELS } from '@
 
 type ClosePositionBody = { quantity?: string };
 import { getApiClient } from '../services/api.ts';
-import { getErrorMessage } from '../services/errors.ts';
+import { formatApiError, getErrorMessage } from '../services/errors.ts';
 import { useAuth } from '../context/AuthContext.tsx';
 import { useMarket } from '../context/MarketContext.tsx';
 import {
@@ -86,7 +87,7 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
   onNavigate,
 }) => {
   const { isAuthenticated } = useAuth();
-  const { symbols: spotSymbols, realtimeClient, activeTradeBlock } = useMarket();
+  const { symbols: spotSymbols, realtimeClient, activeTradeBlock, tradingHalted } = useMarket();
   const { success, error: toastError, info: toastInfo } = useToast();
   const api = getApiClient();
 
@@ -108,6 +109,7 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
   const [futuresTrades, setFuturesTrades] = useState<FuturesTrade[]>([]);
   const [symbolSettings, setSymbolSettings] = useState<FuturesSymbolSettings[]>([]);
   const [symbolInfos, setSymbolInfos] = useState<FuturesSymbolInfo[]>([]);
+  const [futuresExchangeInfo, setFuturesExchangeInfo] = useState<FuturesExchangeInfo | null>(null);
 
   // Ticking now for countdown
   const [now, setNow] = useState(Date.now());
@@ -196,6 +198,10 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
 
   // Selected order tab
   const [bottomTab, setBottomTab] = useState<'positions' | 'orders' | 'trades' | 'orderHistory' | 'posHistory' | 'funding'>('positions');
+  const setActiveTab = setBottomTab;
+
+  const currentPosition = useMemo(() => positions.find((p) => p.symbol === symbol), [positions, symbol]);
+  const baseAsset = currentSymbolInfo?.baseAsset || symbol.replace('USDT', '');
 
   // Order Form State
   const [orderType, setOrderType] = useState<'LIMIT' | 'MARKET'>('LIMIT');
@@ -220,6 +226,7 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
       ]);
       setTickers(tRes.items);
       if (markRes) setMarkPrice(markRes);
+      if (exInfo) setFuturesExchangeInfo(exInfo);
       if (exInfo?.symbols) setSymbolInfos(exInfo.symbols);
 
       if (isAuthenticated) {
@@ -346,10 +353,32 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
       success(`Đã cập nhật đòn bẩy ${symbol} lên ${selectedLeverage}×!`);
       setLeverageModalOpen(false);
     } catch (err: unknown) {
-      if (err instanceof ApiError && err.code === 'LEVERAGE_LOCKED') {
-        toastError('Vui lòng đóng vị thế và hủy lệnh đang mở của cặp này trước khi đổi đòn bẩy.');
+      const isLocked = (err instanceof ApiError && err.code === 'LEVERAGE_LOCKED') ||
+        (typeof err === 'object' && err !== null && (err as { code?: string }).code === 'LEVERAGE_LOCKED');
+      const msg = formatApiError(err, 'Không thể thay đổi đòn bẩy.', undefined, {
+        symbol,
+        baseAsset,
+        positionQty: currentPosition?.quantity,
+        openOrdersCount: openOrders.filter((o) => o.symbol === symbol).length,
+      });
+      if (isLocked) {
+        toastError(
+          <div className="flex flex-col gap-1.5 items-start">
+            <span>{msg}</span>
+            <button
+              type="button"
+              onClick={() => {
+                setBottomTab('positions');
+                setLeverageModalOpen(false);
+              }}
+              className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--accent,#818cf8)] underline hover:opacity-80 cursor-pointer"
+            >
+              Xem vị thế
+            </button>
+          </div>
+        );
       } else {
-        toastError('Không thể thay đổi đòn bẩy.');
+        toastError(msg);
       }
     }
   };
@@ -397,10 +426,91 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
     return null;
   }, [refPrice, calculatedQty, requiredMargin, currentSymbolInfo]);
 
+  const futuresAvailable = useMemo(() => {
+    return account?.available ? dec(account.available) : ZERO;
+  }, [account?.available]);
+
+  const notionalValue = useMemo(() => {
+    if (calculatedQty.lte(0) || refPrice.lte(0)) return ZERO;
+    try {
+      return calculatedQty.mul(refPrice);
+    } catch {
+      return ZERO;
+    }
+  }, [calculatedQty, refPrice]);
+
+  const takerFeeRate = useMemo(() => {
+    return futuresExchangeInfo?.fees?.takerFee || '0.0005';
+  }, [futuresExchangeInfo]);
+
+  const estFee = useMemo(() => {
+    if (notionalValue.lte(0)) return ZERO;
+    try {
+      return roundUp(notionalValue.mul(dec(takerFeeRate)), 8);
+    } catch {
+      return ZERO;
+    }
+  }, [notionalValue, takerFeeRate]);
+
+  const totalCost = useMemo(() => {
+    return requiredMargin.add(estFee);
+  }, [requiredMargin, estFee]);
+
+  const isTradingHalted = tradingHalted || Boolean(futuresExchangeInfo?.tradingHalted) || activeTradeBlock === 'HALTED';
+  const isMarketDataStale = markPrice === null || markPrice.status !== 'LIVE' || currentTicker?.status === 'STALE' || activeTradeBlock === 'PRICE_STALE';
+  const isSymbolDisabled = Boolean(currentSymbolInfo && (currentSymbolInfo.enabled === false || (currentSymbolInfo as { status?: string }).status === 'DISABLED')) || activeTradeBlock === 'PAIR_DISABLED';
+
+  const blockReason = useMemo<string | null>(() => {
+    if (isTradingHalted) {
+      return 'Sàn giao dịch đang tạm dừng khẩn cấp';
+    }
+    if (isMarketDataStale || markPrice === null) {
+      return 'Dữ liệu thị trường bị gián đoạn';
+    }
+    if (isSymbolDisabled) {
+      return 'Cặp giao dịch đang tạm ngưng';
+    }
+    const minQtyStr = (currentSymbolInfo as { minQuantity?: string } | null)?.minQuantity || currentSymbolInfo?.minQty || '0.001';
+    const minNotionalStr = currentSymbolInfo?.minNotional || '5';
+
+    if (calculatedQty.gt(0)) {
+      if (calculatedQty.lt(dec(minQtyStr))) {
+        return `Khối lượng nhỏ hơn mức tối thiểu (${minQtyStr} ${baseAsset})`;
+      }
+      if (notionalValue.lt(dec(minNotionalStr))) {
+        return `Giá trị lệnh nhỏ hơn mức tối thiểu (${minNotionalStr} USDT)`;
+      }
+      if (isAuthenticated && totalCost.gt(futuresAvailable)) {
+        return `Cần thêm ~${formatDecimal(totalCost.sub(futuresAvailable).toString(), { decimals: 2 })} USDT (ký quỹ + phí)`;
+      }
+    }
+    return null;
+  }, [
+    isTradingHalted,
+    isMarketDataStale,
+    markPrice,
+    isSymbolDisabled,
+    currentSymbolInfo,
+    calculatedQty,
+    baseAsset,
+    notionalValue,
+    isAuthenticated,
+    totalCost,
+    futuresAvailable,
+  ]);
+
+  const isInsufficientBalanceBlock = useMemo(() => {
+    return isAuthenticated && calculatedQty.gt(0) && totalCost.gt(futuresAvailable);
+  }, [isAuthenticated, calculatedQty, totalCost, futuresAvailable]);
+
   // Submit Order (Open Long / Open Short)
   const handlePlaceOrder = async (orderSide: 'BUY' | 'SELL') => {
     if (!isAuthenticated) {
       onNavigate('/login');
+      return;
+    }
+    if (blockReason) {
+      toastError(blockReason);
       return;
     }
     if (calculatedQty.lte(0)) {
@@ -452,10 +562,35 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
       setConfirmOrderData(null);
       fetchData();
     } catch (err: unknown) {
-      if (err instanceof ApiError) {
-        toastError(getErrorMessage(err.code));
+      const isInsufficient = (err instanceof ApiError && err.code === 'INSUFFICIENT_BALANCE') ||
+        (typeof err === 'object' && err !== null && (err as { code?: string }).code === 'INSUFFICIENT_BALANCE');
+
+      const errMessage = formatApiError(err, 'Không thể gửi lệnh Futures.', undefined, {
+        needed: totalCost.gt(futuresAvailable) ? totalCost.sub(futuresAvailable).toString() : undefined,
+        currentNotional: formatDecimal(notionalValue.toString(), { decimals: 2 }),
+        baseAsset,
+        symbol,
+        side: orderSide,
+        available: futuresAvailable.toString(),
+        positionQty: currentPosition?.quantity,
+        openOrdersCount: openOrders.filter((o) => o.symbol === symbol).length,
+      });
+
+      if (isInsufficient) {
+        toastError(
+          <div className="flex flex-col gap-1.5 items-start">
+            <span>{errMessage}</span>
+            <button
+              type="button"
+              onClick={() => setTransferModalOpen(true)}
+              className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--accent,#818cf8)] underline hover:opacity-80 cursor-pointer"
+            >
+              Chuyển từ Spot
+            </button>
+          </div>
+        );
       } else {
-        toastError('Không thể gửi lệnh Futures.');
+        toastError(errMessage);
       }
     } finally {
       setSubmittingOrder(false);
@@ -474,11 +609,12 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
       setClosePositionModalOpen(false);
       fetchData();
     } catch (err: unknown) {
-      if (err instanceof ApiError) {
-        toastError(getErrorMessage(err.code));
-      } else {
-        toastError('Không thể đóng vị thế.');
-      }
+      toastError(formatApiError(err, 'Không thể đóng vị thế.', undefined, {
+        symbol: pos.symbol,
+        baseAsset,
+        positionQty: pos.quantity,
+        side: pos.side === 'LONG' ? 'SELL' : 'BUY',
+      }));
     }
   };
 
@@ -497,10 +633,31 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
       setAdjustMarginModalOpen(false);
       fetchData();
     } catch (err: unknown) {
-      if (err instanceof ApiError) {
-        toastError(getErrorMessage(err.code));
+      const isInsufficient = (err instanceof ApiError && err.code === 'INSUFFICIENT_BALANCE') ||
+        (typeof err === 'object' && err !== null && (err as { code?: string }).code === 'INSUFFICIENT_BALANCE');
+      const msg = formatApiError(err, 'Không thể điều chỉnh ký quỹ.', undefined, {
+        available: futuresAvailable.toString(),
+        symbol: adjustMarginPosition.symbol,
+        baseAsset,
+      });
+      if (isInsufficient) {
+        toastError(
+          <div className="flex flex-col gap-1.5 items-start">
+            <span>{msg}</span>
+            <button
+              type="button"
+              onClick={() => {
+                setTransferModalOpen(true);
+                setAdjustMarginModalOpen(false);
+              }}
+              className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--accent,#818cf8)] underline hover:opacity-80 cursor-pointer"
+            >
+              Chuyển từ Spot
+            </button>
+          </div>
+        );
       } else {
-        toastError('Không thể điều chỉnh ký quỹ.');
+        toastError(msg);
       }
     }
   };
@@ -520,15 +677,12 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
       setTpslModalOpen(false);
       fetchData();
     } catch (err: unknown) {
-      if (err instanceof ApiError) {
-        toastError(getErrorMessage(err.code));
-      } else {
-        toastError('Không thể lưu cài đặt TP/SL.');
-      }
+      toastError(formatApiError(err, 'Không thể lưu cài đặt TP/SL.', undefined, {
+        side: tpslPosition.side === 'LONG' ? 'BUY' : 'SELL',
+        symbol: tpslPosition.symbol,
+      }));
     }
   };
-
-  const currentPosition = positions.find((p) => p.symbol === symbol);
 
   return (
     <div className="flex flex-col min-h-[calc(100vh-56px)] bg-[var(--bg,#000000)] text-[var(--text,#f4f4f5)] text-xs select-none">
@@ -1304,6 +1458,7 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
               data-testid="futures-open-long"
               variant="buy"
               size="lg"
+              disabled={Boolean(blockReason) || submittingOrder}
               loading={submittingOrder}
               onClick={() => handlePlaceOrder('BUY')}
               className="py-3 font-bold text-sm tracking-wide"
@@ -1314,6 +1469,7 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
               data-testid="futures-open-short"
               variant="sell"
               size="lg"
+              disabled={Boolean(blockReason) || submittingOrder}
               loading={submittingOrder}
               onClick={() => handlePlaceOrder('SELL')}
               className="py-3 font-bold text-sm tracking-wide"
@@ -1321,6 +1477,24 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
               {currentPosition?.side === 'LONG' ? 'Đóng Long' : 'Mở Short'}
             </Button>
           </div>
+
+          {blockReason && (
+            <div
+              data-testid="futures-order-block-reason"
+              className="text-[var(--down,#f2475f)] text-[11px] mt-1.5 text-center flex items-center justify-center gap-1.5 flex-wrap"
+            >
+              <span>{blockReason}</span>
+              {isInsufficientBalanceBlock && (
+                <button
+                  type="button"
+                  onClick={() => setTransferModalOpen(true)}
+                  className="underline font-semibold hover:opacity-80 text-[var(--accent,#818cf8)] cursor-pointer"
+                >
+                  Chuyển từ Spot
+                </button>
+              )}
+            </div>
+          )}
 
           <div className="text-[10px] text-center text-[var(--color-text-muted,#6b7280)] mt-2">
             Futures: chưa có quy định thuế, không khấu trừ

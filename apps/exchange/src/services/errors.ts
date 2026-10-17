@@ -1,4 +1,6 @@
 import { ApiError, type ErrorCode } from '@cex/contracts';
+import { formatDecimal } from '@cex/ui';
+import { dec } from '@cex/core';
 
 /**
  * Mapping error codes from @cex/contracts to friendly Vietnamese messages.
@@ -24,7 +26,7 @@ export const ERROR_MESSAGES: Record<ErrorCode, string> = {
   // Exchange State
   TRADING_HALTED: 'Sàn giao dịch hiện đang tạm dừng hoạt động khẩn cấp.',
   SYMBOL_DISABLED: 'Cặp giao dịch đang tạm ngưng.',
-  MARKET_DATA_STALE: 'Dữ liệu thị trường hiện bị gián đoạn.',
+  MARKET_DATA_STALE: 'Dữ liệu thị trường hiện bị gián đoạn; tạm ngưng giao dịch.',
 
   // Order Validation
   INVALID_PRICE: 'Mức giá đặt lệnh không hợp lệ (phải lớn hơn 0).',
@@ -66,13 +68,26 @@ export function getErrorMessage(code: string, fallback = 'Đã có lỗi xảy r
   return (ERROR_MESSAGES as Record<string, string>)[code] || fallback;
 }
 
+export interface FormatApiErrorContext {
+  needed?: string;
+  currentNotional?: string;
+  maxQty?: string;
+  baseAsset?: string;
+  symbol?: string;
+  side?: 'BUY' | 'SELL';
+  positionQty?: string;
+  openOrdersCount?: number;
+  available?: string;
+}
+
 /**
  * Format structured ApiError with details into user-friendly Vietnamese messages.
  */
 export function formatApiError(
   err: unknown,
   fallback = 'Đã có lỗi xảy ra. Vui lòng thử lại.',
-  overrides?: Partial<Record<ErrorCode, string>>
+  overrides?: Partial<Record<ErrorCode, string>>,
+  context?: FormatApiErrorContext
 ): string {
   // Check for ApiError or duck-typed API error object
   const isApiErr = err instanceof ApiError || (typeof err === 'object' && err !== null && 'code' in err);
@@ -82,6 +97,95 @@ export function formatApiError(
 
     if (overrides && code in overrides && overrides[code]) {
       return overrides[code]!;
+    }
+
+    const details = apiErr.details;
+
+    if (code === 'INSUFFICIENT_BALANCE') {
+      if (details?.account === 'FUTURES') {
+        let needed: string | undefined;
+        if (context?.needed) {
+          needed = context.needed.includes(',') ? context.needed : formatDecimal(context.needed, { decimals: 2 });
+          if (needed === '—') needed = context.needed;
+        } else if (details.required != null && details.available != null) {
+          try {
+            const req = dec(String(details.required));
+            const avail = dec(String(details.available));
+            if (req.gt(avail)) {
+              needed = formatDecimal(req.sub(avail).toString(), { decimals: 2 });
+            }
+          } catch {
+            // ignore
+          }
+        }
+
+        let available: string | undefined;
+        if (context?.available != null) {
+          available = context.available.includes(',') ? context.available : formatDecimal(context.available, { decimals: 2 });
+          if (available === '—') available = context.available;
+        } else if (details.available != null) {
+          available = formatDecimal(String(details.available), { decimals: 2 });
+          if (available === '—') available = String(details.available);
+        }
+
+        return `Ví Futures không đủ USDT: cần thêm ~${needed ?? '...'} USDT (ký quỹ + phí). Khả dụng: ${available ?? '0'} USDT.`;
+      }
+    }
+
+    if (code === 'NOTIONAL_TOO_SMALL') {
+      const minNotional = details?.minNotional;
+      if (minNotional != null || context?.currentNotional) {
+        const minNotionalStr = minNotional != null ? String(minNotional) : '5';
+        const cur = context?.currentNotional ? ` (hiện ${context.currentNotional} USDT)` : '';
+        return `Giá trị lệnh tối thiểu ${minNotionalStr} USDT${cur}.`;
+      }
+    }
+
+    if (code === 'INVALID_LEVERAGE') {
+      const maxLeverage = details?.maxLeverage;
+      if (maxLeverage != null) {
+        return `Đòn bẩy tối đa của ${context?.symbol || 'cặp giao dịch'} là ${maxLeverage}x.`;
+      }
+    }
+
+    if (code === 'LEVERAGE_LOCKED') {
+      if (context && (context.positionQty !== undefined || context.openOrdersCount !== undefined || context.symbol !== undefined)) {
+        return `Không đổi được đòn bẩy khi còn vị thế ${context.positionQty || '0'} ${context.baseAsset || ''} hoặc ${context.openOrdersCount || 0} lệnh chờ trên ${context.symbol || ''}.`;
+      }
+      return 'Không đổi được đòn bẩy khi còn vị thế hoặc lệnh chờ trên cặp giao dịch này.';
+    }
+
+    if (code === 'INVALID_TPSL') {
+      const markPrice = details?.markPrice;
+      if (markPrice != null) {
+        const markPriceStr = String(markPrice);
+        if (context?.side === 'SELL') {
+          return `Chốt lời phải thấp hơn và cắt lỗ cao hơn giá mark ${markPriceStr}.`;
+        }
+        if (context?.side === 'BUY') {
+          return `Chốt lời phải cao hơn và cắt lỗ thấp hơn giá mark ${markPriceStr}.`;
+        }
+        return `Long: Chốt lời phải cao hơn và cắt lỗ thấp hơn giá mark ${markPriceStr} (Short: ngược lại).`;
+      }
+    }
+
+    if (code === 'INSUFFICIENT_LIQUIDITY') {
+      if (context?.maxQty) {
+        return `Sổ lệnh hiện chỉ khớp được khoảng ${context.maxQty} ${context.baseAsset || ''} — giảm khối lượng hoặc dùng lệnh Giới hạn.`;
+      }
+      return 'Thanh khoản sổ lệnh hiện tại không đủ để khớp lệnh thị trường này.';
+    }
+
+    if (code === 'MARKET_DATA_STALE') {
+      return 'Dữ liệu thị trường hiện bị gián đoạn; tạm ngưng giao dịch.';
+    }
+
+    if (code === 'TRADING_HALTED') {
+      return 'Sàn giao dịch hiện đang tạm dừng hoạt động khẩn cấp.';
+    }
+
+    if (code === 'SYMBOL_DISABLED') {
+      return 'Cặp giao dịch đang tạm ngưng.';
     }
 
     if (apiErr.code === 'INVALID_INVITE') {
@@ -125,8 +229,9 @@ export function formatApiError(
     return getErrorMessage(apiErr.code, fallback);
   }
 
-  // Network / fetch errors
+  // Network / fetch errors / general Error
   if (err instanceof Error) {
+    console.error(err);
     const msg = err.message || '';
     if (/failed to fetch/i.test(msg) || /network/i.test(msg) || err.name === 'TypeError') {
       return 'Không thể kết nối đến máy chủ. Vui lòng kiểm tra kết nối mạng và thử lại.';
@@ -135,7 +240,7 @@ export function formatApiError(
     if (/status of 5\d\d/i.test(msg) || /internal/i.test(msg)) {
       return 'Lỗi máy chủ nội bộ. Vui lòng thử lại sau.';
     }
-    return msg;
+    return `Không gửi được lệnh: ${msg}`;
   }
 
   return fallback;

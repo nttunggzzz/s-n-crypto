@@ -26,6 +26,7 @@ Thêm mọi `data-testid` mới vào `docs/antigravity/TESTIDS.md` (mục "Futur
 - Dùng `formatApiError(err, fallback, overrides)` trong `services/errors.ts`, bổ sung xử lý `details` cho các mã trên (một chỗ, dùng lại cho Futures và Spot).
 - **Kiểm trước khi gửi (client)**: nếu khối lượng < `minQty`, giá trị < `minNotional`, hoặc tổng chi phí (S-02) > khả dụng ví Futures thì **khóa nút Mở Long/Mở Short** và hiện lý do ngay dưới nút (`data-testid="futures-order-block-reason"`). Server vẫn là chuẩn: nếu server báo lỗi khác, hiện theo bảng trên.
 **Nghiệm thu:** ví Futures 100 USDT, đặt Long 1 BTC x10 → nút bị khóa, lý do "cần thêm … USDT"; bấm "Chuyển từ Spot" mở hộp chuyển tiền. Gửi TP sai phía → thông báo nói rõ chiều đúng.
+**Trạng thái:** Hoàn thành (Agent A — 2026-10-17). `formatApiError` hỗ trợ đầy đủ `details` và `context`, pre-flight check khóa nút và hiện `futures-order-block-reason` kèm link Chuyển từ Spot, `LEVERAGE_LOCKED` kèm nút Xem vị thế, unit test 17/17 passed, `tsc -p apps/exchange` 0 lỗi.
 
 ### S-02 · P1 · Futures: form không cho thấy phí, tổng chi phí, funding, khối lượng tối đa
 **File:** `FuturesPage.tsx:1280-1298` (hộp "Ký quỹ ban đầu / Giá thanh lý"), `:1508-1540` (hộp xác nhận).
