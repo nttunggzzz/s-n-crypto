@@ -30,6 +30,7 @@ import { inviteResolvers, mockConsumeInvite } from './invites.ts';
 import { phase26Resolvers } from './phase26.ts';
 import { journalResolvers } from './journal.ts';
 import { taxResolvers } from './tax.ts';
+import { accountStatsResolvers } from './accountStats.ts';
 import { newsResolvers } from './news.ts';
 import type { BinaryFile } from '../common.ts';
 const requireTradable = (symbol: string) => {
@@ -376,6 +377,7 @@ const resolvers: { [N in EndpointName]: Resolver<N> } = {
   ...inviteResolvers,
   ...journalResolvers,
   ...taxResolvers,
+  ...accountStatsResolvers,
   ...newsResolvers,
 
   markNotificationsRead: ({ body }) => {

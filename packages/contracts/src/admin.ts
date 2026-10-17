@@ -5,6 +5,7 @@ import { Balance, LedgerEntry, WalletAccount } from './wallet.ts';
 import { FuturesAccount, FuturesFees } from './futures.ts';
 import { DcaPlan, GridBot } from './bots.ts';
 import { TaxCategory } from './tax.ts';
+import { AccountTradingStats } from './accountStats.ts';
 
 /** Every admin action that changes data must say why (stored in the audit log). */
 export const Reason = z.string().trim().min(5, 'at least 5 characters').max(500);
@@ -58,6 +59,8 @@ export const AdminUserDetail = z.object({
   futures: FuturesAccount,
   bots: z.object({ runningGrid: z.number().int(), activeDca: z.number().int() }),
   tax: AdminUserTax,
+  /** Trading volume (today / 7d / 30d / this month / previous month) and tax withheld this and last month - the same numbers as `accountTradingStats` for this user (0.19.0). */
+  trading: AccountTradingStats,
 });
 export type AdminUserDetail = z.infer<typeof AdminUserDetail>;
 

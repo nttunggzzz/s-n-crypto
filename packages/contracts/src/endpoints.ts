@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { AdminInviteListQuery, CreatedInvite, CreateInviteRequest, Invite, InviteIdParam, PublicConfig } from './invites.ts';
 import { Empty, IsoDateTime, PaginationQuery, SymbolCode, paginated } from './common.ts';
 import { Me, Preferences, UpdatePreferencesRequest } from './account.ts';
+import { AccountTradingStats } from './accountStats.ts';
 import { LoginEvent, SecurityOverview, SetAntiPhishingRequest, UpdateProfileRequest } from './security.ts';
 import { PnlAnalysis, PnlQuery } from './analytics.ts';
 import { CreateDcaPlanRequest, DcaPlan, DcaPlanIdParam, DcaRun, GridBot, GridBotIdParam, GridBotParams, GridPreview, StopGridBotRequest, UpdateDcaPlanRequest } from './bots.ts';
@@ -277,6 +278,10 @@ export const endpoints = {
   listNotifications: ep({ method: 'GET', path: '/api/v1/notifications', auth: 'user', query: NotificationListQuery.extend(PaginationQuery.shape), response: paginated(Notification) }),
   unreadNotifications: ep({ method: 'GET', path: '/api/v1/notifications/unread-count', auth: 'user', response: UnreadCount }),
   markNotificationsRead: ep({ method: 'POST', path: '/api/v1/notifications/read', auth: 'user', body: MarkReadRequest, response: UnreadCount }),
+
+  // ---- profile numbers (0.19.0) — the user's own data only; see accountStats.ts
+  /** Own trading volume (today / 7d / 30d / this month / previous month, GMT+7, USDT) + tax already withheld this and last month. */
+  accountTradingStats: ep({ method: 'GET', path: '/api/v1/account/stats', auth: 'user', response: AccountTradingStats }),
 
   // ---- Vietnam tax (0.15.0, test exchange) — the user's own data only; see tax.ts
   /** Self-declared category (default INDIVIDUAL). No identity document. */

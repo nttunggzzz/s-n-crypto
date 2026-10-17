@@ -377,3 +377,28 @@ await api.adminNewsMacroEvents({ query: { from, to, code, importance } }); // { 
 
 **Mock:** 8 tin mẫu (có/không tone, `publishedAt: null`, tin vĩ mô chung `symbols: []`, 3 tin cùng `firstSeenAt`), 5 nguồn (LIVE, STALE, LIVE lag âm, lịch tĩnh LIVE, tắt), 3 sự kiện vĩ mô (CPI và FOMC mức HIGH sắp tới, PCE đã có `actual`);
 fixture `fixtureSnapshotNews`, `fixtureMacroEvents`, `fixtureAnalysisNewsContext` (tin hack trên BTCUSDT → `BLOCKED`). Dữ liệu mẫu có ngày cố định (tháng 10/2026): `adminNewsMacroEvents` không có `from`/`to` lấy 400 ngày từ lúc gọi nên có thể trống, hãy truyền khoảng ngày.
+
+## 17. Hồ sơ: khối lượng giao dịch và thuế đã khấu trừ trong tháng (v0.19.0)
+Người dùng xem số của chính mình ở trang hồ sơ; admin xem của người đang mở ở chi tiết người dùng. Cùng một kiểu `AccountTradingStats`, cùng một phép tính ở server.
+```ts
+const s = await api.accountTradingStats({});          // GET /api/v1/account/stats — chỉ của người đang đăng nhập, không có tham số
+const d = await api.adminGetUser({ params: { userId } }); // d.trading cùng kiểu (quyền users.read)
+s.volume.today.total        // USDT, chuỗi thập phân 8 chữ số
+s.volume.thisMonth.spot     // phần Spot;  .futures = phần Futures;  .fills = số lần khớp đã cộng
+s.tax.thisMonth             // { month: '2026-10', withheldCount, withheldAmount }
+```
+- **Khối lượng** = tổng giá trị (`quoteQty`) mọi lần khớp **của chính người dùng**, cả MUA và BÁN, đã gồm lệnh bot của họ. `volume.today / last7d / last30d / thisMonth / previousMonth`
+  mỗi mục có `spot`, `futures`, `total` (= spot + futures) và `fills`. Một lần khớp nằm trong mọi cửa sổ chứa nó, nên `today` ≤ `last7d` ≤ `last30d`.
+- **Giờ Việt Nam (GMT+7):** `today` từ 00:00 hôm nay; `last7d` = hôm nay + 6 ngày trước; `last30d` = hôm nay + 29 ngày trước; `thisMonth` từ 00:00 ngày 1 tháng này;
+  `previousMonth` = cả tháng dương lịch trước. Một lần khớp lúc 23:59:59,999 hôm qua **không** thuộc `today` nhưng thuộc `last7d`.
+- **Chỉ cộng cặp quote USDT.** Cặp Spot quote khác (hoặc cặp sàn không còn niêm yết) không bị đổi tỷ giá đoán: chúng đếm vào `excludedNonUsdtFills` (30 ngày gần nhất).
+  Khi số này > 0, ghi chú "chưa tính N lần khớp ở cặp không quote USDT"; sàn chỉ niêm yết cặp USDT thì luôn 0. Futures là hợp đồng USDT-margined nên cộng đủ.
+- **Thuế = đã khấu trừ** (thuế đã bị trừ vào tiền bán ngay lúc khớp), **không phải** số còn phải nộp: hiện nhãn "Thuế đã khấu trừ trong tháng", không viết "thuế phải nộp".
+  `tax.thisMonth` / `tax.previousMonth` chỉ khác `0` khi từng có lần bán Spot bị trích trong tháng đó (theo giờ GMT+7). `category = 'DOMESTIC_ORG'` tự kê khai nên không bị trích: hiện `0` và nói rõ lý do,
+  đừng viết "chưa phát sinh". `taxMode = 'OFF'` chỉ nghĩa là lần khớp mới không bị trích; tháng có bản ghi cũ vẫn hiện số cũ.
+- `asOf` là lúc server tính; số liệu luôn tính lại theo yêu cầu (không có cache). Không có dữ liệu thì là `"0.00000000"`/`0`, không phải `null` — người dùng chưa khớp lệnh nào thì thực sự bằng 0.
+- Trang admin dùng `trading.volume.previousMonth` cho "khối lượng tháng trước" và `trading.volume.last30d` / `thisMonth` cho các mốc còn lại.
+
+**Mock:** `accountTradingStats` tính từ kho mock (các lần khớp Spot và Futures của người dùng demo, bản ghi thuế): người dùng demo có 2 lệnh MUA ngày 9/10/2026 và 2 lệnh BÁN cũ (tháng 9 và tháng 8) nên
+số liệu phụ thuộc ngày hiện tại của máy bạn; đặt một lệnh khớp ngay trong mock thì khối lượng hôm nay tăng theo giá trị lệnh vừa khớp. Người dùng khác trong `adminGetUser` (mock) luôn là toàn số 0 vì mock không có lệnh của họ.
+Fixture tĩnh: `fixtureAccountTradingStats` (người dùng demo lúc 2026-10-09T03:00Z), `fixtureEmptyTradingStats()`.

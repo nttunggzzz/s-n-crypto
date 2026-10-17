@@ -4,6 +4,7 @@
  */
 import type { AdminAnnouncement, AnnouncementLevel, AssetTag, AuditLogEntry, AdminUserSummary } from '../index.ts';
 import { fixtureAdminUserDetail, fixtureLedger, fixtureOpenOrders, fixtureOrderHistory } from '../fixtures/index.ts';
+import { mockTradingStatsOf } from './accountStats.ts';
 import { MockError, mockMe, now, ok, requireStaff, requireUser, type Resolver } from './common.ts';
 import { mockStore, nextId } from './store.ts';
 
@@ -114,7 +115,7 @@ export const adminResolvers: { [N in AdminEndpoint]: Resolver<N> } = {
   adminGetUser: ({ params }) => {
     requireStaff('users.read');
     const u = findUser(params.userId!);
-    return { ...fixtureAdminUserDetail(u.id)!, user: u };
+    return { ...fixtureAdminUserDetail(u.id)!, user: u, trading: mockTradingStatsOf(u.id, Date.now()) };
   },
   adminUserOrders: ({ params, query }) => {
     requireStaff('users.read');
@@ -180,7 +181,8 @@ export const adminResolvers: { [N in AdminEndpoint]: Resolver<N> } = {
     const u = findUser(params.userId!);
     guardBot(u);
     audit({ action: 'ACCOUNT_RESET', targetType: 'USER', targetId: u.id, before: { note: 'balances and open orders before reset' }, after: { balances: [] }, reason: String(body.reason) });
-    return { ...fixtureAdminUserDetail(u.id)!, user: u, balances: [], totalValueUsdt: '0.00000000', unpricedAssets: [], openOrders: 0, faucetTotalClaimed: '0.00000000' };
+    // a reset closes nothing in the history: the user's past fills (and their volume) stay
+    return { ...fixtureAdminUserDetail(u.id)!, user: u, balances: [], totalValueUsdt: '0.00000000', unpricedAssets: [], openOrders: 0, faucetTotalClaimed: '0.00000000', trading: mockTradingStatsOf(u.id, Date.now()) };
   },
   adminGetSettings: () => (requireStaff('exchange.read'), mockStore.settings),
   adminUpdateSettings: ({ body }) => {
