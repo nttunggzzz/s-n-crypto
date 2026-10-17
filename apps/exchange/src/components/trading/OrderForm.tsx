@@ -265,7 +265,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({
     };
   }, [realtimeClient, isAuthenticated]);
 
-  const baseAsset = activeSymbolInfo?.baseAsset || 'COIN';
+  const baseAsset = activeSymbolInfo?.baseAsset || (symbol.endsWith('USDT') ? symbol.slice(0, -4) : symbol.replace(/USDT$/, '')) || 'BTC';
   const quoteAsset = activeSymbolInfo?.quoteAsset || 'USDT';
 
   const freeQuote = useMemo(() => {
@@ -279,16 +279,33 @@ export const OrderForm: React.FC<OrderFormProps> = ({
   const freeCoin = freeBase;
 
   // Percentage slider logic
-  const handlePercentClick = (percent: number) => {
+  const handlePercentClick = async (percent: number) => {
     setValidationError(null);
-    if (!activeSymbolInfo) return;
+    let symInfo = activeSymbolInfo;
+    if (!symInfo && exchangeInfo) {
+      symInfo = exchangeInfo.symbols.find((s) => s.symbol === symbol) || null;
+    }
+    if (!symInfo) {
+      try {
+        const info = await api.exchangeInfo();
+        symInfo = info.symbols.find((s) => s.symbol === symbol) || null;
+      } catch {}
+    }
+    const step = dec(symInfo?.stepSize || '0.0001');
 
     try {
       const pct = dec((percent / 100).toString());
-      const step = dec(activeSymbolInfo.stepSize);
 
       if (side === 'BUY') {
-        const availableUsdt = dec(freeQuote);
+        let curFreeQuote = freeQuote;
+        if (dec(curFreeQuote).lte(0) && isAuthenticated) {
+          try {
+            const b = await api.balances();
+            setBalances(b);
+            curFreeQuote = b.items.find((x) => x.asset === quoteAsset)?.available || '0';
+          } catch {}
+        }
+        const availableUsdt = dec(curFreeQuote);
         if (availableUsdt.lte(0)) return;
 
         if (orderType === 'MARKET' || orderType === 'STOP_MARKET' || orderType === 'TRAILING') {
@@ -310,8 +327,8 @@ export const OrderForm: React.FC<OrderFormProps> = ({
             return;
           }
           if (!price && activeTicker?.lastPrice) {
-            const snapped = activeSymbolInfo?.tickSize
-              ? floorToStep(dec(activeTicker.lastPrice), dec(activeSymbolInfo.tickSize)).toString()
+            const snapped = symInfo?.tickSize
+              ? floorToStep(dec(activeTicker.lastPrice), dec(symInfo.tickSize)).toString()
               : activeTicker.lastPrice;
             setPrice(snapped);
           }
@@ -322,7 +339,15 @@ export const OrderForm: React.FC<OrderFormProps> = ({
       } else {
         // SELL (N-05: switch to base coin input mode)
         setMarketInputMode('qty');
-        const availableCoin = dec(freeCoin);
+        let curFreeCoin = freeCoin;
+        if (dec(curFreeCoin).lte(0) && isAuthenticated) {
+          try {
+            const b = await api.balances();
+            setBalances(b);
+            curFreeCoin = b.items.find((x) => x.asset === baseAsset)?.available || '0';
+          } catch {}
+        }
+        const availableCoin = dec(curFreeCoin);
         if (availableCoin.lte(0)) return;
         const calculatedQty = floorToStep(availableCoin.mul(pct), step);
         setQuantity(calculatedQty.toString());
@@ -791,6 +816,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({
           onClick={() => {
             setSide('BUY');
             setMarketInputMode('quote');
+            setSliderValue(0);
           }}
           className={`py-2 rounded-[var(--radius-sm,4px)] font-bold text-xs transition-all duration-200 cursor-pointer active:scale-[0.98] ${
             side === 'BUY'
@@ -805,6 +831,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({
           onClick={() => {
             setSide('SELL');
             setMarketInputMode('qty');
+            setSliderValue(0);
           }}
           className={`py-2 rounded-[var(--radius-sm,4px)] font-bold text-xs transition-all duration-200 cursor-pointer active:scale-[0.98] ${
             side === 'SELL'
