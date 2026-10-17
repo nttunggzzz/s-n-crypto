@@ -106,4 +106,40 @@ Lưu lỗi → trả ngôi sao về trạng thái cũ + `toastError(formatApiErr
 **File:** `apps/exchange/src/pages/SettingsPage.tsx:524-537`. Chưa có tính năng → ẩn thẻ.
 
 ---
-Đợt 2 (sẽ gửi): S-1x hồ sơ người dùng — khối lượng giao dịch hôm nay/7 ngày, thuế đã khấu trừ tháng này (cần backend 0.19.0); trang chi tiết người dùng admin; các lỗi web admin.
+## Đợt 2 — hồ sơ người dùng, chi tiết người dùng admin, 2FA khi dev (cần `git merge main` để có contracts 0.20.0)
+
+### S-13 · P1 · Admin: bỏ đoán "localhost", dùng cờ của server
+**File:** `apps/admin/src/context/AuthContext.tsx:88-90` (commit `7179707`).
+- Chủ dự án quyết: **dev không cần 2FA** cho tới khi làm lại bảo mật. Server đã có cờ (contracts 0.19.0): `npm run dev` chạy với `STAFF_REQUIRE_2FA=false`, mọi endpoint staff chỉ kiểm vai trò + quyền. Production từ chối cờ này.
+- Sửa: xóa `isLocalhost`. Đọc `publicConfig().staffTwoFactorRequired` (đã có `ConfigContext`/gọi `publicConfig` lúc khởi động — dùng lại). Chỉ hiện màn "bắt buộc bật 2FA" khi `staffTwoFactorRequired === true && !user.twoFactorEnabled`. Khi cờ là `false`: hiện dải nhỏ trên cùng "Máy chủ dev: admin không yêu cầu 2FA" (`data-testid="admin-no-2fa-notice"`).
+- Thêm xử lý chung: lời gọi admin nào trả `TWO_FACTOR_REQUIRED` → chuyển sang màn 2FA (hướng dẫn bật 2FA rồi đăng nhập lại bằng 2FA), không hiện thành "không có quyền" hay danh sách trống.
+**Nghiệm thu:** `npm run dev` → admin chưa bật 2FA vào được và thấy dữ liệu. `npm run e2e` (server mặc định bắt 2FA) → staff chưa bật 2FA thấy `admin-2fa-required`.
+
+### S-14 · P1 · Hồ sơ: khối lượng giao dịch hôm nay / 7 ngày và thuế đã khấu trừ tháng này
+**File:** `apps/exchange/src/pages/SettingsPage.tsx:355+` (tab "Hồ sơ & Tài khoản").
+- Gọi `api.accountTradingStats()` (README hợp đồng mục 17). Thêm khối **"Hoạt động giao dịch"**:
+  | Ô | Nguồn | testid |
+  |---|---|---|
+  | Khối lượng hôm nay | `volume.today.total` USDT; dòng phụ "Spot X · Futures Y · N lần khớp" | `profile-volume-today` (`data-value`) |
+  | Khối lượng 7 ngày | `volume.last7d.*` | `profile-volume-7d` |
+  | Khối lượng 30 ngày | `volume.last30d.*` | `profile-volume-30d` |
+  | Thuế đã khấu trừ tháng {MM/YYYY} | `tax.thisMonth.withheldAmount` USDT + "{n} lần bán"; dòng phụ tháng trước | `profile-tax-month` (`data-value`) |
+- Chữ phải đúng nghĩa: thuế là **"đã khấu trừ"** (sàn trừ ngay khi bán), **không** viết "cần đóng" hay "phải nộp". Thêm câu nhỏ: "Thuế 0,1% được trừ thẳng vào tiền bán; bạn không cần nộp thêm (sàn thử nghiệm)." Khi `category = 'DOMESTIC_ORG'`: "Tổ chức trong nước tự kê khai — sàn không khấu trừ". Khi `taxMode = 'OFF'`: "Sàn đang tắt thuế".
+- `excludedNonUsdtFills > 0` → ghi chú "Chưa tính N lần khớp của cặp không phải USDT".
+- Có trạng thái tải / lỗi kèm "Thử lại"; không hiện 0 khi lỗi. Nút "Xem chi tiết thuế" → `/account/tax`.
+- Số tiền: `formatDecimal` (không `parseFloat`); khối lượng lớn dùng định dạng gọn có sẵn (`format.ts`).
+**Nghiệm thu:** mua 100 USDT BTC → `profile-volume-today` `data-value` = `quoteQty` của lần khớp. Thuế bật, bán → `profile-tax-month` = `Trade.tax`.
+
+### S-15 · P1 · Admin chi tiết người dùng: thuế, khối lượng, số dư, tài sản nắm giữ
+**File:** `apps/admin/src/pages/UserDetailPage.tsx:656-706` (tab số dư), phần đầu trang.
+- **Thẻ tóm tắt đầu trang** (luôn thấy, không phải bấm tab):
+  - Tổng tài sản: `detail.totalValueUsdt` USDT; nếu `unpricedAssets` không rỗng: "Chưa tính giá: X, Y" (`admin-unpriced-assets`).
+  - Ví Futures: `futures.equity` (null → "—"), `walletBalance`, ký quỹ vị thế + lệnh, PnL chưa thực hiện (null → "—", **không** `|| '0'` — xem AD-07).
+  - Khối lượng: hôm nay / 7 ngày / 30 ngày / **tháng trước** từ `detail.trading.volume` (Spot · Futures).
+  - Thuế: tháng này + tháng trước từ `detail.trading.tax`; tổng mọi thời gian `detail.tax.withheldTotal` (`admin-user-tax-total`); phân loại `detail.tax.category`.
+- **Tab Số dư = bảng tài sản nắm giữ:** mỗi dòng: coin, khả dụng, đang khóa, tổng, **giá trị USDT** (`Balance.valueUsdt`, null → "—"), **% danh mục**; sắp theo giá trị giảm dần; dòng cuối tổng.
+- Mọi số qua `formatDecimal`/`dec`; không cộng ở client những gì server đã trả tổng.
+**Nghiệm thu:** người dùng có BTC + USDT → bảng 2 dòng có giá trị và %, tổng = `totalValueUsdt`; `admin-user-tax-total` = `detail.tax.withheldTotal`.
+
+---
+Đợt 3: lỗi web admin — xem `PROMPT-18-web-admin.md`.
