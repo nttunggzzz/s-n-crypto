@@ -49,6 +49,7 @@ export const inviteResolvers: { [N in InviteEndpoint]: Resolver<N> } = {
     registration: mockStore.invites.registration,
     captchaSiteKey: null,
     emailVerificationRequired: true,
+    staffTwoFactorRequired: true,
     emailDelivery: 'log',
     marketFeed: mockStore.invites.marketFeed,
   }),

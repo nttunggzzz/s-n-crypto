@@ -214,6 +214,7 @@ saveTextFile(await api.exportLedger({ query: {} }), 'so-cai.csv');
   - `cfg.registration === 'INVITE_ONLY'` → form đăng ký có ô **Mã mời** (bắt buộc), điền sẵn từ `?invite=`.
   - `cfg.captchaSiteKey` → hiện Turnstile, gửi `captchaToken`.
   - `cfg.marketFeed === 'sim'` → banner "GIÁ GIẢ LẬP — không phải giá thị trường".
+  - `cfg.staffTwoFactorRequired` (v0.19.0) → app admin chỉ chặn nhân sự ở màn "bật 2FA" khi giá trị là `true`. `false` chỉ có trên server dev (`npm run dev`, quyết định của chủ dự án 2026-10-17); server production từ chối khởi động với cấu hình đó. Không đoán theo hostname.
 - Lỗi `INVALID_INVITE` → thông báo theo `details.reason`: thiếu mã / mã không đúng / mã hết hạn / mã đã dùng hết lượt / mã đã bị thu hồi.
 - Admin: trang "Mã mời" gồm danh sách (lọc trạng thái), tạo mới (người nhận, số lượt, số ngày) và thu hồi (lý do ≥ 5 ký tự).
   Sau khi tạo, **chỉ lúc đó** hiện mã + link kèm nút sao chép; đóng hộp là không xem lại được.

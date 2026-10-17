@@ -17,6 +17,11 @@ export const PublicConfig = z.object({
   captchaSiteKey: z.string().nullable(),
   emailVerificationRequired: z.boolean(),
   /**
+   * Admin area needs two-factor authentication (staff endpoints answer TWO_FACTOR_REQUIRED without it). false only on a
+   * development server: the admin app must then NOT block staff on the "enable 2FA" screen (never guess from the hostname).
+   */
+  staffTwoFactorRequired: z.boolean(),
+  /**
    * What the server does with the emails it "sends" (verification, password reset, new-device alerts):
    * "sent" = delivered to the user's inbox; "log" = only written to the server log / a test outbox (dev, e2e,
    * or a closed server before a mail domain exists). With "log", do not tell users "email sent" —

@@ -1,5 +1,12 @@
 # Changelog — @cex/contracts
 
+## 0.19.0 — 2026-10-17 (Admin không cần 2FA trên server dev)
+Chỉ thêm trường; không thêm endpoint.
+
+**Thêm**
+- `PublicConfig.staffTwoFactorRequired` (boolean). Server đặt bằng `STAFF_REQUIRE_2FA` (mặc định `true`). `false` = endpoint staff chỉ kiểm vai trò + quyền, không cần 2FA. Chỉ dùng ở dev (`npm run dev` bật mặc định cho tới khi làm lại phần bảo mật); production từ chối khởi động với `false`.
+- App admin: thay kiểm tra `window.location.hostname === 'localhost'` bằng `publicConfig().staffTwoFactorRequired`.
+
 ## 0.18.0 — 2026-10-15 (Thuế — hiện thuế trong phân tích lãi lỗ và trong chi tiết người dùng của admin)
 Chỉ thêm trường; không thêm endpoint (vẫn 153). Hướng dẫn: README mục 15.
 

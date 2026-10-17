@@ -55,7 +55,7 @@ host/ host-data/     (git bỏ qua) bản sàn đang chạy cho người dùng t
 npm install
 npm run db:start      # PostgreSQL nhúng :5433 (dữ liệu ở .pgdata) + migrate
 npm run dev:server    # API :8080, đọc .env (copy từ .env.example)
-npm test              # vitest — tự bật PostgreSQL thật trên :5434
+npm test              # vitest — tự bật PostgreSQL thật trên :5434 (chạy song song nhiều thư mục: đặt CEX_TEST_DB_PORT khác nhau, vd 5444)
 npx vitest run -c vitest.unit.config.ts [packages/core]   # chỉ test thuần packages/*, không dựng DB — chạy song song được giữa các worktree
 npm run typecheck     # mọi workspace có tsconfig (core, contracts, server, và ui/apps khi đã gộp)
 npm run db:generate   # sau khi sửa server/src/db/schema.ts
@@ -65,6 +65,7 @@ npm run dev           # cả hệ thống: DB + server + mọi app trong apps/* 
 npm run dev -- --sim  # như trên nhưng giá GIẢ LẬP (không cần Binance: offline, test e2e, CI)
                       # dev mặc định KHÔNG bắt xác minh email (dev không gửi email thật); `-- --verify-email` để thử luồng thật (link nằm ở log [server], dòng "EMAIL (log transport");
                       #   quyết định trong shell hoặc .env (REQUIRE_EMAIL_VERIFICATION) luôn thắng
+                      # dev mặc định admin KHÔNG cần 2FA (STAFF_REQUIRE_2FA=false, chủ dự án quyết 2026-10-17 tới khi làm lại bảo mật); `-- --with-2fa` để bật; production từ chối false
 npm run verify        # cổng gộp main: typecheck mọi workspace (cả UI) + lint + test + build app + báo cáo API app chưa dùng
 npm run lint          # ESLint: backend/contracts/core/infra/e2e lỗi là chặn; apps/*, packages/ui chỉ cảnh báo
 npm run ui-coverage   # endpoint nào backend có mà app chưa gọi (--strict: thiếu là lỗi)
@@ -100,7 +101,7 @@ Hiện tại (chưa thuê Railway) sàn chạy trên máy chủ dự án: [docs/
 10. Không báo "xong/PASSED" khi chưa chạy test thật; ghi rõ lệnh đã chạy và kết quả.
 11. **OCO**: tiền khóa nằm trên **đúng một** chân đang sống (chân LIMIT; khi chân STOP kích hoạt thì chuyển sang chân STOP). Mọi thao tác trên một chân phải khóa **cả nhóm** qua `lockGroup()` theo thứ tự id.
 12. Mọi thay đổi trạng thái lệnh chạy trong `commit()` của OrderService: chỉ mục trong bộ nhớ + sự kiện realtime chỉ áp dụng **sau khi** transaction commit (`Outcome`).
-13. **Admin**: quyền khai báo ở `packages/contracts/src/permissions.ts`; endpoint `auth: 'staff'` cần vai trò staff + 2FA bật + phiên đăng nhập bằng 2FA (`sessions.mfa_verified`) + `permission`. Mọi thay đổi admin ghi `writeAudit()` **trong cùng transaction**; tài khoản bot không ai sửa được.
+13. **Admin**: quyền khai báo ở `packages/contracts/src/permissions.ts`; endpoint `auth: 'staff'` cần vai trò staff + 2FA bật + phiên đăng nhập bằng 2FA (`sessions.mfa_verified`) + `permission` (chỉ server dev được tắt 2FA bằng `STAFF_REQUIRE_2FA=false`; production từ chối). Mọi thay đổi admin ghi `writeAudit()` **trong cùng transaction**; tài khoản bot không ai sửa được.
 14. **Database phải là UTF8** (tiếng Việt). Script PostgreSQL nhúng tự tạo UTF8 và từ chối DB khác bảng mã.
 15. **Khớp lệnh chỉ dùng 20 mức realtime** (`MarketDataService`). Sổ lệnh sâu (`DepthSnapshots`, REST) và sparkline chỉ để **hiển thị**,
     có cache + giới hạn trọng số Binance (tổng IP 6000/phút; sổ lệnh sâu ≤ 1200). Không gọi REST Binance trong đường khớp lệnh.

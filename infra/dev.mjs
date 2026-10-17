@@ -7,7 +7,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import net from 'node:net';
 import path from 'node:path';
-import { devEmailEnv } from './devEmailEnv.mjs';
+import { devEmailEnv, devStaff2faEnv } from './devEmailEnv.mjs';
 import { ROOT, run, workspaces } from './workspaces.mjs';
 
 // In dev each app has its own Vite server, so links between the exchange and the admin app need the
@@ -51,6 +51,11 @@ const { env: devEnv, required } = devEmailEnv({
   env: process.env,
   envFileText: existsSync(envFile) ? readFileSync(envFile, 'utf8') : undefined,
 });
+const staff2fa = devStaff2faEnv({
+  argv: process.argv,
+  env: process.env,
+  envFileText: existsSync(envFile) ? readFileSync(envFile, 'utf8') : undefined,
+});
 const emailNote = required
   ? 'email verification REQUIRED (emails are only logged: look for "EMAIL (log transport" in the [server] lines for the link)'
   : 'email verification off';
@@ -58,7 +63,7 @@ const emailNote = required
 void run('npm', ['run', 'db:start'], { prefix: '[db]     ', onSpawn: track });
 await waitForPort(5433);
 const sim = process.argv.includes('--sim');
-void run('npm', ['run', 'dev:server'], { prefix: '[server] ', onSpawn: track, env: { ...devEnv, ...(sim ? { MARKET_FEED: 'sim' } : {}) } });
+void run('npm', ['run', 'dev:server'], { prefix: '[server] ', onSpawn: track, env: { ...devEnv, ...staff2fa.env, ...(sim ? { MARKET_FEED: 'sim' } : {}) } });
 await waitForPort(8080);
 
 if (!process.argv.includes('--no-apps')) {
@@ -68,4 +73,4 @@ if (!process.argv.includes('--no-apps')) {
     void run('npm', ['run', 'dev', '-w', pkg.name], { prefix: `[${dir.split('/')[1]}] `.padEnd(9), env: { VITE_USE_MOCKS: 'false', ...DEV_ORIGINS }, onSpawn: track });
   }
 }
-process.stdout.write(`[dev]    API http://localhost:8080 · WebSocket ws://localhost:8080/ws · prices: ${sim ? 'SYNTHETIC (--sim)' : 'Binance'} · ${emailNote} · Ctrl+C to stop\n`);
+process.stdout.write(`[dev]    API http://localhost:8080 · WebSocket ws://localhost:8080/ws · prices: ${sim ? 'SYNTHETIC (--sim)' : 'Binance'} · ${emailNote} · admin 2FA ${staff2fa.required ? 'required' : 'OFF (dev only; --with-2fa to require it)'} · Ctrl+C to stop\n`);

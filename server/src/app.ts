@@ -72,7 +72,7 @@ export function createApp(deps: AppDeps) {
   const { config } = deps;
   const app = express();
   const origins = allowedOrigins(config);
-  const opts: RouteOptions = { requireEmailVerification: config.REQUIRE_EMAIL_VERIFICATION, validateResponses: !config.isProd };
+  const opts: RouteOptions = { requireEmailVerification: config.REQUIRE_EMAIL_VERIFICATION, staffRequire2fa: config.STAFF_REQUIRE_2FA, validateResponses: !config.isProd };
 
   app.disable('x-powered-by');
   app.set('trust proxy', 1); // Railway / Cloudflare in front
@@ -135,6 +135,7 @@ export function createApp(deps: AppDeps) {
     registration: config.REGISTRATION === 'invite' ? ('INVITE_ONLY' as const) : ('OPEN' as const),
     captchaSiteKey: config.TURNSTILE_SITE_KEY || null,
     emailVerificationRequired: config.REQUIRE_EMAIL_VERIFICATION,
+    staffTwoFactorRequired: config.STAFF_REQUIRE_2FA,
     emailDelivery: config.EMAIL_TRANSPORT === 'resend' ? ('sent' as const) : ('log' as const),
     marketFeed: config.MARKET_FEED,
   }));
