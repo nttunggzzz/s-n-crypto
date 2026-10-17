@@ -59,6 +59,7 @@ Thêm mọi `data-testid` mới vào `docs/antigravity/TESTIDS.md` (mục "Futur
   Tỉ lệ lấy từ `exchange:status`/`exchangeInfo.taxRate` (đã có `formattedTaxRatePercent`), không hard-code.
 - Hộp **Xác nhận đặt lệnh**: thêm dòng thuế như trên, và với BÁN thêm "Thực nhận ước tính". Giữ `data-testid` cũ (`tax-*`) — test e2e thuế đang dựa vào chúng.
 **Nghiệm thu:** thuế bật → form MUA có `spot-tax-line` "0 — chỉ khấu trừ khi bán"; form BÁN vẫn có `tax-breakdown`; thuế tắt → "không áp dụng". Spec `tax.spec.ts` vẫn xanh.
+**Trạng thái:** Hoàn thành (Agent C — 2026-10-17). Đã cập nhật dòng phí hiển thị tỷ lệ thực tế `Phí giao dịch (${formattedFeeRatePercent}):`, bổ sung dòng `spot-tax-line` cho cả tab MUA và BÁN theo đúng trạng thái taxMode (`OFF` / `WITHHOLD` / `DOMESTIC_ORG` / ước tính khi chưa nhập khối lượng), giữ nguyên vẹn khối `tax-breakdown` và gắn `spot-tax-line` cho dòng thuế, đồng bộ sang hộp Xác nhận đặt lệnh kèm dòng `Thực nhận ước tính` cho lệnh BÁN, cập nhật `TESTIDS.md`, `tsc -p apps/exchange` 0 lỗi.
 
 ### S-04 · P3 · Bỏ dòng "SÀN MÔ PHỎNG SPOT — TIỀN ẢO …"
 **File:** `packages/ui/src/TradingBadges.tsx:144-151` (nhánh không tạm dừng của `SimulatedBanner`), `apps/exchange/src/App.tsx:110`.

@@ -105,6 +105,7 @@ export const AccountTaxPage: React.FC<AccountTaxPageProps> = ({ onNavigate }) =>
     try {
       const updated = await api.taxUpdateProfile({ body: { category: newCategory } });
       setProfile(updated);
+      window.dispatchEvent(new CustomEvent('cex:tax-profile-updated'));
       success('Đã cập nhật phân loại người nộp thuế thành công.');
       await loadTaxData(selectedYear);
     } catch (err: unknown) {

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import type { Balances, OrderSide, TimeInForce, PlaceOrderRequest, PlaceOcoRequest } from '@cex/contracts';
+import type { Balances, OrderSide, TimeInForce, PlaceOrderRequest, PlaceOcoRequest, TaxCategory } from '@cex/contracts';
 import { ApiError } from '@cex/contracts';
 import {
   dec,
@@ -187,6 +187,39 @@ export const OrderForm: React.FC<OrderFormProps> = ({
     }
   }, [isAuthenticated, api]);
 
+  // Load taxpayer category (Module T)
+  const [taxCategory, setTaxCategory] = useState<TaxCategory>('INDIVIDUAL');
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setTaxCategory('INDIVIDUAL');
+      return;
+    }
+    let cancelled = false;
+    const loadProfile = () => {
+      api.taxProfile()
+        .then((p) => {
+          if (!cancelled && p?.category) {
+            setTaxCategory(p.category);
+          }
+        })
+        .catch(() => {});
+    };
+    loadProfile();
+
+    const handleTaxProfileUpdated = () => {
+      loadProfile();
+    };
+    window.addEventListener('cex:tax-profile-updated', handleTaxProfileUpdated);
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener('cex:tax-profile-updated', handleTaxProfileUpdated);
+    };
+  }, [isAuthenticated, api]);
+
+  const isDomesticOrg = taxCategory === 'DOMESTIC_ORG';
+
   // Load user balances
   const fetchBalances = async () => {
     if (!isAuthenticated) return;
@@ -353,6 +386,17 @@ export const OrderForm: React.FC<OrderFormProps> = ({
     return null;
   }, [stopPrice, activeTicker]);
 
+  // Fee rate & formatted percentage
+  const effectiveFeeRate = (exchangeInfo as any)?.makerFeeRate ?? (exchangeInfo as any)?.takerFeeRate ?? exchangeInfo?.feeRate ?? '0.001';
+
+  const formattedFeeRatePercent = useMemo(() => {
+    try {
+      return `${formatDecimal(dec(effectiveFeeRate).mul(100).toString(), { locale: 'vi', trimTrailingZeros: true })}%`;
+    } catch {
+      return '0,1%';
+    }
+  }, [effectiveFeeRate]);
+
   // Risk calculation result
   const riskResult = useMemo(() => {
     if (!showRiskCalc || !riskEntryPrice || !riskStopPrice || !activeSymbolInfo) return null;
@@ -362,7 +406,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({
       const rp = dec(riskPercent);
       const eq = dec(freeQuote);
       const step = dec(activeSymbolInfo.stepSize);
-      const fee = exchangeInfo?.feeRate ? dec(exchangeInfo.feeRate) : ZERO;
+      const fee = effectiveFeeRate ? dec(effectiveFeeRate) : ZERO;
 
       if (ep.gt(0) && sp.gt(0) && sp.lt(ep) && rp.gt(0) && eq.gt(0)) {
         return positionSizeForRisk({
@@ -376,14 +420,14 @@ export const OrderForm: React.FC<OrderFormProps> = ({
       }
     } catch {}
     return null;
-  }, [showRiskCalc, riskEntryPrice, riskStopPrice, riskPercent, freeQuote, activeSymbolInfo, exchangeInfo]);
+  }, [showRiskCalc, riskEntryPrice, riskStopPrice, riskPercent, freeQuote, activeSymbolInfo, effectiveFeeRate]);
 
   // Estimated fee
   const estimatedFee = useMemo(() => {
-    if (!exchangeInfo?.feeRate) return '—';
+    if (!effectiveFeeRate) return '—';
     if (!quantity && !quoteOrderQty) return '—';
     try {
-      const rate = dec(exchangeInfo.feeRate);
+      const rate = dec(effectiveFeeRate);
       if (side === 'BUY') {
         if ((orderType === 'MARKET' || orderType === 'STOP_MARKET' || orderType === 'TRAILING') && quoteOrderQty) {
           const p = activeTicker?.lastPrice ? dec(activeTicker.lastPrice) : null;
@@ -404,25 +448,24 @@ export const OrderForm: React.FC<OrderFormProps> = ({
       }
     } catch {}
     return '—';
-  }, [exchangeInfo, side, orderType, quoteOrderQty, quantity, price, activeTicker]);
+  }, [effectiveFeeRate, side, orderType, quoteOrderQty, quantity, price, activeTicker]);
 
   // Vietnam Tax calculation (Module T)
   const taxMode = exchangeStatus?.taxMode ?? exchangeInfo?.taxMode ?? 'OFF';
-  const taxRate = exchangeStatus?.taxRate ?? exchangeInfo?.taxRate ?? null;
+  const taxRate = exchangeStatus?.taxRate ?? exchangeInfo?.taxRate ?? '0.001';
   const taxVndRate = exchangeStatus ? exchangeStatus.taxVndRate : (exchangeInfo?.taxVndRate ?? null);
-  const feeRate = exchangeInfo?.feeRate ?? null;
+  const feeRate = effectiveFeeRate;
 
   const formattedTaxRatePercent = useMemo(() => {
-    if (!taxRate) return '—';
     try {
       return `${formatDecimal(dec(taxRate).mul(100).toString(), { locale: 'vi', trimTrailingZeros: true })}%`;
     } catch {
-      return '—';
+      return '0,1%';
     }
   }, [taxRate]);
 
   const taxCalculation = useMemo(() => {
-    if (side !== 'SELL' || taxMode !== 'WITHHOLD') return null;
+    if (side !== 'SELL' || taxMode !== 'WITHHOLD' || isDomesticOrg) return null;
     if (!quantity || !activeSymbolInfo || !feeRate || !taxRate) return null;
     try {
       const q = dec(quantity);
@@ -462,7 +505,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({
     } catch {
       return null;
     }
-  }, [side, taxMode, quantity, price, orderType, activeTicker?.lastPrice, activeSymbolInfo, feeRate, taxRate, taxVndRate]);
+  }, [side, taxMode, isDomesticOrg, quantity, price, orderType, activeTicker?.lastPrice, activeSymbolInfo, feeRate, taxRate, taxVndRate]);
 
   // Real order dispatching
   const dispatchOrder = async (orderPayload: OrderPayload) => {
@@ -1184,7 +1227,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({
         )}
 
         {/* Vietnam Tax Breakdown (Module T) */}
-        {side === 'SELL' && taxMode === 'WITHHOLD' && taxCalculation ? (
+        {side === 'SELL' && taxMode === 'WITHHOLD' && !isDomesticOrg && taxCalculation ? (
           <div
             data-testid="tax-breakdown"
             className="p-2.5 rounded-[var(--radius-sm,4px)] bg-[var(--color-bg-secondary,#16181d)] border border-[var(--color-border,#242731)] flex flex-col gap-1.5 text-[11px]"
@@ -1217,7 +1260,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({
             </div>
 
             <div className="flex items-center justify-between text-[var(--color-text-muted,#6b7280)]">
-              <span>Phí ước tính:</span>
+              <span>Phí ước tính ({formattedFeeRatePercent}):</span>
               <span
                 data-testid="tax-fee"
                 data-value={taxCalculation.fee.toString()}
@@ -1227,7 +1270,10 @@ export const OrderForm: React.FC<OrderFormProps> = ({
               </span>
             </div>
 
-            <div className="flex items-center justify-between text-[var(--color-text-muted,#6b7280)]">
+            <div
+              data-testid="spot-tax-line"
+              className="flex items-center justify-between text-[var(--color-text-muted,#6b7280)]"
+            >
               <span className="flex items-center gap-1">
                 Thuế ước tính (<span data-testid="tax-rate-label">{formattedTaxRatePercent}</span>):
                 <span
@@ -1271,12 +1317,43 @@ export const OrderForm: React.FC<OrderFormProps> = ({
             </div>
           </div>
         ) : (
-          /* Estimated Fee info */
-          <div className="flex items-center justify-between text-[11px] text-[var(--color-text-muted,#6b7280)]">
-            <span>Phí giao dịch (ước tính):</span>
-            <span className="font-mono text-[var(--color-text-secondary,#9ca3af)]">
-              ~{estimatedFee} {side === 'BUY' ? baseAsset : 'USDT'}
-            </span>
+          /* Estimated Fee & Tax info */
+          <div className="flex flex-col gap-1.5 text-[11px] text-[var(--color-text-muted,#6b7280)]">
+            <div className="flex items-center justify-between">
+              <span>Phí giao dịch ({formattedFeeRatePercent}):</span>
+              <span className="font-mono text-[var(--color-text-secondary,#9ca3af)]">
+                ~{estimatedFee} {side === 'BUY' ? baseAsset : quoteAsset}
+              </span>
+            </div>
+            {side === 'BUY' ? (
+              <div data-testid="spot-tax-line" className="flex items-center justify-between">
+                <span>Thuế ({formattedTaxRatePercent}):</span>
+                <span className="font-mono text-[var(--color-text-secondary,#9ca3af)]">
+                  0 — chỉ khấu trừ khi bán
+                </span>
+              </div>
+            ) : taxMode === 'OFF' ? (
+              <div data-testid="spot-tax-line" className="flex items-center justify-between">
+                <span>Thuế:</span>
+                <span className="font-mono text-[var(--color-text-secondary,#9ca3af)]">
+                  không áp dụng (sàn đang tắt)
+                </span>
+              </div>
+            ) : isDomesticOrg ? (
+              <div data-testid="spot-tax-line" className="flex items-center justify-between">
+                <span>Thuế:</span>
+                <span className="font-mono text-[var(--color-text-secondary,#9ca3af)]">
+                  0 — tổ chức trong nước tự kê khai
+                </span>
+              </div>
+            ) : (
+              <div data-testid="spot-tax-line" className="flex items-center justify-between">
+                <span>Thuế ({formattedTaxRatePercent}):</span>
+                <span className="font-mono text-[var(--color-text-secondary,#9ca3af)]">
+                  ước tính khi nhập khối lượng
+                </span>
+              </div>
+            )}
           </div>
         )}
 
@@ -1398,9 +1475,54 @@ export const OrderForm: React.FC<OrderFormProps> = ({
             )}
 
             <div className="flex items-center justify-between text-[11px] text-[var(--color-text-muted,#6b7280)] mt-1">
-              <span>Phí ước tính:</span>
-              <span className="font-mono">~{estimatedFee} {side === 'BUY' ? baseAsset : 'USDT'}</span>
+              <span>Phí giao dịch ({formattedFeeRatePercent}):</span>
+              <span className="font-mono">~{estimatedFee} {side === 'BUY' ? baseAsset : quoteAsset}</span>
             </div>
+
+            {side === 'BUY' ? (
+              <div data-testid="spot-tax-line" className="flex items-center justify-between text-[11px] text-[var(--color-text-muted,#6b7280)]">
+                <span>Thuế ({formattedTaxRatePercent}):</span>
+                <span className="font-mono text-[var(--color-text-secondary,#9ca3af)]">
+                  0 — chỉ khấu trừ khi bán
+                </span>
+              </div>
+            ) : taxMode === 'OFF' ? (
+              <div data-testid="spot-tax-line" className="flex items-center justify-between text-[11px] text-[var(--color-text-muted,#6b7280)]">
+                <span>Thuế:</span>
+                <span className="font-mono text-[var(--color-text-secondary,#9ca3af)]">
+                  không áp dụng (sàn đang tắt)
+                </span>
+              </div>
+            ) : isDomesticOrg ? (
+              <div data-testid="spot-tax-line" className="flex items-center justify-between text-[11px] text-[var(--color-text-muted,#6b7280)]">
+                <span>Thuế:</span>
+                <span className="font-mono text-[var(--color-text-secondary,#9ca3af)]">
+                  0 — tổ chức trong nước tự kê khai
+                </span>
+              </div>
+            ) : taxCalculation ? (
+              <>
+                <div data-testid="spot-tax-line" className="flex items-center justify-between text-[11px] text-[var(--color-text-muted,#6b7280)]">
+                  <span>Thuế ({formattedTaxRatePercent}):</span>
+                  <span className="font-mono text-amber-400 font-medium">
+                    {formatDecimal(taxCalculation.tax.toString(), { decimals: 8 })} {quoteAsset}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-[11px] font-medium pt-1 border-t border-[var(--color-border-subtle,#1e212b)]">
+                  <span className="text-[var(--color-text,#e5e7eb)]">Thực nhận ước tính:</span>
+                  <span className="font-mono text-[var(--color-buy,#34d399)]">
+                    {formatDecimal(taxCalculation.net.toString(), { decimals: 8 })} {quoteAsset}
+                  </span>
+                </div>
+              </>
+            ) : (
+              <div data-testid="spot-tax-line" className="flex items-center justify-between text-[11px] text-[var(--color-text-muted,#6b7280)]">
+                <span>Thuế ({formattedTaxRatePercent}):</span>
+                <span className="font-mono text-[var(--color-text-secondary,#9ca3af)]">
+                  ước tính khi nhập khối lượng
+                </span>
+              </div>
+            )}
 
             <div className="grid grid-cols-2 gap-2 mt-3 pt-3 border-t border-[var(--color-border-subtle,#1e212b)]">
               <Button

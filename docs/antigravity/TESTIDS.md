@@ -121,6 +121,7 @@ Sàn thử nghiệm: mọi màn thuế có nhãn "thử nghiệm", không dùng 
 | `tax-net` | trong `tax-breakdown` | Thực nhận ước tính = gộp − phí − thuế, `data-value` |
 | `tax-vnd` | trong `tax-breakdown` | Quy đổi VND của thuế, `data-value` = `roundUp(thuế × taxVndRate, 0)`. **Không có** khi `taxVndRate = null` |
 | `tax-test-label` | trong `tax-breakdown` | Nhãn "thử nghiệm" |
+| `spot-tax-line` | dưới phí ước tính trên form Spot (hoặc dòng thuế trong `tax-breakdown`), và trong hộp xác nhận đặt lệnh | Dòng hiển thị thuế: MUA hiện "0 — chỉ khấu trừ khi bán"; BÁN hiện thuế ước tính (hoặc "không áp dụng" khi OFF, "0 — tổ chức trong nước tự kê khai" khi DOMESTIC_ORG, hoặc ước tính khi nhập khối lượng) |
 
 **Bảng Lịch sử khớp lệnh (`apps/exchange`, `/trade/:symbol`)**
 | id | Ở đâu | Nội dung |
