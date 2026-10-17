@@ -9,6 +9,7 @@ Test nằm ở `e2e/tests/*.spec.ts` — đọc test để biết chính xác lu
 |---|---|---|
 | `order-confirm` | Nút xác nhận trong hộp "Xác nhận đặt lệnh" (Spot **và** Futures) | Hộp này hiện khi `preferences.confirmOrders` bật (mặc định bật) |
 | `bot-confirm` | Nút xác nhận trong hộp tóm tắt trước khi tạo bot lưới / kế hoạch mua định kỳ | Bot dùng tiền thật trong ví ảo → luôn hỏi lại |
+| `header-theme-toggle` | Nút chuyển đổi giao diện sáng/tối trên Header (S-05) | Thuộc tính đổi Moon/Sun, đổi data-theme |
 
 ## Trang Giao dịch Spot (`/trade/:symbol`) — `bots.spec.ts`
 | id | Phần tử |

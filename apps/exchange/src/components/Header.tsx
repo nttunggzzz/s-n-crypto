@@ -8,7 +8,7 @@ import { getApiClient } from '../services/api.ts';
 import { NotificationCenter } from './NotificationCenter.tsx';
 import { AvatarIcon } from './AvatarIcon.tsx';
 import { 
-  Search, Moon, Globe, ChevronDown, 
+  Search, Moon, Sun, ChevronDown, 
   Wallet, History, CreditCard, Settings, Shield, LogOut, Copy, LayoutPanelLeft, User, X,
   Bot, BarChart2, LayoutDashboard, Receipt
 } from 'lucide-react';
@@ -31,6 +31,38 @@ export const Header: React.FC<HeaderProps> = ({ currentPath, onNavigate }) => {
   });
   const [totalEstimatedUsdt, setTotalEstimatedUsdt] = useState<string | null>(null);
   const api = getApiClient();
+
+  const [currentTheme, setCurrentTheme] = useState<'dark' | 'light'>(() => {
+    if (typeof document !== 'undefined') {
+      const docTheme = document.documentElement.getAttribute('data-theme');
+      if (docTheme === 'light' || docTheme === 'dark') return docTheme;
+    }
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('cex_theme');
+      if (saved === 'light' || saved === 'dark') return saved;
+    }
+    return 'dark';
+  });
+
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      const t = document.documentElement.getAttribute('data-theme');
+      if (t === 'light' || t === 'dark') setCurrentTheme(t);
+    });
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+    return () => observer.disconnect();
+  }, []);
+
+  const handleToggleTheme = () => {
+    const nextTheme = currentTheme === 'dark' ? 'light' : 'dark';
+    setCurrentTheme(nextTheme);
+    localStorage.setItem('cex_theme', nextTheme);
+    document.documentElement.setAttribute('data-theme', nextTheme);
+    if (isAuthenticated) {
+      api.updatePreferences({ body: { theme: nextTheme } }).catch(() => {});
+    }
+    success(`Đã chuyển sang giao diện ${nextTheme === 'dark' ? 'Tối' : 'Sáng'}.`);
+  };
 
   useEffect(() => {
     if (user?.emailVerified) {
@@ -341,18 +373,23 @@ export const Header: React.FC<HeaderProps> = ({ currentPath, onNavigate }) => {
               </div>
             )}
 
-            {/* Dev Tools & Theme/Lang (Minimal) */}
+            {/* Dev Tools & Theme (Minimal) */}
             <div className="hidden sm:flex items-center gap-1 border-l border-[var(--line)] ml-2 pl-2">
-              <button className="p-1.5 text-[var(--text-2,#a1a1aa)] hover:text-[var(--text,#f4f4f5)]" title="Giao diện" aria-label="Giao diện">
-                <Moon size={16} />
-              </button>
-              <button className="p-1.5 text-[var(--text-2,#a1a1aa)] hover:text-[var(--text,#f4f4f5)]" title="Ngôn ngữ" aria-label="Ngôn ngữ">
-                <Globe size={16} />
+              <button
+                onClick={handleToggleTheme}
+                data-testid="header-theme-toggle"
+                className="p-1.5 text-[var(--text-2,#a1a1aa)] hover:text-[var(--text,#f4f4f5)] transition-colors cursor-pointer"
+                title={currentTheme === 'dark' ? 'Chuyển sang giao diện Sáng' : 'Chuyển sang giao diện Tối'}
+                aria-label="Đổi giao diện sáng/tối"
+              >
+                {currentTheme === 'dark' ? <Moon size={16} /> : <Sun size={16} />}
               </button>
               {import.meta.env.DEV && (
                 <button 
                   onClick={() => onNavigate('/__ui')}
-                  className="p-1.5 text-[var(--text-2,#a1a1aa)] hover:text-[var(--accent,#818cf8)]" title="UI Kit" aria-label="UI Kit"
+                  className="p-1.5 text-[var(--text-2,#a1a1aa)] hover:text-[var(--accent,#818cf8)]"
+                  title="Bộ giao diện (chỉ môi trường dev)"
+                  aria-label="UI Kit"
                 >
                   <LayoutPanelLeft size={16} />
                 </button>

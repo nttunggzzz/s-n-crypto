@@ -73,6 +73,7 @@ Thêm mọi `data-testid` mới vào `docs/antigravity/TESTIDS.md` (mục "Futur
 - **Mặt trăng:** bấm để đổi sáng/tối. Dùng đúng cơ chế đang có (`applyThemeAndColor` trong `context/AuthContext.tsx:60`, lưu `updatePreferences({ theme })` khi đã đăng nhập, `localStorage cex_theme` khi chưa). Icon đổi Moon/Sun theo chế độ hiện tại. `data-testid="header-theme-toggle"`.
 - **Quả địa cầu:** app chỉ có tiếng Việt → **bỏ nút** (không để nút giả). Khi nào có đa ngôn ngữ thì thêm lại.
 **Nghiệm thu:** bấm mặt trăng → `document.documentElement[data-theme]` đổi, tải lại trang vẫn giữ.
+**Trạng thái:** Hoàn thành. Đã chỉnh sửa `apps/exchange/src/components/Header.tsx`: nút mặt trăng gắn `data-testid="header-theme-toggle"`, đổi icon Moon/Sun linh hoạt, chuyển đổi theme sáng/tối lưu vào `localStorage` và `updatePreferences` khi đăng nhập, gỡ bỏ hoàn toàn nút quả địa cầu.
 
 ### S-06 · P2 · Trang `/__ui` ("CEX Design System Showcase") lộ ra người dùng
 **File:** `apps/exchange/src/App.tsx:99-101` (route không kiểm môi trường), `Header.tsx:352-359` (icon bảng lưới, chỉ hiện khi `import.meta.env.DEV`).
