@@ -80,6 +80,7 @@ Thêm mọi `data-testid` mới vào `docs/antigravity/TESTIDS.md` (mục "Futur
 - Đây là trang **trưng bày bộ thành phần giao diện cho lập trình viên**, không phải tính năng của sàn. Icon chỉ hiện khi chạy `npm run dev` nên chủ dự án thấy nó; nhưng route `/__ui` mở được cả trong bản build chạy cho người dùng.
 - Sửa: chỉ đăng ký route `/__ui` khi `import.meta.env.DEV`; bản production gõ `/__ui` → về trang Thị trường. Đổi `title` icon thành "Bộ giao diện (chỉ môi trường dev)".
 **Nghiệm thu:** bản build (`npm run e2e` dùng bản build) mở `/__ui` → không thấy "Design System Showcase".
+**Trạng thái:** Hoàn thành. Đã chỉnh sửa `apps/exchange/src/App.tsx`: route `/__ui` chỉ kích hoạt khi `import.meta.env.DEV`, môi trường production tự động chuyển hướng về trang Thị trường; trong `Header.tsx` icon UI Kit đổi title thành "Bộ giao diện (chỉ môi trường dev)".
 
 ---
 Đợt 2 (sẽ gửi): S-1x hồ sơ người dùng — khối lượng giao dịch hôm nay/7 ngày, thuế đã khấu trừ tháng này (cần backend 0.19.0); trang chi tiết người dùng admin; các lỗi web admin.

@@ -97,7 +97,10 @@ const AppContent: React.FC = () => {
       return <VerifyEmailPage onNavigate={navigate} />;
     }
     if (currentPath === '/__ui') {
-      return <UiShowcasePage />;
+      if (import.meta.env.DEV) {
+        return <UiShowcasePage />;
+      }
+      return <MarketsPage onNavigate={navigate} />;
     }
 
     // Default route -> redirect to markets
