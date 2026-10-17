@@ -45,6 +45,7 @@ Thêm mọi `data-testid` mới vào `docs/antigravity/TESTIDS.md` (mục "Futur
 - Hộp **xác nhận đặt lệnh** (`:1508+`) hiện đủ: giá trị, ký quỹ, phí, tổng cần, giá thanh lý, funding ước tính.
 - Nút "Tối đa" cạnh ô khối lượng điền số tối đa của phía đang chọn.
 **Nghiệm thu:** mark 80.000, x20, 0,1 BTC → giá trị 8.000, ký quỹ 400, phí 4 (0,05%), tổng 404; đổi x10 → ký quỹ 800, tổng 804. Hộp xác nhận cùng số.
+**Trạng thái:** Hoàn thành (Agent B — 2026-10-17). Đã tính toán và hiển thị đầy đủ trên form và hộp xác nhận: `futures-est-notional`, `futures-est-margin`, `futures-est-fee` (kèm % taker/maker), `futures-est-cost` (kèm `data-value`), `futures-available`, `futures-max-long`/`futures-max-short` (tính theo số dư & depth 20 mức cho MARKET), `futures-est-funding` (tỷ lệ, countdown, ước tính mỗi kỳ và bên chi trả), nút 'Tối đa' (`futures-max-btn`) và các mốc slider %, đồng bộ số liệu sang hộp xác nhận đặt lệnh, cập nhật `TESTIDS.md`, `tsc -p apps/exchange` 0 lỗi.
 
 ### S-03 · P2 · Spot: dưới "Phí ước tính" thêm dòng Thuế (bao nhiêu %)
 **File:** `apps/exchange/src/components/trading/OrderForm.tsx:1272-1280` (dòng "Phí giao dịch (ước tính)" khi không có khối thuế), `:1345+` (hộp "Xác nhận đặt lệnh" — ảnh chủ dự án gửi: chỉ có phí).

@@ -12,6 +12,7 @@ import type {
   FuturesExchangeInfo,
   UserEvent,
   FuturesPlaceOrderRequest,
+  Depth,
 } from '@cex/contracts';
 import { countdown, resolveFuturesSymbol, ApiError, TRADE_BLOCK_LABELS } from '@cex/contracts';
 
@@ -63,6 +64,7 @@ import {
   pnl,
   returnOnMargin,
   ZERO,
+  minDec,
 } from '@cex/core';
 
 export interface FuturesPageProps {
@@ -110,6 +112,7 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
   const [symbolSettings, setSymbolSettings] = useState<FuturesSymbolSettings[]>([]);
   const [symbolInfos, setSymbolInfos] = useState<FuturesSymbolInfo[]>([]);
   const [futuresExchangeInfo, setFuturesExchangeInfo] = useState<FuturesExchangeInfo | null>(null);
+  const [depth, setDepth] = useState<Depth | null>(null);
 
   // Ticking now for countdown
   const [now, setNow] = useState(Date.now());
@@ -219,15 +222,17 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
   const fetchData = useCallback(async () => {
     const cur = resolveInitialFuturesSymbol(symbol);
     try {
-      const [tRes, markRes, exInfo] = await Promise.all([
+      const [tRes, markRes, exInfo, depthRes] = await Promise.all([
         api.futuresTickers(),
         api.futuresMarkPrice({ params: { symbol: cur } }).catch(() => null),
         api.futuresExchangeInfo().catch(() => null),
+        api.futuresDepth({ params: { symbol: cur }, query: { limit: 20 } }).catch(() => null),
       ]);
       setTickers(tRes.items);
       if (markRes) setMarkPrice(markRes);
       if (exInfo) setFuturesExchangeInfo(exInfo);
       if (exInfo?.symbols) setSymbolInfos(exInfo.symbols);
+      if (depthRes) setDepth(depthRes);
 
       if (isAuthenticated) {
         const [acc, pos, ords, sets] = await Promise.all([
@@ -289,6 +294,10 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
       setTickers((prev) => prev.map((t) => (t.symbol === data.symbol ? data : t)));
     });
 
+    const unsubDepth = realtimeClient.subscribe(`futures:depth:${symbol}`, (data: unknown) => {
+      setDepth(data as Depth);
+    });
+
     let unsubUser: (() => void) | undefined;
     if (isAuthenticated) {
       unsubUser = realtimeClient.subscribe('user', (event: unknown) => {
@@ -331,6 +340,7 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
       unsubTickers();
       unsubMark();
       unsubTicker();
+      unsubDepth();
       if (unsubUser) unsubUser();
     };
   }, [realtimeClient, symbol, isAuthenticated]);
@@ -383,8 +393,19 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
     }
   };
 
-  // Calculations for Order Form
-  const refPrice = orderType === 'LIMIT' && price ? dec(price) : markPrice?.markPrice ? dec(markPrice.markPrice) : ZERO;
+  // Calculations for Order Form & Confirmation Modal (S-02)
+  const refPrice = useMemo(() => {
+    if (orderType === 'LIMIT') {
+      if (price) {
+        try {
+          const p = dec(price);
+          if (p.gt(0)) return p;
+        } catch {}
+      }
+      return markPrice?.markPrice ? dec(markPrice.markPrice) : ZERO;
+    }
+    return markPrice?.markPrice ? dec(markPrice.markPrice) : ZERO;
+  }, [orderType, price, markPrice?.markPrice]);
 
   const calculatedQty = useMemo(() => {
     if (!quantity) return ZERO;
@@ -399,13 +420,55 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
     return ZERO;
   }, [quantity, unitMode, refPrice, currentLeverage, currentSymbolInfo]);
 
-  const requiredMargin = useMemo(() => {
+  const orderNotional = useMemo(() => {
     if (calculatedQty.lte(0) || refPrice.lte(0)) return ZERO;
+    if (orderType === 'LIMIT' && (!price || parseFloat(price) <= 0)) return ZERO;
+    try {
+      return refPrice.mul(calculatedQty);
+    } catch {
+      return ZERO;
+    }
+  }, [calculatedQty, refPrice, orderType, price]);
+
+  // Keep notionalValue as alias for compatibility with S-01
+  const notionalValue = orderNotional;
+
+  const takerFeeRate = useMemo(() => {
+    return futuresExchangeInfo?.fees?.takerFee || '0.0005';
+  }, [futuresExchangeInfo]);
+
+  const makerFeeRate = useMemo(() => {
+    return futuresExchangeInfo?.fees?.makerFee || '0.0002';
+  }, [futuresExchangeInfo]);
+
+  const takerFeePercent = useMemo(() => {
+    try {
+      return formatDecimal(dec(takerFeeRate).mul(100).toString());
+    } catch {
+      return '0,05';
+    }
+  }, [takerFeeRate]);
+
+  const makerFeePercent = useMemo(() => {
+    try {
+      return formatDecimal(dec(makerFeeRate).mul(100).toString());
+    } catch {
+      return '0,02';
+    }
+  }, [makerFeeRate]);
+
+  const estMargin = useMemo(() => {
+    if (calculatedQty.lte(0) || refPrice.lte(0)) return ZERO;
+    if (orderType === 'LIMIT' && (!price || parseFloat(price) <= 0)) return ZERO;
     try {
       return initialMargin(refPrice, calculatedQty, currentLeverage);
-    } catch {}
-    return ZERO;
-  }, [calculatedQty, refPrice, currentLeverage]);
+    } catch {
+      return ZERO;
+    }
+  }, [calculatedQty, refPrice, currentLeverage, orderType, price]);
+
+  // Keep requiredMargin as alias for compatibility
+  const requiredMargin = estMargin;
 
   // Est Liquidation Price (using maintenanceMarginRate from symbol info)
   const estLiqLong = useMemo(() => {
@@ -430,31 +493,124 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
     return account?.available ? dec(account.available) : ZERO;
   }, [account?.available]);
 
-  const notionalValue = useMemo(() => {
-    if (calculatedQty.lte(0) || refPrice.lte(0)) return ZERO;
-    try {
-      return calculatedQty.mul(refPrice);
-    } catch {
-      return ZERO;
-    }
-  }, [calculatedQty, refPrice]);
-
-  const takerFeeRate = useMemo(() => {
-    return futuresExchangeInfo?.fees?.takerFee || '0.0005';
-  }, [futuresExchangeInfo]);
-
   const estFee = useMemo(() => {
-    if (notionalValue.lte(0)) return ZERO;
+    if (orderNotional.lte(0)) return ZERO;
     try {
-      return roundUp(notionalValue.mul(dec(takerFeeRate)), 8);
+      return roundUp(orderNotional.mul(dec(takerFeeRate)));
     } catch {
       return ZERO;
     }
-  }, [notionalValue, takerFeeRate]);
+  }, [orderNotional, takerFeeRate]);
 
   const totalCost = useMemo(() => {
-    return requiredMargin.add(estFee);
-  }, [requiredMargin, estFee]);
+    return estMargin.add(estFee);
+  }, [estMargin, estFee]);
+
+  // Max calculations (S-02)
+  const stepSize = useMemo(() => {
+    return dec(currentSymbolInfo?.stepSize || '0.001');
+  }, [currentSymbolInfo?.stepSize]);
+
+  const maxByBalance = useMemo(() => {
+    if (refPrice.lte(0) || futuresAvailable.lte(0) || currentLeverage <= 0) return ZERO;
+    try {
+      const denom = refPrice.div(currentLeverage).add(refPrice.mul(dec(takerFeeRate)));
+      return denom.gt(0) ? floorToStep(futuresAvailable.div(denom), stepSize) : ZERO;
+    } catch {
+      return ZERO;
+    }
+  }, [refPrice, futuresAvailable, currentLeverage, takerFeeRate, stepSize]);
+
+  const maxByDepthLong = useMemo(() => {
+    if (!depth?.asks || depth.asks.length === 0) return ZERO;
+    try {
+      const slice = depth.asks.slice(0, 20);
+      return slice.reduce((sum, [, qty]) => sum.add(dec(qty)), ZERO);
+    } catch {
+      return ZERO;
+    }
+  }, [depth?.asks]);
+
+  const maxByDepthShort = useMemo(() => {
+    if (!depth?.bids || depth.bids.length === 0) return ZERO;
+    try {
+      const slice = depth.bids.slice(0, 20);
+      return slice.reduce((sum, [, qty]) => sum.add(dec(qty)), ZERO);
+    } catch {
+      return ZERO;
+    }
+  }, [depth?.bids]);
+
+  const maxLong = useMemo(() => {
+    if (orderType === 'MARKET' && maxByDepthLong.gt(0)) {
+      return floorToStep(minDec(maxByBalance, maxByDepthLong), stepSize);
+    }
+    return maxByBalance;
+  }, [orderType, maxByDepthLong, maxByBalance, stepSize]);
+
+  const maxShort = useMemo(() => {
+    if (orderType === 'MARKET' && maxByDepthShort.gt(0)) {
+      return floorToStep(minDec(maxByBalance, maxByDepthShort), stepSize);
+    }
+    return maxByBalance;
+  }, [orderType, maxByDepthShort, maxByBalance, stepSize]);
+
+  // Funding calculations (S-02)
+  const fundingRate = markPrice?.fundingRate || '0';
+
+  const fundingRatePercent = useMemo(() => {
+    try {
+      return formatDecimal(dec(fundingRate).mul(100).toString());
+    } catch {
+      return '0';
+    }
+  }, [fundingRate]);
+
+  const fundingCountdown = useMemo(() => {
+    if (markPrice?.nextFundingTime) {
+      const cd = countdown(markPrice.nextFundingTime, now);
+      if (cd) return cd;
+    }
+    const nowDate = new Date(now);
+    const nextTarget = new Date(now);
+    const currentHour = nowDate.getUTCHours();
+    const nextFundingHour = (Math.floor(currentHour / 8) + 1) * 8;
+    nextTarget.setUTCHours(nextFundingHour, 0, 0, 0);
+    return countdown(nextTarget.toISOString(), now) || '00:00:00';
+  }, [markPrice?.nextFundingTime, now]);
+
+  const estFunding = useMemo(() => {
+    if (orderNotional.lte(0)) return ZERO;
+    try {
+      return orderNotional.mul(dec(fundingRate).abs());
+    } catch {
+      return ZERO;
+    }
+  }, [orderNotional, fundingRate]);
+
+  const fundingPayer = useMemo(() => {
+    try {
+      const fr = dec(fundingRate);
+      if (fr.gt(0)) return 'Long trả Short';
+      if (fr.lt(0)) return 'Short trả Long';
+    } catch {}
+    return 'Không tính phí funding';
+  }, [fundingRate]);
+
+  const handleFillMax = useCallback(() => {
+    const targetMax = currentPosition?.side === 'SHORT' ? maxShort : maxLong;
+    const chosenMax = targetMax.gt(0) ? targetMax : (maxLong.gt(0) ? maxLong : maxShort);
+    if (chosenMax.lte(0)) return;
+
+    if (unitMode === 'coin') {
+      setQuantity(chosenMax.toString());
+    } else {
+      if (refPrice.gt(0)) {
+        setQuantity(roundDown(chosenMax.mul(refPrice), 2).toString());
+      }
+    }
+    setSliderValue(100);
+  }, [currentPosition?.side, maxShort, maxLong, unitMode, refPrice]);
 
   const isTradingHalted = tradingHalted || Boolean(futuresExchangeInfo?.tradingHalted) || activeTradeBlock === 'HALTED';
   const isMarketDataStale = markPrice === null || markPrice.status !== 'LIVE' || currentTicker?.status === 'STALE' || activeTradeBlock === 'PRICE_STALE';
@@ -867,7 +1023,7 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
 
             {/* Orderbook & Trades */}
             <div className="w-full xl:w-[280px] h-[480px]">
-              <Orderbook symbol={symbol} marketType="futures" onSelectPrice={setPrice} />
+              <Orderbook symbol={symbol} marketType="futures" onSelectPrice={setPrice} onDepthChange={setDepth} />
             </div>
           </div>
 
@@ -1299,7 +1455,7 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
           <div className="flex items-center justify-between text-[11px] text-[var(--text-3,#63636b)]">
             <div className="flex items-center gap-1">
               <span>Khả dụng:</span>
-              <span data-testid="futures-available" className="font-mono text-white font-semibold">
+              <span className="font-mono text-white font-semibold">
                 {isAuthenticated ? `${formatDecimal(account?.available || '0.00', { decimals: 2 })} USDT` : '—'}
               </span>
             </div>
@@ -1324,10 +1480,20 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
             />
           )}
 
-          {/* Quantity Input with Coin / USDT Switch */}
+          {/* Quantity Input with Coin / USDT Switch & Max Button */}
           <div>
             <div className="flex items-center justify-between text-[11px] text-[var(--text-3,#63636b)] mb-1">
-              <span>Khối lượng</span>
+              <div className="flex items-center gap-1.5">
+                <span>Khối lượng</span>
+                <button
+                  type="button"
+                  data-testid="futures-max-btn"
+                  onClick={handleFillMax}
+                  className="text-[10px] text-[var(--accent,#818cf8)] font-semibold hover:underline cursor-pointer"
+                >
+                  Tối đa
+                </button>
+              </div>
               <div className="flex items-center gap-1">
                 <button
                   data-testid="futures-unit-coin"
@@ -1365,21 +1531,34 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
               onChange={(e) => {
                 const val = Number(e.target.value);
                 setSliderValue(val);
-                if (account?.available && refPrice.gt(0)) {
-                  const step = currentSymbolInfo?.stepSize || '0.001';
-                  const maxAffordable = dec(account.available).mul(currentLeverage).div(refPrice);
-                  const q = floorToStep(maxAffordable.mul(dec((val / 100).toString())), dec(step));
-                  setQuantity(unitMode === 'coin' ? q.toString() : roundDown(q.mul(refPrice), 2).toString());
+                const targetMax = currentPosition?.side === 'SHORT' ? maxShort : maxLong;
+                const chosenMax = targetMax.gt(0) ? targetMax : maxLong;
+                if (chosenMax.gt(0)) {
+                  const q = floorToStep(chosenMax.mul(dec((val / 100).toString())), stepSize);
+                  setQuantity(unitMode === 'coin' ? q.toString() : (refPrice.gt(0) ? roundDown(q.mul(refPrice), 2).toString() : ''));
                 }
               }}
               className="w-full h-1 bg-[var(--line,#1d1e21)] rounded-lg appearance-none cursor-pointer accent-[var(--accent,#818cf8)]"
             />
             <div className="flex justify-between text-[9px] text-[var(--text-3,#63636b)] mt-1 font-mono">
-              <span>0%</span>
-              <span>25%</span>
-              <span>50%</span>
-              <span>70%</span>
-              <span>100%</span>
+              {[0, 25, 50, 75, 100].map((pct) => (
+                <button
+                  key={pct}
+                  type="button"
+                  onClick={() => {
+                    setSliderValue(pct);
+                    const targetMax = currentPosition?.side === 'SHORT' ? maxShort : maxLong;
+                    const chosenMax = targetMax.gt(0) ? targetMax : maxLong;
+                    if (chosenMax.gt(0)) {
+                      const q = floorToStep(chosenMax.mul(dec((pct / 100).toString())), stepSize);
+                      setQuantity(unitMode === 'coin' ? q.toString() : (refPrice.gt(0) ? roundDown(q.mul(refPrice), 2).toString() : ''));
+                    }
+                  }}
+                  className="hover:text-white cursor-pointer"
+                >
+                  {pct}%
+                </button>
+              ))}
             </div>
           </div>
 
@@ -1435,10 +1614,64 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
           {/* Estimated Calculations Box */}
           <div className="space-y-1.5 p-2.5 rounded bg-[var(--panel-2,#141416)] border border-[var(--line,#1d1e21)] text-[11px] text-[var(--text-3,#63636b)]">
             <div className="flex items-center justify-between">
-              <span>Ký quỹ ban đầu:</span>
-              <span className="font-mono text-white">{roundDown(requiredMargin, 2).toString()} USDT</span>
+              <span>Giá trị lệnh:</span>
+              <span data-testid="futures-est-notional" className="font-mono text-white">
+                {formatDecimal(orderNotional.toString())} USDT
+              </span>
             </div>
+
             <div className="flex items-center justify-between">
+              <span>Ký quỹ ban đầu:</span>
+              <span data-testid="futures-est-margin" className="font-mono text-white">
+                {formatDecimal(estMargin.toString())} USDT
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <span>Phí mở (ước tính):</span>
+              <span data-testid="futures-est-fee" className="font-mono text-white text-right">
+                {formatDecimal(estFee.toString())} USDT ({takerFeePercent}% taker){orderType === 'LIMIT' ? `; tối đa theo taker, khớp maker ${makerFeePercent}% thì hoàn chênh` : ''}
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <span className="font-semibold text-white">Tổng cần:</span>
+              <span
+                data-testid="futures-est-cost"
+                data-value={totalCost.toString()}
+                className="font-mono font-bold text-[var(--accent,#818cf8)]"
+              >
+                {formatDecimal(totalCost.toString())} USDT
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <span>Khả dụng ví Futures:</span>
+              <span data-testid="futures-available" className="font-mono text-white">
+                {isAuthenticated ? `${formatDecimal(futuresAvailable.toString())} USDT` : '—'}
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <span>Tối đa mở được:</span>
+              <div className="flex items-center gap-2 font-mono text-[10px]">
+                <span className="text-[var(--up,#1fc27a)]">
+                  Long: <span data-testid="futures-max-long">{maxLong.toString()} {baseAsset}</span>
+                </span>
+                <span className="text-[var(--down,#f2475f)]">
+                  Short: <span data-testid="futures-max-short">{maxShort.toString()} {baseAsset}</span>
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <span>Funding:</span>
+              <span data-testid="futures-est-funding" className="font-mono text-right text-[var(--warn,#f59e0b)]">
+                {fundingRatePercent}% · còn {fundingCountdown} (~{formatDecimal(estFunding.toString())} USDT; {fundingPayer})
+              </span>
+            </div>
+
+            <div className="flex items-center justify-between pt-1 border-t border-[var(--line,#1d1e21)]">
               <span>Giá thanh lý (Long):</span>
               <span className="font-mono text-[var(--down,#f2475f)] font-semibold">
                 {estLiqLong ? formatDecimal(estLiqLong.toString()) : '—'}
@@ -1699,14 +1932,58 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
             </div>
             <div className="flex items-center justify-between pb-2 border-b border-[var(--line,#1d1e21)]">
               <span className="text-[var(--text-3,#63636b)]">Khối lượng:</span>
-              <span className="font-mono text-white font-bold">{confirmOrderData.body.quantity}</span>
+              <span className="font-mono text-white font-bold">{confirmOrderData.body.quantity} {baseAsset}</span>
             </div>
-            {confirmOrderData.body.type === 'LIMIT' && (
-              <div className="flex items-center justify-between pb-2 border-b border-[var(--line,#1d1e21)]">
-                <span className="text-[var(--text-3,#63636b)]">Mức giá:</span>
-                <span className="font-mono text-white font-bold">{confirmOrderData.body.price} USDT</span>
-              </div>
-            )}
+            <div className="flex items-center justify-between pb-2 border-b border-[var(--line,#1d1e21)]">
+              <span className="text-[var(--text-3,#63636b)]">Mức giá:</span>
+              <span className="font-mono text-white font-bold">
+                {confirmOrderData.body.type === 'LIMIT' && confirmOrderData.body.price
+                  ? `${confirmOrderData.body.price} USDT`
+                  : `Thị trường (~${formatDecimal(refPrice.toString())} USDT)`}
+              </span>
+            </div>
+            <div className="flex items-center justify-between pb-2 border-b border-[var(--line,#1d1e21)]">
+              <span className="text-[var(--text-3,#63636b)]">Giá trị lệnh:</span>
+              <span data-testid="futures-confirm-notional" className="font-mono text-white font-semibold">
+                {formatDecimal(orderNotional.toString())} USDT
+              </span>
+            </div>
+            <div className="flex items-center justify-between pb-2 border-b border-[var(--line,#1d1e21)]">
+              <span className="text-[var(--text-3,#63636b)]">Ký quỹ ban đầu:</span>
+              <span data-testid="futures-confirm-margin" className="font-mono text-white font-semibold">
+                {formatDecimal(estMargin.toString())} USDT
+              </span>
+            </div>
+            <div className="flex items-center justify-between pb-2 border-b border-[var(--line,#1d1e21)]">
+              <span className="text-[var(--text-3,#63636b)]">Phí mở (ước tính):</span>
+              <span data-testid="futures-confirm-fee" className="font-mono text-white font-semibold">
+                {formatDecimal(estFee.toString())} USDT
+              </span>
+            </div>
+            <div className="flex items-center justify-between pb-2 border-b border-[var(--line,#1d1e21)]">
+              <span className="text-[var(--text-3,#63636b)] font-bold text-white">Tổng cần:</span>
+              <span
+                data-testid="futures-confirm-cost"
+                data-value={totalCost.toString()}
+                className="font-mono font-bold text-[var(--accent,#818cf8)]"
+              >
+                {formatDecimal(totalCost.toString())} USDT
+              </span>
+            </div>
+            <div className="flex items-center justify-between pb-2 border-b border-[var(--line,#1d1e21)]">
+              <span className="text-[var(--text-3,#63636b)]">Giá thanh lý ước tính:</span>
+              <span className="font-mono font-semibold">
+                {confirmOrderData.side === 'BUY'
+                  ? (estLiqLong ? <span className="text-[var(--down,#f2475f)]">{formatDecimal(estLiqLong.toString())} USDT</span> : '—')
+                  : (estLiqShort ? <span className="text-[var(--up,#1fc27a)]">{formatDecimal(estLiqShort.toString())} USDT</span> : '—')}
+              </span>
+            </div>
+            <div className="flex items-center justify-between pb-2 border-b border-[var(--line,#1d1e21)]">
+              <span className="text-[var(--text-3,#63636b)]">Funding ước tính mỗi kỳ:</span>
+              <span className="font-mono text-[var(--warn,#f59e0b)] font-semibold">
+                ~{formatDecimal(estFunding.toString())} USDT ({fundingRatePercent}%)
+              </span>
+            </div>
             <div className="grid grid-cols-2 gap-2 mt-2 pt-3 border-t border-[var(--line,#1d1e21)]">
               <Button variant="secondary" onClick={() => setConfirmOrderData(null)}>Hủy bỏ</Button>
               <Button

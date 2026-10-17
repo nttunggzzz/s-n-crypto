@@ -9,6 +9,7 @@ export interface OrderbookProps {
   symbol: string;
   marketType?: 'spot' | 'futures';
   onSelectPrice: (price: string) => void;
+  onDepthChange?: (depth: Depth | null) => void;
 }
 
 const groupOrderbook = (
@@ -45,7 +46,7 @@ const groupOrderbook = (
   return result;
 };
 
-export const Orderbook: React.FC<OrderbookProps> = ({ symbol, marketType = 'spot', onSelectPrice }) => {
+export const Orderbook: React.FC<OrderbookProps> = ({ symbol, marketType = 'spot', onSelectPrice, onDepthChange }) => {
   const [depth, setDepth] = useState<Depth | null>(null);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'all' | 'buy' | 'sell'>('all');
@@ -66,9 +67,15 @@ export const Orderbook: React.FC<OrderbookProps> = ({ symbol, marketType = 'spot
         const res = marketType === 'futures'
           ? await api.futuresDepth({ params: { symbol }, query: { limit: groupMode > 1 ? 200 : 20 } })
           : await api.depth({ params: { symbol }, query: { limit: groupMode > 1 ? 200 : 20 } });
-        if (active) setDepth(res);
+        if (active) {
+          setDepth(res);
+          onDepthChange?.(res);
+        }
       } catch {
-        if (active && !depth) setDepth(null);
+        if (active && !depth) {
+          setDepth(null);
+          onDepthChange?.(null);
+        }
       } finally {
         if (active) setLoading(false);
       }
@@ -84,16 +91,18 @@ export const Orderbook: React.FC<OrderbookProps> = ({ symbol, marketType = 'spot
       active = false;
       window.clearInterval(timer);
     };
-  }, [api, symbol, groupMode, marketType]);
+  }, [api, symbol, groupMode, marketType, onDepthChange]);
 
   useEffect(() => {
     if (!realtimeClient || groupMode > 1) return;
     const channel = marketType === 'futures' ? `futures:depth:${symbol}` : `depth:${symbol}`;
     const unsub = realtimeClient.subscribe(channel, (data: unknown) => {
-      setDepth(data as Depth);
+      const d = data as Depth;
+      setDepth(d);
+      onDepthChange?.(d);
     });
     return () => unsub();
-  }, [realtimeClient, symbol, groupMode, marketType]);
+  }, [realtimeClient, symbol, groupMode, marketType, onDepthChange]);
 
   // Subscribe to latest trades for mid-bar execution price
   useEffect(() => {

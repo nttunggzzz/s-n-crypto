@@ -34,6 +34,18 @@ Test nằm ở `e2e/tests/*.spec.ts` — đọc test để biết chính xác lu
 | `position-close` | Nút "Đóng" trong dòng | |
 | `close-confirm` | Nút xác nhận đóng (mặc định: đóng toàn bộ, giá thị trường) | |
 | `futures-order-block-reason` | Dòng lý do khóa nút đặt lệnh Futures (thiếu tiền, chưa đủ minQty/minNotional, sàn tạm dừng, gián đoạn giá, cặp bị tắt) | Hiện ngay dưới 2 nút Mở Long/Short khi có điều kiện chặn; nếu thiếu tiền có kèm link Chuyển từ Spot |
+| `futures-max-btn` | Nút "Tối đa" cạnh ô khối lượng | Điền khối lượng tối đa theo số dư/sổ lệnh |
+| `futures-est-notional` | Dòng "Giá trị lệnh" ước tính (USDT) trên form | Định dạng tiếng Việt (`formatDecimal`) kèm đơn vị USDT |
+| `futures-est-margin` | Dòng "Ký quỹ ban đầu" ước tính (USDT) trên form | `initialMargin`, làm tròn lên 8 số rồi format |
+| `futures-est-fee` | Dòng "Phí mở (ước tính)" trên form | Ước tính phí theo takerFee, kèm ghi chú tỉ lệ |
+| `futures-est-cost` | Dòng "Tổng cần" trên form | Ký quỹ + phí mở; có thuộc tính `data-value` chứa số thô |
+| `futures-max-long` | Khối lượng tối đa mở được phía Long | `min(theo số dư, theo sổ lệnh)` |
+| `futures-max-short` | Khối lượng tối đa mở được phía Short | `min(theo số dư, theo sổ lệnh)` |
+| `futures-est-funding` | Dòng "Funding" trên form | Tỷ lệ, đếm ngược, phí ước tính mỗi kỳ và bên chi trả |
+| `futures-confirm-notional` | Dòng "Giá trị lệnh" trong hộp xác nhận đặt lệnh | |
+| `futures-confirm-margin` | Dòng "Ký quỹ ban đầu" trong hộp xác nhận đặt lệnh | |
+| `futures-confirm-fee` | Dòng "Phí mở (ước tính)" trong hộp xác nhận đặt lệnh | |
+| `futures-confirm-cost` | Dòng "Tổng cần" trong hộp xác nhận đặt lệnh | Có thuộc tính `data-value` chứa số thô |
 
 ## Trang Bot (`/bots`) — `bots.spec.ts`
 `/bots?symbol=BTCUSDT` chọn sẵn cặp cho cả bot lưới và mua định kỳ (dùng cho nút "Tạo bot" ở trang Giao dịch).
