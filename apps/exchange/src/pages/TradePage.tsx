@@ -310,13 +310,13 @@ export const TradePage: React.FC<TradePageProps> = ({ symbolParam, onNavigate })
               <Bell size={13} className="text-[var(--accent,#818cf8)]" /> Cảnh báo
             </button>
 
-            <button
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-[var(--radius-sm,4px)] bg-[var(--panel-2,#141416)] border border-[var(--line,#1d1e21)] text-[11px] text-[var(--text-2,#a1a1aa)] hover:text-[var(--text,#f4f4f5)] transition-colors cursor-default"
+            <span
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-[var(--radius-sm,4px)] bg-[var(--panel-2,#141416)] border border-[var(--line,#1d1e21)] text-[11px] text-[var(--text-2,#a1a1aa)] cursor-default select-none"
               title="Đang ở chế độ Pro Trader tiêu chuẩn"
               aria-label="Chế độ Pro"
             >
-              <Settings2 size={14} className="text-[var(--accent,#818cf8)]" /> Chế độ Pro
-            </button>
+              <Settings2 size={13} className="text-[var(--accent,#818cf8)]" /> Chế độ Pro
+            </span>
           </div>
         </div>
       </div>

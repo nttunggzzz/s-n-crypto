@@ -107,6 +107,7 @@ Lưu lỗi → trả ngôi sao về trạng thái cũ + `toastError(formatApiErr
 
 ### S-10 · P3 · "Chế độ Pro" trên trang Giao dịch trông như nút nhưng không làm gì
 **File:** `apps/exchange/src/pages/TradePage.tsx:313-319`. Đổi thành nhãn (`<span>`, không hover) hoặc bỏ. Không để nút không có chức năng.
+**Trạng thái:** Hoàn thành. Đã chỉnh sửa `apps/exchange/src/pages/TradePage.tsx`: đổi phần tử nút "Chế độ Pro" thành nhãn `<span>` thông tin tĩnh với `cursor-default` và `title="Đang ở chế độ Pro Trader tiêu chuẩn"`, không còn trạng thái hover nhận bấm giả.
 
 ### S-11 · P3 · Futures: nút "Cô lập (Isolated)" bị khóa không giải thích
 **File:** `FuturesPage.tsx:1111-1116`. Sàn chỉ hỗ trợ ký quỹ cô lập (`futuresExchangeInfo().marginModes = ['ISOLATED']`). Hiện dạng nhãn "Ký quỹ: Cô lập" kèm `title="Sàn chỉ hỗ trợ ký quỹ cô lập"`, không phải nút bị khóa.
