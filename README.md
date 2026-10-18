@@ -28,9 +28,9 @@ Kiểm tra mã: `npm run typecheck`, `npm test` (tự bật PostgreSQL thật tr
 
 ## Nhánh và lỗi đang mở
 
-Nhánh mặc định  là **bản mới nhất, kể cả giao diện Antigravity đang làm**: nó đã gộp cả backend của .
+Nhánh mặc định `ui/gd2-exchange` là **bản mới nhất, kể cả giao diện Antigravity đang làm**: nó đã gộp cả backend của `main`.
 Bản này **còn lỗi đã biết** (chưa được rà soát xong), ghi đầy đủ ở [docs/LOI-HIEN-TAI.md](docs/LOI-HIEN-TAI.md).
-Nhánh  là bản ổn định cũ hơn, giao diện ít tính năng hơn.
+Nhánh `main` là bản ổn định cũ hơn, giao diện ít tính năng hơn.
 
 **Gặp lỗi?** Mở một [Issue](https://github.com/nttunggzzz/s-n-crypto/issues/new) ghi: bạn làm gì, thấy gì, đáng lẽ thấy gì, kèm ảnh chụp màn hình nếu có.
 
