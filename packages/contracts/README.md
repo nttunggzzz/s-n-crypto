@@ -403,3 +403,22 @@ s.tax.thisMonth             // { month: '2026-10', withheldCount, withheldAmount
 **Mock:** `accountTradingStats` tính từ kho mock (các lần khớp Spot và Futures của người dùng demo, bản ghi thuế): người dùng demo có 2 lệnh MUA ngày 9/10/2026 và 2 lệnh BÁN cũ (tháng 9 và tháng 8) nên
 số liệu phụ thuộc ngày hiện tại của máy bạn; đặt một lệnh khớp ngay trong mock thì khối lượng hôm nay tăng theo giá trị lệnh vừa khớp. Người dùng khác trong `adminGetUser` (mock) luôn là toàn số 0 vì mock không có lệnh của họ.
 Fixture tĩnh: `fixtureAccountTradingStats` (người dùng demo lúc 2026-10-09T03:00Z), `fixtureEmptyTradingStats()`.
+
+## 18. Back office: rủi ro và số liệu (đợt AD2)
+Bốn endpoint chỉ đọc cho web admin, toàn sàn (không lọc theo người dùng), schema ở `adminRisk.ts`. Quyền: `adminRiskPositions` và `adminLiquidations` cần `users.read` (có tên/email người dùng),
+`adminFundingSummary` và `adminMetrics` cần `exchange.read`. Support đã có cả hai quyền; người dùng thường nhận 403.
+
+- **`adminRiskPositions`** `GET /api/v1/admin/risk/positions` — vị thế Futures đang mở. Mark price của cặp **không LIVE** (STALE/UNAVAILABLE) → `markPrice`, `notional`, `unrealizedPnl`, `liqDistance`, `marginRatio` là `null`
+  (không phải 0); `liquidationPrice` vẫn có vì không cần mark. `liqDistance` = khoảng cách mark → giá thanh lý chia mark, dạng phân số 6 chữ số (`"0.05"` = 5 %, âm = mark đã vượt giá thanh lý). `marginRatio` =
+  ký quỹ duy trì / (ký quỹ + PnL), tối đa `"1.000000"` (1 = ngưỡng thanh lý). `sort`: `liqDistance` (mặc định, tăng dần) hoặc `notional` (giảm dần); dòng `null` xếp cuối. `symbol` lọc cả `items` và `totals`,
+  `side` chỉ lọc `items` (open interest luôn gồm cả hai chiều). `totals` = open interest mỗi cặp (`longQty`, `shortQty`, notional `null` nếu mark không LIVE, `markStatus`).
+  `cursor` là offset trong thứ tự tính lúc gọi — giá mark đổi nên ranh giới trang có thể xê dịch giữa hai lần gọi.
+- **`adminLiquidations`** `GET /api/v1/admin/risk/liquidations` — vị thế đóng do thanh lý, mới nhất trước, lọc `symbol`, `from`/`to` (theo `liquidatedAt`), cursor `"<ISO>|<id>"`. `lostMargin` = ký quỹ mất
+  (đọc từ sổ cái của lần thanh lý); `quantity`/`liquidationPrice`/`fee`/`margin`/`lostMargin` chỉ `null` khi thiếu bản ghi gốc.
+- **`adminFundingSummary`** `GET /api/v1/admin/risk/funding` — theo cặp trong `[from, to]` (mặc định 7 ngày gần nhất; tối đa 366 ngày, `from` > `to` → 400). Mỗi chiều có `paid`, `received` (đều dương), `net` = received − paid,
+  `payments`; `net` của cặp = tổng hai chiều theo góc nhìn người dùng (âm = người dùng trả nhiều hơn nhận).
+- **`adminMetrics`** `GET /api/v1/admin/metrics?range=7d|30d|90d` — **đủ mọi ngày GMT+7** của khoảng (ngày không có giao dịch = 0, ngày cuối là hôm nay chưa trọn), khối lượng và phí Spot/Futures (USDT),
+  thuế đã khấu trừ, người dùng mới, người giao dịch, số lần thanh lý. Tài khoản bot tín hiệu không được tính. `totals.activeTraders` là số người **khác nhau** cả khoảng, không phải tổng các ngày.
+  Spot chỉ cộng cặp quote USDT; fill cặp khác đếm ở `excludedNonUsdtFills`. Phí Spot trả bằng coin gốc được quy ra USDT theo giá của chính lần khớp đó.
+
+**Mock:** dữ liệu cố định (3 vị thế với 1 mark STALE, 2 lần thanh lý, funding 2 cặp); `adminMetrics` dựng đủ ngày tính từ hôm nay, cứ 4 ngày có 1 ngày toàn số 0.

@@ -132,6 +132,7 @@ import {
   UpdateTaxProfileRequest,
   UpdateTaxSettingsRequest,
 } from './tax.ts';
+import { AdminFundingSummary, AdminFundingSummaryQuery, AdminLiquidation, AdminLiquidationsQuery, AdminMetrics, AdminMetricsQuery, AdminRiskPositions, AdminRiskPositionsQuery } from './adminRisk.ts';
 import { AdminNewsItemsQuery, AdminNewsMacroEvents, AdminNewsMacroEventsQuery, AdminNewsSources, NewsItemAdmin } from './news.ts';
 
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
@@ -354,6 +355,16 @@ export const endpoints = {
   adminNewsSources: ep({ method: 'GET', path: '/api/v1/admin/news/sources', auth: 'staff', permission: 'news.view', response: AdminNewsSources }),
   /** Scheduled macro events, scheduledAt ascending; filter code / importance / from / to (window <= 400 days). For "upcoming events" screens. */
   adminNewsMacroEvents: ep({ method: 'GET', path: '/api/v1/admin/news/macro-events', auth: 'staff', permission: 'news.view', query: AdminNewsMacroEventsQuery, response: AdminNewsMacroEvents }),
+
+  // Module AD (batch AD2) — Futures risk and exchange numbers, read-only; see adminRisk.ts
+  /** Open Futures positions with live risk numbers (null without a LIVE mark), sorted by liqDistance (default) or notional; totals = open interest per symbol. */
+  adminRiskPositions: ep({ method: 'GET', path: '/api/v1/admin/risk/positions', auth: 'staff', permission: 'users.read', query: AdminRiskPositionsQuery, response: AdminRiskPositions }),
+  /** Positions closed by liquidation, newest first; filter symbol / from / to (on liquidatedAt). */
+  adminLiquidations: ep({ method: 'GET', path: '/api/v1/admin/risk/liquidations', auth: 'staff', permission: 'users.read', query: AdminLiquidationsQuery, response: paginated(AdminLiquidation) }),
+  /** Funding paid and received per symbol in a window (default: last 7 days), split by side. */
+  adminFundingSummary: ep({ method: 'GET', path: '/api/v1/admin/risk/funding', auth: 'staff', permission: 'exchange.read', query: AdminFundingSummaryQuery, response: AdminFundingSummary }),
+  /** Exchange numbers for every GMT+7 day of the last 7 / 30 / 90 days (zero days included) + totals. */
+  adminMetrics: ep({ method: 'GET', path: '/api/v1/admin/metrics', auth: 'staff', permission: 'exchange.read', query: AdminMetricsQuery, response: AdminMetrics }),
 
   // ---- futures (phase F) — simulated USDT-M perpetuals, isolated margin, ≤ 20×
   futuresExchangeInfo: ep({ method: 'GET', path: '/api/v1/futures/exchange-info', auth: 'public', response: FuturesExchangeInfo }),

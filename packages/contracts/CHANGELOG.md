@@ -1,5 +1,16 @@
 # Changelog — @cex/contracts
 
+## Chưa phát hành — đợt AD2 (Back office: rủi ro Futures và số liệu sàn theo ngày)
+Chỉ thêm 4 endpoint chỉ đọc (lead đánh số version khi gộp). Hướng dẫn: README mục 18.
+
+**Thêm**
+- `adminRisk.ts` (file mới): `AdminRiskPositionsQuery` (`symbol`, `side`, `sort: liqDistance|notional`, cursor, limit), `RiskPosition`, `RiskSymbolTotals`, `AdminRiskPositions`; `AdminLiquidationsQuery`, `AdminLiquidation`;
+  `AdminFundingSummaryQuery` (`FUNDING_SUMMARY_MAX_DAYS = 366`), `FundingSide`, `FundingSymbolSummary`, `AdminFundingSummary`; `AdminMetricsQuery` (`METRICS_RANGES`), `MetricsDay`, `MetricsTotals`, `AdminMetrics`.
+- Endpoint `adminRiskPositions` GET `/api/v1/admin/risk/positions` và `adminLiquidations` GET `/api/v1/admin/risk/liquidations` (quyền `users.read`); `adminFundingSummary` GET `/api/v1/admin/risk/funding` và `adminMetrics` GET `/api/v1/admin/metrics` (quyền `exchange.read`). Không thêm quyền mới.
+- Fixture `fixtureRiskPositions`, `fixtureRiskTotals`, `fixtureLiquidations`, `fixtureFundingSummary`, `fixtureMetricsDay()`, `fixtureMetricsTotals()`; resolver mock cho cả 4 endpoint.
+
+**Quy tắc:** mark price không LIVE → `markPrice`, `notional`, `unrealizedPnl`, `liqDistance`, `marginRatio` là `null` (không phải 0), xếp cuối khi sắp xếp. `adminMetrics` trả đủ mọi ngày GMT+7 kể cả ngày 0; tài khoản bot tín hiệu không được tính.
+
 ## 0.20.0 — 2026-10-17 (Hồ sơ: khối lượng giao dịch và thuế đã khấu trừ trong tháng — người dùng và admin)
 Chỉ thêm một endpoint (tổng 154) và một trường bắt buộc trong phản hồi. Hướng dẫn: README mục 17.
 
