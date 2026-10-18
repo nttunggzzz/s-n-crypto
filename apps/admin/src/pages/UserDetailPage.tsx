@@ -60,7 +60,8 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
 
   // Dialogs & Modals
   const [confirmOpen, setConfirmOpen] = useState(false);
-  const [confirmAction, setConfirmAction] = useState<'LOCK' | 'UNLOCK' | 'RESET' | 'STOP_BOT' | 'CANCEL_DCA' | 'DEACTIVATE_USER' | null>(null);
+  const [confirmAction, setConfirmAction] = useState<'LOCK' | 'UNLOCK' | 'RESET' | 'STOP_BOT' | 'CANCEL_DCA' | 'DEACTIVATE_USER' | 'TOGGLE_SIGNALS' | null>(null);
+  const [confirmError, setConfirmError] = useState<string | null>(null);
   const [selectedBotId, setSelectedBotId] = useState<string | null>(null);
   const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
 
@@ -319,7 +320,9 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
   };
 
   const handleConfirmAction = async (reason: string) => {
+    if (!detail) return;
     setIsSubmitting(true);
+    setConfirmError(null);
     try {
       if (confirmAction === 'LOCK') {
         await api.adminLockUser({ params: { userId: detail.user.id }, body: { reason } });
@@ -332,9 +335,7 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
           await api.adminResetAccount({ params: { userId: detail.user.id }, body: { reason: `Đặt lại số dư: ${reason}`, confirm: 'RESET' } });
         } catch (resetErr: unknown) {
           const msg = resetErr instanceof Error ? resetErr.message : 'Thao tác thất bại';
-          setAuditNotification(`Lỗi đặt lại số dư: ${msg}`);
-          setConfirmOpen(false);
-          loadUserData();
+          setConfirmError(`Lỗi đặt lại số dư: ${msg}`);
           return;
         }
 
@@ -343,17 +344,30 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
           setAuditNotification(`Đã đặt lại số dư và khóa tài khoản ${detail.user.email}`);
         } catch (lockErr: unknown) {
           const msg = lockErr instanceof Error ? lockErr.message : 'Lỗi khóa';
-          setAuditNotification(`Đã đặt lại số dư nhưng khóa thất bại: ${msg}`);
+          setConfirmError(`Đã đặt lại số dư nhưng khóa thất bại: ${msg}`);
+          return;
         }
       } else if (confirmAction === 'STOP_BOT' && selectedBotId) {
         await api.adminStopGridBot({ params: { userId: detail.user.id, botId: selectedBotId }, body: { reason, sellBase: false } });
       } else if (confirmAction === 'CANCEL_DCA' && selectedPlanId) {
         await api.adminCancelDcaPlan({ params: { userId: detail.user.id, planId: selectedPlanId }, body: { reason } });
+      } else if (confirmAction === 'TOGGLE_SIGNALS') {
+        const nextVal = !detail.user.signalsAccess;
+        await api.adminSetSignalsAccess({
+          params: { userId: detail.user.id },
+          body: {
+            enabled: nextVal,
+            reason,
+          },
+        });
+        setAuditNotification(`Đã ${nextVal ? 'cấp' : 'thu hồi'} quyền tín hiệu giao dịch cho ${detail.user.email}`);
       }
       setConfirmOpen(false);
+      setConfirmAction(null);
+      setConfirmError(null);
       loadUserData();
     } catch (e) {
-      console.error(e);
+      setConfirmError(formatApiError(e));
     } finally {
       setIsSubmitting(false);
     }
@@ -371,31 +385,16 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
       setRoleModalOpen(false);
       loadUserData();
     } catch (e: any) {
-      setAuditNotification(`Lỗi: ${e?.message || 'Có lỗi xảy ra khi cập nhật vai trò'}`);
+      setAuditNotification(`Lỗi: ${formatApiError(e)}`);
     } finally {
       setIsSubmittingRole(false);
     }
   };
 
-  const handleToggleSignals = async () => {
-    if (!detail) return;
-    setIsSubmitting(true);
-    try {
-      const nextVal = !detail.user.signalsAccess;
-      await api.adminSetSignalsAccess({
-        params: { userId: detail.user.id },
-        body: {
-          enabled: nextVal,
-          reason: nextVal ? 'Cấp quyền truy cập tín hiệu giao dịch' : 'Thu hồi quyền truy cập tín hiệu giao dịch',
-        },
-      });
-      setAuditNotification(`Đã ${nextVal ? 'cấp' : 'thu hồi'} quyền tín hiệu giao dịch cho ${detail.user.email}`);
-      loadUserData();
-    } catch (e: any) {
-      setAuditNotification(`Lỗi: ${e?.message || 'Lỗi khi cập nhật quyền tín hiệu'}`);
-    } finally {
-      setIsSubmitting(false);
-    }
+  const handleOpenToggleSignals = () => {
+    setConfirmError(null);
+    setConfirmAction('TOGGLE_SIGNALS');
+    setConfirmOpen(true);
   };
 
   return (
@@ -488,7 +487,7 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
 
               {hasPerm('users.signals') && !u.isBot && (
                 <button
-                  onClick={handleToggleSignals}
+                  onClick={handleOpenToggleSignals}
                   className={`px-3 py-2 rounded-lg text-sm font-medium border transition-colors flex items-center gap-1.5 ${
                     u.signalsAccess
                       ? 'bg-[var(--accent,#818cf8)]/10 text-[var(--accent,#818cf8)] border-[var(--accent,#818cf8)]/30'
@@ -1460,6 +1459,7 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
           confirmAction === 'STOP_BOT' ? 'Dừng Grid Trading Bot' :
           confirmAction === 'CANCEL_DCA' ? 'Hủy kế hoạch mua định kỳ' :
           confirmAction === 'DEACTIVATE_USER' ? 'Đặt lại số dư và khóa tài khoản' :
+          confirmAction === 'TOGGLE_SIGNALS' ? (detail?.user.signalsAccess ? 'Thu hồi quyền tín hiệu giao dịch' : 'Cấp quyền tín hiệu giao dịch') :
           'Xác nhận thao tác'
         }
         consequenceText={
@@ -1469,6 +1469,7 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
           confirmAction === 'STOP_BOT' ? 'Hủy toàn bộ lệnh đang mở của bot này. Thao tác sẽ được ghi vào nhật ký.' :
           confirmAction === 'CANCEL_DCA' ? 'Hủy kế hoạch định kỳ này. Thao tác sẽ được ghi vào nhật ký.' :
           confirmAction === 'DEACTIVATE_USER' ? 'Tài khoản sẽ bị hủy toàn bộ lệnh mở, đưa toàn bộ số dư về 0 (ACCOUNT_RESET) và khóa tài khoản. Số dư không thể hoàn tác, nhưng tài khoản có thể mở khóa lại sau.' :
+          confirmAction === 'TOGGLE_SIGNALS' ? `Người dùng sẽ ${detail?.user.signalsAccess ? 'mất' : 'được cấp'} quyền truy cập các bot và chiến lược tín hiệu trên sàn.` :
           'Hành động này sẽ được ghi nhận vào nhật ký quản trị của sàn.'
         }
         quickReasons={
@@ -1482,6 +1483,11 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
             'Vi phạm nghiêm trọng quy chế giao dịch & AML',
             'Tài khoản giả mạo / spam',
             'Xử lý vi phạm theo quy định nội bộ',
+          ] : confirmAction === 'TOGGLE_SIGNALS' ? [
+            'Đủ điều kiện đăng ký gói tín hiệu',
+            'Nâng cấp quyền trải nghiệm tín hiệu',
+            'Hết hạn quyền sử dụng bot tín hiệu',
+            'Thu hồi theo yêu cầu của người dùng',
           ] : undefined
         }
         requirePhrase={
@@ -1489,8 +1495,9 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
           confirmAction === 'DEACTIVATE_USER' ? 'DEACTIVATE' : undefined
         }
         onConfirm={handleConfirmAction}
-        onCancel={() => setConfirmOpen(false)}
+        onCancel={() => { setConfirmOpen(false); setConfirmAction(null); setConfirmError(null); }}
         isSubmitting={isSubmitting}
+        error={confirmError}
       />
     </div>
   );

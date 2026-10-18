@@ -28,6 +28,7 @@ Dùng chung cho cả đợt: **một** hàm dịch lỗi theo `code` cho admin (
 - **AD-05:** Hoàn thành. Đã nâng cấp `pages/AnnouncementsPage.tsx`: bổ sung nút Sửa cho từng thông báo (điền sẵn form, PATCH chỉ gửi các trường đã đổi), nút "Xuất bản" nhanh cho bản nháp với `data-testid="announcement-publish"`, ô nhập ngày giờ hết hạn `expiresAt`, và xử lý lỗi tiếng Việt `confirm-error`.
 - **AD-06:** Hoàn thành. Đã tách quy trình đổi vai trò nhân sự trong `pages/RolesPage.tsx` thành 2 bước rõ ràng: Bước 1 modal chọn vai trò mới (có nút Hủy / Tiếp tục, khóa nút khi vai trò mới trùng vai trò cũ), Bước 2 hộp thoại xác nhận lý do `ConfirmDialog`; khi đóng hoặc thành công luôn reset `setTargetUser(null)` không để lại lớp phủ; bắt lỗi tiếng Việt qua `confirm-error`.
 - **AD-07:** Hoàn thành. Đã sửa trong `pages/UserDetailPage.tsx`: trường `unrealizedPnl` khi null hiển thị dấu gạch ngang "—" với màu trung tính (`admin-futures-upnl`), kèm nhãn/tooltip "Chưa có giá đánh dấu" (không hiển thị 0.00000000 màu xanh vi phạm quy tắc null ≠ 0).
+- **AD-08:** Hoàn thành. Đã sửa nút Bật/Tắt quyền tín hiệu trong `pages/UserDetailPage.tsx`: mở `ConfirmDialog` để admin tự nhập lý do kiểm toán (không tự sinh chuỗi lý do), hiển thị lỗi tiếng Việt trong hộp thoại và giữ hộp thoại mở khi thao tác thất bại.
 
 ## P2
 | ID | File:dòng | Lỗi | Sửa |
