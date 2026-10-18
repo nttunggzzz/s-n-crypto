@@ -35,6 +35,7 @@ Tiền tố mới của lần này: **V** (V-01 …).
 | V-01 | P1 | Antigravity + **Chủ dự án** | Chatbot "AI Concierge" trả lời sai sự thật (Faucet 1.000 USDT, thật là 10.000) và tự nhận là AI dù chỉ là câu soạn sẵn |
 | V-02 | P2 | Antigravity | Đưa lại tỉ lệ thuế đoán `0.001` ("tự động bật thuế 0.1%") — hồi quy T-04 |
 | V-03 | P3 | Antigravity | Futures: đòn bẩy đoán `|| 10` trước khi tải cài đặt → ký quỹ/tổng cần hiện sai trong lúc tải |
+| V-05 | **P1** | Antigravity | Hộp chatbot (góc phải) **che nút "Mở Short"** và nửa phải "Mở Long" — bấm giữa nút trúng hộp chat, không đặt được lệnh |
 | V-04 | P3 | Antigravity (quy trình) | Làm tính năng ngoài phạm vi không có prompt; thêm 876 KB ảnh chưa commit; font Google tải ngoài |
 
 ### V-01 · P1 · Chatbot nói sai và tự nhận là "AI"
@@ -64,6 +65,13 @@ Tiền tố mới của lần này: **V** (V-01 …).
 - Ba commit ngoài phạm vi không có prompt (chatbot, nhân vật anime, 25 file skill animation, sửa `AGENTS.md`, đổi `packages/ui` Button/Card/tokens). Thư mục `apps/exchange/public/sakura/` (876 KB) chưa commit.
 - `apps/exchange/index.html` tải font từ Google Fonts: thêm yêu cầu ra ngoài mỗi lần mở trang; chạy offline (giá giả lập) vẫn dùng được nhờ font dự phòng.
 - **Yêu cầu:** việc ngoài prompt phải có yêu cầu của chủ dự án và ghi vào báo cáo; ảnh tĩnh hoặc commit hoặc xóa.
+
+### V-05 · P1 · Hộp chatbot che nút đặt lệnh Futures
+- **File:** `apps/exchange/src/components/AiAssistantWidget.tsx:264` (UI `58dbc2f`): `<div className="fixed bottom-6 right-6 z-50 flex flex-col items-end pointer-events-auto …">`.
+- **Bằng chứng (chạy thật, trace Playwright):** ở 1440×900, sau khi bóng chào "Xin chào! Em là Sakura…" hiện (≈1,2 s sau khi tải trang, ở lại tới khi đóng), bấm giữa nút `futures-open-short` → Playwright báo phần tử trên bị `<div class="fixed bottom-6 right-6 z-50 …">` chặn. Hộp bao cả khoảng trống giữa bóng chat và avatar nên phủ nút "Mở Short" và nửa phải "Mở Long".
+- **Ảnh hưởng:** người dùng bấm "Mở Short" không có gì xảy ra (hoặc mở chat) — chặn chức năng chính của trang Futures.
+- **Cách sửa:** hộp ngoài `pointer-events-none`, chỉ avatar và bóng chat `pointer-events-auto`; hộp chỉ to bằng nội dung; không để bóng chào tự hiện trên trang Giao dịch/Futures (hoặc đặt tránh vùng form đặt lệnh). Cũng sửa chữ "1.000 USDT" còn ở `:26` (V-01).
+- **Nghiệm thu:** `review08-futures.spec.ts` test "Mở Long / Mở Short bấm được ở 1440×900: không có hộp nổi nào phủ lên nút" xanh.
 
 ## 4. Thứ tự đề xuất
 - **Chủ dự án:** quyết V-01 (giữ chatbot có sửa, hay gỡ).

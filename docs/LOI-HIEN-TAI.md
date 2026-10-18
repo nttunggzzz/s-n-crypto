@@ -48,6 +48,7 @@ Rà soát: **2026-10-11** (Claude Code). Cập nhật lần cuối: 2026-10-11 t
 
 >
 > **Rà soát lần 10 (UI `b994b81`, 2026-10-18 chiều): [docs/reports/2026-10-18-ra-soat-ui-lan-10.md](reports/2026-10-18-ra-soat-ui-lan-10.md)** — T-01…T-06 xong (17/21 test nghiệm thu đạt), trừ T-04 bị đưa lại.
+> - **V-05 (P1)**: hộp chatbot che nút "Mở Short"/"Mở Long" trên trang Futures (đã chứng minh bằng e2e).
 > - **V-01 (P1)**: chatbot "AI Concierge" nói sai (Faucet 1.000 USDT, thật 10.000) và tự nhận là AI — chờ chủ dự án quyết giữ/gỡ; **V-02 (P2)** tỉ lệ thuế đoán 0,1% quay lại; V-03, V-04.
 
 ## Backend → UI (Claude Code cập nhật mỗi khi đổi backend/hợp đồng; Antigravity đọc đầu mỗi phiên, cùng `packages/contracts/CHANGELOG.md`)
