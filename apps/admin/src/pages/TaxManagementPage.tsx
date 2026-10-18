@@ -10,7 +10,7 @@ import {
 import { getApiClient } from '../services/api';
 import { formatApiError } from '../services/errors';
 import { useAuth } from '../context/AuthContext';
-import { Button, formatDecimal } from '@cex/ui';
+import { Button, formatDecimal, formatPrice } from '@cex/ui';
 import {
   Receipt,
   Download,
@@ -59,13 +59,28 @@ export const TaxManagementPage: React.FC = () => {
   const [summaryLoading, setSummaryLoading] = useState(true);
   const [summaryError, setSummaryError] = useState<string | null>(null);
 
-  // Withholdings State (M-08)
+  // Withholdings State (M-08, AD-22)
   const [withholdings, setWithholdings] = useState<AdminTaxWithholding[]>([]);
   const [withholdingsLoading, setWithholdingsLoading] = useState(true);
   const [withholdingsError, setWithholdingsError] = useState<string | null>(null);
   const [filterUser, setFilterUser] = useState<string>('');
   const [filterSymbol, setFilterSymbol] = useState<string>('');
+  const [appliedUser, setAppliedUser] = useState<string>('');
+  const [appliedSymbol, setAppliedSymbol] = useState<string>('');
   const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [symbolTickSizes, setSymbolTickSizes] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    api.exchangeInfo()
+      .then((info) => {
+        const map: Record<string, string> = {};
+        info.symbols.forEach((s) => {
+          map[s.symbol] = s.tickSize;
+        });
+        setSymbolTickSizes(map);
+      })
+      .catch(() => {});
+  }, [api]);
 
   // Fetch Tax Settings (M-04)
   const fetchSettings = useCallback(async () => {
@@ -103,47 +118,93 @@ export const TaxManagementPage: React.FC = () => {
     }
   }, [api]);
 
-  // Fetch Withholding List (M-08)
-  const fetchWithholdings = useCallback(async (cursor?: string) => {
-    setWithholdingsLoading(true);
-    setWithholdingsError(null);
-    try {
-      const q: { limit: number; userId?: string; symbol?: string; cursor?: string; from?: string; to?: string } = { limit: 50 };
-      if (filterUser.trim()) q.userId = filterUser.trim();
-      if (filterSymbol.trim()) q.symbol = filterSymbol.trim();
-      if (cursor) {
-        q.cursor = cursor;
-      } else if (summary?.from && summary?.to) {
-        q.from = summary.from;
-        q.to = summary.to;
+  // Fetch Withholding List (M-08, AD-22)
+  const executeFetchWithholdings = useCallback(
+    async (userQuery: string, symbolQuery: string, cursor?: string) => {
+      setWithholdingsLoading(true);
+      setWithholdingsError(null);
+      try {
+        let resolvedUserId: string | undefined = undefined;
+        const cleanUser = userQuery.trim();
+        if (cleanUser) {
+          // If input is UID (all digits), resolve to UUID via adminListUsers
+          if (/^\d+$/.test(cleanUser)) {
+            const list = await api.adminListUsers({ query: { q: cleanUser, limit: 1 } });
+            const matchedUser = list.items.find((u) => u.uid === cleanUser || u.id === cleanUser);
+            if (matchedUser) {
+              resolvedUserId = matchedUser.id;
+            } else {
+              // UID does not exist -> return empty withholdings list immediately
+              if (!cursor) setWithholdings([]);
+              setNextCursor(null);
+              setWithholdingsLoading(false);
+              return;
+            }
+          } else {
+            resolvedUserId = cleanUser;
+          }
+        }
+
+        const q: { limit: number; userId?: string; symbol?: string; cursor?: string; from?: string; to?: string } = { limit: 50 };
+        if (resolvedUserId) q.userId = resolvedUserId;
+        if (symbolQuery.trim()) q.symbol = symbolQuery.trim();
+
+        // Always preserve period (from & to) regardless of cursor
+        if (summary?.from && summary?.to) {
+          q.from = summary.from;
+          q.to = summary.to;
+        }
+        if (cursor) {
+          q.cursor = cursor;
+        }
+
+        const res = await api.adminTaxWithholdings({ query: q });
+        if (cursor) {
+          setWithholdings((prev) => [...prev, ...(res.items || [])]);
+        } else {
+          setWithholdings(res.items || []);
+        }
+        setNextCursor(res.nextCursor || null);
+      } catch (err) {
+        if (!cursor) setWithholdings([]);
+        setWithholdingsError(formatApiError(err, 'Không thể tải danh sách khấu trừ thuế.'));
+      } finally {
+        setWithholdingsLoading(false);
       }
-      const res = await api.adminTaxWithholdings({ query: q });
-      if (cursor) {
-        setWithholdings((prev) => [...prev, ...(res.items || [])]);
-      } else {
-        setWithholdings(res.items || []);
-      }
-      setNextCursor(res.nextCursor || null);
-    } catch (err) {
-      if (!cursor) setWithholdings([]);
-      setWithholdingsError(formatApiError(err, 'Không thể tải danh sách khấu trừ thuế.'));
-    } finally {
-      setWithholdingsLoading(false);
+    },
+    [api, summary?.from, summary?.to]
+  );
+
+  const handleApplyFilter = () => {
+    setAppliedUser(filterUser);
+    setAppliedSymbol(filterSymbol);
+    executeFetchWithholdings(filterUser, filterSymbol);
+  };
+
+  const handleLoadMore = () => {
+    if (nextCursor && !withholdingsLoading) {
+      executeFetchWithholdings(appliedUser, appliedSymbol, nextCursor);
     }
-  }, [api, filterUser, filterSymbol, summary?.from, summary?.to]);
+  };
 
   useEffect(() => {
     if (canRead) {
       fetchSettings();
-      fetchWithholdings();
     }
-  }, [canRead, fetchSettings, fetchWithholdings]);
+  }, [canRead, fetchSettings]);
 
   useEffect(() => {
     if (canRead) {
       fetchSummary(period);
     }
   }, [canRead, fetchSummary, period]);
+
+  // Load withholdings when period / summary range is ready or changed
+  useEffect(() => {
+    if (canRead) {
+      executeFetchWithholdings(appliedUser, appliedSymbol);
+    }
+  }, [canRead, summary?.from, summary?.to, executeFetchWithholdings]);
 
   // Save Settings Handler (M-04)
   const handleSaveSettings = async () => {
@@ -270,7 +331,7 @@ export const TaxManagementPage: React.FC = () => {
             onClick={() => {
               fetchSettings();
               fetchSummary(period);
-              fetchWithholdings();
+              executeFetchWithholdings(appliedUser, appliedSymbol);
             }}
             loading={settingsLoading || summaryLoading || withholdingsLoading}
             className="flex items-center gap-1.5"
@@ -664,28 +725,30 @@ export const TaxManagementPage: React.FC = () => {
             Nhật ký khấu trừ toàn hệ thống
           </div>
 
-          {/* Filters (M-08) */}
+          {/* Filters (M-08, AD-22) */}
           <div className="flex items-center gap-2 flex-wrap">
             <input
               type="text"
               data-testid="admin-tax-filter-user"
               value={filterUser}
               onChange={(e) => setFilterUser(e.target.value)}
-              placeholder="Lọc User ID..."
-              className="bg-[var(--bg,#000000)] border border-[var(--line,#1d1e21)] rounded px-2.5 py-1 text-xs text-[var(--text,#f4f4f5)] font-mono outline-none focus:border-indigo-500 w-36"
+              onKeyDown={(e) => e.key === 'Enter' && handleApplyFilter()}
+              placeholder="Lọc User ID hoặc UID..."
+              className="bg-[var(--bg,#000000)] border border-[var(--line,#1d1e21)] rounded px-2.5 py-1 text-xs text-[var(--text,#f4f4f5)] font-mono outline-none focus:border-indigo-500 w-44"
             />
             <input
               type="text"
               data-testid="admin-tax-filter-symbol"
               value={filterSymbol}
               onChange={(e) => setFilterSymbol(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleApplyFilter()}
               placeholder="Lọc Cặp (vd BTCUSDT)..."
               className="bg-[var(--bg,#000000)] border border-[var(--line,#1d1e21)] rounded px-2.5 py-1 text-xs text-[var(--text,#f4f4f5)] font-mono outline-none focus:border-indigo-500 w-36"
             />
             <Button
               variant="secondary"
               size="sm"
-              onClick={() => fetchWithholdings()}
+              onClick={handleApplyFilter}
               loading={withholdingsLoading}
               className="flex items-center gap-1"
             >
@@ -698,7 +761,7 @@ export const TaxManagementPage: React.FC = () => {
         {withholdingsError && (
           <div className="p-4 bg-red-500/10 border-b border-red-500/30 text-xs text-red-300 flex items-center justify-between">
             <span>{withholdingsError}</span>
-            <Button variant="secondary" size="sm" onClick={() => fetchWithholdings()}>
+            <Button variant="secondary" size="sm" onClick={() => executeFetchWithholdings(appliedUser, appliedSymbol)}>
               Thử lại
             </Button>
           </div>
@@ -742,7 +805,7 @@ export const TaxManagementPage: React.FC = () => {
                       {formatDecimal(w.quantity, { decimals: 6 })}
                     </td>
                     <td className="px-4 py-3 font-mono text-right text-[var(--text,#f4f4f5)]">
-                      {formatDecimal(w.price, { decimals: 2 })}
+                      {formatPrice(w.price, symbolTickSizes[w.symbol])}
                     </td>
                     <td className="px-4 py-3 font-mono text-right text-[var(--text,#f4f4f5)]">
                       {formatDecimal(w.grossQuote, { decimals: 2 })} {w.asset}
@@ -766,13 +829,13 @@ export const TaxManagementPage: React.FC = () => {
           </table>
         </div>
 
-        {/* Load More Button (M-08) */}
+        {/* Load More Button (M-08, AD-22) */}
         {nextCursor && (
           <div className="p-4 border-t border-[var(--line,#1d1e21)] text-center">
             <button
               type="button"
               data-testid="admin-tax-more"
-              onClick={() => fetchWithholdings(nextCursor)}
+              onClick={handleLoadMore}
               disabled={withholdingsLoading}
               className="px-4 py-2 rounded-lg bg-[var(--line,#1d1e21)] text-xs text-[var(--text,#f4f4f5)] hover:bg-[var(--line,#1d1e21)]/80 transition-colors"
             >
