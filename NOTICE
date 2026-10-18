@@ -1,0 +1,3 @@
+Third-party files keep their own licenses: the skills under .agent/skills/ and
+.claude/skills/ that ship a LICENSE file or a "license:" line in SKILL.md
+(MIT / Apache-2.0) are not covered by the notice above.
