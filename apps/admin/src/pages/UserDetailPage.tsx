@@ -418,20 +418,20 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
       } else if (confirmAction === 'RESET') {
         await api.adminResetAccount({ params: { userId: detail.user.id }, body: { reason, confirm: 'RESET' } });
       } else if (confirmAction === 'DEACTIVATE_USER') {
+        // Bước 1: Khóa tài khoản trước
         try {
-          await api.adminResetAccount({ params: { userId: detail.user.id }, body: { reason: `Đặt lại số dư: ${reason}`, confirm: 'RESET' } });
-        } catch (resetErr: unknown) {
-          const msg = resetErr instanceof Error ? resetErr.message : 'Thao tác thất bại';
-          setConfirmError(`Lỗi đặt lại số dư: ${msg}`);
+          await api.adminLockUser({ params: { userId: detail.user.id }, body: { reason: `Khóa tài khoản: ${reason}` } });
+        } catch (lockErr: unknown) {
+          setConfirmError(`Bước 1 thất bại (Lỗi khóa tài khoản): ${formatApiError(lockErr)}`);
           return;
         }
 
+        // Bước 2: Đặt lại số dư sau
         try {
-          await api.adminLockUser({ params: { userId: detail.user.id }, body: { reason: `Khóa tài khoản: ${reason}` } });
-          setAuditNotification(`Đã đặt lại số dư và khóa tài khoản ${detail.user.email}`);
-        } catch (lockErr: unknown) {
-          const msg = lockErr instanceof Error ? lockErr.message : 'Lỗi khóa';
-          setConfirmError(`Đã đặt lại số dư nhưng khóa thất bại: ${msg}`);
+          await api.adminResetAccount({ params: { userId: detail.user.id }, body: { reason: `Đặt lại số dư: ${reason}`, confirm: 'RESET' } });
+          setAuditNotification(`Đã khóa tài khoản và đặt lại số dư của ${detail.user.email}`);
+        } catch (resetErr: unknown) {
+          setConfirmError(`Bước 1 thành công (Đã khóa tài khoản), nhưng Bước 2 thất bại (Lỗi đặt lại số dư): ${formatApiError(resetErr)}`);
           return;
         }
       } else if (confirmAction === 'STOP_BOT' && selectedBotId) {
@@ -1605,10 +1605,10 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
         consequenceText={
           confirmAction === 'LOCK' ? 'Khóa = đăng xuất mọi thiết bị ngay; lệnh đang mở vẫn giữ; người dùng không đăng nhập lại được cho tới khi mở khóa.' :
           confirmAction === 'UNLOCK' ? 'Người dùng sẽ có thể đăng nhập lại vào web sàn và tiếp tục giao dịch bình thường.' :
-          confirmAction === 'RESET' ? 'Hủy toàn bộ lệnh mở, đưa toàn bộ số dư về 0, xóa lịch sử faucet. Không thể hoàn tác!' :
+          confirmAction === 'RESET' ? 'Hủy toàn bộ lệnh Spot & Futures, đóng mọi vị thế Futures, dừng bot/DCA, xóa giá vốn, xóa lịch sử Faucet và đưa toàn bộ số dư về 0 (ACCOUNT_RESET). Thao tác này không thể hoàn tác!' :
           confirmAction === 'STOP_BOT' ? 'Hủy toàn bộ lệnh đang mở của bot này. Thao tác sẽ được ghi vào nhật ký.' :
           confirmAction === 'CANCEL_DCA' ? 'Hủy kế hoạch định kỳ này. Thao tác sẽ được ghi vào nhật ký.' :
-          confirmAction === 'DEACTIVATE_USER' ? 'Tài khoản sẽ bị hủy toàn bộ lệnh mở, đưa toàn bộ số dư về 0 (ACCOUNT_RESET) và khóa tài khoản. Số dư không thể hoàn tác, nhưng tài khoản có thể mở khóa lại sau.' :
+          confirmAction === 'DEACTIVATE_USER' ? 'Tài khoản sẽ bị khóa ngay lập tức (đăng xuất mọi thiết bị). Đồng thời hủy toàn bộ lệnh mở, đóng mọi vị thế Futures, dừng bot/DCA, xóa giá vốn, xóa lịch sử Faucet và đưa toàn bộ số dư về 0 (ACCOUNT_RESET). Số dư và vị thế không thể hoàn tác, nhưng tài khoản có thể mở khóa lại sau.' :
           confirmAction === 'TOGGLE_SIGNALS' ? `Người dùng sẽ ${detail?.user.signalsAccess ? 'mất' : 'được cấp'} quyền truy cập các bot và chiến lược tín hiệu trên sàn.` :
           'Hành động này sẽ được ghi nhận vào nhật ký quản trị của sàn.'
         }
