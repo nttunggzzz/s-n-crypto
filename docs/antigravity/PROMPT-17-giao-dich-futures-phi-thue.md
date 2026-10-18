@@ -142,6 +142,7 @@ Lưu lỗi → trả ngôi sao về trạng thái cũ + `toastError(formatApiErr
 - Có trạng thái tải / lỗi kèm "Thử lại"; không hiện 0 khi lỗi. Nút "Xem chi tiết thuế" → `/account/tax`.
 - Số tiền: `formatDecimal` (không `parseFloat`); khối lượng lớn dùng định dạng gọn có sẵn (`format.ts`).
 **Nghiệm thu:** mua 100 USDT BTC → `profile-volume-today` `data-value` = `quoteQty` của lần khớp. Thuế bật, bán → `profile-tax-month` = `Trade.tax`.
+**Trạng thái:** Hoàn thành. Đã chỉnh sửa `apps/exchange/src/pages/SettingsPage.tsx`: gọi `api.accountTradingStats()`, hiển thị khối "Hoạt động giao dịch" với các ô `profile-volume-today`, `profile-volume-7d`, `profile-volume-30d` (gồm `data-value`, chia rõ Spot/Futures/số lần khớp), và thẻ `profile-tax-month` (thuế đã khấu trừ tháng này, tháng trước, ghi chú giải thích theo danh mục và chế độ thuế, cùng ghi chú các lần khớp không phải USDT).
 
 ### S-15 · P1 · Admin chi tiết người dùng: thuế, khối lượng, số dư, tài sản nắm giữ
 **File:** `apps/admin/src/pages/UserDetailPage.tsx:656-706` (tab số dư), phần đầu trang.

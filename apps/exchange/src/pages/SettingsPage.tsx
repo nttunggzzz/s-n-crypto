@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import type { SessionInfo, AvatarId, SecurityOverview, LoginEvent, Preferences, CandleInterval } from '@cex/contracts';
+import type { SessionInfo, AvatarId, SecurityOverview, LoginEvent, Preferences, CandleInterval, AccountTradingStats } from '@cex/contracts';
 import { ApiError } from '@cex/contracts';
 
 type UpdatePreferencesInput = Partial<Preferences>;
@@ -22,6 +22,7 @@ import {
   Modal,
   useToast,
   EmptyState,
+  formatDecimal,
 } from '@cex/ui';
 
 import { User, Shield, Settings, Copy, Check, ShieldCheck, Lock, Key, AlertTriangle, ShieldAlert, Download } from 'lucide-react';
@@ -77,6 +78,29 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate }) => {
   const [avatarPickerOpen, setAvatarPickerOpen] = useState(false);
   const [updatingAvatar, setUpdatingAvatar] = useState(false);
   const [copiedUid, setCopiedUid] = useState(false);
+  const [tradingStats, setTradingStats] = useState<AccountTradingStats | null>(null);
+  const [statsLoading, setStatsLoading] = useState(false);
+  const [statsError, setStatsError] = useState<string | null>(null);
+
+  const loadTradingStats = React.useCallback(async () => {
+    if (!isAuthenticated) return;
+    setStatsLoading(true);
+    setStatsError(null);
+    try {
+      const stats = await api.accountTradingStats();
+      setTradingStats(stats);
+    } catch (err: any) {
+      setStatsError(err?.message || 'Không thể tải thống kê giao dịch');
+    } finally {
+      setStatsLoading(false);
+    }
+  }, [api, isAuthenticated]);
+
+  useEffect(() => {
+    if (activeTab === 'profile' && isAuthenticated) {
+      loadTradingStats();
+    }
+  }, [activeTab, isAuthenticated, loadTradingStats]);
 
   useEffect(() => {
     if (user?.name) {
@@ -519,6 +543,123 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate }) => {
                   </Button>
                 </form>
               </div>
+            </div>
+
+            {/* Hoạt động giao dịch */}
+            <div className="pt-6 border-t border-[var(--line,#1d1e21)] space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold text-[var(--text,#f4f4f5)]">Hoạt động giao dịch</h3>
+                <button
+                  type="button"
+                  onClick={() => onNavigate('/account/tax')}
+                  className="text-xs text-[var(--accent,#818cf8)] hover:underline flex items-center gap-1 cursor-pointer"
+                >
+                  Xem chi tiết thuế
+                </button>
+              </div>
+
+              {statsLoading ? (
+                <div className="p-6 rounded-[var(--radius-lg,12px)] bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)] text-center text-xs text-[var(--text-3,#63636b)]">
+                  Đang tải thống kê giao dịch...
+                </div>
+              ) : statsError ? (
+                <div className="p-4 rounded-[var(--radius-lg,12px)] bg-[var(--down,#f2475f)]/10 border border-[var(--down,#f2475f)]/20 flex items-center justify-between">
+                  <div className="text-xs text-[var(--down,#f2475f)]">{statsError}</div>
+                  <Button variant="secondary" size="sm" onClick={loadTradingStats}>
+                    Thử lại
+                  </Button>
+                </div>
+              ) : tradingStats ? (
+                <div className="space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    {/* Khối lượng hôm nay */}
+                    <div
+                      data-testid="profile-volume-today"
+                      data-value={tradingStats.volume.today.total}
+                      className="p-3.5 rounded-[var(--radius-lg,12px)] bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)] flex flex-col justify-between gap-1"
+                    >
+                      <div className="text-xs text-[var(--text-3,#63636b)]">Khối lượng hôm nay</div>
+                      <div className="text-base font-bold text-[var(--text,#f4f4f5)]">
+                        {formatDecimal(tradingStats.volume.today.total)} <span className="text-xs font-normal text-[var(--text-3,#63636b)]">USDT</span>
+                      </div>
+                      <div className="text-[11px] text-[var(--text-2,#a1a1aa)]">
+                        Spot {formatDecimal(tradingStats.volume.today.spot)} · Futures {formatDecimal(tradingStats.volume.today.futures)} · {tradingStats.volume.today.fills} lần khớp
+                      </div>
+                    </div>
+
+                    {/* Khối lượng 7 ngày */}
+                    <div
+                      data-testid="profile-volume-7d"
+                      data-value={tradingStats.volume.last7d.total}
+                      className="p-3.5 rounded-[var(--radius-lg,12px)] bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)] flex flex-col justify-between gap-1"
+                    >
+                      <div className="text-xs text-[var(--text-3,#63636b)]">Khối lượng 7 ngày</div>
+                      <div className="text-base font-bold text-[var(--text,#f4f4f5)]">
+                        {formatDecimal(tradingStats.volume.last7d.total)} <span className="text-xs font-normal text-[var(--text-3,#63636b)]">USDT</span>
+                      </div>
+                      <div className="text-[11px] text-[var(--text-2,#a1a1aa)]">
+                        Spot {formatDecimal(tradingStats.volume.last7d.spot)} · Futures {formatDecimal(tradingStats.volume.last7d.futures)} · {tradingStats.volume.last7d.fills} lần khớp
+                      </div>
+                    </div>
+
+                    {/* Khối lượng 30 ngày */}
+                    <div
+                      data-testid="profile-volume-30d"
+                      data-value={tradingStats.volume.last30d.total}
+                      className="p-3.5 rounded-[var(--radius-lg,12px)] bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)] flex flex-col justify-between gap-1"
+                    >
+                      <div className="text-xs text-[var(--text-3,#63636b)]">Khối lượng 30 ngày</div>
+                      <div className="text-base font-bold text-[var(--text,#f4f4f5)]">
+                        {formatDecimal(tradingStats.volume.last30d.total)} <span className="text-xs font-normal text-[var(--text-3,#63636b)]">USDT</span>
+                      </div>
+                      <div className="text-[11px] text-[var(--text-2,#a1a1aa)]">
+                        Spot {formatDecimal(tradingStats.volume.last30d.spot)} · Futures {formatDecimal(tradingStats.volume.last30d.futures)} · {tradingStats.volume.last30d.fills} lần khớp
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Thuế đã khấu trừ tháng này */}
+                  <div
+                    data-testid="profile-tax-month"
+                    data-value={tradingStats.tax.thisMonth.withheldAmount}
+                    className="p-4 rounded-[var(--radius-lg,12px)] bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)] space-y-2"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="text-xs font-medium text-[var(--text-2,#a1a1aa)]">
+                        Thuế đã khấu trừ tháng {tradingStats.tax.thisMonth.month.split('-').length === 2 ? `${tradingStats.tax.thisMonth.month.split('-')[1]}/${tradingStats.tax.thisMonth.month.split('-')[0]}` : tradingStats.tax.thisMonth.month}
+                      </div>
+                      <Badge variant="outline" size="sm">thử nghiệm</Badge>
+                    </div>
+
+                    <div className="flex items-baseline gap-2">
+                      <div className="text-xl font-bold text-[var(--text,#f4f4f5)]">
+                        {formatDecimal(tradingStats.tax.thisMonth.withheldAmount)} <span className="text-xs font-normal text-[var(--text-3,#63636b)]">USDT</span>
+                      </div>
+                      <div className="text-xs text-[var(--text-3,#63636b)]">
+                        ({tradingStats.tax.thisMonth.withheldCount} lần bán)
+                      </div>
+                    </div>
+
+                    <div className="text-[11px] text-[var(--text-3,#63636b)]">
+                      Tháng trước ({tradingStats.tax.previousMonth.month.split('-').length === 2 ? `${tradingStats.tax.previousMonth.month.split('-')[1]}/${tradingStats.tax.previousMonth.month.split('-')[0]}` : tradingStats.tax.previousMonth.month}): {formatDecimal(tradingStats.tax.previousMonth.withheldAmount)} USDT ({tradingStats.tax.previousMonth.withheldCount} lần bán)
+                    </div>
+
+                    <div className="text-[11px] text-[var(--text-2,#a1a1aa)] pt-1 border-t border-[var(--line,#1d1e21)]/50">
+                      {tradingStats.tax.category === 'DOMESTIC_ORG'
+                        ? 'Tổ chức trong nước tự kê khai — sàn không khấu trừ'
+                        : tradingStats.tax.taxMode === 'OFF'
+                        ? 'Sàn đang tắt thuế'
+                        : 'Thuế 0,1% được trừ thẳng vào tiền bán; bạn không cần nộp thêm (sàn thử nghiệm).'}
+                    </div>
+                  </div>
+
+                  {tradingStats.volume.excludedNonUsdtFills > 0 && (
+                    <div className="text-[11px] text-[var(--text-3,#63636b)] italic">
+                      * Chưa tính {tradingStats.volume.excludedNonUsdtFills} lần khớp của cặp không phải USDT
+                    </div>
+                  )}
+                </div>
+              ) : null}
             </div>
           </div>
         )}
