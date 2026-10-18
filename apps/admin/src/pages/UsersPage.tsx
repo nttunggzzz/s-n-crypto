@@ -11,8 +11,6 @@ import {
   Unlock,
   Shield,
   ArrowRight,
-  KeyRound,
-  Mail,
   UserCheck,
   X,
   RefreshCw,
@@ -32,7 +30,6 @@ export const UsersPage: React.FC<{ onNavigate: (path: string) => void }> = ({ on
 
   // Modal Thêm thành viên
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
-  const [addMethod, setAddMethod] = useState<'invite' | 'direct'>('invite');
   const [inviteRole, setInviteRole] = useState<Role>('user');
   const [inviteUses, setInviteUses] = useState('1');
   const [inviteNote, setInviteNote] = useState('');
@@ -40,12 +37,6 @@ export const UsersPage: React.FC<{ onNavigate: (path: string) => void }> = ({ on
   const [copiedInvite, setCopiedInvite] = useState(false);
   const [isCreatingInvite, setIsCreatingInvite] = useState(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
-
-  // Direct user provision state
-  const [directEmail, setDirectEmail] = useState('');
-  const [directName, setDirectName] = useState('');
-  const [directRole, setDirectRole] = useState<Role>('user');
-  const [directNotice, setDirectNotice] = useState<string | null>(null);
 
   // Quick Action Dialogs
   const [selectedUser, setSelectedUser] = useState<AdminUserSummary | null>(null);
@@ -408,221 +399,117 @@ export const UsersPage: React.FC<{ onNavigate: (path: string) => void }> = ({ on
             <div className="flex items-center justify-between border-b border-[var(--line,#1d1e21)] pb-3">
               <h3 className="text-lg font-bold text-[var(--text,#f4f4f5)] flex items-center gap-2">
                 <UserPlus size={18} className="text-[var(--accent,#818cf8)]" />
-                <span>Thêm Thành Viên Vào Hệ Thống</span>
+                <span>Tạo Mã Mời Thành Viên</span>
               </h3>
               <button onClick={() => { setIsAddUserOpen(false); setCreatedInvite(null); }} className="text-[var(--text-3,#63636b)] hover:text-white">
                 <X size={18} />
               </button>
             </div>
 
-            {/* Methods tabs */}
-            <div className="flex border-b border-[var(--line,#1d1e21)] gap-4 text-xs font-semibold">
-              <button
-                onClick={() => setAddMethod('invite')}
-                className={`pb-2.5 flex items-center gap-1.5 border-b-2 transition-all ${
-                  addMethod === 'invite'
-                    ? 'border-[var(--accent,#818cf8)] text-[var(--accent,#818cf8)]'
-                    : 'border-transparent text-[var(--text-2,#a1a1aa)] hover:text-white'
-                }`}
-              >
-                <KeyRound size={14} />
-                <span>Qua Mã Mời Gia Nhập (Khuyên dùng)</span>
-              </button>
+            <div className="space-y-4">
+              {createdInvite ? (
+                <div className="p-4 rounded-xl bg-[var(--up,#1fc27a)]/10 border border-[var(--up,#1fc27a)]/30 space-y-3">
+                  <div className="flex items-center gap-2 text-xs font-bold text-[var(--up,#1fc27a)]">
+                    <Check size={16} />
+                    <span>Đã tạo mã mời thành công!</span>
+                  </div>
 
-              <button
-                onClick={() => setAddMethod('direct')}
-                className={`pb-2.5 flex items-center gap-1.5 border-b-2 transition-all ${
-                  addMethod === 'direct'
-                    ? 'border-[var(--accent,#818cf8)] text-[var(--accent,#818cf8)]'
-                    : 'border-transparent text-[var(--text-2,#a1a1aa)] hover:text-white'
-                }`}
-              >
-                <Mail size={14} />
-                <span>Tạo Tài Khoản Trực Tiếp</span>
-              </button>
-            </div>
-
-            {/* Method 1: Create Invite Code */}
-            {addMethod === 'invite' && (
-              <div className="space-y-4">
-                {createdInvite ? (
-                  <div className="p-4 rounded-xl bg-[var(--up,#1fc27a)]/10 border border-[var(--up,#1fc27a)]/30 space-y-3">
-                    <div className="flex items-center gap-2 text-xs font-bold text-[var(--up,#1fc27a)]">
-                      <Check size={16} />
-                      <span>Đã tạo mã mời thành công!</span>
-                    </div>
-
-                    <div className="p-3 bg-[var(--bg,#000000)] border border-[var(--line,#1d1e21)] rounded-lg flex items-center justify-between">
-                      <span className="font-mono text-base font-bold text-[var(--accent,#818cf8)] tracking-wider">
-                        {createdInvite.code}
-                      </span>
-                      <button
-                        onClick={copyCreatedInvite}
-                        className="px-3 py-1.5 rounded bg-[var(--accent,#818cf8)] hover:brightness-110 text-white text-xs font-bold transition-all flex items-center gap-1"
-                      >
-                        {copiedInvite ? <Check size={13} /> : <Copy size={13} />}
-                        <span>{copiedInvite ? 'Đã chép' : 'Sao chép'}</span>
-                      </button>
-                    </div>
-
-                    <p className="text-[11px] text-[var(--text-2,#a1a1aa)] leading-relaxed">
-                      Mã này chỉ hiển thị một lần. Hãy gửi mã này cho thành viên để họ nhập khi đăng ký tài khoản tại web sàn.
-                    </p>
-
+                  <div className="p-3 bg-[var(--bg,#000000)] border border-[var(--line,#1d1e21)] rounded-lg flex items-center justify-between">
+                    <span className="font-mono text-base font-bold text-[var(--accent,#818cf8)] tracking-wider">
+                      {createdInvite.code}
+                    </span>
                     <button
-                      onClick={() => setCreatedInvite(null)}
-                      className="w-full py-2 rounded-lg bg-[var(--line,#1d1e21)] text-xs text-[var(--text-2,#a1a1aa)] hover:text-white transition-colors"
+                      onClick={copyCreatedInvite}
+                      className="px-3 py-1.5 rounded bg-[var(--accent,#818cf8)] hover:brightness-110 text-white text-xs font-bold transition-all flex items-center gap-1"
                     >
-                      Tạo mã mời khác
+                      {copiedInvite ? <Check size={13} /> : <Copy size={13} />}
+                      <span>{copiedInvite ? 'Đã chép' : 'Sao chép'}</span>
                     </button>
                   </div>
-                ) : (
-                  <form onSubmit={handleCreateInviteSubmit} className="space-y-4">
-                    {inviteError && (
-                      <div className="p-3 rounded-lg bg-[var(--down,#f2475f)]/10 border border-[var(--down,#f2475f)]/30 text-xs text-[var(--down,#f2475f)]">
-                        {inviteError}
-                      </div>
-                    )}
+
+                  <p className="text-[11px] text-[var(--text-2,#a1a1aa)] leading-relaxed">
+                    Mã này chỉ hiển thị một lần. Hãy gửi mã này cho thành viên để họ nhập khi đăng ký tài khoản tại web sàn.
+                  </p>
+
+                  <button
+                    onClick={() => setCreatedInvite(null)}
+                    className="w-full py-2 rounded-lg bg-[var(--line,#1d1e21)] text-xs text-[var(--text-2,#a1a1aa)] hover:text-white transition-colors"
+                  >
+                    Tạo mã mời khác
+                  </button>
+                </div>
+              ) : (
+                <form onSubmit={handleCreateInviteSubmit} className="space-y-4">
+                  {inviteError && (
+                    <div className="p-3 rounded-lg bg-[var(--down,#f2475f)]/10 border border-[var(--down,#f2475f)]/30 text-xs text-[var(--down,#f2475f)]">
+                      {inviteError}
+                    </div>
+                  )}
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-semibold uppercase text-[var(--text-2,#a1a1aa)]">
+                      Vai trò dự kiến của thành viên
+                    </label>
+                    <select
+                      value={inviteRole}
+                      onChange={(e) => setInviteRole(e.target.value as Role)}
+                      className="w-full bg-[var(--bg,#000000)] border border-[var(--line,#1d1e21)] rounded-lg p-2.5 text-sm text-[var(--text,#f4f4f5)] outline-none focus:border-[var(--accent,#818cf8)]"
+                    >
+                      <option value="user">User (Khách giao dịch bình thường)</option>
+                      <option value="support">Support (Nhân viên chăm sóc khách hàng)</option>
+                      <option value="operator">Operator (Vận hành viên sàn)</option>
+                      <option value="admin">Admin (Quản trị viên)</option>
+                    </select>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-semibold uppercase text-[var(--text-2,#a1a1aa)]">
+                        Số lượt dùng tối đa
+                      </label>
+                      <input
+                        type="number"
+                        min="1"
+                        max="100"
+                        value={inviteUses}
+                        onChange={(e) => setInviteUses(e.target.value)}
+                        className="w-full bg-[var(--bg,#000000)] border border-[var(--line,#1d1e21)] rounded-lg p-2.5 text-sm text-[var(--text,#f4f4f5)] outline-none focus:border-[var(--accent,#818cf8)]"
+                      />
+                    </div>
 
                     <div className="space-y-1.5">
                       <label className="text-xs font-semibold uppercase text-[var(--text-2,#a1a1aa)]">
-                        Vai trò dự kiến của thành viên
+                        Ghi chú / Mục đích
                       </label>
-                      <select
-                        value={inviteRole}
-                        onChange={(e) => setInviteRole(e.target.value as Role)}
+                      <input
+                        type="text"
+                        placeholder="Ví dụ: Cấp cho đối tác..."
+                        value={inviteNote}
+                        onChange={(e) => setInviteNote(e.target.value)}
                         className="w-full bg-[var(--bg,#000000)] border border-[var(--line,#1d1e21)] rounded-lg p-2.5 text-sm text-[var(--text,#f4f4f5)] outline-none focus:border-[var(--accent,#818cf8)]"
-                      >
-                        <option value="user">User (Khách giao dịch bình thường)</option>
-                        <option value="support">Support (Nhân viên chăm sóc khách hàng)</option>
-                        <option value="operator">Operator (Vận hành viên sàn)</option>
-                        <option value="admin">Admin (Quản trị viên)</option>
-                      </select>
+                      />
                     </div>
-
-                    <div className="grid grid-cols-2 gap-3">
-                      <div className="space-y-1.5">
-                        <label className="text-xs font-semibold uppercase text-[var(--text-2,#a1a1aa)]">
-                          Số lượt dùng tối đa
-                        </label>
-                        <input
-                          type="number"
-                          min="1"
-                          max="100"
-                          value={inviteUses}
-                          onChange={(e) => setInviteUses(e.target.value)}
-                          className="w-full bg-[var(--bg,#000000)] border border-[var(--line,#1d1e21)] rounded-lg p-2.5 text-sm text-[var(--text,#f4f4f5)] outline-none focus:border-[var(--accent,#818cf8)]"
-                        />
-                      </div>
-
-                      <div className="space-y-1.5">
-                        <label className="text-xs font-semibold uppercase text-[var(--text-2,#a1a1aa)]">
-                          Ghi chú / Mục đích
-                        </label>
-                        <input
-                          type="text"
-                          placeholder="Ví dụ: Cấp cho đối tác..."
-                          value={inviteNote}
-                          onChange={(e) => setInviteNote(e.target.value)}
-                          className="w-full bg-[var(--bg,#000000)] border border-[var(--line,#1d1e21)] rounded-lg p-2.5 text-sm text-[var(--text,#f4f4f5)] outline-none focus:border-[var(--accent,#818cf8)]"
-                        />
-                      </div>
-                    </div>
-
-                    <div className="flex justify-end gap-3 pt-2 border-t border-[var(--line,#1d1e21)]">
-                      <button
-                        type="button"
-                        onClick={() => setIsAddUserOpen(false)}
-                        className="px-4 py-2 rounded-lg border border-[var(--line,#1d1e21)] text-xs text-[var(--text-2,#a1a1aa)] hover:bg-[var(--line,#1d1e21)] transition-colors"
-                      >
-                        Hủy
-                      </button>
-                      <button
-                        type="submit"
-                        disabled={isCreatingInvite}
-                        className="px-4 py-2 rounded-lg bg-[var(--accent,#818cf8)] hover:brightness-110 text-white text-xs font-bold transition-all disabled:opacity-50"
-                      >
-                        {isCreatingInvite ? 'Đang tạo...' : 'Tạo mã mời'}
-                      </button>
-                    </div>
-                  </form>
-                )}
-              </div>
-            )}
-
-            {/* Method 2: Direct Provisioning */}
-            {addMethod === 'direct' && (
-              <div className="space-y-4">
-                <div className="p-3.5 rounded-lg bg-blue-950/30 border border-blue-800/40 text-xs text-blue-300 leading-relaxed">
-                  <strong>Thông báo quy chuẩn bảo mật:</strong> Để đảm bảo tính toàn vẹn xác minh email và khởi tạo ví tài sản an toàn, hệ thống khuyến nghị sử dụng <em>Mã mời gia nhập</em>. Form dưới đây phục vụ ghi nhận hồ sơ thành viên trực tiếp vào danh sách cấp quyền.
-                </div>
-
-                <div className="space-y-3 text-xs">
-                  <div className="space-y-1">
-                    <label className="font-semibold text-[var(--text-2,#a1a1aa)] uppercase">Email thành viên</label>
-                    <input
-                      type="email"
-                      placeholder="thanhvien@example.com"
-                      value={directEmail}
-                      onChange={(e) => setDirectEmail(e.target.value)}
-                      className="w-full bg-[var(--bg,#000000)] border border-[var(--line,#1d1e21)] rounded-lg p-2.5 text-sm text-[var(--text,#f4f4f5)] outline-none focus:border-[var(--accent,#818cf8)]"
-                    />
                   </div>
 
-                  <div className="space-y-1">
-                    <label className="font-semibold text-[var(--text-2,#a1a1aa)] uppercase">Họ và tên</label>
-                    <input
-                      type="text"
-                      placeholder="Nguyễn Văn A"
-                      value={directName}
-                      onChange={(e) => setDirectName(e.target.value)}
-                      className="w-full bg-[var(--bg,#000000)] border border-[var(--line,#1d1e21)] rounded-lg p-2.5 text-sm text-[var(--text,#f4f4f5)] outline-none focus:border-[var(--accent,#818cf8)]"
-                    />
-                  </div>
-
-                  <div className="space-y-1">
-                    <label className="font-semibold text-[var(--text-2,#a1a1aa)] uppercase">Vai trò chỉ định</label>
-                    <select
-                      value={directRole}
-                      onChange={(e) => setDirectRole(e.target.value as Role)}
-                      className="w-full bg-[var(--bg,#000000)] border border-[var(--line,#1d1e21)] rounded-lg p-2.5 text-sm text-[var(--text,#f4f4f5)] outline-none focus:border-[var(--accent,#818cf8)]"
+                  <div className="flex justify-end gap-3 pt-2 border-t border-[var(--line,#1d1e21)]">
+                    <button
+                      type="button"
+                      onClick={() => setIsAddUserOpen(false)}
+                      className="px-4 py-2 rounded-lg border border-[var(--line,#1d1e21)] text-xs text-[var(--text-2,#a1a1aa)] hover:bg-[var(--line,#1d1e21)] transition-colors"
                     >
-                      <option value="user">User (Khách giao dịch)</option>
-                      <option value="support">Support</option>
-                      <option value="admin">Admin</option>
-                      <option value="owner">Owner</option>
-                    </select>
+                      Hủy
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={isCreatingInvite}
+                      className="px-4 py-2 rounded-lg bg-[var(--accent,#818cf8)] hover:brightness-110 text-white text-xs font-bold transition-all disabled:opacity-50"
+                    >
+                      {isCreatingInvite ? 'Đang tạo...' : 'Tạo mã mời'}
+                    </button>
                   </div>
-                </div>
-
-                {directNotice && (
-                  <div className="p-3 rounded-lg bg-[var(--up,#1fc27a)]/10 border border-[var(--up,#1fc27a)]/30 text-xs text-[var(--up,#1fc27a)]">
-                    {directNotice}
-                  </div>
-                )}
-
-                <div className="flex justify-end gap-3 pt-2 border-t border-[var(--line,#1d1e21)]">
-                  <button
-                    type="button"
-                    onClick={() => setIsAddUserOpen(false)}
-                    className="px-4 py-2 rounded-lg border border-[var(--line,#1d1e21)] text-xs text-[var(--text-2,#a1a1aa)] hover:bg-[var(--line,#1d1e21)] transition-colors"
-                  >
-                    Đóng
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setDirectNotice(`Đã lưu yêu cầu cấp tài khoản cho ${directEmail}. Hệ thống đã gửi lời mời xác thực.`);
-                      setTimeout(() => setDirectNotice(null), 5000);
-                    }}
-                    disabled={!directEmail}
-                    className="px-4 py-2 rounded-lg bg-[var(--accent,#818cf8)] hover:brightness-110 text-white text-xs font-bold transition-all disabled:opacity-50"
-                  >
-                    Tạo tài khoản & Gửi kích hoạt
-                  </button>
-                </div>
-              </div>
-            )}
+                </form>
+              )}
+            </div>
           </div>
         </div>
       )}

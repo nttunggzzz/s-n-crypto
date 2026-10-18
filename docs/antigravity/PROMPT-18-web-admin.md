@@ -21,6 +21,9 @@ Dùng chung cho cả đợt: **một** hàm dịch lỗi theo `code` cho admin (
 | AD-10 | `pages/OverviewPage.tsx:125-133,150,212,215,227-234` | Số bịa: `?? 50` cặp, "Độ trễ Binance < 150ms" ghi cứng, đối soát null hiện "Sai lệch: 0" màu xanh, có sai lệch vẫn banner xanh | Bỏ số ghi cứng; số cặp LIVE/STALE/UNAVAILABLE từ `market.symbols[].status` (`admin-market-health`); đối soát null → "Chưa chạy"; sai lệch → đỏ; tải lỗi → lỗi + Thử lại | Không còn "150ms", `?? 50` |
 | AD-11 | `pages/ReconciliationPage.tsx:89-116` | Chỉ thấy **số lượng** sai lệch, không xem được chi tiết | Mở rộng từng lần chạy: bảng kind/account/người dùng (link chi tiết)/asset/field/expected/actual/chênh (`dec`); phân trang; chạy xong tự mở lần mới nhất | Lần `ok=false` có `recon-mismatch-row` |
 
+### Trạng thái các mục P1
+- **AD-02:** Hoàn thành. Đã xóa tab "Tạo tài khoản trực tiếp" và chuỗi thông báo "Hệ thống đã gửi lời mời xác thực" trong `pages/UsersPage.tsx`. Chỉ giữ luồng tạo mã mời gia nhập an toàn.
+
 ## P2
 | ID | File:dòng | Lỗi | Sửa |
 |---|---|---|---|

@@ -10,6 +10,7 @@ interface ConfirmDialogProps {
   onConfirm: (reason: string) => void;
   onCancel: () => void;
   isSubmitting?: boolean;
+  error?: string | null;
 }
 
 export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
@@ -21,6 +22,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   onConfirm,
   onCancel,
   isSubmitting,
+  error,
 }) => {
   const [reason, setReason] = useState('');
   const [phrase, setPhrase] = useState('');
@@ -48,6 +50,15 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
           <h2 id="confirm-dialog-title" className="text-lg font-bold text-[var(--text,#f4f4f5)]">{title}</h2>
           <p className="text-[var(--text-2,#a1a1aa)] text-sm mt-1">{consequenceText}</p>
         </div>
+
+        {error && (
+          <div
+            data-testid="confirm-error"
+            className="p-2.5 rounded bg-[var(--down,#f2475f)]/15 border border-[var(--down,#f2475f)]/30 text-xs text-[var(--down,#f2475f)] leading-relaxed"
+          >
+            {error}
+          </div>
+        )}
 
         {quickReasons && quickReasons.length > 0 && (
           <div>
