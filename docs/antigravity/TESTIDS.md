@@ -139,3 +139,59 @@ Sàn thử nghiệm: mọi màn thuế có nhãn "thử nghiệm", không dùng 
 | `admin-tax-by-symbol-row` | Mỗi cặp có bản ghi; `data-symbol` |
 | `admin-tax-export-csv` | Nút tải bảng kê CSV; tiêu đề = `ADMIN_TAX_EXPORT_COLUMNS` |
 
+
+## Rà soát lần 8 (PROMPT-17/18)
+Test: `e2e/tests/review08-futures.spec.ts`, `review08-spot-tax.spec.ts`, `review08-profile.spec.ts`, `review08-admin.spec.ts`.
+**Quy ước giá trị** (như mục Thuế): phần tử số mang `data-value` = số thập phân thô (chuỗi, dấu chấm, không phân tách hàng nghìn); test so `data-value`, không đọc chữ hiển thị.
+Phần tử chưa có dữ liệu (đang tải / lỗi) **không** mang `data-value` (không hiện `0` thay cho "chưa biết").
+Những chỗ test đọc **chữ** vì chữ chính là yêu cầu (nút, thông báo) được ghi ở cột "Chữ".
+
+### Futures — form đặt lệnh (`/futures/:symbol`) — `review08-futures.spec.ts` (S-01, S-02)
+| id | Phần tử | `data-value` / ghi chú |
+|---|---|---|
+| `futures-order-type-limit` | Tab "Giới hạn (Limit)" (cạnh `futures-order-type-market`) | mới |
+| `futures-price` | Ô "Giá đặt lệnh" của lệnh Limit (`<input>`) | mới |
+| `futures-tpsl-toggle` | Ô chọn (`<input type="checkbox">`) "TP / SL" của form | mới. Bật lên mới hiện hai ô dưới |
+| `futures-order-tp` / `futures-order-sl` | Ô giá Chốt lời / Cắt lỗ của form (`<input>`) | mới (khác `tpsl-take-profit`/`tpsl-stop-loss` của hộp TP/SL trên dòng vị thế) |
+| `futures-est-notional` | Giá trị lệnh = giá tham chiếu × khối lượng (MARKET: mark; LIMIT: giá đặt) | `data-value` (PROMPT-17 chỉ nêu `data-value` cho `futures-est-cost`; bốn ô số dưới đây đều mang `data-value` để test không đọc chữ) |
+| `futures-est-margin` | Ký quỹ ban đầu = `initialMargin(giá, khối lượng, đòn bẩy)` | `data-value` = số **làm tròn lên** 8 chữ số, đúng số server khóa |
+| `futures-est-fee` | Phí mở ước tính = `roundUp(giá trị × takerFee)` | `data-value`. Chữ ghi tỉ lệ ("0,05% taker"); LIMIT thêm ghi chú "maker"; MARKET **không** có chữ "maker" |
+| `futures-est-cost` | Tổng cần = ký quỹ + phí | `data-value` |
+| `futures-available` | Khả dụng ví Futures | chữ định dạng vi-VN (như mục Futures ở trên) |
+| `futures-max-long` / `futures-max-short` | Tối đa mở được (đơn vị coin) | `data-value` = `floorToStep(khả dụng ÷ (giá/đòn bẩy + giá × takerFee), stepSize)`; MARKET lấy thêm min với tổng khối lượng 20 mức của phía khớp |
+| `futures-max-btn` | Nút "Tối đa" cạnh ô khối lượng | tên truy cập đúng là "Tối đa" (test tìm theo chữ); điền số tối đa vào `futures-qty` |
+| `futures-est-funding` | Dòng funding | chữ: "{rate}% · còn {mm:ss}", ước tính mỗi kỳ, ghi ai trả: rate > 0 → "Long trả Short", rate < 0 → "Short trả Long" |
+| `futures-order-block-reason` | Lý do khóa nút Mở Long/Short, ngay dưới nút | chỉ render khi nút bị khóa vì khối lượng/giá trị/tiền. Chữ: thiếu tiền → "…cần thêm ~X USDT (ký quỹ + phí). Khả dụng: Y" (X = tổng cần − khả dụng); dưới mức tối thiểu → ghi `minNotional` và giá trị lệnh hiện tại. Có nút **"Chuyển từ Spot"** (tìm theo chữ) mở hộp chuyển tiền (`transfer-amount`) |
+| `futures-open-long` / `futures-open-short` | (đã có) | `disabled` thật (thuộc tính `disabled`) khi `futures-order-block-reason` hiện |
+| `futures-confirm-notional` / `futures-confirm-margin` / `futures-confirm-fee` / `futures-confirm-cost` | Bốn dòng trong hộp "Xác nhận đặt lệnh" Futures (`order-confirm` ở trong cùng hộp) | `data-value`, cùng số với `futures-est-*` của form |
+| (thông báo) | Chốt lời/cắt lỗ sai phía | chữ (toast hoặc dòng lỗi): Long "Chốt lời phải **cao hơn** và cắt lỗ **thấp hơn** giá mark …"; Short "Chốt lời phải **thấp hơn** và cắt lỗ **cao hơn** …" (test tìm `/chốt lời[^.]*cao hơn/i`, `/chốt lời[^.]*thấp hơn/i`) |
+
+### Spot — phí/thuế trên form đặt lệnh — `review08-spot-tax.spec.ts` (S-03)
+| id | Phần tử | Ghi chú |
+|---|---|---|
+| `spot-tax-line` | Dòng thuế dưới dòng phí của form `/trade/:symbol`, **luôn có** (cả khi chưa nhập khối lượng) | Chữ: MUA (thuế bật) "Thuế (0,25%): 0 — chỉ khấu trừ khi bán"; thuế `OFF` (cả MUA lẫn BÁN) "Thuế: không áp dụng (sàn đang tắt)"; BÁN `WITHHOLD` có `tax-breakdown` (dòng vẫn ghi tỉ lệ); `DOMESTIC_ORG` "Thuế: 0 — tổ chức trong nước tự kê khai" (không có `tax-breakdown`). Tỉ lệ từ `exchange:status`/`exchangeInfo.taxRate`, không ghi cứng. Dòng phí ghi tỉ lệ: "Phí giao dịch (0,1%): ~…" |
+
+### Hồ sơ (`/settings`, tab "Hồ sơ & Tài khoản") — `review08-profile.spec.ts` (S-14)
+| id | Phần tử | `data-value` |
+|---|---|---|
+| `profile-volume-today` | Khối lượng hôm nay (khối "Hoạt động giao dịch") | `accountTradingStats.volume.today.total` |
+| `profile-volume-7d` | Khối lượng 7 ngày | `volume.last7d.total` |
+| `profile-volume-30d` | Khối lượng 30 ngày | `volume.last30d.total` |
+| `profile-tax-month` | Thuế **đã khấu trừ** tháng này (nhãn "… tháng MM/YYYY") | `tax.thisMonth.withheldAmount` ("0.00000000" khi chưa có, kể cả `DOMESTIC_ORG`/thuế tắt) |
+Chữ bắt buộc: "đã khấu trừ", "được trừ thẳng vào tiền bán"; **không bao giờ** "cần đóng" hay "phải nộp"; thuế tắt → "Sàn đang tắt thuế"; `DOMESTIC_ORG` → "tự kê khai … sàn không khấu trừ"; nút/link "Xem chi tiết thuế" → `/account/tax`.
+
+### Web admin (`/admin/…`) — `review08-admin.spec.ts` (S-13, S-15, AD-07, AD-10)
+| id | Ở đâu | Ghi chú |
+|---|---|---|
+| `admin-2fa-required` | Màn "bắt buộc bật 2FA" của app admin | Hiện khi `publicConfig.staffTwoFactorRequired === true` và (`!user.twoFactorEnabled` **hoặc** một lời gọi admin trả `TWO_FACTOR_REQUIRED`). Khi hiện: không có `admin-overview`, `admin-halt-open`, danh sách người dùng |
+| `admin-no-2fa-notice` | Dải trên cùng "Máy chủ dev: admin không yêu cầu 2FA" | Chỉ khi `staffTwoFactorRequired === false` (hệ e2e: không bao giờ hiện) |
+| `admin-user-tax-total` | Thẻ tóm tắt đầu trang chi tiết người dùng (không nằm trong tab) | `data-value` = `adminGetUser.tax.withheldTotal` |
+| `admin-user-volume-today` | Thẻ tóm tắt đầu trang chi tiết người dùng | `data-value` = `adminGetUser.trading.volume.today.total` |
+| `admin-unpriced-assets` | Dòng "Chưa tính giá: X, Y" ở thẻ tổng tài sản | Chỉ render khi `unpricedAssets` không rỗng |
+| `admin-holding-row` | Mỗi dòng của bảng tài sản nắm giữ (tab "Số dư & Ví") — **một dòng cho mỗi số dư khác 0**, sắp theo giá trị USDT giảm dần | `data-asset` = mã coin |
+| `admin-holding-value` | Trong dòng: giá trị USDT | `data-value` = `Balance.valueUsdt` (không có thuộc tính khi `null`; chữ "—") |
+| `admin-holding-pct` | Trong dòng: % danh mục | `data-value` = giá trị ÷ tổng × 100 (số thập phân, được làm tròn tối đa 2 chữ số lẻ) |
+| `admin-holdings-total` | Dòng cuối bảng: tổng | `data-value` = `totalValueUsdt` của server (không cộng lại ở client) |
+| `admin-market-health` | Thẻ "Nguồn giá thị trường" ở Tổng quan | `data-live`, `data-stale`, `data-unavailable` = số cặp theo `market.symbols[].status`. Không còn chữ "150ms" |
+| `admin-futures-upnl` | PnL chưa thực hiện của mỗi vị thế Futures ở chi tiết người dùng | `null` → chữ "—" (không "0.00000000"), không có `data-value`. (`review08-admin.spec.ts` AD-07 đang `test.fixme`: sim chưa có cách làm mark STALE) |
+| `admin-no-access` | (đã có) | không được hiện thay cho `admin-2fa-required` |
