@@ -26,14 +26,13 @@ npm run dev -- --sim      # giá GIẢ LẬP, chạy offline
 Kiểm tra mã: `npm run typecheck`, `npm test` (tự bật PostgreSQL thật trên cổng 5434), `npm run verify` (typecheck + lint + test + build),
 `npm run e2e` (Playwright, cần trình duyệt Edge hoặc Chromium).
 
-## Nhánh (branch)
+## Nhánh và lỗi đang mở
 
-| Nhánh | Là gì |
-|---|---|
-| `main` | Backend, hợp đồng API, core, hạ tầng, tài liệu. Giao diện ở đây là bản đã gộp gần nhất. |
-| `ui/gd2-exchange` | Nhánh giao diện đang phát triển (`apps/*`, `packages/ui`). Mới hơn về giao diện nhưng chưa gộp vào `main`. |
+Nhánh mặc định  là **bản mới nhất, kể cả giao diện Antigravity đang làm**: nó đã gộp cả backend của .
+Bản này **còn lỗi đã biết** (chưa được rà soát xong), ghi đầy đủ ở [docs/LOI-HIEN-TAI.md](docs/LOI-HIEN-TAI.md).
+Nhánh  là bản ổn định cũ hơn, giao diện ít tính năng hơn.
 
-Gộp thử giao diện mới với `main` trong thư mục tạm rồi kiểm tra: `npm run ui-check`.
+**Gặp lỗi?** Mở một [Issue](https://github.com/nttunggzzz/s-n-crypto/issues/new) ghi: bạn làm gì, thấy gì, đáng lẽ thấy gì, kèm ảnh chụp màn hình nếu có.
 
 ## Cấu trúc
 

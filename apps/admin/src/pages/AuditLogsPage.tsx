@@ -28,6 +28,8 @@ const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   INVITE_CREATE: 'Tạo mã mời',
   INVITE_REVOKE: 'Thu hồi mã mời',
   TAX_SETTINGS_UPDATE: 'Cấu hình thuế',
+  ORDER_CANCEL: 'Admin hủy lệnh',
+  SESSION_REVOKE: 'Thu hồi phiên đăng nhập',
 };
 
 const ALL_AUDIT_ACTIONS: AuditAction[] = [
