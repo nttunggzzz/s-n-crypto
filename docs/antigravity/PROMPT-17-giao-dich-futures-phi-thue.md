@@ -154,6 +154,7 @@ Lưu lỗi → trả ngôi sao về trạng thái cũ + `toastError(formatApiErr
 - **Tab Số dư = bảng tài sản nắm giữ:** mỗi dòng: coin, khả dụng, đang khóa, tổng, **giá trị USDT** (`Balance.valueUsdt`, null → "—"), **% danh mục**; sắp theo giá trị giảm dần; dòng cuối tổng.
 - Mọi số qua `formatDecimal`/`dec`; không cộng ở client những gì server đã trả tổng.
 **Nghiệm thu:** người dùng có BTC + USDT → bảng 2 dòng có giá trị và %, tổng = `totalValueUsdt`; `admin-user-tax-total` = `detail.tax.withheldTotal`.
+**Trạng thái:** Hoàn thành. Đã chỉnh sửa `apps/admin/src/pages/UserDetailPage.tsx`: thêm 4 thẻ tóm tắt đầu trang (Tổng tài sản kèm cảnh báo `admin-unpriced-assets`, Ví Futures gồm equity/số dư/ký quỹ/PnL `admin-futures-upnl`, Khối lượng hôm nay/7d/30d/tháng trước, và Thuế đã khấu trừ gồm `admin-user-tax-total`), cập nhật tab Số dư thành Bảng tài sản nắm giữ có giá trị USDT và % danh mục được sắp xếp giảm dần theo giá trị và có dòng tổng. Đồng thời sửa triệt để lỗi AD-07 (PnL null hiển thị "—").
 
 ---
 ## Theo dõi khi đang sửa (Claude Code rà commit `8f77399`, `ddd5b0b`, `c6e483d`, `31a57d7`)

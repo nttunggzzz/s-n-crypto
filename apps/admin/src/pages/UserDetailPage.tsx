@@ -602,6 +602,117 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
         )}
       </div>
 
+      {/* S-15 Summary Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Card 1: Tổng tài sản */}
+        <div className="bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)] rounded-xl p-4 shadow-sm flex flex-col justify-between">
+          <div>
+            <div className="text-xs font-semibold text-[var(--text-3,#63636b)] uppercase tracking-wider mb-1">
+              Tổng tài sản
+            </div>
+            <div className="text-xl font-bold font-mono text-[var(--text,#f4f4f5)]">
+              {formatDecimal(detail.totalValueUsdt)} <span className="text-xs font-normal text-[var(--text-3,#63636b)]">USDT</span>
+            </div>
+          </div>
+          {detail.unpricedAssets && detail.unpricedAssets.length > 0 && (
+            <div data-testid="admin-unpriced-assets" className="text-xs text-amber-400 mt-2 font-medium">
+              Chưa tính giá: {detail.unpricedAssets.join(', ')}
+            </div>
+          )}
+        </div>
+
+        {/* Card 2: Ví Futures */}
+        <div className="bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)] rounded-xl p-4 shadow-sm flex flex-col justify-between space-y-2">
+          <div>
+            <div className="text-xs font-semibold text-[var(--text-3,#63636b)] uppercase tracking-wider mb-1">
+              Ví Futures
+            </div>
+            <div className="text-base font-bold font-mono text-[var(--text,#f4f4f5)] flex items-center justify-between">
+              <span className="text-xs text-[var(--text-3,#63636b)] font-sans">Vốn ví (Equity):</span>
+              <span>{detail.futures.equity !== null ? `${formatDecimal(detail.futures.equity)} USDT` : '—'}</span>
+            </div>
+          </div>
+          <div className="text-xs font-mono space-y-1 text-[var(--text-2,#a1a1aa)] border-t border-[var(--line,#1d1e21)] pt-1.5">
+            <div className="flex justify-between">
+              <span className="text-[var(--text-3,#63636b)]">Số dư:</span>
+              <span>{formatDecimal(detail.futures.walletBalance)} USDT</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[var(--text-3,#63636b)]">Ký quỹ (vị thế + lệnh):</span>
+              <span>{formatDecimal(dec(detail.futures.positionMargin).add(detail.futures.orderMargin).toString())} USDT</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-[var(--text-3,#63636b)]">PnL chưa chốt:</span>
+              <span
+                data-testid="admin-futures-upnl"
+                className={
+                  detail.futures.unrealizedPnl === null
+                    ? 'text-[var(--text-3,#63636b)]'
+                    : dec(detail.futures.unrealizedPnl).gte(0)
+                    ? 'text-[var(--up,#1fc27a)]'
+                    : 'text-[var(--down,#f2475f)]'
+                }
+              >
+                {detail.futures.unrealizedPnl !== null ? `${formatDecimal(detail.futures.unrealizedPnl)} USDT` : '—'}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Card 3: Khối lượng giao dịch */}
+        <div className="bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)] rounded-xl p-4 shadow-sm flex flex-col justify-between space-y-2">
+          <div>
+            <div className="text-xs font-semibold text-[var(--text-3,#63636b)] uppercase tracking-wider mb-1">
+              Khối lượng giao dịch
+            </div>
+            <div className="text-base font-bold font-mono text-[var(--text,#f4f4f5)] flex items-center justify-between">
+              <span className="text-xs text-[var(--text-3,#63636b)] font-sans">Hôm nay:</span>
+              <span>{formatDecimal(detail.trading.volume.today.total)} USDT</span>
+            </div>
+          </div>
+          <div className="text-xs font-mono space-y-1 text-[var(--text-2,#a1a1aa)] border-t border-[var(--line,#1d1e21)] pt-1.5">
+            <div className="flex justify-between">
+              <span className="text-[var(--text-3,#63636b)]">7 ngày:</span>
+              <span>{formatDecimal(detail.trading.volume.last7d.total)} USDT</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[var(--text-3,#63636b)]">30 ngày:</span>
+              <span>{formatDecimal(detail.trading.volume.last30d.total)} USDT</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[var(--text-3,#63636b)]">Tháng trước:</span>
+              <span>{formatDecimal(detail.trading.volume.previousMonth.total)} USDT</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Card 4: Thuế */}
+        <div className="bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)] rounded-xl p-4 shadow-sm flex flex-col justify-between space-y-2">
+          <div>
+            <div className="text-xs font-semibold text-[var(--text-3,#63636b)] uppercase tracking-wider mb-1 flex items-center justify-between">
+              <span>Thuế đã khấu trừ</span>
+              <span className="text-[10px] text-[var(--text-3,#63636b)] font-sans">({detail.tax.category})</span>
+            </div>
+            <div className="text-base font-bold font-mono text-[var(--text,#f4f4f5)] flex items-center justify-between">
+              <span className="text-xs text-[var(--text-3,#63636b)] font-sans">Tổng khấu trừ:</span>
+              <span className="text-[var(--accent,#818cf8)] font-bold">
+                <span data-testid="admin-user-tax-total">{formatDecimal(detail.tax.withheldTotal)}</span> USDT
+              </span>
+            </div>
+          </div>
+          <div className="text-xs font-mono space-y-1 text-[var(--text-2,#a1a1aa)] border-t border-[var(--line,#1d1e21)] pt-1.5">
+            <div className="flex justify-between">
+              <span className="text-[var(--text-3,#63636b)]">Tháng này:</span>
+              <span>{formatDecimal(detail.trading.tax.thisMonth.withheldAmount)} USDT ({detail.trading.tax.thisMonth.withheldCount} lần)</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-[var(--text-3,#63636b)]">Tháng trước:</span>
+              <span>{formatDecimal(detail.trading.tax.previousMonth.withheldAmount)} USDT ({detail.trading.tax.previousMonth.withheldCount} lần)</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Tabs */}
       <div className="border-b border-[var(--line,#1d1e21)] flex gap-6 text-sm">
         <button
@@ -655,28 +766,68 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
           {/* Spot Balances */}
           <div className="bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)] rounded-xl overflow-hidden shadow">
             <div className="px-5 py-4 border-b border-[var(--line,#1d1e21)] flex items-center justify-between">
-              <span className="font-bold text-sm text-[var(--text,#f4f4f5)]">Số dư Spot</span>
+              <span className="font-bold text-sm text-[var(--text,#f4f4f5)]">Tài sản nắm giữ</span>
               <span className="text-sm font-mono text-[var(--text-2,#a1a1aa)]">
-                Ước tính: <strong className="text-[var(--text,#f4f4f5)] font-bold">{detail.totalValueUsdt}</strong> USDT
+                Ước tính: <strong className="text-[var(--text,#f4f4f5)] font-bold">{formatDecimal(detail.totalValueUsdt)}</strong> USDT
               </span>
             </div>
             <table className="w-full text-left text-sm">
               <thead className="bg-[var(--line,#1d1e21)]/30 border-b border-[var(--line,#1d1e21)]">
                 <tr>
                   <th className="px-5 py-3 font-semibold text-xs text-[var(--text-2,#a1a1aa)] uppercase">Tài sản</th>
-                  <th className="px-5 py-3 font-semibold text-xs text-[var(--text-2,#a1a1aa)] uppercase">Khả dụng</th>
-                  <th className="px-5 py-3 font-semibold text-xs text-[var(--text-2,#a1a1aa)] uppercase">Đang khóa</th>
+                  <th className="px-5 py-3 font-semibold text-xs text-[var(--text-2,#a1a1aa)] uppercase text-right">Khả dụng</th>
+                  <th className="px-5 py-3 font-semibold text-xs text-[var(--text-2,#a1a1aa)] uppercase text-right">Đang khóa</th>
+                  <th className="px-5 py-3 font-semibold text-xs text-[var(--text-2,#a1a1aa)] uppercase text-right">Tổng</th>
+                  <th className="px-5 py-3 font-semibold text-xs text-[var(--text-2,#a1a1aa)] uppercase text-right">Giá trị (USDT)</th>
+                  <th className="px-5 py-3 font-semibold text-xs text-[var(--text-2,#a1a1aa)] uppercase text-right">% Danh mục</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--line,#1d1e21)]">
-                {detail.balances.map((b) => (
-                  <tr key={b.asset} className="hover:bg-[var(--line,#1d1e21)]/10">
-                    <td className="px-5 py-3 font-bold text-[var(--text,#f4f4f5)]">{b.asset}</td>
-                    <td className="px-5 py-3 font-mono text-[var(--text,#f4f4f5)]">{b.available}</td>
-                    <td className="px-5 py-3 font-mono text-[var(--text-3,#63636b)]">{b.locked}</td>
-                  </tr>
-                ))}
+                {(() => {
+                  const sorted = [...detail.balances].sort((a, b) => {
+                    const valA = dec(a.valueUsdt ?? '-1');
+                    const valB = dec(b.valueUsdt ?? '-1');
+                    return valB.cmp(valA);
+                  });
+                  const totalUsdt = dec(detail.totalValueUsdt);
+
+                  return sorted.map((b) => {
+                    let percentStr = '—';
+                    if (b.valueUsdt !== null && totalUsdt.gt(0)) {
+                      percentStr = dec(b.valueUsdt).div(totalUsdt).mul(100).toFixed(2) + '%';
+                    }
+
+                    return (
+                      <tr key={b.asset} className="hover:bg-[var(--line,#1d1e21)]/10 font-mono">
+                        <td className="px-5 py-3 font-bold text-[var(--text,#f4f4f5)] font-sans">{b.asset}</td>
+                        <td className="px-5 py-3 text-right text-[var(--text,#f4f4f5)]">{formatDecimal(b.available)}</td>
+                        <td className="px-5 py-3 text-right text-[var(--text-3,#63636b)]">{formatDecimal(b.locked)}</td>
+                        <td className="px-5 py-3 text-right text-[var(--text,#f4f4f5)]">{formatDecimal(b.total)}</td>
+                        <td className="px-5 py-3 text-right font-bold text-[var(--text,#f4f4f5)]">
+                          {b.valueUsdt !== null ? `${formatDecimal(b.valueUsdt)} USDT` : '—'}
+                        </td>
+                        <td className="px-5 py-3 text-right text-[var(--text-2,#a1a1aa)] font-semibold">
+                          {percentStr}
+                        </td>
+                      </tr>
+                    );
+                  });
+                })()}
               </tbody>
+              <tfoot className="bg-[var(--line,#1d1e21)]/40 font-bold border-t border-[var(--line,#1d1e21)] font-mono text-sm">
+                <tr>
+                  <td className="px-5 py-3 text-[var(--text,#f4f4f5)] font-sans">Tổng cộng</td>
+                  <td className="px-5 py-3 text-right text-[var(--text-3,#63636b)]">—</td>
+                  <td className="px-5 py-3 text-right text-[var(--text-3,#63636b)]">—</td>
+                  <td className="px-5 py-3 text-right text-[var(--text-3,#63636b)]">—</td>
+                  <td className="px-5 py-3 text-right text-[var(--accent,#818cf8)]">
+                    {formatDecimal(detail.totalValueUsdt)} USDT
+                  </td>
+                  <td className="px-5 py-3 text-right text-[var(--accent,#818cf8)]">
+                    {dec(detail.totalValueUsdt).gt(0) ? '100.00%' : '—'}
+                  </td>
+                </tr>
+              </tfoot>
             </table>
           </div>
 
@@ -686,21 +837,33 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm font-mono">
               <div className="bg-[var(--bg,#000000)] p-3 rounded-lg border border-[var(--line,#1d1e21)]">
                 <div className="text-xs text-[var(--text-3,#63636b)] mb-1">Số dư ví</div>
-                <div className="font-bold text-[var(--text,#f4f4f5)]">{detail.futures.walletBalance} USDT</div>
+                <div className="font-bold text-[var(--text,#f4f4f5)]">{formatDecimal(detail.futures.walletBalance)} USDT</div>
               </div>
               <div className="bg-[var(--bg,#000000)] p-3 rounded-lg border border-[var(--line,#1d1e21)]">
                 <div className="text-xs text-[var(--text-3,#63636b)] mb-1">Khả dụng</div>
-                <div className="font-bold text-[var(--text,#f4f4f5)]">{detail.futures.available} USDT</div>
+                <div className="font-bold text-[var(--text,#f4f4f5)]">{formatDecimal(detail.futures.available)} USDT</div>
               </div>
               <div className="bg-[var(--bg,#000000)] p-3 rounded-lg border border-[var(--line,#1d1e21)]">
                 <div className="text-xs text-[var(--text-3,#63636b)] mb-1">Ký quỹ vị thế</div>
-                <div className="font-bold text-[var(--text,#f4f4f5)]">{detail.futures.positionMargin} USDT</div>
+                <div className="font-bold text-[var(--text,#f4f4f5)]">{formatDecimal(detail.futures.positionMargin)} USDT</div>
               </div>
               <div className="bg-[var(--bg,#000000)] p-3 rounded-lg border border-[var(--line,#1d1e21)]">
                 <div className="text-xs text-[var(--text-3,#63636b)] mb-1">PnL chưa thực hiện</div>
-                <div className={`font-bold ${dec(detail.futures.unrealizedPnl || '0').gte(0) ? 'text-[var(--up,#1fc27a)]' : 'text-[var(--down,#f2475f)]'}`}>
-                  {detail.futures.unrealizedPnl || '0.00000000'} USDT
+                <div
+                  data-testid="admin-futures-upnl"
+                  className={`font-bold ${
+                    detail.futures.unrealizedPnl === null
+                      ? 'text-[var(--text-3,#63636b)]'
+                      : dec(detail.futures.unrealizedPnl).gte(0)
+                      ? 'text-[var(--up,#1fc27a)]'
+                      : 'text-[var(--down,#f2475f)]'
+                  }`}
+                >
+                  {detail.futures.unrealizedPnl !== null ? `${formatDecimal(detail.futures.unrealizedPnl)} USDT` : '—'}
                 </div>
+                {detail.futures.unrealizedPnl === null && (
+                  <div className="text-[10px] text-[var(--text-3,#63636b)] mt-0.5">Chưa có giá đánh dấu</div>
+                )}
               </div>
             </div>
           </div>
@@ -851,8 +1014,17 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
                   <td className="px-4 py-3">{p.quantity}</td>
                   <td className="px-4 py-3">{p.entryPrice}</td>
                   <td className="px-4 py-3">{p.markPrice || '—'}</td>
-                  <td className={`px-4 py-3 font-bold ${dec(p.unrealizedPnl || '0').gte(0) ? 'text-[var(--up,#1fc27a)]' : 'text-[var(--down,#f2475f)]'}`}>
-                    {p.unrealizedPnl || '0.00000000'} USDT
+                  <td
+                    data-testid="admin-futures-position-upnl"
+                    className={`px-4 py-3 font-bold ${
+                      p.unrealizedPnl === null
+                        ? 'text-[var(--text-3,#63636b)]'
+                        : dec(p.unrealizedPnl).gte(0)
+                        ? 'text-[var(--up,#1fc27a)]'
+                        : 'text-[var(--down,#f2475f)]'
+                    }`}
+                  >
+                    {p.unrealizedPnl !== null ? `${formatDecimal(p.unrealizedPnl)} USDT` : '—'}
                   </td>
                 </tr>
               ))}
