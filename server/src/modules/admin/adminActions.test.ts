@@ -229,7 +229,7 @@ describe('adminCancelUserOrder (Futures)', () => {
     expect([row.status, row.closeReason, row.marginLocked, row.feeLocked]).toEqual(['CANCELED', 'ADMIN', '0.000000000000000000', '0.000000000000000000']);
     expect(await futuresBalance(h.env, u.id)).toEqual({ available: '1000.000000000000000000', locked: '0.000000000000000000' });
     expect(await auditCount()).toBe(before + 1);
-    expect((await auditRows('ORDER_CANCEL', u.id))[0]).toMatchObject({ id: Number(r.auditLogId), after: { closeReason: 'ADMIN' } });
+    expect((await auditRows('ORDER_CANCEL', u.id))[0]).toMatchObject({ id: Number(r.auditLogId), before: { status: 'NEW', reduceOnly: false }, after: { closeReason: 'ADMIN' } });
     await expectApiError(admin.b.adminCancelUserOrder({ params: { userId: u.id, orderId: o.id }, body: { market: 'FUTURES', reason: REASON } }), 'ORDER_NOT_CANCELABLE');
     expect(await auditCount()).toBe(before + 1);
     await booksBalanced();
@@ -345,6 +345,92 @@ describe('adminCancelUserOrders (cancel all)', () => {
     expect(await balanceOf(h.env, u.id, 'USDT')).toEqual(spotBefore);
     expect(await futuresBalance(h.env, u.id)).toEqual(futBefore);
     await booksBalanced();
+  });
+});
+
+const openWs = async (cookie: string) => {
+  const ws = new WebSocket(h.base.replace('http', 'ws') + '/ws', { headers: { cookie } });
+  const closed = new Promise<number>((r) => ws.once('close', (code) => r(code)));
+  await new Promise((r) => ws.once('open', r));
+  ws.send(JSON.stringify({ type: 'subscribe', channel: 'user' }));
+  await new Promise((r) => ws.once('message', r));
+  return { ws, closed };
+};
+
+describe('AD3 review fixes', () => {
+  it('R1 race: cancel-all with a SELL (smaller id) and a BUY (bigger id) open vs fills and a marketable limit - no deadlock, books balanced', async () => {
+    const admin = await h.staff('admin');
+    for (let round = 0; round < 12; round++) {
+      const u = await funded();
+      await u.b.placeOrder({ body: { symbol: 'BTCUSDT', side: 'BUY', type: 'MARKET', quantity: '0.5' } });
+      const sell = (await u.b.placeOrder({ body: { symbol: 'BTCUSDT', side: 'SELL', type: 'LIMIT', quantity: '0.2', price: '110' } })).order;
+      const buy = (await limitBuy(u, '90')).order;
+      expect(Number(sell.id)).toBeLessThan(Number(buy.id));
+      const results = await Promise.allSettled([
+        admin.b.adminCancelUserOrders({ params: { userId: u.id }, body: { reason: REASON } }),
+        h.env.ex.orders.fillResting(Number(sell.id), h.env.clock.date()),
+        h.env.ex.orders.fillResting(Number(buy.id), h.env.clock.date()),
+        limitBuy(u, '100', '0.05'), // immediately marketable: takes BTC and USDT rows like a fill does
+      ]);
+      for (const r of results) {
+        if (r.status === 'rejected') expect(r.reason).toSatisfy((e: unknown) => e instanceof ApiError && (e.code === 'ORDER_NOT_CANCELABLE' || e.code === 'NOT_FOUND')); // a 40P01 would be INTERNAL_ERROR / a raw pg error
+      }
+      for (const id of [sell.id, buy.id]) expect(['CANCELED', 'FILLED']).toContain((await orderRow(id)).status);
+      await booksBalanced();
+    }
+  });
+
+  it('R2: an admin cancel never places TP/SL - a partly filled BUY with tpsl leaves zero open orders, the audit lists it (cancel-all and single cancel)', async () => {
+    const admin = await h.staff('admin');
+    const u = await funded();
+    const partlyFilled = async () => {
+      setBook(h.env, 'BTCUSDT', [['99.00', '100.00000']], [['100.00', '0.30000']]); // only 0.3 BTC to take
+      const o = (await u.b.placeOrder({ body: { symbol: 'BTCUSDT', side: 'BUY', type: 'LIMIT', quantity: '0.5', price: '100', tpsl: { takeProfitPrice: '120', stopLossPrice: '90' } } })).order;
+      expect(o.status).toBe('PARTIALLY_FILLED');
+      return o;
+    };
+    const openOrders = () => db().select().from(orders).where(and(eq(orders.userId, u.id), inArray(orders.status, ['NEW', 'PARTIALLY_FILLED'])));
+
+    const a = await partlyFilled();
+    const all = await admin.b.adminCancelUserOrders({ params: { userId: u.id }, body: { reason: REASON } });
+    expect(all.spotCanceled).toBe(1);
+    expect(await openOrders()).toHaveLength(0); // no TP/SL SELL was born
+    const rowA = await orderRow(a.id);
+    expect([rowA.status, rowA.closeReason, rowA.tpsl?.state, rowA.tpsl?.skippedReason]).toEqual(['CANCELED', 'ADMIN', 'SKIPPED', 'ADMIN_CANCELED']);
+    const [logA] = await auditRows('ORDER_CANCEL', u.id);
+    expect(logA).toMatchObject({ before: { openOrders: 1, partiallyFilled: 1 }, after: { canceledOrderIds: [a.id] } });
+    expect((await balanceOf(h.env, u.id, 'BTC')).locked).toBe('0');
+    await booksBalanced();
+
+    const b = await partlyFilled();
+    const r = await admin.b.adminCancelUserOrder({ params: { userId: u.id, orderId: b.id }, body: { market: 'SPOT', reason: REASON } });
+    expect(r.canceledOrderIds).toEqual([b.id]);
+    expect(await openOrders()).toHaveLength(0);
+    expect((await orderRow(b.id)).tpsl).toMatchObject({ state: 'SKIPPED', skippedReason: 'ADMIN_CANCELED' });
+    expect((await auditRows('ORDER_CANCEL', u.id)).find((x) => x.id === Number(r.auditLogId))!.before).toMatchObject({ status: 'PARTIALLY_FILLED' }); // from the locked row
+    await booksBalanced();
+  });
+
+  it('R4: a stopped bot that still has open orders (clean-up failed or crashed) is cleaned by the sweep', async () => {
+    const u = await funded();
+    const bot = await u.b.createGridBot({ body: { symbol: 'BTCUSDT', lowerPrice: '90', upperPrice: '110', gridCount: 4, mode: 'ARITHMETIC', investment: '1000' } });
+    await h.env.bots.grid.idle();
+    const open = () => db().select().from(orders).where(and(eq(orders.source, 'GRID'), eq(orders.sourceId, Number(bot.id)), inArray(orders.status, ['NEW', 'PARTIALLY_FILLED'])));
+    expect((await open()).length).toBeGreaterThan(0);
+    await db().update(gridBots).set({ status: 'STOPPED', stopReason: 'ADMIN' }).where(eq(gridBots.id, Number(bot.id))); // status committed, cancels never ran
+    await h.env.bots.grid.sweep();
+    await h.env.bots.grid.idle();
+    expect(await open()).toHaveLength(0);
+    expect((await balanceOf(h.env, u.id, 'USDT')).locked).toBe('0');
+    await booksBalanced();
+  });
+
+  it('R7: locking a user closes their /ws at once (4401), not at the next heartbeat', async () => {
+    const admin = await h.staff('admin');
+    const u = await h.user();
+    const a = await openWs(u.b.cookie());
+    await admin.b.adminLockUser({ params: { userId: u.id }, body: { reason: REASON } });
+    expect(await a.closed).toBe(WS_SESSION_ENDED);
   });
 });
 

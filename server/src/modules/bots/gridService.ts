@@ -1,4 +1,4 @@
-import { and, asc, count, desc, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, inArray, notInArray, sql } from 'drizzle-orm';
 import type { GridBot, GridPreview } from '@cex/contracts';
 import { ZERO, ceilToStep, dec, floorToStep, maxDec, minDec, toFixedStr, type Dec } from '@cex/core';
 import { gridBotCells, gridBots, notifications, OPEN_STATUSES, orders, trades } from '../../db/schema.ts';
@@ -268,7 +268,15 @@ export class GridService {
         if (row) stopped.push(row);
         return row ?? null;
       });
-      for (const b of stopped) await this.finishHalt(b, 'ADMIN');
+      // The cancel + audit + STOPPED status already committed: a failure of the clean-up must not turn that into an error for the
+      // admin. Whatever it leaves behind (open orders of a STOPPED bot) is cancelled by the sweep (cleanupStopped).
+      for (const b of stopped) {
+        try {
+          await this.finishHalt(b, 'ADMIN');
+        } catch (err) {
+          logger.error({ err, botId: b.id }, 'grid bot stop: clean-up after the admin cancel failed; the sweep will retry');
+        }
+      }
       return value;
     };
     const nest = (i: number): Promise<T> => (i < ids.length ? this.enqueue(ids[i]!, () => nest(i + 1)) : inner());
@@ -331,6 +339,36 @@ export class GridService {
   async sweep(): Promise<void> {
     const running = await this.db.select({ id: gridBots.id }).from(gridBots).where(eq(gridBots.status, 'RUNNING'));
     await Promise.all(running.map((b) => this.enqueue(b.id, () => this.sync(b.id))));
+    await this.cleanupStopped();
+  }
+
+  /**
+   * Safety net: a bot that is no longer STARTING/RUNNING must have no open order (a crash or an error between the status change
+   * and the cancels of a stop would leave some). Cancels them (BOT_STOPPED), inside the bot's queue so it cannot race a halt.
+   */
+  async cleanupStopped(): Promise<void> {
+    const stale = await this.db
+      .selectDistinct({ botId: orders.sourceId, userId: orders.userId })
+      .from(orders)
+      .innerJoin(gridBots, eq(gridBots.id, orders.sourceId))
+      .where(and(eq(orders.source, 'GRID'), inArray(orders.status, [...OPEN_STATUSES]), notInArray(gridBots.status, ['STARTING', 'RUNNING'])));
+    for (const s of stale) {
+      if (s.botId === null) continue;
+      const botId = s.botId;
+      await this.enqueue(botId, async () => {
+        const open = await this.db
+          .select({ id: orders.id })
+          .from(orders)
+          .where(and(eq(orders.source, 'GRID'), eq(orders.sourceId, botId), inArray(orders.status, [...OPEN_STATUSES])));
+        for (const o of open) {
+          try {
+            await this.ex.orders.cancelOrder(s.userId, String(o.id), 'BOT_STOPPED');
+          } catch (err) {
+            if (!(err instanceof AppError && err.code === 'ORDER_NOT_CANCELABLE')) throw err;
+          }
+        }
+      }).catch((err) => logger.error({ err, botId }, 'grid clean-up of a stopped bot failed'));
+    }
   }
 
   /** Makes the bot's cells match the real orders: book filled orders, place missing ones. */

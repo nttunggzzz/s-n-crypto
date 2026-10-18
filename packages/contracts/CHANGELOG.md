@@ -15,7 +15,9 @@ Chỉ thêm. 4 endpoint mới. Không đổi số phiên bản (lead đánh số
 **Hành vi (server)**
 - Audit `ORDER_CANCEL` / `SESSION_REVOKE` nằm **trong cùng transaction** với việc hủy / thu hồi. Hủy lệnh bot lưới: bot chuyển STOPPED (`stopReason: 'ADMIN'`) trong cùng transaction với lệnh hủy.
 - `adminCancelUserOrders` không có `market` → hủy Spot rồi Futures, mỗi sàn một transaction + một dòng audit.
-- Thu hồi phiên đóng `/ws` của phiên đó ngay (mã 4401), không đợi nhịp kiểm 30 giây.
+- Thu hồi phiên đóng `/ws` của phiên đó ngay (mã 4401), không đợi nhịp kiểm 30 giây. `adminLockUser` cũng đóng `/ws` của các phiên bị thu hồi ngay.
+- Admin hủy BUY có TP/SL đang chờ: không đặt TP/SL (`tpsl.state: 'SKIPPED'`, `skippedReason: 'ADMIN_CANCELED'`), nên hủy tất cả không để lại lệnh mở.
+- Audit `ORDER_CANCEL.before.status` lấy từ dòng đã khóa (`NEW` / `PARTIALLY_FILLED`); lệnh Futures có thêm `reduceOnly`; hủy hàng loạt có `partiallyFilled`.
 
 **Có thể ảnh hưởng UI:** `Permission` có thêm `orders.manage` (`Record<Permission, …>` phải bổ sung); `AuditAction` có thêm hai giá trị (nơi dùng `Record<AuditAction, …>` cần nhãn).
 

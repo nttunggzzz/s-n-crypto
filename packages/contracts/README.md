@@ -423,6 +423,11 @@ await api.adminAdjustBalance({ params: { userId }, body: { asset: 'USDT', amount
 ```
 - **Hủy lệnh:** `closeReason` = `ADMIN`; tiền khóa trả lại qua sổ cái (`ORDER_UNLOCK`). Lệnh đã khớp/đã đóng → `ORDER_NOT_CANCELABLE` (409) và **không** có dòng audit. Chạy đua với khớp lệnh: đúng một bên thắng.
   `adminCancelUserOrders` không có lệnh nào đang mở → mọi số đếm 0, `auditLogIds: []` (không ghi audit cho việc không làm gì).
+- **TP/SL không được đặt khi admin hủy:** BUY khớp một phần có TP/SL đính kèm (chưa đặt) bị admin hủy thì **không** sinh lệnh TP/SL mới; `tpsl.state` thành `SKIPPED`, `skippedReason: 'ADMIN_CANCELED'`
+  (người dùng nhận thông báo `TPSL_SKIPPED` nếu lệnh đã khớp được một phần). Nhờ đó "hủy tất cả" không để lại lệnh mở nào. Áp dụng cho cả hủy một lệnh và hủy tất cả.
+- **Không `market` = hai transaction:** Spot rồi Futures, mỗi sàn có một dòng audit riêng (`auditLogIds`); sàn đầu đã commit thì sàn sau lỗi không hoàn tác sàn đầu.
+- **Vai trò:** owner được thao tác trên owner khác (giống `adminLockUser`); admin không thao tác được trên admin/owner.
+- **Khóa người dùng** (`adminLockUser`) cũng đóng `/ws` của các phiên bị thu hồi ngay (mã 4401), như thu hồi phiên.
 - **Phiên:** sau khi thu hồi, lời gọi kế tiếp bằng phiên đó nhận 401 `UNAUTHENTICATED`; kết nối `/ws` của phiên bị đóng ngay với mã `WS_SESSION_ENDED` (4401), phiên khác của người đó không ảnh hưởng.
   Audit không chứa token. `adminRevokeAllSessions` trên chính tài khoản mình → `FORBIDDEN` (không tự khóa mình ra ngoài).
 - **`BalanceAdjustmentRequest.account`** (`'SPOT' | 'FUTURES'`, mặc định `SPOT` — tương thích ngược). `FUTURES` + tài sản khác USDT → `VALIDATION_ERROR`. `entry.account` và `before/after.account` trong audit cho biết ví nào.

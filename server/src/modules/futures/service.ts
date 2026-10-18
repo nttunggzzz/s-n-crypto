@@ -564,7 +564,7 @@ export class FuturesService {
    * `step` (admin path) runs inside the SAME transaction after the order is canceled (it writes the audit row);
    * if it throws, the cancel and the margin release roll back and nothing is published.
    */
-  async cancelOrder(userId: string, orderId: string, reason = 'USER_CANCELED', step?: (tx: Tx, canceled: FOrderRow) => Promise<void>): Promise<FOrderRow> {
+  async cancelOrder(userId: string, orderId: string, reason = 'USER_CANCELED', step?: (tx: Tx, canceled: FOrderRow, priorStatus: FOrderRow['status']) => Promise<void>): Promise<FOrderRow> {
     const id = Number(orderId);
     if (!Number.isSafeInteger(id) || id <= 0) throw new AppError('NOT_FOUND', 'Order not found');
     const [peek] = await this.db
@@ -577,7 +577,7 @@ export class FuturesService {
       const [o] = await tx.select().from(futuresOrders).where(eq(futuresOrders.id, id)).for('update');
       if (!o || (o.status !== 'NEW' && o.status !== 'PARTIALLY_FILLED')) throw new AppError('ORDER_NOT_CANCELABLE', `Order is ${o?.status ?? 'gone'}`);
       const done = await this.finish(tx, out, o, 'CANCELED', reason);
-      if (step) await step(tx, done);
+      if (step) await step(tx, done, o.status);
       return done;
     });
   }
@@ -588,7 +588,7 @@ export class FuturesService {
    * liquidation racing on any symbol of this user waits for us (or we for it) without a lock cycle.
    * `step` is not called when nothing was open.
    */
-  async cancelAllAtomic(userId: string, symbol: string | undefined, reason: string, step: (tx: Tx, canceled: FOrderRow[]) => Promise<void>): Promise<FOrderRow[]> {
+  async cancelAllAtomic(userId: string, symbol: string | undefined, reason: string, step: (tx: Tx, canceled: FOrderRow[], priorStatus: ReadonlyMap<number, FOrderRow['status']>) => Promise<void>): Promise<FOrderRow[]> {
     return this.commit(async (tx, out) => {
       const where: SQL[] = [eq(futuresOrders.userId, userId), inArray(futuresOrders.status, [...OPEN_STATUSES])];
       if (symbol) where.push(eq(futuresOrders.symbol, symbol));
@@ -605,7 +605,7 @@ export class FuturesService {
         .for('update');
       const done: FOrderRow[] = [];
       for (const o of rows) done.push(await this.finish(tx, out, o, 'CANCELED', reason));
-      if (done.length > 0) await step(tx, done);
+      if (done.length > 0) await step(tx, done, new Map(rows.map((r) => [r.id, r.status] as const)));
       return done;
     });
   }

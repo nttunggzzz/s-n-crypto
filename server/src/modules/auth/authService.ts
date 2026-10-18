@@ -320,6 +320,11 @@ export class AuthService {
     return this.replaceRecoveryCodes(ctx.user.id);
   }
 
+  /** The service clock (tests move it); AdminService uses it for session expiry so both agree. */
+  currentTime(): Date {
+    return this.now();
+  }
+
   async logout(sessionId: string): Promise<void> {
     await this.db.update(sessions).set({ revokedAt: this.now() }).where(eq(sessions.id, sessionId));
   }

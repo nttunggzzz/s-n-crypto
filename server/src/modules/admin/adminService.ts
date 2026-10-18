@@ -123,6 +123,11 @@ export class AdminService {
 
   // ───────── helpers
 
+  /** The clock auth uses (tests move it), so session expiry here agrees with authenticate(). */
+  private clock(): Date {
+    return this.auth?.currentTime() ?? new Date();
+  }
+
   private async loadUser(id: string): Promise<UserRow> {
     const [u] = await this.db.select().from(users).where(eq(users.id, id));
     if (!u) throw new AppError('NOT_FOUND', 'User not found');
@@ -393,11 +398,16 @@ export class AdminService {
     const u = await this.loadUser(id);
     this.guardTarget(actor, u);
     if (u.status !== status) {
-      await this.db.transaction(async (tx) => {
+      const ended = await this.db.transaction(async (tx) => {
         await tx.update(users).set({ status, updatedAt: new Date() }).where(eq(users.id, id));
-        if (status === 'locked') await tx.update(sessions).set({ revokedAt: new Date() }).where(and(eq(sessions.userId, id), sql`${sessions.revokedAt} IS NULL`));
+        let ids: string[] = [];
+        if (status === 'locked') {
+          ids = (await tx.update(sessions).set({ revokedAt: this.clock() }).where(and(eq(sessions.userId, id), sql`${sessions.revokedAt} IS NULL`)).returning({ id: sessions.id })).map((s) => s.id);
+        }
         await writeAudit(tx, { actorId: actor.user.id, action: status === 'locked' ? 'USER_LOCK' : 'USER_UNLOCK', targetType: 'USER', targetId: id, before: { status: u.status }, after: { status }, reason, ip: actor.ip });
+        return ids;
       });
+      if (ended.length > 0) this.auth?.sessionEvents.emit('ended', ended); // after commit: their /ws closes now, not at the next heartbeat
     }
     return this.summaryOf(await this.loadUser(id));
   }
@@ -538,13 +548,13 @@ export class AdminService {
     if (market === 'FUTURES') {
       if (!this.futures) throw new AppError('NOT_FOUND', 'Order not found');
       let auditId = 0;
-      await this.futures.service.cancelOrder(userId, orderId, 'ADMIN', async (tx, o) => {
+      await this.futures.service.cancelOrder(userId, orderId, 'ADMIN', async (tx, o, priorStatus) => {
         auditId = await writeAudit(tx, {
           actorId: actor.user.id,
           action: 'ORDER_CANCEL',
           targetType: 'USER',
           targetId: userId,
-          before: { market, orderId, symbol: o.symbol, side: o.side, type: o.type, purpose: o.purpose, quantity: toFixedStr(dec(o.quantity)), executedQty: toFixedStr(dec(o.executedQty)), price: o.price === null ? null : toFixedStr(dec(o.price)), status: 'OPEN' },
+          before: { market, orderId, symbol: o.symbol, side: o.side, type: o.type, purpose: o.purpose, reduceOnly: o.reduceOnly, quantity: toFixedStr(dec(o.quantity)), executedQty: toFixedStr(dec(o.executedQty)), price: o.price === null ? null : toFixedStr(dec(o.price)), status: priorStatus },
           after: { status: 'CANCELED', closeReason: 'ADMIN', canceledOrderIds: [orderId], stoppedBotId: null },
           reason,
           ip: actor.ip,
@@ -560,7 +570,7 @@ export class AdminService {
     let canceledIds: string[] = [];
     let stoppedBotId: string | null = null;
     const cancelWith = (stop: StopBot): Promise<unknown> =>
-      this.ex.orders.cancelOrder(userId, orderId, 'ADMIN', async (tx, canceled) => {
+      this.ex.orders.cancelOrder(userId, orderId, 'ADMIN', async (tx, canceled, prior) => {
         const stopped = await this.stopBotsOf(tx, canceled, stop);
         canceledIds = canceled.map((o) => String(o.id));
         stoppedBotId = stopped[0] ? String(stopped[0].id) : null;
@@ -570,7 +580,7 @@ export class AdminService {
           action: 'ORDER_CANCEL',
           targetType: 'USER',
           targetId: userId,
-          before: { market, orderId, symbol: o.symbol, side: o.side, type: o.type, quantity: o.quantity === null ? null : toFixedStr(dec(o.quantity)), executedQty: toFixedStr(dec(o.executedQty)), price: o.price === null ? null : toFixedStr(dec(o.price)), status: 'OPEN', source: o.source, sourceId: o.sourceId === null ? null : String(o.sourceId) },
+          before: { market, orderId, symbol: o.symbol, side: o.side, type: o.type, quantity: o.quantity === null ? null : toFixedStr(dec(o.quantity)), executedQty: toFixedStr(dec(o.executedQty)), price: o.price === null ? null : toFixedStr(dec(o.price)), status: prior.get(id) ?? null, source: o.source, sourceId: o.sourceId === null ? null : String(o.sourceId) },
           after: { status: 'CANCELED', closeReason: 'ADMIN', canceledOrderIds: canceledIds, stoppedBotId },
           reason,
           ip: actor.ip,
@@ -608,7 +618,7 @@ export class AdminService {
       const botRows = await this.db.selectDistinct({ id: orders.sourceId }).from(orders).where(and(...where));
       const botIds = botRows.flatMap((r) => (r.id === null ? [] : [r.id]));
       const run = (stop: StopBot): Promise<unknown> =>
-        this.ex.orders.cancelAllAtomic(userId, symbol, 'ADMIN', async (tx, canceled) => {
+        this.ex.orders.cancelAllAtomic(userId, symbol, 'ADMIN', async (tx, canceled, prior) => {
           const stopped = await this.stopBotsOf(tx, canceled, stop);
           const canceledOrderIds = canceled.map((o) => String(o.id));
           const auditId = await writeAudit(tx, {
@@ -616,7 +626,7 @@ export class AdminService {
             action: 'ORDER_CANCEL',
             targetType: 'USER',
             targetId: userId,
-            before: { market: 'SPOT', symbol: symbol ?? null, openOrders: canceled.length },
+            before: { market: 'SPOT', symbol: symbol ?? null, openOrders: canceled.length, partiallyFilled: canceled.filter((o) => prior.get(o.id) === 'PARTIALLY_FILLED').length },
             after: { canceled: canceled.length, closeReason: 'ADMIN', canceledOrderIds, stoppedBotIds: stopped.map((b) => String(b.id)) },
             reason,
             ip: actor.ip,
@@ -630,13 +640,13 @@ export class AdminService {
     }
 
     if (market !== 'SPOT' && this.futures) {
-      await this.futures.service.cancelAllAtomic(userId, symbol, 'ADMIN', async (tx, canceled) => {
+      await this.futures.service.cancelAllAtomic(userId, symbol, 'ADMIN', async (tx, canceled, prior) => {
         const auditId = await writeAudit(tx, {
           actorId: actor.user.id,
           action: 'ORDER_CANCEL',
           targetType: 'USER',
           targetId: userId,
-          before: { market: 'FUTURES', symbol: symbol ?? null, openOrders: canceled.length },
+          before: { market: 'FUTURES', symbol: symbol ?? null, openOrders: canceled.length, partiallyFilled: canceled.filter((o) => prior.get(o.id) === 'PARTIALLY_FILLED').length },
           after: { canceled: canceled.length, closeReason: 'ADMIN', canceledOrderIds: canceled.map((o) => String(o.id)), stoppedBotIds: [] },
           reason,
           ip: actor.ip,
@@ -655,8 +665,8 @@ export class AdminService {
     const auditId = await this.db.transaction(async (tx) => {
       const [s] = await tx
         .update(sessions)
-        .set({ revokedAt: new Date() })
-        .where(and(eq(sessions.id, sessionId), eq(sessions.userId, userId), isNull(sessions.revokedAt), gt(sessions.expiresAt, new Date())))
+        .set({ revokedAt: this.clock() })
+        .where(and(eq(sessions.id, sessionId), eq(sessions.userId, userId), isNull(sessions.revokedAt), gt(sessions.expiresAt, this.clock())))
         .returning({ id: sessions.id, ip: sessions.ip, userAgent: sessions.userAgent, createdAt: sessions.createdAt });
       if (!s) throw new AppError('NOT_FOUND', 'Session not found');
       return writeAudit(tx, {
@@ -681,8 +691,8 @@ export class AdminService {
     const { ids, auditId } = await this.db.transaction(async (tx) => {
       const rows = await tx
         .update(sessions)
-        .set({ revokedAt: new Date() })
-        .where(and(eq(sessions.userId, userId), isNull(sessions.revokedAt), gt(sessions.expiresAt, new Date())))
+        .set({ revokedAt: this.clock() })
+        .where(and(eq(sessions.userId, userId), isNull(sessions.revokedAt), gt(sessions.expiresAt, this.clock())))
         .returning({ id: sessions.id });
       if (rows.length === 0) return { ids: [] as string[], auditId: null };
       const ids = rows.map((r) => r.id).sort();

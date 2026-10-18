@@ -269,7 +269,10 @@ export type AdminOrderMarket = z.infer<typeof AdminOrderMarket>;
 export const UserOrderParam = UserIdParam.extend({ orderId: z.string().regex(/^\d+$/) });
 export const UserSessionParam = UserIdParam.extend({ sessionId: z.uuid() });
 
-/** `market` says which book `orderId` lives in (Spot and Futures ids are separate sequences). */
+/**
+ * `market` says which book `orderId` lives in (Spot and Futures ids are separate sequences).
+ * An admin cancel never places the TP/SL attached to a BUY: its tpsl becomes SKIPPED ('ADMIN_CANCELED'), so no new order is born.
+ */
 export const AdminCancelOrderRequest = z.object({ market: AdminOrderMarket, reason: Reason });
 export const AdminCancelOrderResult = z.object({
   market: AdminOrderMarket,
