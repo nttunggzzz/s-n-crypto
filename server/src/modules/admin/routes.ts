@@ -16,6 +16,19 @@ export function registerAdminRoutes(router: Router, opts: RouteOptions, admin: A
 
   route(router, opts, 'adminOverview', async () => admin.overview());
   route(router, opts, 'adminListUsers', async ({ query }) => admin.listUsers(query));
+  // AD1: read-only lookup and export. The export path is registered before ':userId' routes.
+  const exportLimit = new RateLimiter(10 * rateLimitScale, 60_000);
+  route(router, opts, 'adminUsersExport', async ({ auth, query }) => {
+    exportLimit.consume(`admin-export:${auth.user.id}`);
+    return admin.usersExport(query);
+  });
+  route(router, opts, 'adminAuditExport', async ({ auth, query }) => {
+    exportLimit.consume(`admin-export:${auth.user.id}`);
+    return admin.auditExport(query);
+  });
+  route(router, opts, 'adminSearchOrders', async ({ query }) => admin.searchOrders(query));
+  route(router, opts, 'adminSearchTrades', async ({ query }) => admin.searchTrades(query));
+  route(router, opts, 'adminUserSessions', async ({ params }) => admin.userSessions(params.userId));
   route(router, opts, 'adminGetUser', async ({ params }) => admin.getUser(params.userId));
   route(router, opts, 'adminUserOrders', async ({ params, query }) => admin.userOrders(params.userId, query.open === 'true', query.cursor, query.limit));
   route(router, opts, 'adminUserLedger', async ({ params, query }) => admin.userLedger(params.userId, query));

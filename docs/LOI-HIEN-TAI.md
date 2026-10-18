@@ -42,10 +42,15 @@ Rà soát: **2026-10-11** (Claude Code). Cập nhật lần cuối: 2026-10-11 t
 >   - Q-04: không ghi vào thư mục `main`.
 > - **Đã gộp `ui/gd2-exchange` (6b93ac2) vào `main` (7b229bf)**; `npm run verify` trên `main` đạt 629/629. Chưa `host update`, chưa push.
 
+>
+> **Rà soát lần 9 (UI `061fdac`, 2026-10-18): [docs/reports/2026-10-18-ra-soat-ui-lan-9.md](reports/2026-10-18-ra-soat-ui-lan-9.md)** — S-01…S-16 và AD-02…AD-24 đã làm; **không có P0/P1**; 58 test e2e cũ đạt.
+> - Việc tiếp cho Antigravity: **T-01 (P2)** gắn mốc test theo TESTIDS "Rà soát lần 8"; **T-02 (P2)** chi tiết người dùng admin còn nuốt lỗi; T-03…T-06 (P3); AD-25…AD-28.
+
 ## Backend → UI (Claude Code cập nhật mỗi khi đổi backend/hợp đồng; Antigravity đọc đầu mỗi phiên, cùng `packages/contracts/CHANGELOG.md`)
 
 | Ngày | Thay đổi backend / hợp đồng | UI cần làm gì | Trạng thái |
 |---|---|---|---|
+| 2026-10-18 | **Có rồi (contracts 0.21.0 + 0.22.0, back office AD1 + AD2):** `adminSearchOrders`, `adminSearchTrades`, `adminUserSessions`, `adminAuditExport`, `adminUsersExport` (quyền mới `users.export`); `adminRiskPositions`, `adminLiquidations`, `adminFundingSummary`, `adminMetrics`. README hợp đồng mục "Back office" | Chưa làm vội: màn hình sẽ giao trong PROMPT-19 khi AD3 + AD4 cũng gộp xong. Nếu `Record<Permission, …>` ở app admin báo thiếu `users.export` thì thêm nhãn | **Có rồi** — chờ PROMPT-19 |
 | 2026-10-17 | **Có rồi (contracts 0.20.0):** `accountTradingStats` GET `/api/v1/account/stats` (khối lượng hôm nay / 7 ngày / 30 ngày / tháng này / tháng trước, tách Spot–Futures; thuế đã khấu trừ tháng này và tháng trước); `AdminUserDetail.trading` cùng số cho admin. README mục 17 | Hồ sơ người dùng và chi tiết người dùng admin hiện các con số này (đợt 2 của PROMPT-17). Thuế ghi là "đã khấu trừ", không phải "còn phải nộp" | **Có rồi** — chờ Antigravity dùng |
 | 2026-10-17 | **Có rồi (contracts 0.19.0):** `publicConfig.staffTwoFactorRequired`; `npm run dev` chạy server với `STAFF_REQUIRE_2FA=false` (admin không cần 2FA, quyết định của chủ dự án tới khi làm lại bảo mật; production từ chối) | `apps/admin/src/context/AuthContext.tsx`: bỏ kiểm tra hostname của commit `7179707`, chỉ hiện màn "bắt buộc bật 2FA" khi `publicConfig().staffTwoFactorRequired === true` (S-13) | **Có rồi** — chờ Antigravity dùng |
 | 2026-10-15 | **Có rồi (hành vi, không đổi hợp đồng):** đóng vị thế Futures lớn hơn sổ lệnh không còn bị từ chối cả lệnh: khớp phần sổ có, `futuresClosePosition` trả `FuturesOrder` `status: 'EXPIRED'`, `closeReason: 'INSUFFICIENT_LIQUIDITY'`, `executedQty` < `quantity` (sổ trống hẳn vẫn 400) | `FuturesPage.tsx` `handleClosePosition`: so `executedQty` với `quantity`; chưa đủ thì báo "Đã đóng X / Y BTC — sổ lệnh chưa đủ, bấm đóng tiếp", không báo "đã đóng toàn bộ", giữ hộp thoại với khối lượng còn lại. Lỗi `INSUFFICIENT_LIQUIDITY` khi mở lệnh: gợi ý giảm khối lượng. Mở Short/Long lớn hơn sổ vẫn bị từ chối | **Có rồi** — chờ Antigravity dùng |

@@ -1,7 +1,7 @@
 # Changelog — @cex/contracts
 
 ## Chưa phát hành — đợt AD3 (Back office: admin hủy lệnh, thu hồi phiên, điều chỉnh ví Futures)
-Chỉ thêm. 4 endpoint mới. Không đổi số phiên bản (lead đánh số khi gộp). Hướng dẫn: README mục 18. Kế hoạch: `docs/plans/module-AD-admin-backoffice.md` mục 4.
+Chỉ thêm. 4 endpoint mới. Không đổi số phiên bản (lead đánh số khi gộp). Hướng dẫn: README mục 19. Kế hoạch: `docs/plans/module-AD-admin-backoffice.md` mục 4.
 
 **Thêm**
 - Endpoint (cả bốn `auth: 'staff'`): `adminCancelUserOrder` POST `/api/v1/admin/users/:userId/orders/:orderId/cancel` và `adminCancelUserOrders` POST `/api/v1/admin/users/:userId/orders/cancel-all` (quyền mới `orders.manage`);
@@ -20,6 +20,29 @@ Chỉ thêm. 4 endpoint mới. Không đổi số phiên bản (lead đánh số
 - Audit `ORDER_CANCEL.before.status` lấy từ dòng đã khóa (`NEW` / `PARTIALLY_FILLED`); lệnh Futures có thêm `reduceOnly`; hủy hàng loạt có `partiallyFilled`.
 
 **Có thể ảnh hưởng UI:** `Permission` có thêm `orders.manage` (`Record<Permission, …>` phải bổ sung); `AuditAction` có thêm hai giá trị (nơi dùng `Record<AuditAction, …>` cần nhãn).
+
+## 0.22.0 — 2026-10-18 (Back office đợt AD2: rủi ro Futures, thanh lý, funding, số liệu sàn theo ngày) (Back office: rủi ro Futures và số liệu sàn theo ngày)
+Chỉ thêm 4 endpoint chỉ đọc (lead đánh số version khi gộp). Hướng dẫn: README mục 18.
+
+**Thêm**
+- `adminRisk.ts` (file mới): `AdminRiskPositionsQuery` (`symbol`, `side`, `sort: liqDistance|notional`, cursor, limit), `RiskPosition`, `RiskSymbolTotals`, `AdminRiskPositions`; `AdminLiquidationsQuery`, `AdminLiquidation`;
+  `AdminFundingSummaryQuery` (`FUNDING_SUMMARY_MAX_DAYS = 366`), `FundingSide`, `FundingSymbolSummary`, `AdminFundingSummary`; `AdminMetricsQuery` (`METRICS_RANGES`), `MetricsDay`, `MetricsTotals`, `AdminMetrics`.
+- Endpoint `adminRiskPositions` GET `/api/v1/admin/risk/positions` và `adminLiquidations` GET `/api/v1/admin/risk/liquidations` (quyền `users.read`); `adminFundingSummary` GET `/api/v1/admin/risk/funding` và `adminMetrics` GET `/api/v1/admin/metrics` (quyền `exchange.read`). Không thêm quyền mới.
+- Fixture `fixtureRiskPositions`, `fixtureRiskTotals`, `fixtureLiquidations`, `fixtureFundingSummary`, `fixtureMetricsDay()`, `fixtureMetricsTotals()`; resolver mock cho cả 4 endpoint.
+
+**Quy tắc:** mark price không LIVE → `markPrice`, `notional`, `unrealizedPnl`, `liqDistance`, `marginRatio` là `null` (không phải 0), xếp cuối khi sắp xếp. `adminMetrics` trả đủ mọi ngày GMT+7 kể cả ngày 0; tài khoản bot tín hiệu không được tính.
+
+## 0.21.0 — 2026-10-18 (Back office đợt AD1: tra cứu lệnh/khớp lệnh toàn sàn, phiên của khách, xuất CSV) (Back office: tra cứu và xuất, chỉ đọc)
+Thêm 5 endpoint; không đổi endpoint cũ. Lead đánh số phiên bản khi gộp. Hướng dẫn: README mục "Back office: tra cứu và xuất (đợt AD1)".
+
+**Thêm**
+- Quyền `users.export` (ADMIN và owner; support không có): xuất CSV người dùng (chứa email).
+- `adminSearchOrders` GET `/api/v1/admin/orders` và `adminSearchTrades` GET `/api/v1/admin/trades` (`users.read`): `market` (`SPOT`|`FUTURES`) bắt buộc; lọc `symbol`, `side`, `user` (uuid hoặc UID 8 số, không thấy = 404), `orderId`, `from`/`to`; riêng lệnh: `status` (`open`|`closed`|`all`), `clientOrderId`. Mới nhất trước, cursor = id dòng cuối, `limit` ≤ 200. Dòng `AdminOrderRow` / `AdminTradeRow` kèm `userId`, `uid`, `email`. Lệnh Futures: `source`/`sourceId` = `null`; khớp Futures: `tax = null`.
+- `adminUserSessions` GET `/api/v1/admin/users/:userId/sessions` (`users.read`): phiên còn hiệu lực (≤ 100), không trả token hay băm token.
+- `adminAuditExport` GET `/api/v1/admin/audit-logs/export.csv` (`audit.read`, bộ lọc của `adminAuditLogs`) và `adminUsersExport` GET `/api/v1/admin/users/export.csv` (`users.export`, bộ lọc của `adminListUsers`): CSV UTF-8 có BOM, ≤ 10.000 dòng, mới nhất trước. Tiêu đề cố định: `AUDIT_EXPORT_COLUMNS`, `USERS_EXPORT_COLUMNS`. Ô văn bản tự do bắt đầu bằng `=` `+` `-` `@` tab CR được thêm dấu `'` phía trước (`csvTextCell`).
+- Fixture `fixtures/adminLookup.ts`; resolver mock `mocks/adminLookup.ts` (cùng luật, cùng quyền với server).
+
+**Có thể ảnh hưởng UI:** thêm giá trị vào enum `Permission` — nơi nào có `Record<Permission, …>` phải thêm `users.export`.
 
 ## 0.20.0 — 2026-10-17 (Hồ sơ: khối lượng giao dịch và thuế đã khấu trừ trong tháng — người dùng và admin)
 Chỉ thêm một endpoint (tổng 154) và một trường bắt buộc trong phản hồi. Hướng dẫn: README mục 17.

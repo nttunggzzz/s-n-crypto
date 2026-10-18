@@ -37,6 +37,9 @@ import { reconcile } from '../exchange/reconciliation.ts';
 import { makePriceOf } from '../exchange/routes.ts';
 import { serializeBalance, serializeLedger, serializeOrder, valuateBalances } from '../exchange/serializers.ts';
 import { writeAudit } from './audit.ts';
+import { AUDIT_EXPORT_COLUMNS, USERS_EXPORT_COLUMNS, csvTextCell } from '@cex/contracts';
+import { csv, gmt7, MAX_EXPORT_ROWS } from '../exchange/exports.ts';
+import { searchOrders, searchTrades, userSessions } from './lookup.ts';
 import { serializeLoginEvent } from '../auth/security.ts';
 import { serializePosition } from '../futures/serializers.ts';
 
@@ -205,7 +208,8 @@ export class AdminService {
     };
   }
 
-  async listUsers(q: { q?: string; role?: Role; status?: 'active' | 'locked'; cursor?: string; limit: number }) {
+  /** Filters shared by the user list and its CSV export. */
+  private userFilters(q: { q?: string; role?: Role; status?: 'active' | 'locked' }): SQL[] {
     const where: SQL[] = [];
     if (q.q) {
       const isUuid = /^[0-9a-f-]{36}$/i.test(q.q);
@@ -214,6 +218,11 @@ export class AdminService {
     }
     if (q.role) where.push(eq(users.role, q.role));
     if (q.status) where.push(eq(users.status, q.status));
+    return where;
+  }
+
+  async listUsers(q: { q?: string; role?: Role; status?: 'active' | 'locked'; cursor?: string; limit: number }) {
+    const where = this.userFilters(q);
     if (q.cursor) {
       const c = decodeCursor(q.cursor);
       where.push(sql`(${users.createdAt}, ${users.id}) < (${c.t}, ${c.id})`);
@@ -841,7 +850,8 @@ export class AdminService {
 
   // ───────── audit & reconciliation
 
-  async auditLogs(q: { actorId?: string; action?: string; targetType?: AuditTargetType; targetId?: string; from?: string; to?: string; cursor?: string; limit: number }) {
+  /** Filters shared by the audit log list and its CSV export. */
+  private auditFilters(q: { actorId?: string; action?: string; targetType?: AuditTargetType; targetId?: string; from?: string; to?: string }): SQL[] {
     const where: SQL[] = [];
     if (q.actorId) where.push(eq(auditLogs.actorId, q.actorId));
     if (q.action) where.push(eq(auditLogs.action, q.action));
@@ -849,6 +859,11 @@ export class AdminService {
     if (q.targetId) where.push(eq(auditLogs.targetId, q.targetId));
     if (q.from) where.push(gte(auditLogs.createdAt, new Date(q.from)));
     if (q.to) where.push(lte(auditLogs.createdAt, new Date(q.to)));
+    return where;
+  }
+
+  async auditLogs(q: { actorId?: string; action?: string; targetType?: AuditTargetType; targetId?: string; from?: string; to?: string; cursor?: string; limit: number }) {
+    const where = this.auditFilters(q);
     const c = idCursor(q.cursor);
     if (c) where.push(lt(auditLogs.id, c));
     const rows = await this.db
@@ -873,6 +888,67 @@ export class AdminService {
       createdAt: log.createdAt.toISOString(),
     }));
     return { items, nextCursor: more ? String(page[page.length - 1]!.log.id) : null };
+  }
+
+  /** AD1: audit log as CSV (AUDIT_EXPORT_COLUMNS), newest first, at most MAX_EXPORT_ROWS. Free-text cells are neutralised against CSV injection. */
+  async auditExport(q: { actorId?: string; action?: string; targetType?: AuditTargetType; targetId?: string; from?: string; to?: string }): Promise<string> {
+    const where = this.auditFilters(q);
+    const rows = await this.db
+      .select({ log: auditLogs, email: users.email })
+      .from(auditLogs)
+      .leftJoin(users, eq(users.id, auditLogs.actorId))
+      .where(where.length ? and(...where) : undefined)
+      .orderBy(desc(auditLogs.id))
+      .limit(MAX_EXPORT_ROWS);
+    const json = (v: unknown) => (v === null || v === undefined ? null : csvTextCell(JSON.stringify(v)));
+    return csv(
+      AUDIT_EXPORT_COLUMNS,
+      rows.map(({ log, email }) => [
+        String(log.id),
+        log.createdAt.toISOString(),
+        gmt7(log.createdAt.toISOString()),
+        log.actorId,
+        log.actorId ? csvTextCell(email ?? '(deleted)') : null,
+        csvTextCell(log.action),
+        log.targetType,
+        csvTextCell(log.targetId),
+        csvTextCell(log.reason),
+        csvTextCell(log.ip),
+        json(log.before),
+        json(log.after),
+      ]),
+    );
+  }
+
+  /** AD1: user list as CSV (USERS_EXPORT_COLUMNS; e-mail addresses: permission users.export), newest first, at most MAX_EXPORT_ROWS. */
+  async usersExport(q: { q?: string; role?: Role; status?: 'active' | 'locked' }): Promise<string> {
+    const where = this.userFilters(q);
+    const rows = await this.db
+      .select()
+      .from(users)
+      .where(where.length ? and(...where) : undefined)
+      .orderBy(desc(users.createdAt), desc(users.id))
+      .limit(MAX_EXPORT_ROWS);
+    const seen = await this.lastSeen(rows.map((u) => u.id));
+    return csv(
+      USERS_EXPORT_COLUMNS,
+      rows.map((u) => {
+        const s = this.summary(u, seen.get(u.id) ?? null);
+        return [s.uid, s.id, csvTextCell(s.email), csvTextCell(s.name), s.role, s.status, String(s.emailVerified), String(s.twoFactorEnabled), String(s.signalsAccess), String(s.isBot), s.createdAt, s.lastSeenAt];
+      }),
+    );
+  }
+
+  /** AD1: order / fill lookup across all users, and one user's live sessions (see lookup.ts). */
+  searchOrders(q: Parameters<typeof searchOrders>[1]) {
+    return searchOrders(this.db, q);
+  }
+  searchTrades(q: Parameters<typeof searchTrades>[1]) {
+    return searchTrades(this.db, q);
+  }
+  async userSessions(id: string) {
+    await this.loadUser(id);
+    return userSessions(this.db, id);
   }
 
   async reconciliationRuns(cursor: string | undefined, limit: number) {

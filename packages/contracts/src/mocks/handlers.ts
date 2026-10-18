@@ -26,6 +26,7 @@ import { baseOf, cancel, createOco, findList, isOpen, lockOf, mockFill, newOrder
 import { MockError, mockMe, now, ok, requireUser, requireVerified, type Resolver } from './common.ts';
 import { adminResolvers } from './admin.ts';
 import { adminActionResolvers } from './adminActions.ts';
+import { adminLookupResolvers } from './adminLookup.ts';
 import { futuresResolvers } from './futures.ts';
 import { inviteResolvers, mockConsumeInvite } from './invites.ts';
 import { phase26Resolvers } from './phase26.ts';
@@ -33,6 +34,7 @@ import { journalResolvers } from './journal.ts';
 import { taxResolvers } from './tax.ts';
 import { accountStatsResolvers } from './accountStats.ts';
 import { newsResolvers } from './news.ts';
+import { adminRiskResolvers } from './adminRisk.ts';
 import type { BinaryFile } from '../common.ts';
 const requireTradable = (symbol: string) => {
   if (mockStore.scenario === 'halted') throw new MockError('TRADING_HALTED', 'Trading is halted by the operator');
@@ -374,6 +376,7 @@ const resolvers: { [N in EndpointName]: Resolver<N> } = {
   unreadNotifications: () => (requireUser(), { unread: mockStore.notifications.filter((n) => n.readAt === null).length }),
   ...adminResolvers,
   ...adminActionResolvers,
+  ...adminLookupResolvers,
   ...futuresResolvers,
   ...phase26Resolvers,
   ...inviteResolvers,
@@ -381,6 +384,7 @@ const resolvers: { [N in EndpointName]: Resolver<N> } = {
   ...taxResolvers,
   ...accountStatsResolvers,
   ...newsResolvers,
+  ...adminRiskResolvers,
 
   markNotificationsRead: ({ body }) => {
     requireUser();

@@ -404,7 +404,7 @@ s.tax.thisMonth             // { month: '2026-10', withheldCount, withheldAmount
 số liệu phụ thuộc ngày hiện tại của máy bạn; đặt một lệnh khớp ngay trong mock thì khối lượng hôm nay tăng theo giá trị lệnh vừa khớp. Người dùng khác trong `adminGetUser` (mock) luôn là toàn số 0 vì mock không có lệnh của họ.
 Fixture tĩnh: `fixtureAccountTradingStats` (người dùng demo lúc 2026-10-09T03:00Z), `fixtureEmptyTradingStats()`.
 
-## 18. Back office: thao tác của admin (đợt AD3)
+## 19. Back office: thao tác của admin (đợt AD3)
 Chưa phát hành (CHANGELOG: "Chưa phát hành — đợt AD3"). Bốn endpoint mới và một trường mới ở `adminAdjustBalance`. Mọi thao tác **ghi** nhật ký (`writeAudit`) **trong cùng transaction** với thay đổi:
 có dòng audit thì có thay đổi, thất bại thì không có cả hai. Quyền mới `orders.manage` (admin, owner). Khuôn quyền như khóa người dùng: không thao tác trên người có vai trò ngang/cao hơn, không trên chính mình,
 không trên tài khoản bot (`BOT_ACCOUNT_PROTECTED`); lý do (`reason`, 5–500 ký tự) bắt buộc.
@@ -437,3 +437,31 @@ await api.adminAdjustBalance({ params: { userId }, body: { asset: 'USDT', amount
 
 **Mock:** `fixtureAdminCancelOrderResult`, `fixtureAdminCancelOrdersResult`, `fixtureAdminRevokeSessionsResult`, `fixtureAdminSessionIds` (hai phiên của người dùng demo). Mock chỉ có lệnh/phiên cho người dùng demo; người khác → 404 / 0.
 Mock không kiểm vai trò ngang/cao hơn (người đăng nhập mock vừa là nhân viên vừa là người dùng demo); server kiểm.
+
+## Back office: tra cứu và xuất (đợt AD1)
+
+Chỉ đọc, dành cho web admin; mọi endpoint là `auth: staff` (cần 2FA như các endpoint admin khác).
+
+- `adminSearchOrders` / `adminSearchTrades` (`users.read`): `market` (`SPOT`|`FUTURES`) **bắt buộc**. `user` nhận uuid hoặc UID 8 số (sai dạng = 400, không có người dùng = 404). Mới nhất trước; trang kế tiếp dùng `nextCursor` của trang trước. Lệnh Futures có `source = null` và `leverage` có số; khớp Futures có `tax = null`.
+- `adminUserSessions` (`users.read`): phiên còn hiệu lực của khách (tối đa 100). Không có token hay băm token; chỉ id, thời điểm, ip, userAgent, `mfaVerified`.
+- `adminAuditExport` (`audit.read`) và `adminUsersExport` (**`users.export`**, chỉ ADMIN và owner vì có email): trả chuỗi CSV (UTF-8 có BOM, tối đa 10.000 dòng, mới nhất trước). Tiêu đề lấy từ `AUDIT_EXPORT_COLUMNS` / `USERS_EXPORT_COLUMNS`; ô trống = `null`. Ô văn bản tự do bắt đầu bằng `=` `+` `-` `@` được thêm dấu `'` phía trước để bảng tính không chạy như công thức. Ẩn nút xuất người dùng khi `hasPermission(role, 'users.export')` là false.
+- Mock: `mocks/adminLookup.ts` với `fixtures/adminLookup.ts` (người dùng demo có lệnh Spot, người dùng thứ hai có lệnh Futures); cùng luật và cùng quyền với server.
+
+## 18. Back office: rủi ro và số liệu (đợt AD2)
+Bốn endpoint chỉ đọc cho web admin, toàn sàn (không lọc theo người dùng), schema ở `adminRisk.ts`. Quyền: `adminRiskPositions` và `adminLiquidations` cần `users.read` (có tên/email người dùng),
+`adminFundingSummary` và `adminMetrics` cần `exchange.read`. Support đã có cả hai quyền; người dùng thường nhận 403.
+
+- **`adminRiskPositions`** `GET /api/v1/admin/risk/positions` — vị thế Futures đang mở. Mark price của cặp **không LIVE** (STALE/UNAVAILABLE) → `markPrice`, `notional`, `unrealizedPnl`, `liqDistance`, `marginRatio` là `null`
+  (không phải 0); `liquidationPrice` vẫn có vì không cần mark. `liqDistance` = khoảng cách mark → giá thanh lý chia mark, dạng phân số 6 chữ số (`"0.05"` = 5 %, âm = mark đã vượt giá thanh lý). `marginRatio` =
+  ký quỹ duy trì / (ký quỹ + PnL), tối đa `"1.000000"` (1 = ngưỡng thanh lý). `sort`: `liqDistance` (mặc định, tăng dần) hoặc `notional` (giảm dần); dòng `null` xếp cuối. `symbol` lọc cả `items` và `totals`,
+  `side` chỉ lọc `items` (open interest luôn gồm cả hai chiều). `totals` = open interest mỗi cặp (`longQty`, `shortQty`, notional `null` nếu mark không LIVE, `markStatus`).
+  `cursor` là offset trong thứ tự tính lúc gọi — giá mark đổi nên ranh giới trang có thể xê dịch giữa hai lần gọi.
+- **`adminLiquidations`** `GET /api/v1/admin/risk/liquidations` — vị thế đóng do thanh lý, mới nhất trước, lọc `symbol`, `from`/`to` (theo `liquidatedAt`), cursor `"<ISO>|<id>"`. `lostMargin` = ký quỹ mất
+  (đọc từ sổ cái của lần thanh lý); `quantity`/`liquidationPrice`/`fee`/`margin`/`lostMargin` chỉ `null` khi thiếu bản ghi gốc.
+- **`adminFundingSummary`** `GET /api/v1/admin/risk/funding` — theo cặp trong `[from, to]` (mặc định 7 ngày gần nhất; tối đa 366 ngày, `from` > `to` → 400). Mỗi chiều có `paid`, `received` (đều dương), `net` = received − paid,
+  `payments`; `net` của cặp = tổng hai chiều theo góc nhìn người dùng (âm = người dùng trả nhiều hơn nhận).
+- **`adminMetrics`** `GET /api/v1/admin/metrics?range=7d|30d|90d` — **đủ mọi ngày GMT+7** của khoảng (ngày không có giao dịch = 0, ngày cuối là hôm nay chưa trọn), khối lượng và phí Spot/Futures (USDT),
+  thuế đã khấu trừ, người dùng mới, người giao dịch, số lần thanh lý. Tài khoản bot tín hiệu không được tính. `totals.activeTraders` là số người **khác nhau** cả khoảng, không phải tổng các ngày.
+  Spot chỉ cộng cặp quote USDT; fill cặp khác đếm ở `excludedNonUsdtFills`. Phí Spot trả bằng coin gốc được quy ra USDT theo giá của chính lần khớp đó.
+
+**Mock:** dữ liệu cố định (3 vị thế với 1 mark STALE, 2 lần thanh lý, funding 2 cặp); `adminMetrics` dựng đủ ngày tính từ hôm nay, cứ 4 ngày có 1 ngày toàn số 0.
