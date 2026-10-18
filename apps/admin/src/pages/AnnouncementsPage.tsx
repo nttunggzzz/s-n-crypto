@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { getApiClient } from '../services/api';
 import { useAuth } from '../context/AuthContext';
-import { ConfirmDialog } from '../components/ConfirmDialog';
+import { formatApiError } from '../services/errors';
 import type { AdminAnnouncement, AnnouncementLevel } from '@cex/contracts';
-import { Bell, Plus, Eye, EyeOff, Pin, Trash2, Edit3 } from 'lucide-react';
+import { Plus, Eye, EyeOff, Pin, Edit3, Send, X, Calendar } from 'lucide-react';
 
 export const AnnouncementsPage: React.FC = () => {
   const { hasPerm } = useAuth();
@@ -13,12 +13,15 @@ export const AnnouncementsPage: React.FC = () => {
 
   // Create/Edit state
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingItem, setEditingItem] = useState<AdminAnnouncement | null>(null);
   const [title, setTitle] = useState('');
   const [body, setBody] = useState('');
   const [level, setLevel] = useState<AnnouncementLevel>('INFO');
   const [pinned, setPinned] = useState(false);
   const [publish, setPublish] = useState(true);
+  const [expiresAt, setExpiresAt] = useState('');
+  const [modalError, setModalError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const api = getApiClient();
@@ -28,7 +31,7 @@ export const AnnouncementsPage: React.FC = () => {
     setIsLoading(true);
     api.adminListAnnouncements({ query: { includeHidden: includeHidden ? 'true' : 'false' } })
       .then((res) => setItems(res.items))
-      .catch(() => {})
+      .catch((err) => setActionError(formatApiError(err)))
       .finally(() => setIsLoading(false));
   };
 
@@ -37,40 +40,96 @@ export const AnnouncementsPage: React.FC = () => {
   }, [includeHidden]);
 
   const handleOpenCreate = () => {
-    setEditingId(null);
+    setEditingItem(null);
     setTitle('');
     setBody('');
     setLevel('INFO');
     setPinned(false);
     setPublish(true);
+    setExpiresAt('');
+    setModalError(null);
     setIsModalOpen(true);
+  };
+
+  const handleOpenEdit = (a: AdminAnnouncement) => {
+    setEditingItem(a);
+    setTitle(a.title);
+    setBody(a.body);
+    setLevel(a.level);
+    setPinned(a.pinned);
+    setPublish(Boolean(a.publishedAt));
+    setExpiresAt(a.expiresAt ? new Date(a.expiresAt).toISOString().slice(0, 16) : '');
+    setModalError(null);
+    setIsModalOpen(true);
+  };
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    setEditingItem(null);
+    setModalError(null);
   };
 
   const handleSaveAnnouncement = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title || !body) return;
+    if (!title.trim() || !body.trim()) return;
     setIsSubmitting(true);
+    setModalError(null);
     try {
-      if (editingId) {
-        await api.adminUpdateAnnouncement({
-          params: { announcementId: editingId },
-          body: { title, body, level, pinned, published: publish },
-        });
+      const parsedExpiresAt = expiresAt ? new Date(expiresAt).toISOString() : null;
+
+      if (editingItem) {
+        const payload: any = {};
+        if (title.trim() !== editingItem.title) payload.title = title.trim();
+        if (body.trim() !== editingItem.body) payload.body = body.trim();
+        if (level !== editingItem.level) payload.level = level;
+        if (pinned !== editingItem.pinned) payload.pinned = pinned;
+        const wasPublished = Boolean(editingItem.publishedAt);
+        if (publish !== wasPublished) payload.published = publish;
+        const origExpires = editingItem.expiresAt ? new Date(editingItem.expiresAt).toISOString() : null;
+        if (origExpires !== parsedExpiresAt) payload.expiresAt = parsedExpiresAt;
+
+        if (Object.keys(payload).length > 0) {
+          await api.adminUpdateAnnouncement({
+            params: { announcementId: editingItem.id },
+            body: payload,
+          });
+        }
       } else {
         await api.adminCreateAnnouncement({
-          body: { title, body, level, pinned, publish },
+          body: {
+            title: title.trim(),
+            body: body.trim(),
+            level,
+            pinned,
+            publish,
+            expiresAt: parsedExpiresAt,
+          },
         });
       }
-      setIsModalOpen(false);
+      handleCloseModal();
       loadAnnouncements();
     } catch (e) {
-      console.error(e);
+      setModalError(formatApiError(e));
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  const handlePublishDraft = async (a: AdminAnnouncement) => {
+    setActionError(null);
+    try {
+      await api.adminUpdateAnnouncement({
+        params: { announcementId: a.id },
+        body: { published: true },
+      });
+      loadAnnouncements();
+    } catch (e) {
+      setActionError(formatApiError(e));
+    }
+  };
+
   const handleToggleHide = async (a: AdminAnnouncement) => {
+    setActionError(null);
     try {
       await api.adminUpdateAnnouncement({
         params: { announcementId: a.id },
@@ -78,7 +137,7 @@ export const AnnouncementsPage: React.FC = () => {
       });
       loadAnnouncements();
     } catch (e) {
-      console.error(e);
+      setActionError(formatApiError(e));
     }
   };
 
@@ -115,6 +174,18 @@ export const AnnouncementsPage: React.FC = () => {
         </div>
       </div>
 
+      {actionError && (
+        <div
+          data-testid="confirm-error"
+          className="p-3 rounded-lg bg-[var(--down,#f2475f)]/15 border border-[var(--down,#f2475f)]/30 text-xs text-[var(--down,#f2475f)] flex items-center justify-between"
+        >
+          <span>{actionError}</span>
+          <button onClick={() => setActionError(null)} className="text-[var(--down,#f2475f)] hover:opacity-80">
+            <X size={14} />
+          </button>
+        </div>
+      )}
+
       <div className="bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)] rounded-xl overflow-hidden shadow-lg">
         <table className="w-full text-left text-sm">
           <thead className="bg-[var(--line,#1d1e21)]/30 border-b border-[var(--line,#1d1e21)] text-xs font-semibold text-[var(--text-2,#a1a1aa)] uppercase">
@@ -123,6 +194,7 @@ export const AnnouncementsPage: React.FC = () => {
               <th className="px-5 py-3">Cấp độ</th>
               <th className="px-5 py-3">Ghim</th>
               <th className="px-5 py-3">Trạng thái</th>
+              <th className="px-5 py-3">Hết hạn</th>
               <th className="px-5 py-3">Người tạo</th>
               <th className="px-5 py-3">Ngày tạo</th>
               {canManage && <th className="px-5 py-3 text-right">Thao tác</th>}
@@ -153,27 +225,53 @@ export const AnnouncementsPage: React.FC = () => {
                   ) : a.publishedAt ? (
                     <span className="text-xs text-[var(--up,#1fc27a)] font-medium">Đã xuất bản</span>
                   ) : (
-                    <span className="text-xs text-amber-400">Bản nháp</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-amber-400">Bản nháp</span>
+                      {canManage && (
+                        <button
+                          data-testid="announcement-publish"
+                          onClick={() => handlePublishDraft(a)}
+                          className="px-2 py-0.5 rounded bg-[var(--up,#1fc27a)]/15 hover:bg-[var(--up,#1fc27a)]/30 text-[var(--up,#1fc27a)] text-[11px] font-semibold flex items-center gap-1 transition-colors"
+                          title="Xuất bản ngay thông báo này"
+                        >
+                          <Send size={10} />
+                          <span>Xuất bản</span>
+                        </button>
+                      )}
+                    </div>
                   )}
+                </td>
+                <td className="px-5 py-3 text-xs text-[var(--text-3,#63636b)]">
+                  {a.expiresAt ? new Date(a.expiresAt).toLocaleDateString('vi-VN') : '—'}
                 </td>
                 <td className="px-5 py-3 text-xs text-[var(--text-2,#a1a1aa)]">{a.createdBy?.email || 'Hệ thống'}</td>
                 <td className="px-5 py-3 text-xs text-[var(--text-3,#63636b)]">{new Date(a.createdAt).toLocaleDateString('vi-VN')}</td>
                 {canManage && (
                   <td className="px-5 py-3 text-right">
-                    <button
-                      onClick={() => handleToggleHide(a)}
-                      className="p-1 rounded hover:bg-[var(--line,#1d1e21)] text-[var(--text-2,#a1a1aa)] hover:text-[var(--text,#f4f4f5)] mr-1"
-                      title={a.hidden ? 'Hiện lại' : 'Ẩn đi'}
-                    >
-                      {a.hidden ? <Eye size={14} /> : <EyeOff size={14} />}
-                    </button>
+                    <div className="flex items-center justify-end gap-1.5">
+                      <button
+                        onClick={() => handleOpenEdit(a)}
+                        className="px-2.5 py-1 rounded bg-[var(--line,#1d1e21)] hover:bg-[var(--line,#1d1e21)]/80 text-xs font-medium border border-[var(--line,#1d1e21)] text-[var(--text,#f4f4f5)] inline-flex items-center gap-1"
+                        title="Chỉnh sửa thông báo"
+                      >
+                        <Edit3 size={12} />
+                        <span>Sửa</span>
+                      </button>
+                      <button
+                        onClick={() => handleToggleHide(a)}
+                        className="p-1 rounded hover:bg-[var(--line,#1d1e21)] text-[var(--text-2,#a1a1aa)] hover:text-[var(--text,#f4f4f5)]"
+                        title={a.hidden ? 'Hiện lại' : 'Ẩn đi'}
+                      >
+                        {a.hidden ? <Eye size={14} /> : <EyeOff size={14} />}
+                      </button>
+                    </div>
                   </td>
                 )}
               </tr>
             ))}
             {!isLoading && items.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-5 py-10 text-center text-[var(--text-3,#63636b)]">
+                <td colSpan={8} className="px-5 py-10 text-center text-[var(--text-3,#63636b)]">
                   Chưa có thông báo nào
                 </td>
               </tr>
@@ -186,12 +284,30 @@ export const AnnouncementsPage: React.FC = () => {
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
           <form onSubmit={handleSaveAnnouncement} className="bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)] rounded-xl w-full max-w-lg p-6 flex flex-col gap-4 shadow-2xl">
-            <h2 className="text-lg font-bold text-[var(--text,#f4f4f5)]">Tạo thông báo mới</h2>
+            <div className="flex items-center justify-between border-b border-[var(--line,#1d1e21)] pb-3">
+              <h2 className="text-lg font-bold text-[var(--text,#f4f4f5)]">
+                {editingItem ? 'Chỉnh sửa thông báo' : 'Tạo thông báo mới'}
+              </h2>
+              <button type="button" onClick={handleCloseModal} className="text-[var(--text-3,#63636b)] hover:text-white">
+                <X size={18} />
+              </button>
+            </div>
+
+            {modalError && (
+              <div
+                data-testid="confirm-error"
+                className="p-3 rounded-lg bg-[var(--down,#f2475f)]/15 border border-[var(--down,#f2475f)]/30 text-xs text-[var(--down,#f2475f)] leading-relaxed"
+              >
+                {modalError}
+              </div>
+            )}
+
             <div className="flex flex-col gap-1.5">
               <label className="text-xs font-semibold uppercase text-[var(--text-2,#a1a1aa)]">Tiêu đề</label>
               <input
                 type="text"
                 required
+                maxLength={120}
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 className="w-full bg-[var(--bg,#000000)] border border-[var(--line,#1d1e21)] rounded-lg px-3 py-2 text-sm text-[var(--text,#f4f4f5)] outline-none focus:border-[var(--accent,#818cf8)]"
@@ -230,9 +346,26 @@ export const AnnouncementsPage: React.FC = () => {
                     onChange={(e) => setPublish(e.target.checked)}
                     className="rounded"
                   />
-                  <span>Xuất bản ngay</span>
+                  <span>{editingItem ? 'Đang xuất bản' : 'Xuất bản ngay'}</span>
                 </label>
               </div>
+            </div>
+
+            {/* Expires at */}
+            <div className="flex flex-col gap-1.5">
+              <label className="text-xs font-semibold uppercase text-[var(--text-2,#a1a1aa)] flex items-center gap-1.5">
+                <Calendar size={13} className="text-[var(--accent,#818cf8)]" />
+                <span>Thời gian hết hạn (Tùy chọn)</span>
+              </label>
+              <input
+                type="datetime-local"
+                value={expiresAt}
+                onChange={(e) => setExpiresAt(e.target.value)}
+                className="w-full bg-[var(--bg,#000000)] border border-[var(--line,#1d1e21)] rounded-lg px-3 py-2 text-sm text-[var(--text,#f4f4f5)] outline-none focus:border-[var(--accent,#818cf8)]"
+              />
+              <span className="text-[11px] text-[var(--text-3,#63636b)]">
+                Sau thời gian này, thông báo sẽ tự động hết hạn và không hiển thị cho người dùng
+              </span>
             </div>
 
             <div className="flex flex-col gap-1.5">
@@ -240,6 +373,7 @@ export const AnnouncementsPage: React.FC = () => {
               <textarea
                 required
                 rows={5}
+                maxLength={5000}
                 value={body}
                 onChange={(e) => setBody(e.target.value)}
                 className="w-full bg-[var(--bg,#000000)] border border-[var(--line,#1d1e21)] rounded-lg p-2.5 text-sm text-[var(--text,#f4f4f5)] resize-none outline-none focus:border-[var(--accent,#818cf8)]"
@@ -250,7 +384,7 @@ export const AnnouncementsPage: React.FC = () => {
             <div className="flex justify-end gap-3 mt-2 pt-2 border-t border-[var(--line,#1d1e21)]">
               <button
                 type="button"
-                onClick={() => setIsModalOpen(false)}
+                onClick={handleCloseModal}
                 className="px-4 py-2 rounded-lg border border-[var(--line,#1d1e21)] text-sm text-[var(--text-2,#a1a1aa)] hover:bg-[var(--line,#1d1e21)]/40"
               >
                 Hủy
@@ -260,7 +394,7 @@ export const AnnouncementsPage: React.FC = () => {
                 disabled={isSubmitting}
                 className="px-4 py-2 rounded-lg bg-[var(--accent,#818cf8)] text-white text-sm font-semibold hover:brightness-110 disabled:opacity-40"
               >
-                {isSubmitting ? 'Đang lưu...' : 'Lưu thông báo'}
+                {isSubmitting ? 'Đang lưu...' : editingItem ? 'Lưu thay đổi' : 'Tạo thông báo'}
               </button>
             </div>
           </form>
