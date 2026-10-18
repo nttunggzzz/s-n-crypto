@@ -61,6 +61,28 @@ async function dataValue(l: Locator, what: string): Promise<string> {
 }
 const expectDec = (actual: string, expected: Dec, what: string) => expect(dec(actual).toFixed(8), what).toBe(expected.toFixed(8));
 
+/**
+ * The `data-value` of `l` becomes `expected` (polled up to 15 s). The form first computes from a default guess (leverage 10x) until the
+ * saved per-symbol settings arrive from the server, so the first render after a reload may show the margin of another leverage.
+ */
+async function expectDecEventually(l: Locator, expected: Dec, what: string) {
+  await expect(l, `${what}: phần tử phải hiển thị`).toBeVisible();
+  await expect
+    .poll(
+      async () => {
+        const v = await l.getAttribute('data-value', { timeout: 2_000 }).catch(() => null);
+        if (v === null) return 'thiếu data-value';
+        try {
+          return dec(v).toFixed(8);
+        } catch {
+          return `data-value không phải số: "${v}"`;
+        }
+      },
+      { message: what, timeout: 15_000 },
+    )
+    .toBe(expected.toFixed(8));
+}
+
 /** The numbers in a Vietnamese text: "1.234,5" → "1234.5", "704" → "704", "704.00" → "704.00". */
 function numbersIn(text: string): string[] {
   return (text.match(/\d[\d.,]*/g) ?? []).map((raw) => {
@@ -90,6 +112,15 @@ async function fillLimitForm(page: Page, price: string, quantity: string) {
   await page.getByTestId('futures-qty').fill(quantity);
 }
 
+/**
+ * The support-chat widget (AiAssistantWidget) greets with a bubble about 1,2 s after every page load and keeps it until it is closed; its fixed
+ * box (pointer-events: auto) then covers the right-hand end of the order buttons ("Mở Short", part of "Mở Long") and the "Chuyển từ Spot" link.
+ * A user closes the bubble; so do the tests before they click there. That the box covers the buttons at all is its own test below.
+ */
+async function closeSupportBubble(page: Page) {
+  await page.getByTitle('Đóng thông báo').first().click({ timeout: 6_000 }).catch(() => undefined);
+}
+
 const positions = (page: Page) => apiGet<{ items: FuturesPosition[] }>(page, '/api/v1/futures/positions');
 const openOrders = (page: Page) => apiGet<{ items: FuturesOrder[] }>(page, '/api/v1/futures/orders/open');
 
@@ -116,6 +147,7 @@ test('S-01: ví Futures 100 USDT, lệnh 0,1 BTC → Mở Long/Short khóa, lý 
   expect(hasNumber(await reason.innerText(), dec('100')), 'lý do ghi cả số khả dụng (100)').toBe(true);
 
   // "Chuyển từ Spot" opens the transfer dialog; moving enough money unlocks the buttons
+  await closeSupportBubble(page);
   await page.getByRole('button', { name: 'Chuyển từ Spot' }).click();
   await expect(page.getByTestId('transfer-amount')).toBeVisible();
   await page.getByTestId('transfer-amount').fill('1000');
@@ -158,10 +190,10 @@ test('S-02: giá trị / ký quỹ / phí / tổng cần khớp công thức @ce
     await fillLimitForm(page, price, quantity); // page.goto = reload: the page reads the leverage saved on the server
     const want = expectedCost(price, quantity, leverage, r.takerFee);
     margins[leverage] = want.margin;
-    expectDec(await dataValue(page.getByTestId('futures-est-notional'), 'Giá trị lệnh'), want.notional, `giá trị lệnh x${leverage}`);
-    expectDec(await dataValue(page.getByTestId('futures-est-margin'), 'Ký quỹ ban đầu'), want.margin, `ký quỹ ban đầu = initialMargin(giá, khối lượng, ${leverage}) làm tròn lên`);
-    expectDec(await dataValue(page.getByTestId('futures-est-fee'), 'Phí mở'), want.fee, `phí mở = roundUp(giá trị × takerFee ${r.takerFee})`);
-    expectDec(await dataValue(page.getByTestId('futures-est-cost'), 'Tổng cần'), want.cost, `tổng cần = ký quỹ + phí (x${leverage})`);
+    await expectDecEventually(page.getByTestId('futures-est-notional'), want.notional, `giá trị lệnh x${leverage}`);
+    await expectDecEventually(page.getByTestId('futures-est-margin'), want.margin, `ký quỹ ban đầu = initialMargin(giá, khối lượng, ${leverage}) làm tròn lên`);
+    await expectDecEventually(page.getByTestId('futures-est-fee'), want.fee, `phí mở = roundUp(giá trị × takerFee ${r.takerFee})`);
+    await expectDecEventually(page.getByTestId('futures-est-cost'), want.cost, `tổng cần = ký quỹ + phí (x${leverage})`);
   }
   expect(margins[10]!.toFixed(8), 'đổi x20 → x10: ký quỹ gấp đôi').toBe(margins[20]!.mul(2).toFixed(8));
 
@@ -240,6 +272,7 @@ test('S-02: hộp xác nhận đặt lệnh hiện cùng giá trị / ký quỹ 
 
   await fillLimitForm(page, price, quantity);
   await expect(page.getByTestId('futures-open-long')).toBeEnabled();
+  await closeSupportBubble(page);
   await page.getByTestId('futures-open-long').click();
   await expect(page.getByTestId('order-confirm'), 'preferences.confirmOrders bật mặc định: hộp xác nhận hiện').toBeVisible();
   expectDec(await dataValue(page.getByTestId('futures-confirm-notional'), 'Xác nhận: giá trị'), want.notional, 'hộp xác nhận: giá trị lệnh');
@@ -275,7 +308,12 @@ test.describe('S-01: TP/SL sai phía', () => {
       await page.getByTestId('futures-order-tp').fill(tp);
       await page.getByTestId('futures-order-sl').fill(sl);
 
+      // The form is ready once the contract and the mark price are loaded: until then its button is disabled ("Đang tải thông tin hợp đồng…")
+      // and isEnabled() below would be false for that reason only — the total cost of the typed quantity is positive only after both arrived.
+      await expect(page.getByTestId('futures-est-cost'), 'form chưa tính được chi phí (hợp đồng / giá mark chưa tải)').toHaveAttribute('data-value', /[1-9]/);
+      await closeSupportBubble(page);
       const open = page.getByTestId(side === 'LONG' ? 'futures-open-long' : 'futures-open-short');
+      // a form that already refuses the wrong-side TP (disabled button + the message) is as good as a server refusal: only click an enabled button
       if (await open.isEnabled({ timeout: 5_000 })) {
         await open.click();
         // the confirmation box (preferences.confirmOrders) — absent if the form already refused the order
@@ -289,5 +327,24 @@ test.describe('S-01: TP/SL sai phía', () => {
       expect((await openOrders(page)).items, 'không có lệnh chờ').toHaveLength(0);
       expect(dec((await futuresAccount(page)).available).toFixed(8), 'ví Futures không đổi').toBe('1000.00000000');
     });
+  }
+});
+
+test('Mở Long / Mở Short bấm được ở 1440×900: không có hộp nổi nào (chat hỗ trợ) phủ lên nút', async ({ page }) => {
+  await fundedTrader(page, '1000');
+  await page.goto(`/futures/${SYMBOL}`);
+  await expect(page.getByTestId('futures-open-short')).toBeVisible();
+  // the greeting bubble of the support chat appears ~1,2 s after load; wait for it (when the widget has none, there is nothing to cover the buttons)
+  await page.getByTitle('Đóng thông báo').first().waitFor({ state: 'visible', timeout: 6_000 }).catch(() => undefined);
+
+  for (const id of ['futures-open-long', 'futures-open-short']) {
+    // what a mouse click on the centre of the button would hit
+    const hit = await page.getByTestId(id).evaluate((el) => {
+      el.scrollIntoView({ block: 'center' });
+      const r = el.getBoundingClientRect();
+      const top = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+      return top && !el.contains(top) ? `<${top.tagName.toLowerCase()} class="${String(top.className).slice(0, 80)}">` : null;
+    });
+    expect(hit, `${id}: bấm vào giữa nút trúng ${hit ?? '(chính nút)'} chứ không phải nút`).toBeNull();
   }
 });

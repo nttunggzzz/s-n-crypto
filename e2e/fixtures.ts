@@ -46,12 +46,29 @@ export interface ExpectedApiError {
 }
 
 /**
+ * An entry of `expectedApiErrors`: the object above, or the same thing as one string `"METHOD /path STATUS CODE"`
+ * (e.g. `"GET /api/v1/admin/overview 403 TWO_FACTOR_REQUIRED"`).
+ * Use strings when a list has two or more entries: Playwright reads ANY array whose second element is an object as a
+ * fixture tuple `[value, options]` (so `test.use({ expectedApiErrors: [{…}, {…}] })` hands the fixture a single object and it
+ * fails with "expectedApiErrors.find is not a function"). Strings are never taken for fixture options.
+ */
+export type ExpectedApiErrorSpec = ExpectedApiError | string;
+
+/** `"GET /api/v1/admin/overview 403 TWO_FACTOR_REQUIRED"` → the object form (a malformed string is a test bug: throws). */
+export function parseExpectedApiError(spec: ExpectedApiErrorSpec): ExpectedApiError {
+  if (typeof spec !== 'string') return spec;
+  const m = /^(GET|POST|PUT|PATCH|DELETE)\s+(\/\S*)\s+(\d{3})\s+([A-Z][A-Z0-9_]*)$/.exec(spec.trim());
+  if (!m) throw new Error(`expectedApiErrors: "${spec}" — expected "METHOD /path STATUS CODE", e.g. "GET /api/v1/admin/overview 403 TWO_FACTOR_REQUIRED"`);
+  return { method: m[1]!, path: m[2]!, status: Number(m[3]), code: m[4]! };
+}
+
+/**
  * Every test fails if the page logs an error, throws, if any API call returns 5xx or
  * VALIDATION_ERROR (= the UI sent something the contract does not allow), or if the realtime
  * server refuses a subscription (unknown channel, too many channels). 401 before signing in is fine,
  * and so are the refusals the test declared in `expectedApiErrors`.
  */
-export const test = base.extend<{ guard: void; realtime: RealtimeLog; expectedApiErrors: ExpectedApiError[] }>({
+export const test = base.extend<{ guard: void; realtime: RealtimeLog; expectedApiErrors: ExpectedApiErrorSpec[] }>({
   expectedApiErrors: [[], { option: true }],
   realtime: async ({ page }, use) => {
     const log: RealtimeLog = { subscribed: [], refused: [] };
@@ -59,7 +76,8 @@ export const test = base.extend<{ guard: void; realtime: RealtimeLog; expectedAp
     await use(log);
   },
   guard: [
-    async ({ page, expectedApiErrors }, use) => {
+    async ({ page, expectedApiErrors: declared }, use) => {
+      const expectedApiErrors = declared.map(parseExpectedApiError);
       const problems: string[] = [];
       const rt: RealtimeLog = { subscribed: [], refused: [] };
       watchRealtime(page, rt);
