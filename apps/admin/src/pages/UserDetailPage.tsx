@@ -48,6 +48,8 @@ const REF_TYPE_LABELS: Record<string, string> = {
   FUTURES_POSITION: 'Vị thế Futures',
 };
 
+const ADJUST_AMOUNT_REGEX = /^-?\d+(\.\d{1,8})?$/;
+
 interface UserDetailPageProps {
   userId: string;
   onNavigate: (path: string) => void;
@@ -118,9 +120,19 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
   const [adjustError, setAdjustError] = useState<string | null>(null);
   const [auditNotification, setAuditNotification] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [exchangeAssets, setExchangeAssets] = useState<string[]>([]);
 
   const api = getApiClient();
   const exchangeOrigin = import.meta.env.VITE_EXCHANGE_ORIGIN;
+
+  useEffect(() => {
+    api.exchangeInfo()
+      .then((info) => {
+        const assets = Array.from(new Set(info.assets.map((a) => a.asset)));
+        if (assets.length > 0) setExchangeAssets(assets);
+      })
+      .catch(() => {});
+  }, [api]);
 
   const loadUserData = useCallback(async () => {
     setIsLoading(true);
@@ -432,8 +444,11 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
   // Preview for balance adjustment (M-11)
   const currentAssetBal = detail.balances.find((b) => b.asset === adjustAsset);
   const currentAvailable = currentAssetBal?.available ?? '0';
+  const isAdjustAmountFormatValid = !adjustAmount || ADJUST_AMOUNT_REGEX.test(adjustAmount.trim());
+  const isAdjustAmountValid = Boolean(adjustAmount && ADJUST_AMOUNT_REGEX.test(adjustAmount.trim()) && !dec(adjustAmount.trim()).isZero());
+
   let calculatedAfter: string | null = null;
-  if (adjustAmount && adjustAmount.trim() !== '') {
+  if (isAdjustAmountValid) {
     try {
       calculatedAfter = dec(currentAvailable).add(dec(adjustAmount.trim())).toString();
     } catch {
@@ -442,13 +457,13 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
   }
 
   const handleAdjustSubmit = async () => {
-    if (!adjustReason || adjustReason.trim().length < 5) return;
+    if (!adjustReason || adjustReason.trim().length < 5 || !isAdjustAmountValid) return;
     setIsSubmitting(true);
     setAdjustError(null);
     try {
       const res = await api.adminAdjustBalance({
         params: { userId: detail.user.id },
-        body: { asset: adjustAsset, amount: adjustAmount, reason: adjustReason },
+        body: { asset: adjustAsset, amount: adjustAmount.trim(), reason: adjustReason.trim() },
       });
       setAuditNotification(`Đã điều chỉnh số dư thành công! Mã nhật ký: ${res.auditLogId}`);
       setAdjustOpen(false);
@@ -1727,10 +1742,12 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
                 onChange={(e) => setAdjustAsset(e.target.value)}
                 className="bg-[var(--bg,#000000)] border border-[var(--line,#1d1e21)] rounded-lg px-3 py-2 text-sm text-[var(--text,#f4f4f5)] outline-none focus:border-[var(--accent,#818cf8)]"
               >
-                {detail.balances.length > 0
-                  ? detail.balances.map((b) => <option key={b.asset} value={b.asset}>{b.asset}</option>)
-                  : <option value="USDT">USDT</option>
-                }
+                {Array.from(new Set([
+                  ...(exchangeAssets.length > 0 ? exchangeAssets : ['USDT', 'BTC', 'ETH', 'SOL', 'BNB', 'DOGE', 'XRP', 'ADA']),
+                  ...detail.balances.map((b) => b.asset),
+                ])).map((asset) => (
+                  <option key={asset} value={asset}>{asset}</option>
+                ))}
               </select>
             </div>
 
@@ -1738,13 +1755,22 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
               <label className="text-xs font-semibold uppercase text-[var(--text-2,#a1a1aa)]">Số tiền (có dấu)</label>
               <input
                 data-testid="adjust-amount"
-                type="number"
-                step="any"
+                type="text"
                 value={adjustAmount}
                 onChange={(e) => setAdjustAmount(e.target.value)}
-                placeholder="500 hoặc -250.5"
+                placeholder="500 hoặc -250.5 (tối đa 8 chữ số lẻ)"
                 className="bg-[var(--bg,#000000)] border border-[var(--line,#1d1e21)] rounded-lg px-3 py-2 text-sm text-[var(--text,#f4f4f5)] outline-none focus:border-[var(--accent,#818cf8)] font-mono"
               />
+              {adjustAmount && !ADJUST_AMOUNT_REGEX.test(adjustAmount.trim()) && (
+                <div className="text-[11px] text-[var(--down,#f2475f)]">
+                  Số tiền không hợp lệ. Vui lòng nhập số với tối đa 8 chữ số thập phân (không dùng ký tự khoa học 1e3).
+                </div>
+              )}
+              {adjustAmount && ADJUST_AMOUNT_REGEX.test(adjustAmount.trim()) && dec(adjustAmount.trim()).isZero() && (
+                <div className="text-[11px] text-[var(--down,#f2475f)]">
+                  Số tiền điều chỉnh phải khác 0.
+                </div>
+              )}
             </div>
 
             {adjustAmount && calculatedAfter && (
@@ -1785,7 +1811,7 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
                 data-testid="confirm-submit"
                 type="button"
                 onClick={handleAdjustSubmit}
-                disabled={!adjustAmount || !adjustReason || adjustReason.trim().length < 5 || isSubmitting}
+                disabled={!isAdjustAmountValid || !adjustReason || adjustReason.trim().length < 5 || isSubmitting}
                 className="px-4 py-2 rounded-lg bg-[var(--accent,#818cf8)] text-white text-sm font-medium hover:brightness-110 disabled:opacity-40 transition-all"
               >
                 {isSubmitting ? 'Đang xử lý...' : 'Xác nhận điều chỉnh'}
