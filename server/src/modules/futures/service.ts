@@ -560,7 +560,11 @@ export class FuturesService {
     for (const o of rows) if (o.id !== exceptId) await this.finish(tx, out, o, 'CANCELED', 'REDUCE_ONLY');
   }
 
-  async cancelOrder(userId: string, orderId: string, reason = 'USER_CANCELED'): Promise<FOrderRow> {
+  /**
+   * `step` (admin path) runs inside the SAME transaction after the order is canceled (it writes the audit row);
+   * if it throws, the cancel and the margin release roll back and nothing is published.
+   */
+  async cancelOrder(userId: string, orderId: string, reason = 'USER_CANCELED', step?: (tx: Tx, canceled: FOrderRow) => Promise<void>): Promise<FOrderRow> {
     const id = Number(orderId);
     if (!Number.isSafeInteger(id) || id <= 0) throw new AppError('NOT_FOUND', 'Order not found');
     const [peek] = await this.db
@@ -572,7 +576,37 @@ export class FuturesService {
       await this.lockSymbol(tx, userId, peek.symbol);
       const [o] = await tx.select().from(futuresOrders).where(eq(futuresOrders.id, id)).for('update');
       if (!o || (o.status !== 'NEW' && o.status !== 'PARTIALLY_FILLED')) throw new AppError('ORDER_NOT_CANCELABLE', `Order is ${o?.status ?? 'gone'}`);
-      return this.finish(tx, out, o, 'CANCELED', reason);
+      const done = await this.finish(tx, out, o, 'CANCELED', reason);
+      if (step) await step(tx, done);
+      return done;
+    });
+  }
+
+  /**
+   * Admin "cancel all" in ONE transaction (one audit row). Lock order (invariant 17): every affected
+   * (user, symbol) row in symbol order FIRST, then the order rows, then balances - so a fill, TP/SL or
+   * liquidation racing on any symbol of this user waits for us (or we for it) without a lock cycle.
+   * `step` is not called when nothing was open.
+   */
+  async cancelAllAtomic(userId: string, symbol: string | undefined, reason: string, step: (tx: Tx, canceled: FOrderRow[]) => Promise<void>): Promise<FOrderRow[]> {
+    return this.commit(async (tx, out) => {
+      const where: SQL[] = [eq(futuresOrders.userId, userId), inArray(futuresOrders.status, [...OPEN_STATUSES])];
+      if (symbol) where.push(eq(futuresOrders.symbol, symbol));
+      const peek = await tx.selectDistinct({ symbol: futuresOrders.symbol }).from(futuresOrders).where(and(...where));
+      if (peek.length === 0) return [];
+      for (const s of peek.map((p) => p.symbol).sort()) await this.lockSymbol(tx, userId, s);
+      const symbols = peek.map((p) => p.symbol);
+      // status is read AFTER the locks: an order that filled meanwhile is simply not here any more
+      const rows = await tx
+        .select()
+        .from(futuresOrders)
+        .where(and(eq(futuresOrders.userId, userId), inArray(futuresOrders.status, [...OPEN_STATUSES]), inArray(futuresOrders.symbol, symbols)))
+        .orderBy(asc(futuresOrders.id))
+        .for('update');
+      const done: FOrderRow[] = [];
+      for (const o of rows) done.push(await this.finish(tx, out, o, 'CANCELED', reason));
+      if (done.length > 0) await step(tx, done);
+      return done;
     });
   }
 

@@ -84,12 +84,18 @@ export const SignalsAccessRequest = z.object({ enabled: z.boolean(), reason: Rea
 /** Owner only. Nobody can change their own role; the last owner cannot be demoted; bots cannot get a role. */
 export const SetRoleRequest = z.object({ role: Role, reason: Reason });
 
-/** amount > 0 credits, < 0 debits the available balance. A debit larger than available → INSUFFICIENT_BALANCE. */
-export const BalanceAdjustmentRequest = z.object({
-  asset: AssetCode,
-  amount: DecimalString.refine((s) => /[1-9]/.test(s), 'must not be zero').refine((s) => !s.includes('.') || s.split('.')[1]!.length <= 8, 'at most 8 decimals'),
-  reason: Reason,
-});
+/**
+ * amount > 0 credits, < 0 debits the available balance. A debit larger than available → INSUFFICIENT_BALANCE.
+ * `account` (AD3, additive): SPOT (default) or FUTURES; the futures wallet holds USDT only, so FUTURES with another asset → VALIDATION_ERROR.
+ */
+export const BalanceAdjustmentRequest = z
+  .object({
+    asset: AssetCode,
+    amount: DecimalString.refine((s) => /[1-9]/.test(s), 'must not be zero').refine((s) => !s.includes('.') || s.split('.')[1]!.length <= 8, 'at most 8 decimals'),
+    account: WalletAccount.default('SPOT'),
+    reason: Reason,
+  })
+  .refine((r) => r.account === 'SPOT' || r.asset === 'USDT', { message: 'the futures wallet holds USDT only', path: ['asset'] });
 export const BalanceAdjustmentResult = z.object({
   /** Balance after the adjustment. */
   balance: Balance,
@@ -179,6 +185,9 @@ export const AuditAction = z.enum([
   'INVITE_REVOKE',
   // Vietnam tax (0.15.0): taxMode / taxRate / taxVndRate changed
   'TAX_SETTINGS_UPDATE',
+  // admin actions (AD3): cancel a user's order(s); revoke a user's session(s)
+  'ORDER_CANCEL',
+  'SESSION_REVOKE',
 ]);
 export type AuditAction = z.infer<typeof AuditAction>;
 
@@ -252,6 +261,46 @@ export const UserIdParam = z.object({ userId: z.uuid() });
 export const UserBotParam = UserIdParam.extend({ botId: z.string().regex(/^\d+$/) });
 export const UserDcaParam = UserIdParam.extend({ planId: z.string().regex(/^\d+$/) });
 export const SymbolParam = z.object({ symbol: SymbolCode });
+
+// ---- AD3: admin actions on a user's orders and sessions (every one audited in the same transaction)
+export const AdminOrderMarket = z.enum(['SPOT', 'FUTURES']);
+export type AdminOrderMarket = z.infer<typeof AdminOrderMarket>;
+
+export const UserOrderParam = UserIdParam.extend({ orderId: z.string().regex(/^\d+$/) });
+export const UserSessionParam = UserIdParam.extend({ sessionId: z.uuid() });
+
+/** `market` says which book `orderId` lives in (Spot and Futures ids are separate sequences). */
+export const AdminCancelOrderRequest = z.object({ market: AdminOrderMarket, reason: Reason });
+export const AdminCancelOrderResult = z.object({
+  market: AdminOrderMarket,
+  orderId: z.string(),
+  /** Every order this call canceled, with closeReason ADMIN: the order itself plus its OCO siblings (Spot). */
+  canceledOrderIds: z.array(z.string()),
+  /** Spot: the grid bot that owned the order, stopped in the same transaction (reason ADMIN); null if the order is not a bot's. */
+  stoppedBotId: z.string().nullable(),
+  auditLogId: z.string(),
+});
+export type AdminCancelOrderResult = z.infer<typeof AdminCancelOrderResult>;
+
+/** Omit `market` for both books; `symbol` narrows either. Bot orders are included (their bot is stopped first). */
+export const AdminCancelOrdersRequest = z.object({ market: AdminOrderMarket.optional(), symbol: SymbolCode.optional(), reason: Reason });
+export const AdminCancelOrdersResult = z.object({
+  spotCanceled: z.number().int(),
+  futuresCanceled: z.number().int(),
+  /** Grid bots stopped because their orders were canceled. */
+  stoppedBotIds: z.array(z.string()),
+  /** One audit row per book that had orders to cancel (none when nothing was open). */
+  auditLogIds: z.array(z.string()),
+});
+export type AdminCancelOrdersResult = z.infer<typeof AdminCancelOrdersResult>;
+
+export const AdminRevokeSessionsResult = z.object({
+  /** Sessions signed out by this call. */
+  revoked: z.number().int(),
+  /** null when there was nothing to revoke (no audit row is written for a no-op). */
+  auditLogId: z.string().nullable(),
+});
+export type AdminRevokeSessionsResult = z.infer<typeof AdminRevokeSessionsResult>;
 
 export const AssetParam = z.object({ asset: AssetCode });
 

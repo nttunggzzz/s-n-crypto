@@ -61,6 +61,8 @@ export const mockStore = {
   /** Average cost per base asset (realizedPnl of SELL fills, like the server). */
   positions: initialPositions() as Record<string, MockSpotPosition>,
   announcements: clone(fixtureAdminAnnouncements) as AdminAnnouncement[],
+  /** AD3: sessions of the demo user that an admin revoked (ids from fixtureAdminSessionIds). */
+  adminRevokedSessions: new Set<string>(),
   faucetClaimedAt: Date.parse('2026-10-09T03:00:00.000Z') as number | null,
   totalClaimed: 10000,
   balances: initialBalances(),
@@ -105,6 +107,7 @@ export function resetMockStore(scenario: MockScenario = 'normal'): void {
   mockStore.tax = initialTaxState(empty);
   mockStore.positions = initialPositions();
   mockStore.announcements = empty ? [] : clone(fixtureAdminAnnouncements);
+  mockStore.adminRevokedSessions = new Set<string>();
   mockStore.nextId = 1000;
   mockStore.prices = Object.fromEntries(Object.entries(MOCK_PAIRS).map(([s, p]) => [s, p.price]));
 }

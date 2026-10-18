@@ -1,5 +1,5 @@
-import { and, desc, eq, gte, inArray, lt, lte, notInArray, sql, type SQL } from 'drizzle-orm';
-import type { AdminOverview, AdminSymbol, AdminUserBots, AdminUserDetail, AdminUserSummary, AssetInfo, DcaPlan, FuturesAccount, GridBot, AssetTag, AuditLogEntry, AuditTargetType, ExchangeSettings, ReconciliationRun, Role } from '@cex/contracts';
+import { and, desc, eq, gt, gte, inArray, isNull, lt, lte, notInArray, sql, type SQL } from 'drizzle-orm';
+import type { AdminCancelOrderResult, AdminCancelOrdersResult, AdminOrderMarket, AdminRevokeSessionsResult, AdminOverview, AdminSymbol, AdminUserBots, AdminUserDetail, AdminUserSummary, AssetInfo, DcaPlan, FuturesAccount, GridBot, AssetTag, AuditLogEntry, AuditTargetType, ExchangeSettings, ReconciliationRun, Role } from '@cex/contracts';
 import { AMOUNT_SCALE, dec, hasAtMostScale, toFixedStr } from '@cex/core';
 import {
   assets,
@@ -23,14 +23,15 @@ import {
   userTaxProfiles,
   users,
 } from '../../db/schema.ts';
-import type { Db } from '../../db/client.ts';
+import type { Db, Tx } from '../../db/client.ts';
 import { AppError } from '../../lib/errors.ts';
 import type { MarketDataService } from '../market/marketData.ts';
-import type { UserRow } from '../auth/authService.ts';
+import type { AuthService, UserRow } from '../auth/authService.ts';
 import type { Exchange } from '../exchange/index.ts';
 import type { SettingsRow } from '../exchange/exchangeConfig.ts';
 import type { Futures } from '../futures/index.ts';
 import type { Bots } from '../bots/index.ts';
+import type { BotRow } from '../bots/gridService.ts';
 import { applyBalanceChanges, getBalances } from '../exchange/ledger.ts';
 import { reconcile } from '../exchange/reconciliation.ts';
 import { makePriceOf } from '../exchange/routes.ts';
@@ -38,6 +39,15 @@ import { serializeBalance, serializeLedger, serializeOrder, valuateBalances } fr
 import { writeAudit } from './audit.ts';
 import { serializeLoginEvent } from '../auth/security.ts';
 import { serializePosition } from '../futures/serializers.ts';
+
+/** Flips a grid bot to STOPPED inside the cancel's transaction (GridService.runStopping hands it out). */
+type StopBot = (tx: Tx, botId: number) => Promise<BotRow | null>;
+/** For orders that are not a bot's: reaching for a bot here is a bug, not a no-op. */
+const noStop: StopBot = async () => {
+  throw new AppError('CONFLICT', 'A bot of this user changed while canceling; try again');
+};
+/** The server was wired without the bots module: there is no bot to stop. */
+const skipStop: StopBot = async () => null;
 
 export interface Actor {
   user: UserRow;
@@ -105,6 +115,8 @@ export class AdminService {
     private readonly market: MarketDataService,
     private readonly futures?: Futures,
     private readonly bots?: Bots,
+    /** Revoking sessions tells the realtime hub (through auth.sessionEvents) to close their /ws at once. */
+    private readonly auth?: AuthService,
   ) {
     this.priceOf = makePriceOf(market);
   }
@@ -421,42 +433,46 @@ export class AdminService {
   }
 
   /** Credits (amount > 0) or debits the available balance; ledger ADMIN_ADJUST linked to the audit row. */
-  async adjustBalance(actor: Actor, id: string, asset: string, amountStr: string, reason: string) {
+  async adjustBalance(actor: Actor, id: string, asset: string, amountStr: string, reason: string, account: 'SPOT' | 'FUTURES' = 'SPOT') {
     const u = await this.loadUser(id);
     this.guardTarget(actor, u);
+    // the futures wallet holds USDT only (invariant 16); the contract refuses anything else, this guards direct callers
+    if (account === 'FUTURES' && asset !== 'USDT') throw new AppError('VALIDATION_ERROR', 'The futures wallet holds USDT only', { field: 'asset' });
     const known = new Set(['USDT', ...this.ex.config.allSymbols().map((s) => s.row.baseAsset)]);
     if (!known.has(asset)) throw new AppError('VALIDATION_ERROR', `Unknown asset ${asset}`, { field: 'asset' });
     const amount = dec(amountStr);
     if (amount.isZero() || !hasAtMostScale(amount, AMOUNT_SCALE)) throw new AppError('VALIDATION_ERROR', 'amount must be non-zero with at most 8 decimals', { field: 'amount' });
 
     const result = await this.db.transaction(async (tx) => {
-      await tx.insert(balances).values({ userId: id, account: 'SPOT', asset }).onConflictDoNothing();
+      await tx.insert(balances).values({ userId: id, account, asset }).onConflictDoNothing();
       const [row] = await tx
         .select()
         .from(balances)
-        .where(and(eq(balances.userId, id), eq(balances.account, 'SPOT'), eq(balances.asset, asset)))
+        .where(and(eq(balances.userId, id), eq(balances.account, account), eq(balances.asset, asset)))
         .for('update');
       const available = dec(row!.available);
       const after = available.add(amount);
-      if (after.lt(0)) throw new AppError('INSUFFICIENT_BALANCE', 'Debit larger than the available balance', { asset, available: toFixedStr(available) });
+      if (after.lt(0)) throw new AppError('INSUFFICIENT_BALANCE', 'Debit larger than the available balance', { asset, account, available: toFixedStr(available) });
       const auditId = await writeAudit(tx, {
         actorId: actor.user.id,
         action: 'BALANCE_ADJUST',
         targetType: 'USER',
         targetId: id,
-        before: { asset, available: toFixedStr(available), locked: toFixedStr(dec(row!.locked)) },
-        after: { asset, available: toFixedStr(after), locked: toFixedStr(dec(row!.locked)), amount: toFixedStr(amount) },
+        before: { account, asset, available: toFixedStr(available), locked: toFixedStr(dec(row!.locked)) },
+        after: { account, asset, available: toFixedStr(after), locked: toFixedStr(dec(row!.locked)), amount: toFixedStr(amount) },
         reason,
         ip: actor.ip,
       });
-      const state = await applyBalanceChanges(tx, [{ userId: id, asset, type: 'ADMIN_ADJUST', deltaAvailable: amount, refType: 'ADMIN', refId: String(auditId) }]);
+      const state = await applyBalanceChanges(tx, [{ userId: id, account, asset, type: 'ADMIN_ADJUST', deltaAvailable: amount, refType: 'ADMIN', refId: String(auditId) }]);
       const [entry] = await tx
         .select()
         .from(ledgerEntries)
-        .where(and(eq(ledgerEntries.userId, id), eq(ledgerEntries.refType, 'ADMIN'), eq(ledgerEntries.refId, String(auditId))));
+        .where(and(eq(ledgerEntries.userId, id), eq(ledgerEntries.account, account), eq(ledgerEntries.refType, 'ADMIN'), eq(ledgerEntries.refId, String(auditId))));
       return { auditId, balance: [...state.values()][0]!, entry: entry! };
     });
-    this.ex.events.publish({ balances: [result.balance] });
+    // after commit: the Spot wallet rides the exchange events; the futures wallet is pushed as `futuresAccount`
+    if (account === 'SPOT') this.ex.events.publish({ balances: [result.balance] });
+    else this.futures?.events.emit('account', id);
     return {
       balance: serializeBalance(asset, result.balance.available, result.balance.locked, this.priceOf),
       entry: serializeLedger(result.entry),
@@ -503,6 +519,178 @@ export class AdminService {
     });
     this.ex.events.publish({ balances: changed });
     return this.getUser(id);
+  }
+
+  // ───────── AD3: cancel a user's orders, revoke sessions
+
+  /**
+   * Cancels one open order for the user (closeReason ADMIN). The audit row is written by the `step` the order services run
+   * INSIDE the cancel's own transaction, so the order, the released funds, the ledger and the audit row commit together -
+   * or, when the order already filled / the audit fails, none of them exist. A grid bot's order also stops the bot, in that
+   * same transaction (invariant 19: the bot must not place it again).
+   */
+  async cancelUserOrder(actor: Actor, userId: string, orderId: string, market: AdminOrderMarket, reason: string): Promise<AdminCancelOrderResult> {
+    const u = await this.loadUser(userId);
+    this.guardTarget(actor, u);
+    const id = Number(orderId);
+    if (!Number.isSafeInteger(id) || id <= 0) throw new AppError('NOT_FOUND', 'Order not found');
+
+    if (market === 'FUTURES') {
+      if (!this.futures) throw new AppError('NOT_FOUND', 'Order not found');
+      let auditId = 0;
+      await this.futures.service.cancelOrder(userId, orderId, 'ADMIN', async (tx, o) => {
+        auditId = await writeAudit(tx, {
+          actorId: actor.user.id,
+          action: 'ORDER_CANCEL',
+          targetType: 'USER',
+          targetId: userId,
+          before: { market, orderId, symbol: o.symbol, side: o.side, type: o.type, purpose: o.purpose, quantity: toFixedStr(dec(o.quantity)), executedQty: toFixedStr(dec(o.executedQty)), price: o.price === null ? null : toFixedStr(dec(o.price)), status: 'OPEN' },
+          after: { status: 'CANCELED', closeReason: 'ADMIN', canceledOrderIds: [orderId], stoppedBotId: null },
+          reason,
+          ip: actor.ip,
+        });
+      });
+      return { market, orderId, canceledOrderIds: [orderId], stoppedBotId: null, auditLogId: String(auditId) };
+    }
+
+    // Spot: the order must be the user's (404 otherwise); a grid bot's order names its bot
+    const [peek] = await this.db.select({ source: orders.source, sourceId: orders.sourceId }).from(orders).where(and(eq(orders.id, id), eq(orders.userId, userId)));
+    if (!peek) throw new AppError('NOT_FOUND', 'Order not found');
+    let auditId = 0;
+    let canceledIds: string[] = [];
+    let stoppedBotId: string | null = null;
+    const cancelWith = (stop: StopBot): Promise<unknown> =>
+      this.ex.orders.cancelOrder(userId, orderId, 'ADMIN', async (tx, canceled) => {
+        const stopped = await this.stopBotsOf(tx, canceled, stop);
+        canceledIds = canceled.map((o) => String(o.id));
+        stoppedBotId = stopped[0] ? String(stopped[0].id) : null;
+        const o = canceled.find((c) => c.id === id)!;
+        auditId = await writeAudit(tx, {
+          actorId: actor.user.id,
+          action: 'ORDER_CANCEL',
+          targetType: 'USER',
+          targetId: userId,
+          before: { market, orderId, symbol: o.symbol, side: o.side, type: o.type, quantity: o.quantity === null ? null : toFixedStr(dec(o.quantity)), executedQty: toFixedStr(dec(o.executedQty)), price: o.price === null ? null : toFixedStr(dec(o.price)), status: 'OPEN', source: o.source, sourceId: o.sourceId === null ? null : String(o.sourceId) },
+          after: { status: 'CANCELED', closeReason: 'ADMIN', canceledOrderIds: canceledIds, stoppedBotId },
+          reason,
+          ip: actor.ip,
+        });
+      });
+    if (peek.source === 'GRID' && peek.sourceId !== null && this.bots) await this.bots.grid.runStopping([peek.sourceId], cancelWith);
+    else await cancelWith(this.bots ? noStop : skipStop);
+    return { market, orderId, canceledOrderIds: canceledIds, stoppedBotId, auditLogId: String(auditId) };
+  }
+
+  /** Marks the grid bots that own `canceled` orders as STOPPED inside the caller's transaction (see GridService.runStopping). */
+  private async stopBotsOf(tx: Tx, canceled: { source: string; sourceId: number | null }[], stop: StopBot): Promise<BotRow[]> {
+    const stopped: BotRow[] = [];
+    const ids = [...new Set(canceled.flatMap((o) => (o.source === 'GRID' && o.sourceId !== null ? [o.sourceId] : [])))].sort((a, b) => a - b);
+    for (const botId of ids) {
+      const row = await stop(tx, botId);
+      if (row) stopped.push(row);
+    }
+    return stopped;
+  }
+
+  /**
+   * Cancels every open order of the user in scope. Each book is ONE transaction with its own audit row (so a failure leaves
+   * no order canceled without a row, nor a row without cancels); `market` omitted = Spot first, then Futures.
+   * Bot orders are included and their grid bots stop in the same transaction as their cancel.
+   */
+  async cancelUserOrders(actor: Actor, userId: string, market: AdminOrderMarket | undefined, symbol: string | undefined, reason: string): Promise<AdminCancelOrdersResult> {
+    const u = await this.loadUser(userId);
+    this.guardTarget(actor, u);
+    const result: AdminCancelOrdersResult = { spotCanceled: 0, futuresCanceled: 0, stoppedBotIds: [], auditLogIds: [] };
+
+    if (market !== 'FUTURES') {
+      const where = [eq(orders.userId, userId), eq(orders.source, 'GRID'), inArray(orders.status, [...OPEN_STATUSES])];
+      if (symbol) where.push(eq(orders.symbol, symbol));
+      const botRows = await this.db.selectDistinct({ id: orders.sourceId }).from(orders).where(and(...where));
+      const botIds = botRows.flatMap((r) => (r.id === null ? [] : [r.id]));
+      const run = (stop: StopBot): Promise<unknown> =>
+        this.ex.orders.cancelAllAtomic(userId, symbol, 'ADMIN', async (tx, canceled) => {
+          const stopped = await this.stopBotsOf(tx, canceled, stop);
+          const canceledOrderIds = canceled.map((o) => String(o.id));
+          const auditId = await writeAudit(tx, {
+            actorId: actor.user.id,
+            action: 'ORDER_CANCEL',
+            targetType: 'USER',
+            targetId: userId,
+            before: { market: 'SPOT', symbol: symbol ?? null, openOrders: canceled.length },
+            after: { canceled: canceled.length, closeReason: 'ADMIN', canceledOrderIds, stoppedBotIds: stopped.map((b) => String(b.id)) },
+            reason,
+            ip: actor.ip,
+          });
+          result.spotCanceled = canceled.length;
+          result.stoppedBotIds.push(...stopped.map((b) => String(b.id)));
+          result.auditLogIds.push(String(auditId));
+        });
+      if (botIds.length > 0 && this.bots) await this.bots.grid.runStopping(botIds, run);
+      else await run(this.bots ? noStop : skipStop);
+    }
+
+    if (market !== 'SPOT' && this.futures) {
+      await this.futures.service.cancelAllAtomic(userId, symbol, 'ADMIN', async (tx, canceled) => {
+        const auditId = await writeAudit(tx, {
+          actorId: actor.user.id,
+          action: 'ORDER_CANCEL',
+          targetType: 'USER',
+          targetId: userId,
+          before: { market: 'FUTURES', symbol: symbol ?? null, openOrders: canceled.length },
+          after: { canceled: canceled.length, closeReason: 'ADMIN', canceledOrderIds: canceled.map((o) => String(o.id)), stoppedBotIds: [] },
+          reason,
+          ip: actor.ip,
+        });
+        result.futuresCanceled = canceled.length;
+        result.auditLogIds.push(String(auditId));
+      });
+    }
+    return result;
+  }
+
+  /** Signs out one session of the user; the audit row is in the same transaction. 404 if it is not an active session of this user. */
+  async revokeSession(actor: Actor, userId: string, sessionId: string, reason: string): Promise<AdminRevokeSessionsResult> {
+    const u = await this.loadUser(userId);
+    this.guardTarget(actor, u);
+    const auditId = await this.db.transaction(async (tx) => {
+      const [s] = await tx
+        .update(sessions)
+        .set({ revokedAt: new Date() })
+        .where(and(eq(sessions.id, sessionId), eq(sessions.userId, userId), isNull(sessions.revokedAt), gt(sessions.expiresAt, new Date())))
+        .returning({ id: sessions.id, ip: sessions.ip, userAgent: sessions.userAgent, createdAt: sessions.createdAt });
+      if (!s) throw new AppError('NOT_FOUND', 'Session not found');
+      return writeAudit(tx, {
+        actorId: actor.user.id,
+        action: 'SESSION_REVOKE',
+        targetType: 'USER',
+        targetId: userId,
+        before: { sessionId: s.id, ip: s.ip, userAgent: s.userAgent, createdAt: s.createdAt.toISOString() },
+        after: { revoked: 1 },
+        reason,
+        ip: actor.ip,
+      });
+    });
+    this.auth?.sessionEvents.emit('ended', [sessionId]); // after commit: close its /ws now (4401), not at the next heartbeat
+    return { revoked: 1, auditLogId: String(auditId) };
+  }
+
+  /** Signs out every active session of the user (not your own account: guardTarget). Nothing active → no audit row. */
+  async revokeAllSessions(actor: Actor, userId: string, reason: string): Promise<AdminRevokeSessionsResult> {
+    const u = await this.loadUser(userId);
+    this.guardTarget(actor, u);
+    const { ids, auditId } = await this.db.transaction(async (tx) => {
+      const rows = await tx
+        .update(sessions)
+        .set({ revokedAt: new Date() })
+        .where(and(eq(sessions.userId, userId), isNull(sessions.revokedAt), gt(sessions.expiresAt, new Date())))
+        .returning({ id: sessions.id });
+      if (rows.length === 0) return { ids: [] as string[], auditId: null };
+      const ids = rows.map((r) => r.id).sort();
+      const auditId = await writeAudit(tx, { actorId: actor.user.id, action: 'SESSION_REVOKE', targetType: 'USER', targetId: userId, before: { sessionIds: ids }, after: { revoked: ids.length }, reason, ip: actor.ip });
+      return { ids, auditId };
+    });
+    if (ids.length > 0) this.auth?.sessionEvents.emit('ended', ids);
+    return { revoked: ids.length, auditLogId: auditId === null ? null : String(auditId) };
   }
 
   // ───────── exchange

@@ -165,14 +165,18 @@ export const adminResolvers: { [N in AdminEndpoint]: Resolver<N> } = {
     requireStaff('balances.adjust');
     const u = findUser(params.userId!);
     guardBot(u);
+    const account = body.account === 'FUTURES' ? 'FUTURES' : 'SPOT';
+    if (account === 'FUTURES' && body.asset !== 'USDT') throw new MockError('VALIDATION_ERROR', 'the futures wallet holds USDT only', { field: 'asset' });
     const amount = Number(body.amount);
-    const before = 10000;
-    if (before + amount < 0) throw new MockError('INSUFFICIENT_BALANCE', 'Debit larger than the available balance', { available: '10000.00000000' });
+    // FUTURES: the demo user's futures wallet is the one the futures mock keeps; everyone else is shown 10,000 USDT
+    const before = account === 'FUTURES' && u.id === mockMe().id ? mockStore.futures.available : 10000;
+    if (before + amount < 0) throw new MockError('INSUFFICIENT_BALANCE', 'Debit larger than the available balance', { available: before.toFixed(8) });
     const after = (before + amount).toFixed(8);
-    const auditLogId = audit({ action: 'BALANCE_ADJUST', targetType: 'USER', targetId: u.id, before: { asset: body.asset, available: before.toFixed(8) }, after: { asset: body.asset, available: after }, reason: String(body.reason) });
+    if (account === 'FUTURES' && u.id === mockMe().id) mockStore.futures.available = before + amount;
+    const auditLogId = audit({ action: 'BALANCE_ADJUST', targetType: 'USER', targetId: u.id, before: { account, asset: body.asset, available: before.toFixed(8) }, after: { account, asset: body.asset, available: after }, reason: String(body.reason) });
     return {
       balance: { asset: String(body.asset), available: after, locked: '0.00000000', total: after, valueUsdt: body.asset === 'USDT' ? after : null },
-      entry: { id: nextId(), account: 'SPOT', asset: String(body.asset), type: 'ADMIN_ADJUST', deltaAvailable: amount.toFixed(8), deltaLocked: '0.00000000', availableAfter: after, lockedAfter: '0.00000000', refType: 'ADMIN', refId: auditLogId, createdAt: now() },
+      entry: { id: nextId(), account, asset: String(body.asset), type: 'ADMIN_ADJUST', deltaAvailable: amount.toFixed(8), deltaLocked: '0.00000000', availableAfter: after, lockedAfter: '0.00000000', refType: 'ADMIN', refId: auditLogId, createdAt: now() },
       auditLogId,
     };
   },

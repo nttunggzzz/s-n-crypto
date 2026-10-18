@@ -29,7 +29,11 @@ export function registerAdminRoutes(router: Router, opts: RouteOptions, admin: A
   route(router, opts, 'adminUnlockUser', async ({ auth, req, params, body }) => admin.setStatus(actor(auth, req), params.userId, 'active', body.reason));
   route(router, opts, 'adminSetSignalsAccess', async ({ auth, req, params, body }) => admin.setSignalsAccess(actor(auth, req), params.userId, body.enabled, body.reason));
   route(router, opts, 'adminSetRole', async ({ auth, req, params, body }) => admin.setRole(actor(auth, req), params.userId, body.role, body.reason));
-  route(router, opts, 'adminAdjustBalance', async ({ auth, req, params, body }) => admin.adjustBalance(actor(auth, req), params.userId, body.asset, body.amount, body.reason));
+  route(router, opts, 'adminAdjustBalance', async ({ auth, req, params, body }) => admin.adjustBalance(actor(auth, req), params.userId, body.asset, body.amount, body.reason, body.account));
+  route(router, opts, 'adminCancelUserOrder', async ({ auth, req, params, body }) => admin.cancelUserOrder(actor(auth, req), params.userId, params.orderId, body.market, body.reason));
+  route(router, opts, 'adminCancelUserOrders', async ({ auth, req, params, body }) => admin.cancelUserOrders(actor(auth, req), params.userId, body.market, body.symbol, body.reason));
+  route(router, opts, 'adminRevokeSession', async ({ auth, req, params, body }) => admin.revokeSession(actor(auth, req), params.userId, params.sessionId, body.reason));
+  route(router, opts, 'adminRevokeAllSessions', async ({ auth, req, params, body }) => admin.revokeAllSessions(actor(auth, req), params.userId, body.reason));
   route(router, opts, 'adminResetAccount', async ({ auth, req, params, body }) => admin.resetAccount(actor(auth, req), params.userId, body.reason));
 
   route(router, opts, 'adminGetSettings', async () => admin.settings());

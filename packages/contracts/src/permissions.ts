@@ -31,6 +31,8 @@ export const Permission = z.enum([
   'tax.manage',
   /** Module N (0.17.0): read the news items and source health behind the analysis system (read-only, no user data). */
   'news.view',
+  /** AD3: cancel a user's open orders (Spot or Futures) on their behalf (audited, closeReason ADMIN) */
+  'orders.manage',
 ]);
 export type Permission = z.infer<typeof Permission>;
 
@@ -49,6 +51,7 @@ const ADMIN: Permission[] = [
   'content.manage',
   'bots.manage',
   'users.invite',
+  'orders.manage',
 ];
 
 export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {

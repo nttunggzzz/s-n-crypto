@@ -1,3 +1,4 @@
+import { EventEmitter } from 'node:events';
 import { and, desc, eq, gt, inArray, isNull, lt, ne, or } from 'drizzle-orm';
 import { ROLE_PERMISSIONS, STAFF_ROLES, type AvatarId, type Me, type SessionInfo } from '@cex/contracts';
 import { recoveryCodes, sessions, users, verificationTokens } from '../../db/schema.ts';
@@ -58,6 +59,8 @@ export class AuthService {
   readonly security: SecurityService;
   /** Sign-up invite codes (REGISTRATION=invite, closed staging). */
   readonly invites: InviteService;
+  /** 'ended': ids of sessions an admin signed out (AdminService, after commit); the realtime hub closes their /ws at once. */
+  readonly sessionEvents = new EventEmitter<{ ended: [sessionIds: string[]] }>();
 
   constructor(
     private readonly db: Db,

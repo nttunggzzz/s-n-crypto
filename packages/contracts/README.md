@@ -403,3 +403,32 @@ s.tax.thisMonth             // { month: '2026-10', withheldCount, withheldAmount
 **Mock:** `accountTradingStats` tính từ kho mock (các lần khớp Spot và Futures của người dùng demo, bản ghi thuế): người dùng demo có 2 lệnh MUA ngày 9/10/2026 và 2 lệnh BÁN cũ (tháng 9 và tháng 8) nên
 số liệu phụ thuộc ngày hiện tại của máy bạn; đặt một lệnh khớp ngay trong mock thì khối lượng hôm nay tăng theo giá trị lệnh vừa khớp. Người dùng khác trong `adminGetUser` (mock) luôn là toàn số 0 vì mock không có lệnh của họ.
 Fixture tĩnh: `fixtureAccountTradingStats` (người dùng demo lúc 2026-10-09T03:00Z), `fixtureEmptyTradingStats()`.
+
+## 18. Back office: thao tác của admin (đợt AD3)
+Chưa phát hành (CHANGELOG: "Chưa phát hành — đợt AD3"). Bốn endpoint mới và một trường mới ở `adminAdjustBalance`. Mọi thao tác **ghi** nhật ký (`writeAudit`) **trong cùng transaction** với thay đổi:
+có dòng audit thì có thay đổi, thất bại thì không có cả hai. Quyền mới `orders.manage` (admin, owner). Khuôn quyền như khóa người dùng: không thao tác trên người có vai trò ngang/cao hơn, không trên chính mình,
+không trên tài khoản bot (`BOT_ACCOUNT_PROTECTED`); lý do (`reason`, 5–500 ký tự) bắt buộc.
+```ts
+// Hủy 1 lệnh. market bắt buộc (id Spot và Futures là hai dãy khác nhau). Không phải lệnh của người này → 404.
+const r = await api.adminCancelUserOrder({ params: { userId, orderId }, body: { market: 'SPOT', reason } });
+r.canceledOrderIds   // lệnh đã hủy (Spot: cả hai chân OCO), closeReason = 'ADMIN'
+r.stoppedBotId       // bot lưới sở hữu lệnh đó đã được dừng cùng lúc (lệnh bot: bot dừng, không đặt lại); null nếu không phải lệnh bot
+// Hủy hết (lọc market? symbol?). Bỏ market = cả hai sàn, mỗi sàn một transaction + một dòng audit (auditLogIds).
+const all = await api.adminCancelUserOrders({ params: { userId }, body: { symbol: 'BTCUSDT', reason } });
+// Thu hồi phiên (quyền users.lock)
+await api.adminRevokeSession({ params: { userId, sessionId }, body: { reason } });   // phiên không thuộc người này / đã thu hồi → 404
+await api.adminRevokeAllSessions({ params: { userId }, body: { reason } });          // 0 phiên đang sống → { revoked: 0, auditLogId: null }
+// Điều chỉnh ví Futures (balances.adjust): chỉ USDT; trừ tối đa bằng số khả dụng (phần đang khóa làm ký quỹ/đặt lệnh không bị đụng)
+await api.adminAdjustBalance({ params: { userId }, body: { asset: 'USDT', amount: '-50', account: 'FUTURES', reason } });
+```
+- **Hủy lệnh:** `closeReason` = `ADMIN`; tiền khóa trả lại qua sổ cái (`ORDER_UNLOCK`). Lệnh đã khớp/đã đóng → `ORDER_NOT_CANCELABLE` (409) và **không** có dòng audit. Chạy đua với khớp lệnh: đúng một bên thắng.
+  `adminCancelUserOrders` không có lệnh nào đang mở → mọi số đếm 0, `auditLogIds: []` (không ghi audit cho việc không làm gì).
+- **Phiên:** sau khi thu hồi, lời gọi kế tiếp bằng phiên đó nhận 401 `UNAUTHENTICATED`; kết nối `/ws` của phiên bị đóng ngay với mã `WS_SESSION_ENDED` (4401), phiên khác của người đó không ảnh hưởng.
+  Audit không chứa token. `adminRevokeAllSessions` trên chính tài khoản mình → `FORBIDDEN` (không tự khóa mình ra ngoài).
+- **`BalanceAdjustmentRequest.account`** (`'SPOT' | 'FUTURES'`, mặc định `SPOT` — tương thích ngược). `FUTURES` + tài sản khác USDT → `VALIDATION_ERROR`. `entry.account` và `before/after.account` trong audit cho biết ví nào.
+  Trừ quá số khả dụng → `INSUFFICIENT_BALANCE`, không để lại dòng nào.
+- **Giao diện (gợi ý cho PROMPT-19):** nút "Hủy lệnh" ở tab Lệnh của chi tiết người dùng (xác nhận + lý do), "Hủy tất cả", tab Phiên có "Thu hồi" từng phiên và "Thu hồi tất cả"; chọn ví Spot/Futures ở form điều chỉnh số dư.
+  Lệnh của bot: cảnh báo "bot của lệnh này sẽ bị dừng".
+
+**Mock:** `fixtureAdminCancelOrderResult`, `fixtureAdminCancelOrdersResult`, `fixtureAdminRevokeSessionsResult`, `fixtureAdminSessionIds` (hai phiên của người dùng demo). Mock chỉ có lệnh/phiên cho người dùng demo; người khác → 404 / 0.
+Mock không kiểm vai trò ngang/cao hơn (người đăng nhập mock vừa là nhân viên vừa là người dùng demo); server kiểm.

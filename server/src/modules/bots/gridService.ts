@@ -242,6 +242,42 @@ export class GridService {
       return row;
     });
     if (!b) return false;
+    await this.finishHalt(b, reason, sellBase);
+    return true;
+  }
+
+  /**
+   * Admin cancels orders that belong to grid bots (invariant 19: the bot must stop, never re-place them).
+   * Holds the queue of every named bot (ascending id), so no sync/halt of those bots interleaves, and runs `fn`.
+   * Inside `fn`, `stop(tx, botId)` flips the bot to STOPPED (reason ADMIN) in fn's own transaction - the one that cancels
+   * the order and writes the audit row - so cancel + audit + bot status commit together or not at all.
+   * After `fn` returns (committed) the rest of the stop runs: remaining orders canceled (BOT_STOPPED), final value, notice.
+   * A bot not named in `botIds` cannot be stopped from `fn` (CONFLICT, the transaction rolls back; retry).
+   */
+  async runStopping<T>(botIds: number[], fn: (stop: (tx: Tx, botId: number) => Promise<BotRow | null>) => Promise<T>): Promise<T> {
+    const ids = [...new Set(botIds)].sort((a, b) => a - b);
+    const inner = async (): Promise<T> => {
+      const stopped: BotRow[] = [];
+      const value = await fn(async (tx, botId) => {
+        if (!ids.includes(botId)) throw new AppError('CONFLICT', 'A bot of this user changed while canceling; try again');
+        const [row] = await tx
+          .update(gridBots)
+          .set({ status: 'STOPPED', stopReason: 'ADMIN', stoppedAt: this.now(), updatedAt: this.now() })
+          .where(and(eq(gridBots.id, botId), inArray(gridBots.status, ['STARTING', 'RUNNING'])))
+          .returning();
+        if (row) stopped.push(row);
+        return row ?? null;
+      });
+      for (const b of stopped) await this.finishHalt(b, 'ADMIN');
+      return value;
+    };
+    const nest = (i: number): Promise<T> => (i < ids.length ? this.enqueue(ids[i]!, () => nest(i + 1)) : inner());
+    return nest(0);
+  }
+
+  /** The part of a stop that runs after the bot's status committed: cancel its orders, value it, tell the user. */
+  private async finishHalt(b: BotRow, reason: string, sellBase = false): Promise<void> {
+    const botId = b.id;
     const open = await this.db
       .select({ id: orders.id })
       .from(orders)
@@ -269,7 +305,6 @@ export class GridService {
       .returning();
     this.events.emit('notification', b.userId, row!);
     this.events.emit('gridBot', b.userId, await this.view(botId));
-    return true;
   }
 
   /** Market-sells the bot's base (never more than the wallet has free). Returns the base sold and the quote received. */
