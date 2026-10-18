@@ -360,29 +360,6 @@ export const AiAssistantWidget: React.FC<AiAssistantWidgetProps> = ({ onNavigate
 
           {/* Messages Stream */}
           <div className="flex-1 overflow-y-auto p-4 space-y-3.5 text-xs leading-relaxed">
-            {/* Welcoming Card with Sakura 50% Body */}
-            <div className="p-3.5 rounded-2xl bg-gradient-to-r from-[#1A2E40]/90 to-[#2A4365]/80 border border-[#FFD700]/30 shadow-md flex items-center gap-3.5">
-              <div 
-                className="w-20 h-24 shrink-0 overflow-hidden rounded-xl bg-gradient-to-b from-white/10 to-transparent border border-[#FFD700]/30 flex items-end justify-center shadow-inner"
-                title="Sakura Trợ lý CSKH ✨"
-              >
-                <img 
-                  src="/sakura/sakura-upper-body-clean.png" 
-                  alt="Sakura 50% Body" 
-                  className="w-full h-full object-contain object-bottom animate-sakura-gentle-wave select-none pointer-events-none filter drop-shadow-[0_4px_10px_rgba(0,0,0,0.5)]"
-                />
-              </div>
-              <div className="text-[11px] text-pink-100/90 leading-snug">
-                <p className="font-bold text-[#FFD700] text-xs mb-1 flex items-center gap-1">
-                  <Sparkles size={12} className="text-[#FFD700]" />
-                  <span>Sakura chào {accountName}!</span>
-                </p>
-                <p>
-                  Sẵn sàng hướng dẫn nhận 1.000 USDT Faucet, giao dịch Spot, đòn bẩy Futures 20x và tính thuế tự động 0.1% ạ!
-                </p>
-              </div>
-            </div>
-
             {messages.map((m) => (
               <div
                 key={m.id}
