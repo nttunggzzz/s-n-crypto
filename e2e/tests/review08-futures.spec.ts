@@ -61,6 +61,28 @@ async function dataValue(l: Locator, what: string): Promise<string> {
 }
 const expectDec = (actual: string, expected: Dec, what: string) => expect(dec(actual).toFixed(8), what).toBe(expected.toFixed(8));
 
+/**
+ * The `data-value` of `l` becomes `expected` (polled up to 15 s). The form first computes from a default guess (leverage 10x) until the
+ * saved per-symbol settings arrive from the server, so the first render after a reload may show the margin of another leverage.
+ */
+async function expectDecEventually(l: Locator, expected: Dec, what: string) {
+  await expect(l, `${what}: phần tử phải hiển thị`).toBeVisible();
+  await expect
+    .poll(
+      async () => {
+        const v = await l.getAttribute('data-value', { timeout: 2_000 }).catch(() => null);
+        if (v === null) return 'thiếu data-value';
+        try {
+          return dec(v).toFixed(8);
+        } catch {
+          return `data-value không phải số: "${v}"`;
+        }
+      },
+      { message: what, timeout: 15_000 },
+    )
+    .toBe(expected.toFixed(8));
+}
+
 /** The numbers in a Vietnamese text: "1.234,5" → "1234.5", "704" → "704", "704.00" → "704.00". */
 function numbersIn(text: string): string[] {
   return (text.match(/\d[\d.,]*/g) ?? []).map((raw) => {
@@ -158,10 +180,10 @@ test('S-02: giá trị / ký quỹ / phí / tổng cần khớp công thức @ce
     await fillLimitForm(page, price, quantity); // page.goto = reload: the page reads the leverage saved on the server
     const want = expectedCost(price, quantity, leverage, r.takerFee);
     margins[leverage] = want.margin;
-    expectDec(await dataValue(page.getByTestId('futures-est-notional'), 'Giá trị lệnh'), want.notional, `giá trị lệnh x${leverage}`);
-    expectDec(await dataValue(page.getByTestId('futures-est-margin'), 'Ký quỹ ban đầu'), want.margin, `ký quỹ ban đầu = initialMargin(giá, khối lượng, ${leverage}) làm tròn lên`);
-    expectDec(await dataValue(page.getByTestId('futures-est-fee'), 'Phí mở'), want.fee, `phí mở = roundUp(giá trị × takerFee ${r.takerFee})`);
-    expectDec(await dataValue(page.getByTestId('futures-est-cost'), 'Tổng cần'), want.cost, `tổng cần = ký quỹ + phí (x${leverage})`);
+    await expectDecEventually(page.getByTestId('futures-est-notional'), want.notional, `giá trị lệnh x${leverage}`);
+    await expectDecEventually(page.getByTestId('futures-est-margin'), want.margin, `ký quỹ ban đầu = initialMargin(giá, khối lượng, ${leverage}) làm tròn lên`);
+    await expectDecEventually(page.getByTestId('futures-est-fee'), want.fee, `phí mở = roundUp(giá trị × takerFee ${r.takerFee})`);
+    await expectDecEventually(page.getByTestId('futures-est-cost'), want.cost, `tổng cần = ký quỹ + phí (x${leverage})`);
   }
   expect(margins[10]!.toFixed(8), 'đổi x20 → x10: ký quỹ gấp đôi').toBe(margins[20]!.mul(2).toFixed(8));
 
