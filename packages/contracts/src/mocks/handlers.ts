@@ -25,6 +25,7 @@ import { adjust, balanceOf, emitUser, mockStore, nextId } from './store.ts';
 import { baseOf, cancel, createOco, findList, isOpen, lockOf, mockFill, newOrder } from './engine.ts';
 import { MockError, mockMe, now, ok, requireUser, requireVerified, type Resolver } from './common.ts';
 import { adminResolvers } from './admin.ts';
+import { adminActionResolvers } from './adminActions.ts';
 import { adminLookupResolvers } from './adminLookup.ts';
 import { futuresResolvers } from './futures.ts';
 import { inviteResolvers, mockConsumeInvite } from './invites.ts';
@@ -374,6 +375,7 @@ const resolvers: { [N in EndpointName]: Resolver<N> } = {
   },
   unreadNotifications: () => (requireUser(), { unread: mockStore.notifications.filter((n) => n.readAt === null).length }),
   ...adminResolvers,
+  ...adminActionResolvers,
   ...adminLookupResolvers,
   ...futuresResolvers,
   ...phase26Resolvers,

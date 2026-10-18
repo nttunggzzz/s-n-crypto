@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { and, asc, count, eq, inArray, sql } from 'drizzle-orm';
+import { and, asc, count, eq, inArray, or, sql } from 'drizzle-orm';
 import type { z } from 'zod';
 import type { PlaceOcoRequest, PlaceOrderRequest } from '@cex/contracts';
 import {
@@ -53,6 +53,13 @@ export interface OrderSourceMeta {
   source: 'GRID' | 'DCA';
   sourceId: number;
 }
+
+/** Admin path: runs inside the cancel's transaction with the orders it canceled (see OrderService.cancelOrder). */
+export type AdminCancelStep = (tx: Tx, canceled: OrderRow[], priorStatus: ReadonlyMap<number, OrderRow['status']>) => Promise<void>;
+
+/** The orders of `out` that ended CANCELED with `reason` (ids ascending). */
+const canceledBy = (out: Outcome, reason: OrderRow['closeReason']): OrderRow[] =>
+  [...out.orders.values()].filter((o) => o.status === 'CANCELED' && o.closeReason === reason).sort((a, b) => a.id - b.id);
 
 const isOpen = (status: string) => (OPEN_STATUSES as readonly string[]).includes(status);
 const fx = (d: Dec) => toFixedStr(d);
@@ -147,6 +154,22 @@ export class OrderService {
     return { takeProfitPrice: fxn(tp), stopLossPrice: fxn(sl), stopLossLimitPrice: fxn(slLimit), state: 'PENDING', childOrderListId: null, childOrderIds: [], skippedReason: null };
   }
 
+  /**
+   * Locks the user's base AND quote balance rows of a pair, sorted by asset (the order applyBalanceChanges uses). A marketable
+   * LIMIT reserves one asset first and then settles against the book touching both; without this it held USDT while asking for
+   * BTC, the reverse of a fill/cancel that holds BTC and asks for USDT -> 40P01. Lock-only: no value changes.
+   */
+  private async lockPairBalances(tx: Tx, userId: string, sym: LoadedSymbol): Promise<void> {
+    const pairs = [sym.row.baseAsset, sym.row.quoteAsset].sort().map((asset) => ({ userId, account: 'SPOT' as const, asset }));
+    await tx.insert(balances).values(pairs).onConflictDoNothing();
+    await tx
+      .select({ asset: balances.asset })
+      .from(balances)
+      .where(and(eq(balances.userId, userId), eq(balances.account, 'SPOT'), inArray(balances.asset, pairs.map((p) => p.asset))))
+      .orderBy(asc(balances.asset))
+      .for('update');
+  }
+
   /** Inserts an order that reserves funds now, with its ORDER_LOCK ledger entry. */
   private async insertLocked(tx: Tx, out: Outcome, values: typeof orders.$inferInsert, lockAsset: string, lockAmount: Dec): Promise<OrderRow> {
     const [order] = await tx
@@ -210,6 +233,7 @@ export class OrderService {
     ruleError(checkNotional(sym.rules, qty.mul(price)));
     const tpsl = this.tpslData(sym, input.tpsl, price);
     const isBuy = input.side === 'BUY';
+    await this.lockPairBalances(tx, userId, sym);
     const order = await this.insertLocked(
       tx,
       out,
@@ -599,7 +623,11 @@ export class OrderService {
   /** Follow-ups once an order is final: OCO sibling cancel, TP/SL children of a BUY. */
   private async afterOrderDone(tx: Tx, out: Outcome, order: OrderRow, sym: LoadedSymbol): Promise<OrderRow> {
     if (order.orderListId !== null && order.status === 'FILLED') await this.finishList(tx, out, order.orderListId, order.id, false);
-    if (order.side === 'BUY' && order.tpsl?.state === 'PENDING') return this.placeTpSl(tx, out, order, sym);
+    if (order.side === 'BUY' && order.tpsl?.state === 'PENDING') {
+      // An admin cancel must not give birth to new open orders (cancel-all would leave TP/SL SELLs behind): skip the protection instead.
+      if (order.closeReason === 'ADMIN') return this.skipTpSl(tx, out, order, 'ADMIN_CANCELED');
+      return this.placeTpSl(tx, out, order, sym);
+    }
     return order;
   }
 
@@ -636,6 +664,16 @@ export class OrderService {
     }
     await tx.update(orderLists).set({ listStatus: 'ALL_DONE', updatedAt: this.now() }).where(eq(orderLists.id, listId));
     out.listIds.add(listId);
+  }
+
+  /** Marks a pending TP/SL as SKIPPED (no order is placed). The user is told only if the BUY had filled something. */
+  private async skipTpSl(tx: Tx, out: Outcome, parent: OrderRow, reason: string): Promise<OrderRow> {
+    const next: TpSlData = { ...parent.tpsl!, state: 'SKIPPED', skippedReason: reason };
+    if (dec(parent.executedQty).gt(0)) {
+      await this.notifications.create(tx, out, parent.userId, { type: 'TPSL_SKIPPED', orderId: String(parent.id), symbol: parent.symbol, reason });
+    }
+    const [updated] = await tx.update(orders).set({ tpsl: next, updatedAt: this.now() }).where(eq(orders.id, parent.id)).returning();
+    return out.order(updated!);
   }
 
   /** Places the SELL take-profit / stop-loss for what a finished BUY actually received. */
@@ -736,8 +774,13 @@ export class OrderService {
     }
   }
 
-  /** Cancels an order; canceling one OCO leg cancels the whole list. */
-  async cancelOrder(userId: string, orderId: string, reason: OrderRow['closeReason'] = 'USER_CANCELED'): Promise<OrderRow> {
+  /**
+   * Cancels an order; canceling one OCO leg cancels the whole list.
+   * `step` (admin path) runs inside the SAME transaction after the legs are canceled, with every order this call
+   * canceled: it writes the audit row (and any follow-up that must be atomic with the cancel). If it throws,
+   * the cancel rolls back and nothing is published (Outcome is applied only after commit).
+   */
+  async cancelOrder(userId: string, orderId: string, reason: OrderRow['closeReason'] = 'USER_CANCELED', step?: AdminCancelStep): Promise<OrderRow> {
     const id = Number(orderId);
     if (!Number.isSafeInteger(id) || id <= 0) throw new AppError('NOT_FOUND', 'Order not found');
     let result: OrderRow | undefined;
@@ -747,10 +790,62 @@ export class OrderService {
       if (!order) throw new AppError('NOT_FOUND', 'Order not found');
       if (!isOpen(order.status)) throw new AppError('ORDER_NOT_CANCELABLE', `Order is ${order.status}`);
       if (order.source !== 'USER' && reason === 'USER_CANCELED') throw new AppError('ORDER_NOT_CANCELABLE', 'This order belongs to a bot — stop the bot instead', { source: order.source });
+      const prior = new Map(group.map((o) => [o.id, o.status] as const));
       await this.cancelLegs(tx, out, group, reason);
       result = out.orders.get(id);
+      if (step) await step(tx, canceledBy(out, reason), prior);
     });
     return result!;
+  }
+
+  /**
+   * Admin "cancel all" in ONE transaction (so one audit row can describe it): every open order of the user (optionally one
+   * symbol), bot orders included. Lock order: all the order rows first (ascending id, whole OCO lists), only then balances
+   * (applyBalanceChanges) - the order every other path uses - so a fill racing on any of these orders cannot deadlock with it.
+   * A user has at most MAX_OPEN_ORDERS open orders, so the transaction stays small. `step` as in cancelOrder; not called
+   * when nothing was open.
+   */
+  async cancelAllAtomic(userId: string, symbol: string | undefined, reason: OrderRow['closeReason'], step: AdminCancelStep): Promise<OrderRow[]> {
+    let result: OrderRow[] = [];
+    await this.commit(async (tx, out) => {
+      const where = [eq(orders.userId, userId), inArray(orders.status, [...OPEN_STATUSES])];
+      if (symbol) where.push(eq(orders.symbol, symbol));
+      const open = await tx.select({ id: orders.id, orderListId: orders.orderListId }).from(orders).where(and(...where));
+      if (open.length === 0) return;
+      const listIds = [...new Set(open.flatMap((o) => (o.orderListId === null ? [] : [o.orderListId])))];
+      const ids = open.map((o) => o.id);
+      const locked = await tx
+        .select()
+        .from(orders)
+        .where(listIds.length ? or(inArray(orders.id, ids), inArray(orders.orderListId, listIds)) : inArray(orders.id, ids))
+        .orderBy(asc(orders.id))
+        .for('update');
+      // group the locked rows (an OCO list = one group, a plain order = its own); status is read AFTER the lock
+      const groups = new Map<string, OrderRow[]>();
+      for (const o of locked) {
+        const key = o.orderListId === null ? `o${o.id}` : `l${o.orderListId}`;
+        groups.set(key, [...(groups.get(key) ?? []), o]);
+      }
+      // Pre-lock every SPOT balance row the cancels can touch, in the canonical (asset) order applyBalanceChanges uses, BEFORE
+      // releasing anything: otherwise a SELL (id < BUY id) would hold USDT-then-BTC order of our loop while settleFills (sorted)
+      // holds BTC and waits for USDT -> 40P01. Taking them all up front sorted keeps one global lock order.
+      const lockedAssets = [...new Set(locked.filter((o) => isOpen(o.status) && o.lockedAsset !== null && dec(o.lockedAmount).gt(0)).map((o) => o.lockedAsset!))];
+      if (lockedAssets.length > 0) {
+        await tx
+          .select({ asset: balances.asset })
+          .from(balances)
+          .where(and(eq(balances.userId, userId), eq(balances.account, 'SPOT'), inArray(balances.asset, lockedAssets)))
+          .orderBy(asc(balances.asset))
+          .for('update');
+      }
+      const prior = new Map(locked.map((o) => [o.id, o.status] as const));
+      for (const group of groups.values()) {
+        if (group.some((o) => isOpen(o.status))) await this.cancelLegs(tx, out, group, reason);
+      }
+      result = canceledBy(out, reason);
+      if (result.length > 0) await step(tx, result, prior);
+    });
+    return result;
   }
 
   async cancelOrderList(userId: string, listId: string): Promise<number> {

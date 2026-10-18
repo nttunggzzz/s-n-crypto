@@ -1,5 +1,26 @@
 # Changelog — @cex/contracts
 
+## 0.23.0 — 2026-10-18 (Back office đợt AD3: admin hủy lệnh của khách, thu hồi phiên, điều chỉnh ví FUTURES) (Back office: admin hủy lệnh, thu hồi phiên, điều chỉnh ví Futures)
+Chỉ thêm. 4 endpoint mới. Không đổi số phiên bản (lead đánh số khi gộp). Hướng dẫn: README mục 19. Kế hoạch: `docs/plans/module-AD-admin-backoffice.md` mục 4.
+
+**Thêm**
+- Endpoint (cả bốn `auth: 'staff'`): `adminCancelUserOrder` POST `/api/v1/admin/users/:userId/orders/:orderId/cancel` và `adminCancelUserOrders` POST `/api/v1/admin/users/:userId/orders/cancel-all` (quyền mới `orders.manage`);
+  `adminRevokeSession` POST `/api/v1/admin/users/:userId/sessions/:sessionId/revoke` và `adminRevokeAllSessions` POST `/api/v1/admin/users/:userId/sessions/revoke-all` (quyền `users.lock`).
+- Quyền `orders.manage` (admin, owner). `AuditAction` thêm `ORDER_CANCEL`, `SESSION_REVOKE`.
+- `admin.ts`: `AdminOrderMarket`, `UserOrderParam`, `UserSessionParam`, `AdminCancelOrderRequest/Result`, `AdminCancelOrdersRequest/Result`, `AdminRevokeSessionsResult`.
+- `BalanceAdjustmentRequest.account` (`'SPOT' | 'FUTURES'`, mặc định `'SPOT'`: thân yêu cầu cũ vẫn hợp lệ). `FUTURES` chỉ nhận USDT (khác → `VALIDATION_ERROR`). Dòng audit `BALANCE_ADJUST` có thêm `account` trong `before/after`; `LedgerEntry.account` đã có sẵn.
+- `closeReason` của lệnh bị admin hủy là `ADMIN` (đã có trong `CloseReason` và là chuỗi tự do ở Futures) — không thêm giá trị enum.
+- Fixture `fixtures/adminActions.ts`, resolver mock `mocks/adminActions.ts` (cho cả bốn endpoint; mock `adminAdjustBalance` hiểu `account`), test `mocks/mocks-admin-actions.test.ts`.
+
+**Hành vi (server)**
+- Audit `ORDER_CANCEL` / `SESSION_REVOKE` nằm **trong cùng transaction** với việc hủy / thu hồi. Hủy lệnh bot lưới: bot chuyển STOPPED (`stopReason: 'ADMIN'`) trong cùng transaction với lệnh hủy.
+- `adminCancelUserOrders` không có `market` → hủy Spot rồi Futures, mỗi sàn một transaction + một dòng audit.
+- Thu hồi phiên đóng `/ws` của phiên đó ngay (mã 4401), không đợi nhịp kiểm 30 giây. `adminLockUser` cũng đóng `/ws` của các phiên bị thu hồi ngay.
+- Admin hủy BUY có TP/SL đang chờ: không đặt TP/SL (`tpsl.state: 'SKIPPED'`, `skippedReason: 'ADMIN_CANCELED'`), nên hủy tất cả không để lại lệnh mở.
+- Audit `ORDER_CANCEL.before.status` lấy từ dòng đã khóa (`NEW` / `PARTIALLY_FILLED`); lệnh Futures có thêm `reduceOnly`; hủy hàng loạt có `partiallyFilled`.
+
+**Có thể ảnh hưởng UI:** `Permission` có thêm `orders.manage` (`Record<Permission, …>` phải bổ sung); `AuditAction` có thêm hai giá trị (nơi dùng `Record<AuditAction, …>` cần nhãn).
+
 ## 0.22.0 — 2026-10-18 (Back office đợt AD2: rủi ro Futures, thanh lý, funding, số liệu sàn theo ngày) (Back office: rủi ro Futures và số liệu sàn theo ngày)
 Chỉ thêm 4 endpoint chỉ đọc (lead đánh số version khi gộp). Hướng dẫn: README mục 18.
 

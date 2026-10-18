@@ -55,6 +55,12 @@ export class RealtimeHub {
     this.broadcast('exchange:status', () => this.ex.config.exchangeStatus());
   };
 
+  /** An admin signed these sessions out: close their connections now (the client reconnects as a guest) instead of at the next heartbeat. */
+  private readonly onSessionsEnded = (sessionIds: string[]) => {
+    const ended = new Set(sessionIds);
+    for (const c of this.clients) if (c.sessionId && ended.has(c.sessionId)) c.ws.close(WS_SESSION_ENDED, 'session ended');
+  };
+
   constructor(
     private readonly market: MarketDataService,
     private readonly ex: Exchange,
@@ -76,6 +82,7 @@ export class RealtimeHub {
         this.wss.handleUpgrade(req, socket, head, (ws) => this.onConnection(ws, auth));
       });
     });
+    this.auth.sessionEvents.on('ended', this.onSessionsEnded);
     this.wireMarket();
     this.wireExchange();
     this.wireFutures();
@@ -100,6 +107,7 @@ export class RealtimeHub {
     clearInterval(this.heartbeat);
     clearInterval(this.batchTimer);
     this.ex.config.off('changed', this.onConfigChanged);
+    this.auth.sessionEvents.off('ended', this.onSessionsEnded);
     for (const c of this.clients) c.ws.terminate();
     this.wss.close();
   }

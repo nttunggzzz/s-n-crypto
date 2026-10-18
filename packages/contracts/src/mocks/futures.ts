@@ -121,7 +121,7 @@ const emitOrder = (o: FuturesOrder) => emitUser({ kind: 'futuresOrder', order: o
 
 // ───────────────────────────── engine
 
-function finishOrder(o: FuturesOrder, status: FuturesOrder['status'], reason: string | null = null) {
+export function finishOrder(o: FuturesOrder, status: FuturesOrder['status'], reason: string | null = null) {
   const s = fs();
   s.available += Number(o.lockedAmount);
   o.lockedAmount = '0.00000000';
