@@ -1,329 +1,56 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
-  X, Send, Sparkles, ArrowRight, MessageSquare, 
-  HelpCircle, RefreshCw, Zap, TrendingUp, ShieldCheck, 
-  Coins, ChevronDown, CheckCircle2, ChevronRight, User
+  X, Send, Sparkles, RefreshCw, Zap, TrendingUp, ShieldCheck, 
+  Coins, ChevronRight, User, HelpCircle, Bot, BarChart3, Volume2
 } from 'lucide-react';
 
 export interface AiAssistantWidgetProps {
   onNavigate: (path: string) => void;
 }
 
+export type SakuraExpression = 'default' | 'cheerful' | 'explaining' | 'thoughtful';
+
 interface Message {
   id: string;
   sender: 'bot' | 'user';
   text: string;
   time: string;
+  expression?: SakuraExpression;
   action?: {
     label: string;
     path: string;
   };
 }
 
-/**
- * Exquisite SVG Anime Girl Character (AI Concierge - Mai Linh)
- * Featuring: V-line face, sparkling anime eyes with winking animation,
- * warm welcoming smile, blushing cheeks, silky hair with angel-ring shine,
- * cyberpunk fintech headset with pulsing LED & mic, and friendly waving hand!
- */
-export const AnimeGirlAvatar: React.FC<{
-  className?: string;
-  idPrefix?: string;
-  wavingHand?: boolean;
-}> = ({ className = 'w-full h-full', idPrefix = 'ag', wavingHand = true }) => {
-  const p = (name: string) => `${idPrefix}_${name}`;
-
-  return (
-    <svg
-      viewBox="0 0 100 100"
-      fill="none"
-      xmlns="http://www.w3.org/2000/svg"
-      className={className}
-    >
-      <defs>
-        {/* Hair Gradient: Cyber Lavender to Deep Indigo/Magenta */}
-        <linearGradient id={p('hairGrad')} x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#818cf8" />
-          <stop offset="45%" stopColor="#6366f1" />
-          <stop offset="80%" stopColor="#a855f7" />
-          <stop offset="100%" stopColor="#ec4899" />
-        </linearGradient>
-
-        {/* Soft porcelain anime skin */}
-        <linearGradient id={p('skinGrad')} x1="0%" y1="0%" x2="0%" y2="100%">
-          <stop offset="0%" stopColor="#fff8f5" />
-          <stop offset="60%" stopColor="#ffede5" />
-          <stop offset="100%" stopColor="#ffdcd2" />
-        </linearGradient>
-
-        {/* Sparkling Anime Eyes Gradient (HoYoverse/Genshin style cyan-violet glow) */}
-        <linearGradient id={p('eyeIrisGrad')} x1="0%" y1="0%" x2="0%" y2="100%">
-          <stop offset="0%" stopColor="#6366f1" />
-          <stop offset="35%" stopColor="#38bdf8" />
-          <stop offset="85%" stopColor="#06b6d4" />
-          <stop offset="100%" stopColor="#a7f3d0" />
-        </linearGradient>
-
-        {/* Cyberpunk Fintech Headset & Glow */}
-        <linearGradient id={p('headsetGrad')} x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#ec4899" />
-          <stop offset="50%" stopColor="#8b5cf6" />
-          <stop offset="100%" stopColor="#38bdf8" />
-        </linearGradient>
-
-        {/* CEX Concierge Blazer / Uniform */}
-        <linearGradient id={p('suitGrad')} x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#1e1b4b" />
-          <stop offset="60%" stopColor="#172554" />
-          <stop offset="100%" stopColor="#0f172a" />
-        </linearGradient>
-
-        {/* Glossy Hair Shine Band (Tenshi no wa / Angel ring) */}
-        <linearGradient id={p('hairShineGrad')} x1="0%" y1="0%" x2="100%" y2="0%">
-          <stop offset="0%" stopColor="#ffffff" stopOpacity="0" />
-          <stop offset="25%" stopColor="#ffffff" stopOpacity="0.85" />
-          <stop offset="50%" stopColor="#fef08a" stopOpacity="0.95" />
-          <stop offset="75%" stopColor="#ffffff" stopOpacity="0.85" />
-          <stop offset="100%" stopColor="#ffffff" stopOpacity="0" />
-        </linearGradient>
-
-        {/* Cheek Blush Radial Gradient */}
-        <radialGradient id={p('blushGrad')}>
-          <stop offset="0%" stopColor="#f43f5e" stopOpacity="0.65" />
-          <stop offset="70%" stopColor="#fb7185" stopOpacity="0.25" />
-          <stop offset="100%" stopColor="#fb7185" stopOpacity="0" />
-        </radialGradient>
-      </defs>
-
-      {/* 1. Hair Back Silhouette */}
-      <path
-        d="M20 40 C14 62 17 84 23 93 C27 96 33 90 35 78 C38 78 62 78 65 78 C67 90 73 96 77 93 C83 84 86 62 80 40 Z"
-        fill={`url(#${p('hairGrad')})`}
-      />
-
-      {/* 2. Neck & Fintech Uniform */}
-      {/* Neck */}
-      <path d="M44 55 L44 67 C47 70 53 70 56 67 L56 55 Z" fill={`url(#${p('skinGrad')})`} />
-      {/* Neck Shadow under Chin */}
-      <path d="M44 55 C48 59 52 59 56 55 C54 58 46 58 44 55 Z" fill="#fca5a5" opacity="0.45" />
-
-      {/* CEX Concierge Blazer / Uniform */}
-      <path
-        d="M25 88 C26 73 36 67 44 67 L56 67 C64 67 74 73 75 88 L77 100 L23 100 Z"
-        fill={`url(#${p('suitGrad')})`}
-      />
-      {/* White Crisp Inner Collar */}
-      <polygon points="44,67 56,67 50,77" fill="#ffffff" />
-      {/* Cyberpunk Pink Ribbon / Tie */}
-      <polygon points="48.5,74 51.5,74 50.5,83 49.5,83" fill="#ec4899" />
-      {/* Lapel Cyber Trim */}
-      <path d="M34 71 L44 83 L44 100" stroke="#818cf8" strokeWidth="1.2" strokeLinecap="round" fill="none" opacity="0.8" />
-      <path d="M66 71 L56 83 L56 100" stroke="#818cf8" strokeWidth="1.2" strokeLinecap="round" fill="none" opacity="0.8" />
-      {/* VIP Gold Badge */}
-      <circle cx="36" cy="79" r="2.2" fill="#fbbf24" stroke="#d97706" strokeWidth="0.5" />
-
-      {/* 3. Anime V-line Face */}
-      <path
-        d="M26 36 C26 21 74 21 74 36 C74 52 63 65 50 66 C37 65 26 52 26 36 Z"
-        fill={`url(#${p('skinGrad')})`}
-      />
-
-      {/* Blushing Cheeks */}
-      <ellipse cx="34" cy="48" rx="6" ry="3.5" fill={`url(#${p('blushGrad')})`} />
-      <ellipse cx="66" cy="48" rx="6" ry="3.5" fill={`url(#${p('blushGrad')})`} />
-      {/* Cute blush stripes */}
-      <line x1="32" y1="47.5" x2="34" y2="49.5" stroke="#f43f5e" strokeWidth="0.8" strokeLinecap="round" opacity="0.7" />
-      <line x1="35" y1="47.5" x2="37" y2="49.5" stroke="#f43f5e" strokeWidth="0.8" strokeLinecap="round" opacity="0.7" />
-      <line x1="63" y1="47.5" x2="65" y2="49.5" stroke="#f43f5e" strokeWidth="0.8" strokeLinecap="round" opacity="0.7" />
-      <line x1="66" y1="47.5" x2="68" y2="49.5" stroke="#f43f5e" strokeWidth="0.8" strokeLinecap="round" opacity="0.7" />
-
-      {/* Cute Anime Nose */}
-      <circle cx="50" cy="48.5" r="0.75" fill="#f43f5e" opacity="0.55" />
-
-      {/* Warm Welcoming Smile */}
-      <path
-        d="M45 53.5 Q50 58.5 55 53.5 Q50 55.5 45 53.5 Z"
-        fill="#f43f5e"
-      />
-      <path
-        d="M45.5 53.8 Q50 55.2 54.5 53.8"
-        stroke="#ffffff"
-        strokeWidth="0.9"
-        strokeLinecap="round"
-      />
-      {/* Lip Corner Dimples */}
-      <path d="M44 53 Q43.5 52 43 52.5" stroke="#db2777" strokeWidth="0.8" strokeLinecap="round" fill="none" />
-      <path d="M56 53 Q56.5 52 57 52.5" stroke="#db2777" strokeWidth="0.8" strokeLinecap="round" fill="none" />
-
-      {/* 4. Left Eye (Wide sparkling anime eye) */}
-      <g>
-        {/* Soft Eyebrow */}
-        <path d="M30 31 Q36 28 42 31" stroke="#4f46e5" strokeWidth="1.4" strokeLinecap="round" fill="none" />
-        {/* Double eyelid crease */}
-        <path d="M32 34 Q36 32.5 40 34.5" stroke="#93c5fd" strokeWidth="0.8" fill="none" opacity="0.7" />
-        {/* Upper Eyelash line with wing flick */}
-        <path d="M29 37.5 Q35.5 32 43 37" stroke="#1e1b4b" strokeWidth="2.4" strokeLinecap="round" fill="none" />
-        <path d="M41.5 35.8 L44 34.2" stroke="#1e1b4b" strokeWidth="1.6" strokeLinecap="round" />
-        {/* Iris */}
-        <ellipse cx="36.5" cy="41" rx="4.6" ry="5.8" fill={`url(#${p('eyeIrisGrad')})`} />
-        {/* Deep navy pupil */}
-        <ellipse cx="36.5" cy="39.8" rx="2.5" ry="3.2" fill="#0f172a" />
-        {/* Eye bottom glow crescent */}
-        <path d="M33 42 Q36.5 46.5 40 42" stroke="#e0e7ff" strokeWidth="1.3" strokeLinecap="round" fill="none" opacity="0.85" />
-        {/* Big sparkling highlight */}
-        <circle cx="34.8" cy="38" r="1.7" fill="#ffffff" />
-        {/* Small secondary sparkle */}
-        <circle cx="38.5" cy="42.8" r="0.85" fill="#ffffff" />
-        {/* Micro sparkle */}
-        <circle cx="33.8" cy="42" r="0.5" fill="#ffffff" opacity="0.8" />
-        {/* Lower eyelash */}
-        <path d="M33 45.8 Q36.5 47.2 40 45.8" stroke="#4338ca" strokeWidth="0.9" strokeLinecap="round" fill="none" opacity="0.7" />
-      </g>
-
-      {/* 5. Right Eye (Winking animation) */}
-      <g className="animate-anime-eye-wink origin-[58.5px_42px]">
-        {/* Soft Eyebrow */}
-        <path d="M58 31 Q64 28 70 31" stroke="#4f46e5" strokeWidth="1.4" strokeLinecap="round" fill="none" />
-        {/* Double eyelid crease */}
-        <path d="M60 34.5 Q64 32.5 68 34" stroke="#93c5fd" strokeWidth="0.8" fill="none" opacity="0.7" />
-        {/* Upper Eyelash line with wing flick */}
-        <path d="M57 37 Q64.5 32 71 37.5" stroke="#1e1b4b" strokeWidth="2.4" strokeLinecap="round" fill="none" />
-        <path d="M58.5 35.8 L56 34.2" stroke="#1e1b4b" strokeWidth="1.6" strokeLinecap="round" />
-        {/* Iris */}
-        <ellipse cx="63.5" cy="41" rx="4.6" ry="5.8" fill={`url(#${p('eyeIrisGrad')})`} />
-        {/* Deep navy pupil */}
-        <ellipse cx="63.5" cy="39.8" rx="2.5" ry="3.2" fill="#0f172a" />
-        {/* Eye bottom glow crescent */}
-        <path d="M60 42 Q63.5 46.5 67 42" stroke="#e0e7ff" strokeWidth="1.3" strokeLinecap="round" fill="none" opacity="0.85" />
-        {/* Big sparkling highlight */}
-        <circle cx="61.8" cy="38" r="1.7" fill="#ffffff" />
-        {/* Small secondary sparkle */}
-        <circle cx="65.5" cy="42.8" r="0.85" fill="#ffffff" />
-        {/* Micro sparkle */}
-        <circle cx="60.8" cy="42" r="0.5" fill="#ffffff" opacity="0.8" />
-        {/* Lower eyelash */}
-        <path d="M60 45.8 Q63.5 47.2 67 45.8" stroke="#4338ca" strokeWidth="0.9" strokeLinecap="round" fill="none" opacity="0.7" />
-      </g>
-
-      {/* 6. Hair Front: Bangs & Side Locks */}
-      {/* Left side curved lock (tóc mai uốn nhẹ) */}
-      <path
-        d="M24 37 C21 47 22 58 25 64 C26 64 26 59 25 51 C26 45 27 40 26 37 Z"
-        fill={`url(#${p('hairGrad')})`}
-      />
-      {/* Right side curved lock (tóc mai uốn nhẹ) */}
-      <path
-        d="M74 37 C77 47 76 58 73 64 C72 64 72 59 73 51 C72 45 71 40 72 37 Z"
-        fill={`url(#${p('hairGrad')})`}
-      />
-
-      {/* Bangs */}
-      <path d="M25 33 C27 41 33 45 35 43 C33 39 32 31 29 25 Z" fill={`url(#${p('hairGrad')})`} />
-      <path d="M33 21 C35 33 41 41 43 41 C42 35 41 25 39 21 Z" fill={`url(#${p('hairGrad')})`} />
-      <path d="M42 21 C44 34 51 43 52 42 C50 34 47 23 45 21 Z" fill={`url(#${p('hairGrad')})`} />
-      <path d="M51 21 C54 32 59 40 63 40 C61 32 57 23 54 21 Z" fill={`url(#${p('hairGrad')})`} />
-      <path d="M61 24 C65 31 67 39 72 37 C70 29 67 22 63 21 Z" fill={`url(#${p('hairGrad')})`} />
-
-      {/* Glossy Hair Shine Band (Angel Ring) */}
-      <ellipse
-        cx="50"
-        cy="27"
-        rx="18"
-        ry="3.5"
-        fill={`url(#${p('hairShineGrad')})`}
-        className="animate-anime-hair-shimmer"
-      />
-      <circle cx="42" cy="26" r="1" fill="#ffffff" />
-      <circle cx="57" cy="27" r="0.8" fill="#ffffff" />
-
-      {/* 7. Cyberpunk / Fintech AI Headset & Mic */}
-      {/* Headset Arch */}
-      <path
-        d="M20 33 C20 13 80 13 80 33"
-        stroke="#1e1b4b"
-        strokeWidth="3.2"
-        strokeLinecap="round"
-        fill="none"
-      />
-      <path
-        d="M21 32 C22 15 78 15 79 32"
-        stroke="#818cf8"
-        strokeWidth="1.2"
-        fill="none"
-        opacity="0.9"
-      />
-
-      {/* Left Earpiece with Glowing LED Ring */}
-      <rect x="15" y="30" width="7" height="13" rx="3.5" fill="#1e1b4b" stroke="#ec4899" strokeWidth="1.4" />
-      <circle cx="18.5" cy="36.5" r="2.2" fill="#ec4899" className="animate-anime-headset-pulse" />
-      <circle cx="18.5" cy="36.5" r="1" fill="#ffffff" />
-
-      {/* Right Earpiece with Glowing LED Ring */}
-      <rect x="78" y="30" width="7" height="13" rx="3.5" fill="#1e1b4b" stroke="#ec4899" strokeWidth="1.4" />
-      <circle cx="81.5" cy="36.5" r="2.2" fill="#ec4899" className="animate-anime-headset-pulse" />
-      <circle cx="81.5" cy="36.5" r="1" fill="#ffffff" />
-
-      {/* Slim Concierge Microphone Boom */}
-      <path
-        d="M19 41 C20 52 31 56 41 55"
-        stroke="#475569"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-        fill="none"
-      />
-      {/* Glowing Mic Tip */}
-      <circle cx="42" cy="55" r="2" fill="#38bdf8" className="animate-anime-headset-pulse" />
-      <circle cx="42" cy="55" r="0.9" fill="#ffffff" />
-
-      {/* 8. Waving Anime Hand (Hiếu khách & sống động) */}
-      {wavingHand && (
-        <g className="animate-anime-hand-wave">
-          {/* Cuff */}
-          <path
-            d="M74 76 L82 72 L85 78 L77 82 Z"
-            fill="#1e1b4b"
-            stroke="#ec4899"
-            strokeWidth="0.8"
-          />
-          {/* Hand Palm & Waving Fingers */}
-          <path
-            d="M78 72 C76 70 75 64 77 62 C78 60 80 61 80 64 L81 59 C82 57 84 58 84 60 L85 58 C86 56 88 57 88 60 L89 62 C90 61 92 62 91 65 C90 71 87 75 82 76 Z"
-            fill={`url(#${p('skinGrad')})`}
-            stroke="#f472b6"
-            strokeWidth="0.75"
-          />
-          {/* Finger blush tint */}
-          <circle cx="81" cy="61" r="1" fill="#fb7185" opacity="0.6" />
-          <circle cx="85" cy="60" r="1" fill="#fb7185" opacity="0.6" />
-          <circle cx="88" cy="61" r="1" fill="#fb7185" opacity="0.6" />
-          {/* Welcome Sparkle */}
-          <path
-            d="M91 55 L92 51 L93 55 L97 56 L93 57 L92 61 L91 57 L87 56 Z"
-            fill="#fbbf24"
-            opacity="0.9"
-          />
-        </g>
-      )}
-    </svg>
-  );
-};
-
 const INITIAL_SUGGESTIONS = [
-  { icon: Coins, text: 'Làm sao nhận 1.000 USDT Faucet để test?', prompt: 'Làm sao nhận 1.000 USDT từ Faucet để test?' },
-  { icon: TrendingUp, text: 'Hướng dẫn đặt lệnh Spot & chọn cặp', prompt: 'Hướng dẫn giao dịch Spot và cách đặt lệnh Limit, Market' },
-  { icon: Zap, text: 'Futures & đòn bẩy hoạt động thế nào?', prompt: 'Futures đòn bẩy 20x, ký quỹ ban đầu và giá thanh lý hoạt động thế nào?' },
-  { icon: Sparkles, text: 'Cách tạo Bot lưới (Grid) & DCA định kỳ', prompt: 'Cách tạo Bot lưới và Kế hoạch DCA mua định kỳ' },
-  { icon: ShieldCheck, text: 'Chính sách thuế 0.1% & bảo mật 2FA', prompt: 'Chính sách khấu trừ thuế bán Spot và kích hoạt 2FA' },
+  { icon: Coins, text: 'Làm sao nhận 1.000 USDT Faucet miễn phí?', prompt: 'Làm sao nhận USDT từ Faucet để trải nghiệm?' },
+  { icon: TrendingUp, text: 'Hướng dẫn đặt lệnh Spot & chọn cặp coin', prompt: 'Hướng dẫn giao dịch Spot và cách đặt lệnh Limit, Market' },
+  { icon: Zap, text: 'Futures đòn bẩy 20x & ký quỹ thế nào?', prompt: 'Futures đòn bẩy 20x, ký quỹ ban đầu và giá thanh lý hoạt động thế nào?' },
+  { icon: Bot, text: 'Cách tạo Bot lưới (Grid) & DCA định kỳ', prompt: 'Cách tạo Bot lưới và Kế hoạch DCA mua định kỳ' },
+  { icon: ShieldCheck, text: 'Chính sách thuế 0.1% & bảo mật 2FA', prompt: 'Chính sách khấu trừ thuế bán Spot 0.1% và kích hoạt 2FA' },
 ];
 
-/** Intelligent localized AI answering engine with warm Concierge persona */
-function getAiResponse(query: string): { text: string; action?: { label: string; path: string } } {
+/** Avatar mapping for Sakura's expressions */
+export const SAKURA_SPRITES: Record<SakuraExpression, string> = {
+  default: '/sakura/sakura-avatar-transparent.png',
+  cheerful: '/sakura/sakura-exp-cheerful-transparent.png',
+  explaining: '/sakura/sakura-exp-explaining-transparent.png',
+  thoughtful: '/sakura/sakura-exp-thoughtful-transparent.png',
+};
+
+/** Intelligent localized AI answering engine for Sakura (Chatbot CSKH) */
+function getSakuraResponse(query: string): { 
+  text: string; 
+  expression: SakuraExpression;
+  action?: { label: string; path: string }; 
+} {
   const q = query.toLowerCase().trim();
 
   // 1. Faucet / Nạp tiền ảo
-  if (q.includes('faucet') || q.includes('nạp tiền') || q.includes('tiền ảo') || q.includes('nhận usdt') || q.includes('xin tiền') || q.includes('free')) {
+  if (q.includes('faucet') || q.includes('nạp tiền') || q.includes('tiền ảo') || q.includes('nhận usdt') || q.includes('xin tiền') || q.includes('free') || q.includes('1.000') || q.includes('1000')) {
     return {
-      text: 'Dạ, để nhận tiền thử nghiệm, anh/chị vào mục **Tài sản** (hoặc Ví), bấm nút **Faucet** để nhận ngay **1.000 USDT** hoàn toàn miễn phí nhé! ✨\n\nAnh/chị có thể sử dụng số dư này để mua bán Spot, ký quỹ Futures đòn bẩy hoặc tạo Bot giao dịch tự động. Sau mỗi 24 giờ, hệ thống sẽ mở lại Faucet để anh/chị nhận thêm ạ.',
+      text: 'Dạ chào anh/chị! ✨ Để nhận tiền thử nghiệm, anh/chị chỉ cần vào mục **Tài sản** (hoặc Ví), bấm nút **Faucet** để nhận ngay **1.000 USDT** hoàn toàn miễn phí!\n\nAnh/chị có thể sử dụng số dư này để mua bán Spot, ký quỹ mở lệnh Futures hoặc tạo Bot tự động. Sau mỗi 24 giờ hệ thống sẽ cho phép nhận tiếp một lần ạ!',
+      expression: 'cheerful',
       action: {
         label: 'Mở trang Tài sản & Faucet',
         path: '/assets',
@@ -334,9 +61,10 @@ function getAiResponse(query: string): { text: string; action?: { label: string;
   // 2. Spot Trading
   if (q.includes('spot') || q.includes('giao ngay') || (q.includes('mua') && q.includes('bán') && !q.includes('futures')) || q.includes('lệnh limit') || q.includes('lệnh market')) {
     return {
-      text: 'Dạ, giao dịch **Spot (Giao ngay)** cho phép anh/chị sở hữu trực tiếp các tài sản mã hóa (BTC, ETH, SOL...):\n\n• **Lệnh Giới hạn (Limit)**: Anh/chị chọn mức giá mong muốn, lệnh sẽ treo trên sổ lệnh chờ khớp.\n• **Lệnh Thị trường (Market)**: Khớp ngay lập tức với giá tốt nhất trên thị trường.\n• **Ưu đãi Phí & Thuế**: Phí chỉ từ 0.02% - 0.1%. Thuế chỉ khấu trừ 0.1% khi anh/chị đặt lệnh BÁN (chiều MUA hoàn toàn 0% thuế ạ).\n\nEm mời anh/chị bấm nút bên dưới để trải nghiệm ngay nhé! ✨',
+      text: 'Dạ về giao dịch **Spot (Giao ngay)**, anh/chị có thể sở hữu trực tiếp các tài sản mã hóa (BTC, ETH, SOL...):\n\n• **Lệnh Giới hạn (Limit)**: Anh/chị chủ động đặt mức giá mong muốn, lệnh sẽ treo trên sổ lệnh đến khi có người khớp.\n• **Lệnh Thị trường (Market)**: Khớp tức thì với mức giá tốt nhất hiện có trên sổ lệnh.\n• **Minh bạch thuế & phí**: Phí giao dịch từ 0.02% - 0.1%. Thuế chỉ khấu trừ 0.1% khi anh/chị đặt lệnh BÁN (chiều MUA hoàn toàn không tính thuế 0%).',
+      expression: 'explaining',
       action: {
-        label: 'Đến sàn giao dịch Spot',
+        label: 'Đến sàn giao dịch Spot BTC/USDT',
         path: '/trade/BTCUSDT',
       },
     };
@@ -345,9 +73,10 @@ function getAiResponse(query: string): { text: string; action?: { label: string;
   // 3. Futures & Đòn bẩy
   if (q.includes('futures') || q.includes('đòn bẩy') || q.includes('leverage') || q.includes('long') || q.includes('short') || q.includes('ký quỹ') || q.includes('thanh lý') || q.includes('funding')) {
     return {
-      text: 'Dạ, giao dịch **Futures (Hợp đồng tương lai)** giúp anh/chị tối ưu hóa lợi nhuận cả 2 chiều thị trường:\n\n• **Mở Long**: Khi anh/chị kỳ vọng giá coin sẽ tăng.\n• **Mở Short**: Khi anh/chị nhận định giá sẽ giảm.\n• **Đòn bẩy linh hoạt**: Hỗ trợ đòn bẩy tối đa lên tới 20×. Em khuyên anh/chị chú ý tỷ lệ ký quỹ để đảm bảo vị thế an toàn trước Giá thanh lý nhé.\n• **Phí Funding**: Được luân chuyển giữa bên Long và Short mỗi 8 giờ.\n\n*Lưu ý nhỏ: Anh/chị hãy chuyển USDT từ ví Spot sang ví Futures trước khi mở vị thế nhé ạ!* ✨',
+      text: 'Dạ giao dịch **Futures (Hợp đồng tương lai)** cho phép anh/chị tìm kiếm lợi nhuận 2 chiều linh hoạt:\n\n• **Mở Long**: Khi anh/chị kỳ vọng giá sẽ tăng.\n• **Mở Short**: Khi anh/chị dự đoán giá sẽ giảm.\n• **Đòn bẩy tối đa 20×**: Cần lưu ý tỷ lệ ký quỹ để bảo vệ vị thế không chạm giá thanh lý.\n• **Phí Funding**: Tự động thanh toán giữa 2 phe Long và Short mỗi 8 giờ dựa trên Funding Rate của thị trường.\n\n*Mẹo nhỏ từ Sakura: Anh/chị hãy chuyển USDT từ ví Spot sang ví Futures trước khi bắt đầu đặt lệnh nhé!*',
+      expression: 'explaining',
       action: {
-        label: 'Trải nghiệm Futures đòn bẩy',
+        label: 'Trải nghiệm Futures đòn bẩy 20x',
         path: '/futures/BTCUSDT',
       },
     };
@@ -356,9 +85,10 @@ function getAiResponse(query: string): { text: string; action?: { label: string;
   // 4. Bot giao dịch & DCA
   if (q.includes('bot') || q.includes('lưới') || q.includes('grid') || q.includes('dca') || q.includes('tự động') || q.includes('định kỳ')) {
     return {
-      text: 'Dạ, hệ thống sàn hỗ trợ 2 chiến lược giao dịch tự động thông minh dành cho anh/chị:\n\n1. **Grid Bot (Bot lưới Spot)**: Tự động rải lệnh mua thấp bán cao liên tục theo biên độ giá anh/chị cài đặt, tối ưu hóa lợi nhuận khi thị trường đi ngang.\n2. **Kế hoạch DCA (Mua định kỳ)**: Tự động gom coin đều đặn theo giờ/ngày/tuần, giúp bình quân giá vốn hiệu quả mà không tốn thời gian canh bảng điện.\n\nAnh/chị muốn em đưa tới trang quản lý Bot ngay không ạ? ✨',
+      text: 'Dạ hiện sàn đang hỗ trợ 2 chiến lược giao dịch tự động cực kỳ thông minh:\n\n1. **Grid Bot (Bot lưới)**: Tự động chia vốn rải lệnh mua thấp bán cao liên tục trong biên độ giá anh/chị cài đặt, tối ưu hóa lợi nhuận khi thị trường đi ngang.\n2. **Kế hoạch DCA (Mua định kỳ)**: Tự động trích tiền mua lượng coin cố định theo chu kỳ (mỗi giờ, ngày, tuần) giúp trung bình hóa giá vốn hiệu quả mà không tốn công theo dõi bảng điện tử ạ!',
+      expression: 'cheerful',
       action: {
-        label: 'Tạo Bot giao dịch ngay',
+        label: 'Khởi tạo Bot giao dịch ngay',
         path: '/bots',
       },
     };
@@ -367,7 +97,8 @@ function getAiResponse(query: string): { text: string; action?: { label: string;
   // 5. Thuế Crypto
   if (q.includes('thuế') || q.includes('tax') || q.includes('khấu trừ') || q.includes('chiết khấu')) {
     return {
-      text: 'Dạ, cơ chế **Thuế giao dịch tiền mã hóa** trên sàn được triển khai minh bạch và tự động:\n\n• **Tự động bật khấu trừ thuế 0.1%**: Sàn tự động bật tính năng khấu trừ thuế 0.1% cho mọi lệnh BÁN Spot theo quy định thử nghiệm (chiều MUA hoàn toàn miễn thuế 0%).\n• **Xem trước minh bạch**: User có thể xem trước chi tiết số tiền thuế bị khấu trừ và số tiền thực nhận ngay trên form đặt lệnh trước khi bấm Xác nhận.\n• **Tổ chức trong nước (DOMESTIC_ORG)**: Tự kê khai độc lập, sàn không trích khấu trừ.\n• Anh/chị có thể tra cứu chi tiết và tải file CSV sao kê tại trang "Thuế của tôi" bất cứ lúc nào ạ. ✨',
+      text: 'Dạ về chính sách **Thuế tiền mã hóa** trên sàn:\n\n• **Tự động kích hoạt khi BÁN Spot**: Thuế suất chuẩn là **0.1%** tính trên tổng giá trị lệnh bán khớp thành công.\n• **Chiều MUA**: Thuế suất 0% (hoàn toàn miễn thuế).\n• **Tổ chức trong nước (DOMESTIC_ORG)**: Tự kê khai, sàn không trích khấu trừ.\n• Anh/chị có thể xem trước số tiền thuế và số tiền thực nhận ngay trên form trước khi ấn nút Đặt lệnh, đồng thời tải bản kê khai chi tiết tại mục Thuế của tôi ạ!',
+      expression: 'explaining',
       action: {
         label: 'Xem báo cáo thuế của tôi',
         path: '/account/tax',
@@ -378,9 +109,10 @@ function getAiResponse(query: string): { text: string; action?: { label: string;
   // 6. 2FA & Bảo mật
   if (q.includes('2fa') || q.includes('bảo mật') || q.includes('mật khẩu') || q.includes('google') || q.includes('authenticator') || q.includes('xác minh')) {
     return {
-      text: 'Dạ, để bảo vệ tài khoản an toàn tuyệt đối, em khuyến nghị anh/chị bật **Xác thực 2 yếu tố (2FA)** bằng Google Authenticator trong mục Cài đặt -> Bảo mật.\n\nKhi kích hoạt, mọi thao tác đăng nhập hoặc rút tiền đều sẽ cần mã OTP 6 số bảo vệ, giúp tài sản của anh/chị luôn an tâm tuyệt đối ạ! ✨',
+      text: 'Dạ để bảo vệ tài sản tối đa, Sakura khuyến khích anh/chị kích hoạt **Xác thực 2 yếu tố (2FA)** bằng Google Authenticator trong mục Cài đặt -> Bảo mật. Khi bật 2FA, mọi thao tác đăng nhập và rút tiền đều được bảo vệ bằng lớp mã OTP 6 số an toàn tuyệt đối!',
+      expression: 'thoughtful',
       action: {
-        label: 'Đi tới Cài đặt bảo mật',
+        label: 'Cài đặt bảo mật 2FA',
         path: '/settings',
       },
     };
@@ -389,7 +121,8 @@ function getAiResponse(query: string): { text: string; action?: { label: string;
   // 7. Chuyển tiền giữa các ví
   if (q.includes('chuyển') || q.includes('transfer') || q.includes('ví') || q.includes('wallet')) {
     return {
-      text: 'Dạ, sàn phân định tài sản giữa **Ví Spot** (dùng cho giao dịch giao ngay, bot) và **Ví Futures** (dùng ký quỹ đòn bẩy). Anh/chị chỉ cần bấm nút **Chuyển tiền** tại màn hình Futures hoặc Tài sản là có thể luân chuyển USDT tức thì và hoàn toàn 0đ phí ạ! ✨',
+      text: 'Dạ sàn phân định tài sản giữa **Ví Spot** (dùng cho giao ngay, bot) và **Ví Futures** (dùng ký quỹ hợp đồng). Anh/chị có thể bấm nút **Chuyển tiền** tại màn hình Futures hoặc Tài sản để luân chuyển USDT tức thì và hoàn toàn không tốn phí ạ!',
+      expression: 'cheerful',
       action: {
         label: 'Đến trang Tài sản / Ví',
         path: '/assets',
@@ -399,15 +132,17 @@ function getAiResponse(query: string): { text: string; action?: { label: string;
 
   // Default response
   return {
-    text: `Dạ, cảm ơn anh/chị đã trò chuyện cùng em! ✨ Em luôn trực tuyến 24/7 để hỗ trợ anh/chị mọi tính năng trên sàn:
-• **Spot**: Giao dịch giao ngay tức thì.
+    text: `Dạ em là Sakura - Trợ lý CSKH của sàn! ✨ Sàn cung cấp đầy đủ các sản phẩm tài chính hiện đại:
+• **Spot**: Khớp lệnh tức thì, thanh khoản sâu.
 • **Futures**: Đòn bẩy lên tới 20× với bảo vệ thanh lý.
-• **Bot & DCA**: Tự động hóa chiến lược tài chính.
-• **Faucet**: Cấp 1.000 USDT miễn phí để anh/chị trải nghiệm.
+• **Bot & DCA**: Giao dịch tự động kỷ luật.
+• **Faucet**: Tặng ngay 1.000 USDT miễn phí trải nghiệm.
+• **Thuế tự động**: Minh bạch 0.1% cho lệnh bán.
 
-Anh/chị có thể bấm vào một trong các câu hỏi gợi ý bên dưới hoặc gõ câu hỏi cụ thể để em hướng dẫn chi tiết nhé ạ! ✨`,
+Anh/chị có thể bấm vào các câu hỏi gợi ý bên dưới hoặc nhắn câu hỏi cụ thể, Sakura rất vui được hỗ trợ ạ!`,
+    expression: 'cheerful',
     action: {
-      label: 'Khám phá thị trường coin',
+      label: 'Khám phá bảng giá thị trường',
       path: '/markets',
     },
   };
@@ -417,24 +152,30 @@ export const AiAssistantWidget: React.FC<AiAssistantWidgetProps> = ({ onNavigate
   const [isOpen, setIsOpen] = useState(false);
   const [showGreetingBubble, setShowGreetingBubble] = useState(false);
   const [displayedGreeting, setDisplayedGreeting] = useState('');
+  const [isHovered, setIsHovered] = useState(false);
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [isGiggling, setIsGiggling] = useState(false);
+
   const [messages, setMessages] = useState<Message[]>([
     {
       id: 'welcome',
       sender: 'bot',
-      text: 'Xin chào anh/chị! Em là Mai Linh - Trợ lý AI Concierge của sàn giao dịch. ✨\n\nEm rất vui được đồng hành cùng anh/chị! Em có thể hướng dẫn nhận 1.000 USDT Faucet miễn phí, cách giao dịch Spot, đòn bẩy Futures 20x, cài đặt Bot tự động hay giải đáp chính sách thuế. Anh/chị cần em hỗ trợ điều gì hôm nay ạ?',
+      text: 'Xin chào anh/chị! ✨ Em là Sakura - Trợ lý CSKH của sàn giao dịch. Em có thể hỗ trợ anh/chị nhận 1.000 USDT từ Faucet, hướng dẫn đặt lệnh Spot, đòn bẩy Futures 20x hoặc chính sách thuế 0.1% ạ!',
       time: 'Vừa xong',
+      expression: 'cheerful',
     },
   ]);
   const [inputValue, setInputValue] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const fullGreeting = 'Xin chào! Em có thể giúp gì cho anh/chị hôm nay? ✨';
+  const fullGreeting = 'Xin chào! Em là Sakura, có thể giúp gì cho anh/chị hôm nay? ✨';
 
   // Smooth typewriter effect for greeting bubble after 1.5s
   useEffect(() => {
     const timer = setTimeout(() => {
       setShowGreetingBubble(true);
+      setIsSpeaking(true);
       let i = 0;
       const interval = setInterval(() => {
         if (i < fullGreeting.length) {
@@ -442,8 +183,9 @@ export const AiAssistantWidget: React.FC<AiAssistantWidgetProps> = ({ onNavigate
           i++;
         } else {
           clearInterval(interval);
+          setTimeout(() => setIsSpeaking(false), 1200);
         }
-      }, 45);
+      }, 40);
       return () => clearInterval(interval);
     }, 1500);
 
@@ -474,17 +216,20 @@ export const AiAssistantWidget: React.FC<AiAssistantWidgetProps> = ({ onNavigate
 
     // Realistic typing delay for smooth AI feel
     setTimeout(() => {
-      const response = getAiResponse(query);
+      const response = getSakuraResponse(query);
       const botMsg: Message = {
         id: (Date.now() + 1).toString(),
         sender: 'bot',
         text: response.text,
         time: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }),
+        expression: response.expression,
         action: response.action,
       };
       setMessages((prev) => [...prev, botMsg]);
       setIsTyping(false);
-    }, 600);
+      setIsSpeaking(true);
+      setTimeout(() => setIsSpeaking(false), 2400);
+    }, 650);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -494,58 +239,99 @@ export const AiAssistantWidget: React.FC<AiAssistantWidgetProps> = ({ onNavigate
     }
   };
 
+  // Determine active avatar sprite based on interaction state
+  const getActiveAvatarSprite = () => {
+    if (isTyping) return SAKURA_SPRITES.thoughtful;
+    if (isGiggling || isHovered) return SAKURA_SPRITES.cheerful;
+    if (isSpeaking) return SAKURA_SPRITES.explaining;
+    return SAKURA_SPRITES.default;
+  };
+
+  // Determine active animation class for Sakura's avatar
+  const getActiveAnimationClass = () => {
+    if (isGiggling) return 'animate-sakura-giggle';
+    if (isSpeaking) return 'animate-sakura-talk';
+    if (isTyping) return 'animate-anime-float-soft';
+    return 'animate-sakura-breathe';
+  };
+
+  const handleTriggerGiggle = () => {
+    setIsGiggling(true);
+    setTimeout(() => setIsGiggling(false), 700);
+  };
+
   return (
-    <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end pointer-events-auto">
-      {/* Speech Bubble Tooltip beside Mai Linh */}
+    <div className="fixed bottom-6 right-6 z-50 flex flex-col items-end pointer-events-auto select-none">
+      {/* Speech Bubble Tooltip beside Sakura */}
       {!isOpen && showGreetingBubble && (
         <div className="mb-3 mr-1 relative max-w-xs animate-speech-reveal">
-          <div className="relative group bg-[rgba(15,18,25,0.94)] text-white text-xs px-4 py-2.5 rounded-2xl border border-pink-400/40 shadow-[0_10px_25px_-5px_rgba(244,114,182,0.35)] backdrop-blur-xl flex items-center gap-2 cursor-pointer hover:border-pink-400 transition-all">
-            <Sparkles size={14} className="text-pink-400 shrink-0 animate-pulse" />
+          <div className="relative group bg-[rgba(26,46,64,0.95)] text-white text-xs px-4 py-2.5 rounded-2xl border-2 border-[#FFB7C5]/60 shadow-[0_10px_30px_rgba(255,183,197,0.35)] backdrop-blur-xl flex items-center gap-2.5 cursor-pointer hover:border-[#FFD700] transition-all">
+            <span className="w-2 h-2 rounded-full bg-[#FFD700] animate-ping shrink-0" />
             <span 
-              onClick={() => { setIsOpen(true); setShowGreetingBubble(false); }}
-              className="font-medium text-[var(--text,#f4f4f5)] leading-relaxed select-none"
+              onClick={() => { setIsOpen(true); setShowGreetingBubble(false); handleTriggerGiggle(); }}
+              className="font-medium text-white leading-relaxed select-none"
             >
               {displayedGreeting}
-              <span className="inline-block w-1.5 h-3.5 bg-pink-400 ml-0.5 animate-pulse" />
+              <span className="inline-block w-1.5 h-3.5 bg-[#FFB7C5] ml-0.5 animate-pulse" />
             </span>
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 setShowGreetingBubble(false);
               }}
-              className="text-[var(--text-3,#63636b)] hover:text-white p-0.5 ml-1 transition-colors rounded-full"
+              className="text-[#FFB7C5]/70 hover:text-white p-0.5 ml-1 transition-colors rounded-full"
               title="Đóng thông báo"
             >
-              <X size={12} />
+              <X size={13} />
             </button>
             {/* Bubble arrow pointing down */}
-            <div className="absolute -bottom-1.5 right-6 w-3 h-3 bg-[rgba(15,18,25,0.94)] border-r border-b border-pink-400/40 transform rotate-45" />
+            <div className="absolute -bottom-2 right-7 w-3.5 h-3.5 bg-[rgba(26,46,64,0.95)] border-r-2 border-b-2 border-[#FFB7C5]/60 transform rotate-45" />
           </div>
         </div>
       )}
 
       {/* Main Chat Drawer / Window */}
       {isOpen && (
-        <div className="mb-4 w-[390px] max-w-[calc(100vw-32px)] h-[560px] max-h-[calc(100vh-120px)] rounded-3xl bg-[rgba(13,15,22,0.95)] border border-pink-500/20 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.85)] backdrop-blur-2xl flex flex-col overflow-hidden animate-chat-pop">
+        <div className="mb-4 w-[400px] max-w-[calc(100vw-32px)] h-[570px] max-h-[calc(100vh-110px)] rounded-3xl bg-[rgba(15,26,36,0.96)] border-2 border-[#FFB7C5]/40 shadow-[0_25px_60px_-10px_rgba(0,0,0,0.9),0_0_35px_rgba(255,183,197,0.2)] backdrop-blur-2xl flex flex-col overflow-hidden animate-chat-pop">
           {/* Header */}
-          <div className="px-5 py-3.5 bg-gradient-to-r from-[rgba(35,22,46,0.95)] via-[rgba(22,20,38,0.95)] to-[rgba(15,18,26,0.95)] border-b border-white/10 flex items-center justify-between">
+          <div className="px-5 py-3.5 bg-gradient-to-r from-[#1A2E40] via-[#243B53] to-[#1A2E40] border-b border-[#FFD700]/30 flex items-center justify-between shadow-md">
             <div className="flex items-center gap-3">
-              {/* Mini Animated Anime Girl Avatar in Header */}
-              <div className="relative w-10 h-10 rounded-2xl bg-gradient-to-tr from-pink-500/20 via-purple-500/20 to-indigo-500/30 border border-pink-400/50 flex items-center justify-center overflow-hidden shadow-inner">
-                <AnimeGirlAvatar idPrefix="hdr" wavingHand={false} className="w-full h-full transform scale-110 translate-y-1" />
+              {/* Sakura Avatar in Header with Talking/Giggle animation */}
+              <div 
+                onClick={handleTriggerGiggle}
+                className="relative w-10 h-10 rounded-full bg-gradient-to-tr from-[#FFB7C5]/40 to-[#FFD700]/30 border-2 border-[#FFD700] flex items-center justify-center overflow-hidden shadow-inner shrink-0 cursor-pointer"
+                title="Bấm để chào Sakura ✨"
+              >
+                <img 
+                  src={getActiveAvatarSprite()} 
+                  alt="Sakura CSKH" 
+                  className={`w-full h-full object-cover object-top transform scale-110 translate-y-1 transition-all duration-300 ${getActiveAnimationClass()}`}
+                />
                 {/* Active Green Dot */}
-                <span className="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-[var(--up,#1fc27a)] border-2 border-[var(--panel,#0a0a0b)] rounded-full animate-pulse" />
+                <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-[#1fc27a] border-2 border-[#1A2E40] rounded-full" />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-white flex items-center gap-1.5 font-display">
-                  <span>Trợ lý AI - Mai Linh (AI Concierge)</span>
-                  <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-pink-500/20 text-pink-300 border border-pink-500/30">
-                    VIP
+                <div className="flex items-center gap-1.5">
+                  <h3 className="text-sm font-bold text-white font-display tracking-wide">Sakura</h3>
+                  <span className="text-[10px] font-black px-1.5 py-0.2 rounded bg-[#FFD700] text-[#1A2E40] tracking-wider uppercase">
+                    SUPPORT
                   </span>
-                </h3>
-                <p className="text-[11px] text-[var(--text-3,#63636b)] flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[var(--up,#1fc27a)] animate-pulse" />
-                  <span>Trực tuyến 24/7 · Niềm nở giải đáp thắc mắc</span>
+                  <span className="text-[10px] font-semibold px-1.5 py-0.2 rounded-full bg-[#FFB7C5]/20 text-[#FFB7C5]">
+                    24/7
+                  </span>
+                  {/* Voice Equalizer animation when speaking or thinking */}
+                  {(isSpeaking || isTyping) && (
+                    <div className="flex items-end gap-0.5 h-3 ml-1 px-1 py-0.5 rounded bg-[#FFD700]/10 border border-[#FFD700]/30" title="Sakura đang trả lời...">
+                      <span className="w-0.5 h-2 bg-[#FFD700] animate-pulse" />
+                      <span className="w-0.5 h-3 bg-[#FFB7C5] animate-pulse [animation-delay:0.15s]" />
+                      <span className="w-0.5 h-1.5 bg-[#FFD700] animate-pulse [animation-delay:0.3s]" />
+                      <span className="w-0.5 h-2.5 bg-pink-400 animate-pulse [animation-delay:0.45s]" />
+                    </div>
+                  )}
+                </div>
+                <p className="text-[11px] text-pink-200/80 flex items-center gap-1 font-medium mt-0.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#1fc27a] animate-pulse" />
+                  {isSpeaking ? 'Đang giải đáp cho bạn...' : isTyping ? 'Đang suy nghĩ câu trả lời...' : 'Trợ lý CSKH & Giao dịch'}
                 </p>
               </div>
             </div>
@@ -556,58 +342,87 @@ export const AiAssistantWidget: React.FC<AiAssistantWidgetProps> = ({ onNavigate
                   {
                     id: Date.now().toString(),
                     sender: 'bot',
-                    text: 'Dạ, lịch sử trò chuyện đã được làm mới! Em là Mai Linh, em có thể hỗ trợ gì cho anh/chị ạ? ✨',
+                    text: 'Dạ lịch sử trò chuyện đã được làm mới. Em có thể hỗ trợ gì cho anh/chị ạ? ✨',
                     time: 'Vừa xong',
+                    expression: 'cheerful',
                   }
                 ])}
-                className="p-1.5 rounded-lg text-[var(--text-3,#63636b)] hover:text-white hover:bg-white/5 transition-colors"
+                className="p-1.5 rounded-lg text-pink-200/60 hover:text-white hover:bg-white/10 transition-colors"
                 title="Làm mới cuộc trò chuyện"
               >
                 <RefreshCw size={14} />
               </button>
               <button
                 onClick={() => setIsOpen(false)}
-                className="p-1.5 rounded-lg text-[var(--text-3,#63636b)] hover:text-white hover:bg-white/5 transition-colors"
+                className="p-1.5 rounded-lg text-pink-200/60 hover:text-white hover:bg-white/10 transition-colors"
                 title="Đóng cửa sổ"
               >
-                <X size={16} />
+                <X size={17} />
               </button>
             </div>
           </div>
 
           {/* Messages Stream */}
           <div className="flex-1 overflow-y-auto p-4 space-y-3.5 text-xs leading-relaxed">
+            {/* Welcoming Card with Sakura Character Sprite */}
+            <div className="p-3.5 rounded-2xl bg-gradient-to-r from-[#1A2E40]/90 to-[#2A4365]/80 border border-[#FFD700]/30 shadow-md flex items-center gap-3">
+              <div 
+                onClick={handleTriggerGiggle}
+                className="w-16 h-20 shrink-0 overflow-hidden rounded-xl bg-gradient-to-b from-[#FFB7C5]/20 to-transparent flex items-center justify-center cursor-pointer hover:scale-105 transition-transform"
+                title="Bấm để xem Sakura chào ✨"
+              >
+                <img 
+                  src="/sakura/sakura-sprite-transparent.png" 
+                  alt="Sakura Character" 
+                  className={`w-full h-full object-contain object-top transform scale-125 translate-y-1 ${getActiveAnimationClass()}`}
+                />
+              </div>
+              <div className="text-[11px] text-pink-100/90 leading-snug">
+                <p className="font-bold text-[#FFD700] text-xs mb-1 flex items-center gap-1">
+                  <Sparkles size={12} className="text-[#FFD700]" />
+                  <span>Sakura chào bạn!</span>
+                </p>
+                <p>
+                  Sẵn sàng hướng dẫn nhận 1.000 USDT Faucet, giao dịch Spot, đòn bẩy Futures và tính thuế tự động 0.1% ạ!
+                </p>
+              </div>
+            </div>
+
             {messages.map((m) => (
               <div
                 key={m.id}
                 className={`flex gap-2.5 ${m.sender === 'user' ? 'justify-end' : 'justify-start'}`}
               >
                 {m.sender === 'bot' && (
-                  <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-pink-500/20 to-indigo-500/20 border border-pink-400/40 flex items-center justify-center shrink-0 mt-0.5 overflow-hidden shadow-sm">
-                    <AnimeGirlAvatar idPrefix={`msg_${m.id}`} wavingHand={false} className="w-full h-full transform scale-120 translate-y-1" />
+                  <div className="w-8 h-8 rounded-full bg-[#1A2E40] border border-[#FFD700]/70 flex items-center justify-center shrink-0 mt-0.5 overflow-hidden shadow-sm">
+                    <img 
+                      src={SAKURA_SPRITES[m.expression || 'default']} 
+                      alt="Sakura" 
+                      className="w-full h-full object-cover object-top transform scale-110"
+                    />
                   </div>
                 )}
                 <div
-                  className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 ${
+                  className={`max-w-[85%] rounded-2xl px-4 py-2.5 ${
                     m.sender === 'user'
-                      ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white rounded-br-none shadow-md shadow-indigo-500/15'
-                      : 'bg-white/[0.05] border border-white/[0.08] text-[var(--text,#f4f4f5)] rounded-tl-none shadow-sm'
+                      ? 'bg-gradient-to-r from-pink-500 via-rose-500 to-indigo-600 text-white rounded-br-none shadow-md shadow-pink-500/20'
+                      : 'bg-[#1A2E40]/80 border border-white/10 text-white rounded-tl-none shadow-sm'
                   }`}
                 >
-                  <p className="whitespace-pre-line select-text">{m.text}</p>
+                  <p className="whitespace-pre-line select-text leading-relaxed">{m.text}</p>
                   {m.action && (
                     <button
                       onClick={() => {
                         onNavigate(m.action!.path);
                         setIsOpen(false);
                       }}
-                      className="mt-2.5 w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-pink-500/20 to-indigo-500/20 hover:from-pink-500/30 hover:to-indigo-500/30 border border-pink-400/40 text-pink-300 font-semibold transition-all hover:scale-[1.02] active:scale-95 cursor-pointer"
+                      className="mt-2.5 w-full inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#FFD700]/20 hover:bg-[#FFD700]/30 border border-[#FFD700]/50 text-[#FFD700] font-bold transition-all hover:scale-[1.02] active:scale-95 cursor-pointer"
                     >
                       <span>{m.action.label}</span>
                       <ChevronRight size={14} />
                     </button>
                   )}
-                  <span className={`block text-[9px] mt-1 text-right ${m.sender === 'user' ? 'text-white/60' : 'text-[var(--text-3,#63636b)]'}`}>
+                  <span className={`block text-[9px] mt-1.5 text-right ${m.sender === 'user' ? 'text-white/70' : 'text-pink-200/50'}`}>
                     {m.time}
                   </span>
                 </div>
@@ -616,12 +431,16 @@ export const AiAssistantWidget: React.FC<AiAssistantWidgetProps> = ({ onNavigate
 
             {isTyping && (
               <div className="flex gap-2.5 items-center">
-                <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-pink-500/20 to-indigo-500/20 border border-pink-400/40 flex items-center justify-center shrink-0 overflow-hidden shadow-sm">
-                  <AnimeGirlAvatar idPrefix="typing" wavingHand={false} className="w-full h-full transform scale-120 translate-y-1" />
+                <div className="w-8 h-8 rounded-full bg-[#1A2E40] border border-[#FFD700]/70 flex items-center justify-center shrink-0 overflow-hidden shadow-sm">
+                  <img 
+                    src={SAKURA_SPRITES.thoughtful} 
+                    alt="Sakura suy nghĩ" 
+                    className="w-full h-full object-cover object-top transform scale-110 animate-anime-float-soft"
+                  />
                 </div>
-                <div className="bg-white/[0.05] border border-white/[0.08] px-3.5 py-2 rounded-2xl rounded-tl-none flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 rounded-full bg-pink-400 typing-dot-1" />
-                  <span className="w-1.5 h-1.5 rounded-full bg-pink-400 typing-dot-2" />
+                <div className="bg-[#1A2E40]/80 border border-white/10 px-3.5 py-2 rounded-2xl rounded-tl-none flex items-center gap-1.5">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#FFB7C5] typing-dot-1" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#FFD700] typing-dot-2" />
                   <span className="w-1.5 h-1.5 rounded-full bg-pink-400 typing-dot-3" />
                 </div>
               </div>
@@ -630,65 +449,98 @@ export const AiAssistantWidget: React.FC<AiAssistantWidgetProps> = ({ onNavigate
           </div>
 
           {/* Quick Suggestions Pills */}
-          <div className="px-3 py-2 border-t border-white/[0.06] bg-black/30 overflow-x-auto flex gap-1.5 no-scrollbar">
+          <div className="px-3 py-2 border-t border-white/[0.08] bg-[#0F1A24]/60 overflow-x-auto flex gap-1.5 no-scrollbar">
             {INITIAL_SUGGESTIONS.map((s, idx) => (
               <button
                 key={idx}
                 onClick={() => handleSendMessage(s.prompt)}
-                className="whitespace-nowrap flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/[0.04] hover:bg-pink-500/10 border border-white/[0.08] hover:border-pink-500/30 text-[11px] text-[var(--text-2,#a1a1aa)] hover:text-pink-300 transition-all cursor-pointer active:scale-95"
+                className="whitespace-nowrap flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#1A2E40]/90 hover:bg-[#2A4365] border border-[#FFB7C5]/30 hover:border-[#FFD700] text-[11px] text-pink-100 hover:text-white transition-all cursor-pointer active:scale-95 shadow-sm"
               >
-                <s.icon size={11} className="text-pink-400" />
+                <s.icon size={12} className="text-[#FFD700]" />
                 <span>{s.text}</span>
               </button>
             ))}
           </div>
 
           {/* Message Input Box */}
-          <div className="p-3 border-t border-white/10 bg-black/40">
-            <div className="flex items-center gap-2 bg-white/[0.06] border border-white/10 rounded-2xl px-3 py-1.5 focus-within:border-pink-400/60 transition-all">
+          <div className="p-3 border-t border-[#FFD700]/20 bg-[#0F1A24]/90">
+            <div className="flex items-center gap-2 bg-[#1A2E40] border border-[#FFB7C5]/30 rounded-2xl px-3 py-1.5 focus-within:border-[#FFD700] transition-all">
               <input
                 type="text"
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyDown={handleKeyDown}
-                placeholder="Hỏi Mai Linh về nạp tiền, Spot, Futures, Bot..."
-                className="flex-1 bg-transparent text-xs text-white placeholder-[var(--text-3,#63636b)] outline-none py-1"
+                placeholder="Hỏi Sakura về Spot, Futures, Faucet, Thuế..."
+                className="flex-1 bg-transparent text-xs text-white placeholder-pink-200/40 outline-none py-1"
               />
               <button
                 onClick={() => handleSendMessage()}
                 disabled={!inputValue.trim() || isTyping}
-                className="p-1.5 rounded-xl bg-gradient-to-r from-pink-500 to-indigo-600 hover:from-pink-600 hover:to-indigo-700 text-white disabled:opacity-30 disabled:cursor-not-allowed transition-all active:scale-95 cursor-pointer shadow-sm shadow-pink-500/30"
-                title="Gửi tin nhắn"
+                className="p-1.5 rounded-xl bg-gradient-to-r from-[#FFB7C5] via-pink-500 to-[#FFD700] hover:opacity-90 text-[#1A2E40] font-bold disabled:opacity-30 disabled:cursor-not-allowed transition-all active:scale-95 cursor-pointer shadow-md shadow-pink-500/20"
+                title="Gửi tin nhắn cho Sakura"
               >
-                <Send size={13} />
+                <Send size={13} className="text-[#1A2E40]" />
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Floating Animated Anime Girl Button */}
+      {/* Floating Animated Sakura Button */}
       <button
         onClick={() => {
           setIsOpen(!isOpen);
           setShowGreetingBubble(false);
+          handleTriggerGiggle();
         }}
-        aria-label="Trợ lý AI Mai Linh - Niềm nở hỗ trợ giao dịch"
+        onMouseEnter={() => setIsHovered(true)}
+        onMouseLeave={() => setIsHovered(false)}
+        aria-label="Sakura - Trợ lý CSKH Sàn Giao Dịch"
         className="relative group p-1.5 rounded-full cursor-pointer focus:outline-none transition-transform hover:scale-105 active:scale-95"
       >
-        {/* Radar Wave Pulse Background */}
-        <span className="absolute inset-0 rounded-full bg-gradient-to-tr from-pink-500 to-indigo-500 opacity-25 animate-radar-ripple pointer-events-none" />
-        <span className="absolute -inset-1 rounded-full bg-gradient-to-tr from-pink-500 via-purple-500 to-indigo-500 opacity-60 blur-md group-hover:opacity-100 transition-opacity pointer-events-none" />
+        {/* Floating Sakura Petals Animation when hovered */}
+        {isHovered && (
+          <div className="absolute -top-7 -left-3 pointer-events-none select-none z-30">
+            <span className="absolute animate-sakura-petal-1 text-sm">🌸</span>
+            <span className="absolute left-6 animate-sakura-petal-2 text-xs">🌸</span>
+            <span className="absolute left-10 animate-sakura-petal-3 text-xs">✨</span>
+          </div>
+        )}
 
-        {/* Anime Girl Avatar Body Circle */}
-        <div className="relative w-16 h-16 rounded-full bg-gradient-to-b from-[#2e1d42] via-[#1a172e] to-[#0d0f17] border-2 border-pink-400/80 shadow-[0_8px_30px_rgba(244,114,182,0.4)] flex items-center justify-center overflow-hidden animate-anime-float-soft">
-          <AnimeGirlAvatar idPrefix="btn" wavingHand={true} className="w-full h-full transform scale-110 translate-y-1" />
+        {/* Radar Wave Pulse Background */}
+        <span className="absolute inset-0 rounded-full bg-gradient-to-tr from-[#FFB7C5] via-pink-500 to-[#FFD700] opacity-35 animate-radar-ripple pointer-events-none" />
+        <span className="absolute -inset-1 rounded-full bg-gradient-to-tr from-[#FFB7C5] via-[#FFD700] to-[#1A2E40] opacity-70 blur-md group-hover:opacity-100 transition-opacity pointer-events-none" />
+
+        {/* Sakura Avatar Body Circle */}
+        <div className="relative w-16 h-16 rounded-full bg-gradient-to-b from-[#243B53] via-[#1A2E40] to-[#0F1A24] border-2 border-[#FFD700] shadow-[0_8px_30px_rgba(255,183,197,0.5)] flex items-center justify-center overflow-hidden">
+          <img 
+            src={getActiveAvatarSprite()} 
+            alt="Sakura CSKH" 
+            className={`w-full h-full object-cover object-top transform scale-110 translate-y-1.5 transition-all duration-300 ${getActiveAnimationClass()}`}
+          />
+          
+          {/* Star hairpins glint animation */}
+          <span className="absolute top-2.5 left-3 text-yellow-300 animate-star-glint pointer-events-none text-[9px] font-black">
+            ✦
+          </span>
+          <span className="absolute top-3 right-3.5 text-yellow-300 animate-star-glint pointer-events-none text-[9px] font-black [animation-delay:1.8s]">
+            ✦
+          </span>
+
+          {/* Micro microphone pulse wave when speaking */}
+          {isSpeaking && (
+            <span className="absolute bottom-3 right-3 w-3 h-3 rounded-full bg-cyan-400 opacity-80 animate-sakura-mic-wave pointer-events-none" />
+          )}
         </div>
 
-        {/* AI Sparkling Badge */}
-        <div className="absolute -top-1 -right-1 px-1.5 py-0.5 rounded-full bg-gradient-to-r from-pink-500 to-indigo-600 border border-white/80 shadow-md flex items-center gap-0.5 animate-pulse">
-          <Sparkles size={9} className="text-yellow-300" />
-          <span className="text-[9px] font-black tracking-wider text-white">AI</span>
+        {/* Gold SUPPORT Badge */}
+        <div className="absolute -bottom-1 left-1/2 transform -translate-x-1/2 px-2 py-0.2 rounded-full bg-[#1A2E40] border border-[#FFD700] shadow-md flex items-center justify-center">
+          <span className="text-[8px] font-black tracking-widest text-[#FFD700]">SUPPORT</span>
+        </div>
+
+        {/* Active Ping Dot */}
+        <div className="absolute top-0 right-0 w-3.5 h-3.5 rounded-full bg-[#1fc27a] border-2 border-[#1A2E40] shadow-sm flex items-center justify-center">
+          <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
         </div>
       </button>
     </div>
