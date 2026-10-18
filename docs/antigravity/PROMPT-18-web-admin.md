@@ -30,6 +30,7 @@ Dùng chung cho cả đợt: **một** hàm dịch lỗi theo `code` cho admin (
 - **AD-07:** Hoàn thành. Đã sửa trong `pages/UserDetailPage.tsx`: trường `unrealizedPnl` khi null hiển thị dấu gạch ngang "—" với màu trung tính (`admin-futures-upnl`), kèm nhãn/tooltip "Chưa có giá đánh dấu" (không hiển thị 0.00000000 màu xanh vi phạm quy tắc null ≠ 0).
 - **AD-08:** Hoàn thành. Đã sửa nút Bật/Tắt quyền tín hiệu trong `pages/UserDetailPage.tsx`: mở `ConfirmDialog` để admin tự nhập lý do kiểm toán (không tự sinh chuỗi lý do), hiển thị lỗi tiếng Việt trong hộp thoại và giữ hộp thoại mở khi thao tác thất bại.
 - **AD-09:** Hoàn thành. Đã sửa triệt để việc nuốt lỗi ở tất cả các thao tác ghi trên toàn bộ hệ thống admin (`OverviewPage.tsx`, `UserDetailPage.tsx`, `UsersPage.tsx`, `SymbolsPage.tsx`, `InvitesPage.tsx`, `AnnouncementsPage.tsx`, `AssetsPage.tsx`, `FuturesSymbolsPage.tsx`): hiển thị thông báo lỗi chi tiết bằng tiếng Việt trong hộp thoại (`confirm-error`), giữ hộp thoại mở để người dùng biết nguyên nhân và không làm mất bối cảnh thao tác.
+- **AD-10:** Hoàn thành. Đã loại bỏ số ghi cứng ("?? 50" cặp và "Độ trễ Binance < 150ms") trong `pages/OverviewPage.tsx`; hiển thị số lượng cặp LIVE, STALE, UNAVAILABLE thực tế từ `market.symbols` tại `admin-market-health`; hiển thị đúng trạng thái đối soát: null → "CHƯA CHẠY" màu xám và "Chưa chạy đối soát", có sai lệch → "CÓ SAI LỆCH" màu đỏ và số lượng sai lệch màu đỏ; xử lý lỗi tải dữ liệu với khối `list-error` kèm nút "Thử lại".
 
 ## P2
 | ID | File:dòng | Lỗi | Sửa |

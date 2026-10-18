@@ -22,6 +22,8 @@ import {
 
 export const OverviewPage: React.FC<{ onNavigate?: (path: string) => void }> = ({ onNavigate }) => {
   const [overview, setOverview] = useState<AdminOverview | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const { hasPerm } = useAuth();
   const { tradingHalted, refreshHaltState } = useMarket();
   const api = getApiClient();
@@ -32,11 +34,23 @@ export const OverviewPage: React.FC<{ onNavigate?: (path: string) => void }> = (
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isReconciling, setIsReconciling] = useState(false);
   const [reconcileResult, setReconcileResult] = useState<string | null>(null);
+  const [reconcileHasMismatch, setReconcileHasMismatch] = useState(false);
+
+  const loadOverview = async () => {
+    setIsLoading(true);
+    setLoadError(null);
+    try {
+      const data = await api.adminOverview();
+      setOverview(data);
+    } catch (e: any) {
+      setLoadError(formatApiError(e, 'Không thể tải thông tin bảng điều khiển'));
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   useEffect(() => {
-    api.adminOverview()
-      .then(setOverview)
-      .catch(() => {});
+    loadOverview();
   }, []);
 
   const handleOpenHalt = () => {
@@ -75,17 +89,21 @@ export const OverviewPage: React.FC<{ onNavigate?: (path: string) => void }> = (
   const handleQuickReconcile = async () => {
     setIsReconciling(true);
     setReconcileResult(null);
+    setReconcileHasMismatch(false);
     try {
       const res = await api.adminRunReconciliation({ body: {} });
-      if (res.ok) {
+      if (res.ok && (res.mismatches?.length ?? 0) === 0) {
+        setReconcileHasMismatch(false);
         setReconcileResult(`Đối soát thành công! Đã kiểm tra ${res.checkedBalances} số dư ví, 0 sai lệch.`);
       } else {
+        setReconcileHasMismatch(true);
         setReconcileResult(`Phát hiện ${res.mismatches.length} sai lệch cần kiểm tra ngay.`);
       }
       const fresh = await api.adminOverview().catch(() => null);
       if (fresh) setOverview(fresh);
-    } catch {
-      setReconcileResult('Không thể thực hiện đối soát tự động.');
+    } catch (e: any) {
+      setReconcileHasMismatch(true);
+      setReconcileResult(formatApiError(e, 'Không thể thực hiện đối soát tự động.'));
     } finally {
       setIsReconciling(false);
       setTimeout(() => setReconcileResult(null), 6000);
@@ -100,6 +118,44 @@ export const OverviewPage: React.FC<{ onNavigate?: (path: string) => void }> = (
       window.dispatchEvent(new PopStateEvent('popstate'));
     }
   };
+
+  if (loadError && !overview) {
+    return (
+      <div className="p-6 max-w-7xl mx-auto space-y-6" data-testid="admin-overview">
+        <div className="flex items-center justify-between flex-wrap gap-4 border-b border-[var(--line,#1d1e21)] pb-5">
+          <div>
+            <h1 className="text-2xl font-bold text-[var(--text,#f4f4f5)]">Bảng Điều Khiển Quản Trị</h1>
+            <p className="text-sm text-[var(--text-2,#a1a1aa)] mt-1">
+              Trung tâm kiểm soát hệ thống, dòng tiền giao dịch, an toàn sổ cái và tuân thủ nghĩa vụ thuế
+            </p>
+          </div>
+        </div>
+
+        <div
+          data-testid="list-error"
+          className="p-12 text-center bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)] rounded-2xl flex flex-col items-center justify-center"
+        >
+          <div className="w-12 h-12 mb-4 rounded-full bg-[var(--down,#f6465d)]/10 flex items-center justify-center text-[var(--down,#f6465d)]">
+            <AlertTriangle size={24} />
+          </div>
+          <h2 className="text-lg font-semibold text-[var(--text,#f4f4f5)] mb-2">Không thể tải dữ liệu</h2>
+          <p className="text-sm text-[var(--text-2,#a1a1aa)] mb-6 max-w-md">{loadError}</p>
+          <button
+            onClick={loadOverview}
+            disabled={isLoading}
+            className="px-4 py-2 bg-[var(--accent,#818cf8)] text-white text-sm font-medium rounded-lg hover:bg-[var(--accent,#818cf8)]/90 disabled:opacity-50 transition-colors"
+          >
+            Thử lại
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const marketSymbols = overview?.market?.symbols ?? [];
+  const liveCount = marketSymbols.filter((s) => s.status === 'LIVE').length;
+  const staleCount = marketSymbols.filter((s) => s.status === 'STALE').length;
+  const unavailCount = marketSymbols.filter((s) => s.status === 'UNAVAILABLE').length;
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6" data-testid="admin-overview">
@@ -129,9 +185,15 @@ export const OverviewPage: React.FC<{ onNavigate?: (path: string) => void }> = (
       </div>
 
       {reconcileResult && (
-        <div className="p-3.5 rounded-xl bg-[var(--up,#1fc27a)]/10 border border-[var(--up,#1fc27a)]/30 text-xs text-[var(--up,#1fc27a)] flex items-center justify-between">
+        <div
+          className={`p-3.5 rounded-xl text-xs flex items-center justify-between ${
+            reconcileHasMismatch
+              ? 'bg-[var(--down,#f2475f)]/15 border border-[var(--down,#f2475f)]/30 text-[var(--down,#f2475f)]'
+              : 'bg-[var(--up,#1fc27a)]/10 border border-[var(--up,#1fc27a)]/30 text-[var(--up,#1fc27a)]'
+          }`}
+        >
           <div className="flex items-center gap-2">
-            <CheckCircle2 size={16} />
+            {reconcileHasMismatch ? <AlertTriangle size={16} /> : <CheckCircle2 size={16} />}
             <span className="font-semibold">{reconcileResult}</span>
           </div>
           <button onClick={() => setReconcileResult(null)} className="font-bold opacity-70 hover:opacity-100">×</button>
@@ -215,10 +277,12 @@ export const OverviewPage: React.FC<{ onNavigate?: (path: string) => void }> = (
             </span>
           </div>
           <div className="text-2xl font-black text-[var(--text,#f4f4f5)] font-mono">
-            {overview?.market?.symbols?.length ?? 50} <span className="text-xs font-sans text-[var(--text-3,#63636b)] font-normal">cặp giao dịch</span>
+            {overview ? marketSymbols.length : '—'} <span className="text-xs font-sans text-[var(--text-3,#63636b)] font-normal">cặp giao dịch</span>
           </div>
           <div className="text-xs text-[var(--text-3,#63636b)] mt-2 flex items-center justify-between">
-            <span>Độ trễ Binance: <strong className="text-[var(--up,#1fc27a)] font-mono">&lt; 150ms</strong></span>
+            <span data-testid="admin-market-health">
+              {overview ? `${liveCount} LIVE · ${staleCount} STALE · ${unavailCount} UNAVAILABLE` : '—'}
+            </span>
             <span className="text-[11px] text-[var(--accent,#818cf8)] hover:underline cursor-pointer" onClick={() => goTo('/admin/symbols')}>Cấu hình</span>
           </div>
         </div>
@@ -227,17 +291,46 @@ export const OverviewPage: React.FC<{ onNavigate?: (path: string) => void }> = (
         <div className="bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)] p-5 rounded-xl shadow-sm">
           <div className="flex items-center justify-between text-xs text-[var(--text-2,#a1a1aa)] mb-2 font-medium">
             <span className="flex items-center gap-1.5"><Scale size={14} className="text-[var(--accent,#818cf8)]" /> Đối soát sổ cái</span>
-            <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold uppercase ${
-              overview?.lastReconciliation?.ok ? 'bg-[var(--up,#1fc27a)]/15 text-[var(--up,#1fc27a)]' : 'bg-amber-950/40 text-amber-400'
-            }`}>
-              {overview?.lastReconciliation?.ok ? 'KHỚP 100%' : 'CẦN KIỂM TRA'}
-            </span>
+            {overview?.lastReconciliation ? (
+              overview.lastReconciliation.ok && (overview.lastReconciliation.mismatches?.length ?? 0) === 0 ? (
+                <span className="text-[10px] px-1.5 py-0.5 rounded font-bold uppercase bg-[var(--up,#1fc27a)]/15 text-[var(--up,#1fc27a)]">
+                  KHỚP 100%
+                </span>
+              ) : (
+                <span className="text-[10px] px-1.5 py-0.5 rounded font-bold uppercase bg-[var(--down,#f2475f)]/15 text-[var(--down,#f2475f)]">
+                  CÓ SAI LỆCH
+                </span>
+              )
+            ) : (
+              <span className="text-[10px] px-1.5 py-0.5 rounded font-bold uppercase bg-[var(--line,#1d1e21)] text-[var(--text-3,#63636b)]">
+                CHƯA CHẠY
+              </span>
+            )}
           </div>
           <div className="text-2xl font-black text-[var(--text,#f4f4f5)] font-mono">
-            {overview?.lastReconciliation?.checkedBalances ?? 0} <span className="text-xs font-sans text-[var(--text-3,#63636b)] font-normal">ví tài sản</span>
+            {overview?.lastReconciliation ? (
+              <>
+                {overview.lastReconciliation.checkedBalances} <span className="text-xs font-sans text-[var(--text-3,#63636b)] font-normal">ví tài sản</span>
+              </>
+            ) : (
+              <span className="text-base text-[var(--text-3,#63636b)] font-sans font-normal">Chưa chạy đối soát</span>
+            )}
           </div>
           <div className="text-xs text-[var(--text-3,#63636b)] mt-2 flex items-center justify-between">
-            <span>Sai lệch: <strong className="text-[var(--up,#1fc27a)] font-mono">{overview?.lastReconciliation?.mismatches?.length ?? 0}</strong></span>
+            <span>
+              Sai lệch:{' '}
+              {overview?.lastReconciliation ? (
+                (overview.lastReconciliation.mismatches?.length ?? 0) > 0 ? (
+                  <strong className="text-[var(--down,#f2475f)] font-mono">
+                    {overview.lastReconciliation.mismatches.length}
+                  </strong>
+                ) : (
+                  <strong className="text-[var(--up,#1fc27a)] font-mono">0</strong>
+                )
+              ) : (
+                <span className="text-[var(--text-3,#63636b)] font-mono">—</span>
+              )}
+            </span>
             {hasPerm('reconciliation.run') && (
               <button
                 disabled={isReconciling}
