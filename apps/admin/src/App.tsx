@@ -19,6 +19,7 @@ import { ReconciliationPage } from './pages/ReconciliationPage';
 import { RolesPage } from './pages/RolesPage';
 import { TaxManagementPage } from './pages/TaxManagementPage';
 import { NoAccessPage } from './pages/NoAccessPage';
+import { NotFoundPage } from './pages/NotFoundPage';
 
 const AppContent: React.FC = () => {
   // Vite sets base='/admin/', so pathname might be '/admin/' or '/admin/users'
@@ -97,8 +98,7 @@ const AppContent: React.FC = () => {
       return <RolesPage />;
     }
 
-    if (!hasPerm('exchange.read')) return <NoAccessPage />;
-    return <OverviewPage onNavigate={navigate} />;
+    return <NotFoundPage onNavigate={navigate} />;
   };
 
   return (

@@ -4,7 +4,7 @@ import { ApiError } from '@cex/contracts';
 
 type UpdatePreferencesInput = Partial<Preferences>;
 import { getApiClient } from '../services/api.ts';
-import { getErrorMessage } from '../services/errors.ts';
+import { getErrorMessage, formatApiError } from '../services/errors.ts';
 import { useAuth } from '../context/AuthContext.tsx';
 import { useConfig } from '../context/ConfigContext.tsx';
 import { AvatarIcon, AVATAR_LIST } from '../components/AvatarIcon.tsx';
@@ -90,7 +90,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate }) => {
       const stats = await api.accountTradingStats();
       setTradingStats(stats);
     } catch (err: any) {
-      setStatsError(err?.message || 'Không thể tải thống kê giao dịch');
+      setStatsError(formatApiError(err, 'Không tải được thống kê giao dịch'));
     } finally {
       setStatsLoading(false);
     }
@@ -580,10 +580,10 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate }) => {
                     >
                       <div className="text-xs text-[var(--text-3,#63636b)]">Khối lượng hôm nay</div>
                       <div className="text-base font-bold text-[var(--text,#f4f4f5)]">
-                        {formatDecimal(tradingStats.volume.today.total)} <span className="text-xs font-normal text-[var(--text-3,#63636b)]">USDT</span>
+                        {formatDecimal(tradingStats.volume.today.total, { decimals: 2 })} <span className="text-xs font-normal text-[var(--text-3,#63636b)]">USDT</span>
                       </div>
                       <div className="text-[11px] text-[var(--text-2,#a1a1aa)]">
-                        Spot {formatDecimal(tradingStats.volume.today.spot)} · Futures {formatDecimal(tradingStats.volume.today.futures)} · {tradingStats.volume.today.fills} lần khớp
+                        Spot {formatDecimal(tradingStats.volume.today.spot, { decimals: 2 })} · Futures {formatDecimal(tradingStats.volume.today.futures, { decimals: 2 })} · {tradingStats.volume.today.fills} lần khớp
                       </div>
                     </div>
 
@@ -595,10 +595,10 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate }) => {
                     >
                       <div className="text-xs text-[var(--text-3,#63636b)]">Khối lượng 7 ngày</div>
                       <div className="text-base font-bold text-[var(--text,#f4f4f5)]">
-                        {formatDecimal(tradingStats.volume.last7d.total)} <span className="text-xs font-normal text-[var(--text-3,#63636b)]">USDT</span>
+                        {formatDecimal(tradingStats.volume.last7d.total, { decimals: 2 })} <span className="text-xs font-normal text-[var(--text-3,#63636b)]">USDT</span>
                       </div>
                       <div className="text-[11px] text-[var(--text-2,#a1a1aa)]">
-                        Spot {formatDecimal(tradingStats.volume.last7d.spot)} · Futures {formatDecimal(tradingStats.volume.last7d.futures)} · {tradingStats.volume.last7d.fills} lần khớp
+                        Spot {formatDecimal(tradingStats.volume.last7d.spot, { decimals: 2 })} · Futures {formatDecimal(tradingStats.volume.last7d.futures, { decimals: 2 })} · {tradingStats.volume.last7d.fills} lần khớp
                       </div>
                     </div>
 
@@ -610,10 +610,10 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onNavigate }) => {
                     >
                       <div className="text-xs text-[var(--text-3,#63636b)]">Khối lượng 30 ngày</div>
                       <div className="text-base font-bold text-[var(--text,#f4f4f5)]">
-                        {formatDecimal(tradingStats.volume.last30d.total)} <span className="text-xs font-normal text-[var(--text-3,#63636b)]">USDT</span>
+                        {formatDecimal(tradingStats.volume.last30d.total, { decimals: 2 })} <span className="text-xs font-normal text-[var(--text-3,#63636b)]">USDT</span>
                       </div>
                       <div className="text-[11px] text-[var(--text-2,#a1a1aa)]">
-                        Spot {formatDecimal(tradingStats.volume.last30d.spot)} · Futures {formatDecimal(tradingStats.volume.last30d.futures)} · {tradingStats.volume.last30d.fills} lần khớp
+                        Spot {formatDecimal(tradingStats.volume.last30d.spot, { decimals: 2 })} · Futures {formatDecimal(tradingStats.volume.last30d.futures, { decimals: 2 })} · {tradingStats.volume.last30d.fills} lần khớp
                       </div>
                     </div>
                   </div>

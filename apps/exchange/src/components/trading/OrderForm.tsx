@@ -478,15 +478,16 @@ export const OrderForm: React.FC<OrderFormProps> = ({
 
   // Vietnam Tax calculation (Module T)
   const taxMode = exchangeStatus?.taxMode ?? exchangeInfo?.taxMode ?? 'OFF';
-  const taxRate = exchangeStatus?.taxRate ?? exchangeInfo?.taxRate ?? '0.001';
+  const taxRate = exchangeStatus?.taxRate ?? exchangeInfo?.taxRate ?? null;
   const taxVndRate = exchangeStatus ? exchangeStatus.taxVndRate : (exchangeInfo?.taxVndRate ?? null);
   const feeRate = effectiveFeeRate;
 
   const formattedTaxRatePercent = useMemo(() => {
+    if (!taxRate) return '—';
     try {
       return `${formatDecimal(dec(taxRate).mul(100).toString(), { locale: 'vi', trimTrailingZeros: true })}%`;
     } catch {
-      return '0,1%';
+      return '—';
     }
   }, [taxRate]);
 
@@ -1357,18 +1358,18 @@ export const OrderForm: React.FC<OrderFormProps> = ({
                 ~{estimatedFee} {side === 'BUY' ? baseAsset : quoteAsset}
               </span>
             </div>
-            {side === 'BUY' ? (
-              <div data-testid="spot-tax-line" className="flex items-center justify-between">
-                <span>Thuế ({formattedTaxRatePercent}):</span>
-                <span className="font-mono text-[var(--color-text-secondary,#9ca3af)]">
-                  0 — chỉ khấu trừ khi bán
-                </span>
-              </div>
-            ) : taxMode === 'OFF' ? (
+            {taxMode === 'OFF' ? (
               <div data-testid="spot-tax-line" className="flex items-center justify-between">
                 <span>Thuế:</span>
                 <span className="font-mono text-[var(--color-text-secondary,#9ca3af)]">
                   không áp dụng (sàn đang tắt)
+                </span>
+              </div>
+            ) : side === 'BUY' ? (
+              <div data-testid="spot-tax-line" className="flex items-center justify-between">
+                <span>Thuế ({formattedTaxRatePercent}):</span>
+                <span className="font-mono text-[var(--color-text-secondary,#9ca3af)]">
+                  0 — chỉ khấu trừ khi bán
                 </span>
               </div>
             ) : isDomesticOrg ? (
@@ -1511,18 +1512,18 @@ export const OrderForm: React.FC<OrderFormProps> = ({
               <span className="font-mono">~{estimatedFee} {side === 'BUY' ? baseAsset : quoteAsset}</span>
             </div>
 
-            {side === 'BUY' ? (
-              <div data-testid="spot-tax-line" className="flex items-center justify-between text-[11px] text-[var(--color-text-muted,#6b7280)]">
-                <span>Thuế ({formattedTaxRatePercent}):</span>
-                <span className="font-mono text-[var(--color-text-secondary,#9ca3af)]">
-                  0 — chỉ khấu trừ khi bán
-                </span>
-              </div>
-            ) : taxMode === 'OFF' ? (
+            {taxMode === 'OFF' ? (
               <div data-testid="spot-tax-line" className="flex items-center justify-between text-[11px] text-[var(--color-text-muted,#6b7280)]">
                 <span>Thuế:</span>
                 <span className="font-mono text-[var(--color-text-secondary,#9ca3af)]">
                   không áp dụng (sàn đang tắt)
+                </span>
+              </div>
+            ) : side === 'BUY' ? (
+              <div data-testid="spot-tax-line" className="flex items-center justify-between text-[11px] text-[var(--color-text-muted,#6b7280)]">
+                <span>Thuế ({formattedTaxRatePercent}):</span>
+                <span className="font-mono text-[var(--color-text-secondary,#9ca3af)]">
+                  0 — chỉ khấu trừ khi bán
                 </span>
               </div>
             ) : isDomesticOrg ? (

@@ -1448,6 +1448,7 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
           {/* Order Type Tabs */}
           <div className="grid grid-cols-2 gap-1 p-0.5 rounded bg-[var(--panel-2,#141416)] border border-[var(--line,#1d1e21)] text-[11px] font-semibold text-center">
             <button
+              data-testid="futures-order-type-limit"
               onClick={() => setOrderType('LIMIT')}
               className={`py-1 rounded transition-colors cursor-pointer ${orderType === 'LIMIT' ? 'bg-[var(--line,#1d1e21)] text-white' : 'text-[var(--text-3,#63636b)]'}`}
             >
@@ -1467,7 +1468,7 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
             <div className="flex items-center gap-1">
               <span>Khả dụng:</span>
               <span className="font-mono text-white font-semibold">
-                {isAuthenticated ? `${formatDecimal(account?.available || '0.00', { decimals: 2 })} USDT` : '—'}
+                {isAuthenticated ? (account ? `${formatDecimal(account.available, { decimals: 2 })} USDT` : '—') : '—'}
               </span>
             </div>
             <button
@@ -1483,6 +1484,7 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
           {/* Price Input (for Limit) */}
           {orderType === 'LIMIT' && (
             <DecimalInput
+              data-testid="futures-price"
               label="Giá đặt lệnh"
               value={price}
               onValueChange={setPrice}
@@ -1577,6 +1579,7 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
           <div className="flex items-center justify-between pt-1 border-t border-[var(--line,#1d1e21)] text-[11px]">
             <label className="flex items-center gap-1.5 cursor-pointer">
               <input
+                data-testid="futures-tpsl-toggle"
                 type="checkbox"
                 checked={enableTpSl}
                 onChange={(e) => setEnableTpSl(e.target.checked)}
@@ -1602,6 +1605,7 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
               <div>
                 <span className="text-[10px] text-[var(--up,#1fc27a)] font-semibold">Chốt lời (TP)</span>
                 <input
+                  data-testid="futures-order-tp"
                   type="text"
                   value={orderTpPrice}
                   onChange={(e) => setOrderTpPrice(e.target.value)}
@@ -1612,6 +1616,7 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
               <div>
                 <span className="text-[10px] text-[var(--down,#f2475f)] font-semibold">Cắt lỗ (SL)</span>
                 <input
+                  data-testid="futures-order-sl"
                   type="text"
                   value={orderSlPrice}
                   onChange={(e) => setOrderSlPrice(e.target.value)}
@@ -1626,21 +1631,33 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
           <div className="space-y-1.5 p-2.5 rounded bg-[var(--panel-2,#141416)] border border-[var(--line,#1d1e21)] text-[11px] text-[var(--text-3,#63636b)]">
             <div className="flex items-center justify-between">
               <span>Giá trị lệnh:</span>
-              <span data-testid="futures-est-notional" className="font-mono text-white">
+              <span
+                data-testid="futures-est-notional"
+                data-value={orderNotional.toString()}
+                className="font-mono text-white"
+              >
                 {formatDecimal(orderNotional.toString())} USDT
               </span>
             </div>
 
             <div className="flex items-center justify-between">
               <span>Ký quỹ ban đầu:</span>
-              <span data-testid="futures-est-margin" className="font-mono text-white">
+              <span
+                data-testid="futures-est-margin"
+                data-value={estMargin.toString()}
+                className="font-mono text-white"
+              >
                 {formatDecimal(estMargin.toString())} USDT
               </span>
             </div>
 
             <div className="flex items-center justify-between">
               <span>Phí mở (ước tính):</span>
-              <span data-testid="futures-est-fee" className="font-mono text-white text-right">
+              <span
+                data-testid="futures-est-fee"
+                data-value={estFee.toString()}
+                className="font-mono text-white text-right"
+              >
                 {takerFeePercent !== null ? (
                   <>
                     {formatDecimal(estFee.toString())} USDT ({takerFeePercent}% taker){orderType === 'LIMIT' && makerFeePercent !== null ? `; tối đa theo taker, khớp maker ${makerFeePercent}% thì hoàn chênh` : ''}
@@ -1673,10 +1690,10 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
               <span>Tối đa mở được:</span>
               <div className="flex items-center gap-2 font-mono text-[10px]">
                 <span className="text-[var(--up,#1fc27a)]">
-                  Long: <span data-testid="futures-max-long">{maxLong.toString()} {baseAsset}</span>
+                  Long: <span data-testid="futures-max-long" data-value={maxLong.toString()}>{maxLong.toString()} {baseAsset}</span>
                 </span>
                 <span className="text-[var(--down,#f2475f)]">
-                  Short: <span data-testid="futures-max-short">{maxShort.toString()} {baseAsset}</span>
+                  Short: <span data-testid="futures-max-short" data-value={maxShort.toString()}>{maxShort.toString()} {baseAsset}</span>
                 </span>
               </div>
             </div>
@@ -1965,19 +1982,31 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
             </div>
             <div className="flex items-center justify-between pb-2 border-b border-[var(--line,#1d1e21)]">
               <span className="text-[var(--text-3,#63636b)]">Giá trị lệnh:</span>
-              <span data-testid="futures-confirm-notional" className="font-mono text-white font-semibold">
+              <span
+                data-testid="futures-confirm-notional"
+                data-value={orderNotional.toString()}
+                className="font-mono text-white font-semibold"
+              >
                 {formatDecimal(orderNotional.toString())} USDT
               </span>
             </div>
             <div className="flex items-center justify-between pb-2 border-b border-[var(--line,#1d1e21)]">
               <span className="text-[var(--text-3,#63636b)]">Ký quỹ ban đầu:</span>
-              <span data-testid="futures-confirm-margin" className="font-mono text-white font-semibold">
+              <span
+                data-testid="futures-confirm-margin"
+                data-value={estMargin.toString()}
+                className="font-mono text-white font-semibold"
+              >
                 {formatDecimal(estMargin.toString())} USDT
               </span>
             </div>
             <div className="flex items-center justify-between pb-2 border-b border-[var(--line,#1d1e21)]">
               <span className="text-[var(--text-3,#63636b)]">Phí mở (ước tính):</span>
-              <span data-testid="futures-confirm-fee" className="font-mono text-white font-semibold">
+              <span
+                data-testid="futures-confirm-fee"
+                data-value={estFee.toString()}
+                className="font-mono text-white font-semibold"
+              >
                 {takerFeePercent !== null ? `${formatDecimal(estFee.toString())} USDT (${takerFeePercent}% taker)` : '—'}
               </span>
             </div>

@@ -615,10 +615,10 @@ export const UsersPage: React.FC<{ onNavigate: (path: string) => void }> = ({ on
                 onChange={(e) => setNewRole(e.target.value as Role)}
                 className="w-full bg-[var(--bg,#000000)] border border-[var(--line,#1d1e21)] rounded-lg p-2.5 text-sm text-[var(--text,#f4f4f5)] outline-none focus:border-[var(--accent,#818cf8)] font-semibold"
               >
-                <option value="user">User (Khách giao dịch bình thường)</option>
-                <option value="support">Support (Nhân viên hỗ trợ, chỉ xem)</option>
-                <option value="admin">Admin (Quản trị viên toàn quyền)</option>
-                <option value="owner">Owner (Chủ sở hữu sàn)</option>
+                <option value="user">User — Khách giao dịch (Spot, Futures, Faucet; không có quyền quản trị)</option>
+                <option value="support">Support — Chăm sóc khách hàng (Chỉ đọc dữ liệu tài khoản, sàn, đối soát, thuế, tin tức)</option>
+                <option value="admin">Admin — Quản trị viên (Khóa/mở khóa, điều chỉnh số dư, bot, thuế, cấu hình sàn; không phân quyền nhân sự)</option>
+                <option value="owner">Owner — Chủ sở hữu (Toàn quyền hệ thống, phân quyền vai trò nhân sự)</option>
               </select>
             </div>
 

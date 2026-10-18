@@ -73,9 +73,9 @@ export const SettingsPage: React.FC = () => {
       if (d.lt(0) || d.gt(1)) {
         errors.spotFee = 'Phí Spot phải từ 0% đến 1% (tương ứng 0 đến 0.01)';
       } else {
-        const newFeeRate = d.div(100).toString();
-        if (newFeeRate !== settings.feeRate) {
-          body.feeRate = newFeeRate;
+        const rateDec = d.div(100);
+        if (!rateDec.eq(settings.feeRate)) {
+          body.feeRate = rateDec.toFixed();
           diffs.push(`Phí Spot: ${dec(settings.feeRate).mul(100).toString()}% → ${sFee}%`);
         }
       }
@@ -92,9 +92,9 @@ export const SettingsPage: React.FC = () => {
       if (d.lt(0) || d.gt(1)) {
         errors.futuresMaker = 'Phí Maker Futures phải từ 0% đến 1%';
       } else {
-        const newMaker = d.div(100).toString();
-        if (newMaker !== settings.futures.makerFee) {
-          body.futuresMakerFee = newMaker;
+        const rateDec = d.div(100);
+        if (!rateDec.eq(settings.futures.makerFee)) {
+          body.futuresMakerFee = rateDec.toFixed();
           diffs.push(`Phí Maker Futures: ${dec(settings.futures.makerFee).mul(100).toString()}% → ${fMaker}%`);
         }
       }
@@ -111,9 +111,9 @@ export const SettingsPage: React.FC = () => {
       if (d.lt(0) || d.gt(1)) {
         errors.futuresTaker = 'Phí Taker Futures phải từ 0% đến 1%';
       } else {
-        const newTaker = d.div(100).toString();
-        if (newTaker !== settings.futures.takerFee) {
-          body.futuresTakerFee = newTaker;
+        const rateDec = d.div(100);
+        if (!rateDec.eq(settings.futures.takerFee)) {
+          body.futuresTakerFee = rateDec.toFixed();
           diffs.push(`Phí Taker Futures: ${dec(settings.futures.takerFee).mul(100).toString()}% → ${fTaker}%`);
         }
       }
@@ -130,9 +130,9 @@ export const SettingsPage: React.FC = () => {
       if (d.lt(0) || d.gt(5)) {
         errors.futuresLiq = 'Phí Thanh lý phải từ 0% đến 5%';
       } else {
-        const newLiq = d.div(100).toString();
-        if (newLiq !== settings.futures.liquidationFee) {
-          body.futuresLiquidationFee = newLiq;
+        const rateDec = d.div(100);
+        if (!rateDec.eq(settings.futures.liquidationFee)) {
+          body.futuresLiquidationFee = rateDec.toFixed();
           diffs.push(`Phí Thanh lý: ${dec(settings.futures.liquidationFee).mul(100).toString()}% → ${fLiq}%`);
         }
       }

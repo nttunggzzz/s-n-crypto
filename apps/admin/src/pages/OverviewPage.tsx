@@ -302,7 +302,12 @@ export const OverviewPage: React.FC<{ onNavigate?: (path: string) => void }> = (
             {overview ? marketSymbols.length : '—'} <span className="text-xs font-sans text-[var(--text-3,#63636b)] font-normal">cặp giao dịch</span>
           </div>
           <div className="text-xs text-[var(--text-3,#63636b)] mt-2 flex items-center justify-between">
-            <span data-testid="admin-market-health">
+            <span
+              data-testid="admin-market-health"
+              data-live={liveCount}
+              data-stale={staleCount}
+              data-unavailable={unavailCount}
+            >
               {overview ? `${liveCount} LIVE · ${staleCount} STALE · ${unavailCount} UNAVAILABLE` : '—'}
             </span>
             <span className="text-[11px] text-[var(--accent,#818cf8)] hover:underline cursor-pointer" onClick={() => goTo('/admin/symbols')}>Cấu hình</span>
@@ -367,55 +372,63 @@ export const OverviewPage: React.FC<{ onNavigate?: (path: string) => void }> = (
       </div>
 
       {/* SECTION 2: QUICK MANAGEMENT SHORTCUTS */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div
-          onClick={() => goTo('/admin/users')}
-          className="bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)] hover:border-[var(--accent,#818cf8)]/40 p-5 rounded-xl cursor-pointer transition-all group shadow-sm"
-        >
-          <div className="flex items-center justify-between mb-3">
-            <div className="p-2 rounded-lg bg-blue-950/40 text-blue-400">
-              <Users size={18} />
+      {(hasPerm('users.read') || hasPerm('users.roles') || hasPerm('exchange.read')) && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {hasPerm('users.read') && (
+            <div
+              onClick={() => goTo('/admin/users')}
+              className="bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)] hover:border-[var(--accent,#818cf8)]/40 p-5 rounded-xl cursor-pointer transition-all group shadow-sm"
+            >
+              <div className="flex items-center justify-between mb-3">
+                <div className="p-2 rounded-lg bg-blue-950/40 text-blue-400">
+                  <Users size={18} />
+                </div>
+                <ArrowUpRight size={16} className="text-[var(--text-3,#63636b)] group-hover:text-[var(--accent,#818cf8)] transition-colors" />
+              </div>
+              <div className="text-base font-bold text-[var(--text,#f4f4f5)]">Quản lý Thành viên</div>
+              <p className="text-xs text-[var(--text-2,#a1a1aa)] mt-1">
+                Tra cứu theo UID, thêm thành viên mới, khóa tài khoản nghi gian lận, điều chỉnh số dư và vô hiệu hóa tài khoản.
+              </p>
             </div>
-            <ArrowUpRight size={16} className="text-[var(--text-3,#63636b)] group-hover:text-[var(--accent,#818cf8)] transition-colors" />
-          </div>
-          <div className="text-base font-bold text-[var(--text,#f4f4f5)]">Quản lý Thành viên</div>
-          <p className="text-xs text-[var(--text-2,#a1a1aa)] mt-1">
-            Tra cứu theo UID, thêm thành viên mới, khóa tài khoản nghi gian lận, điều chỉnh số dư và vô hiệu hóa tài khoản.
-          </p>
-        </div>
+          )}
 
-        <div
-          onClick={() => goTo('/admin/roles')}
-          className="bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)] hover:border-[var(--accent,#818cf8)]/40 p-5 rounded-xl cursor-pointer transition-all group shadow-sm"
-        >
-          <div className="flex items-center justify-between mb-3">
-            <div className="p-2 rounded-lg bg-purple-950/40 text-purple-400">
-              <ShieldCheck size={18} />
+          {hasPerm('users.roles') && (
+            <div
+              onClick={() => goTo('/admin/roles')}
+              className="bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)] hover:border-[var(--accent,#818cf8)]/40 p-5 rounded-xl cursor-pointer transition-all group shadow-sm"
+            >
+              <div className="flex items-center justify-between mb-3">
+                <div className="p-2 rounded-lg bg-purple-950/40 text-purple-400">
+                  <ShieldCheck size={18} />
+                </div>
+                <ArrowUpRight size={16} className="text-[var(--text-3,#63636b)] group-hover:text-[var(--accent,#818cf8)] transition-colors" />
+              </div>
+              <div className="text-base font-bold text-[var(--text,#f4f4f5)]">Phân quyền & Vai trò</div>
+              <p className="text-xs text-[var(--text-2,#a1a1aa)] mt-1">
+                Cấp quyền nhân sự (Support, Admin, Owner), kiểm tra trạng thái bảo mật 2FA và bổ nhiệm nhân sự mới.
+              </p>
             </div>
-            <ArrowUpRight size={16} className="text-[var(--text-3,#63636b)] group-hover:text-[var(--accent,#818cf8)] transition-colors" />
-          </div>
-          <div className="text-base font-bold text-[var(--text,#f4f4f5)]">Phân quyền & Vai trò</div>
-          <p className="text-xs text-[var(--text-2,#a1a1aa)] mt-1">
-            Cấp quyền nhân sự (Support, Operator, Admin, Owner), kiểm tra trạng thái bảo mật 2FA và bổ nhiệm nhân sự mới.
-          </p>
-        </div>
+          )}
 
-        <div
-          onClick={() => goTo('/admin/settings')}
-          className="bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)] hover:border-[var(--accent,#818cf8)]/40 p-5 rounded-xl cursor-pointer transition-all group shadow-sm"
-        >
-          <div className="flex items-center justify-between mb-3">
-            <div className="p-2 rounded-lg bg-amber-950/40 text-amber-400">
-              <Building size={18} />
+          {hasPerm('exchange.read') && (
+            <div
+              onClick={() => goTo('/admin/settings')}
+              className="bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)] hover:border-[var(--accent,#818cf8)]/40 p-5 rounded-xl cursor-pointer transition-all group shadow-sm"
+            >
+              <div className="flex items-center justify-between mb-3">
+                <div className="p-2 rounded-lg bg-amber-950/40 text-amber-400">
+                  <Building size={18} />
+                </div>
+                <ArrowUpRight size={16} className="text-[var(--text-3,#63636b)] group-hover:text-[var(--accent,#818cf8)] transition-colors" />
+              </div>
+              <div className="text-base font-bold text-[var(--text,#f4f4f5)]">Thông số Sàn & Faucet</div>
+              <p className="text-xs text-[var(--text-2,#a1a1aa)] mt-1">
+                Cấu hình tỷ lệ phí Spot, Maker/Taker Futures, hạn mức Faucet nạp tiền thử nghiệm và ngưỡng cảnh báo trễ giá.
+              </p>
             </div>
-            <ArrowUpRight size={16} className="text-[var(--text-3,#63636b)] group-hover:text-[var(--accent,#818cf8)] transition-colors" />
-          </div>
-          <div className="text-base font-bold text-[var(--text,#f4f4f5)]">Thông số Sàn & Faucet</div>
-          <p className="text-xs text-[var(--text-2,#a1a1aa)] mt-1">
-            Cấu hình tỷ lệ phí Spot, Maker/Taker Futures, hạn mức Faucet nạp tiền thử nghiệm và ngưỡng cảnh báo trễ giá.
-          </p>
+          )}
         </div>
-      </div>
+      )}
 
       <ConfirmDialog
         isOpen={isConfirmOpen}

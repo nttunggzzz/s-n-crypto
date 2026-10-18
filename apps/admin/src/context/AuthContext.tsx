@@ -1,7 +1,9 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import type { Me } from '@cex/contracts';
 import { ApiError, canOpenAdmin, hasPermission, Permission, appLinks } from '@cex/contracts';
+import { AlertTriangle } from 'lucide-react';
 import { getApiClient, getRealtimeClient } from '../services/api.ts';
+import { formatApiError } from '../services/errors.ts';
 
 interface AuthContextType {
   user: Me | null;
@@ -15,6 +17,7 @@ const AuthContext = createContext<AuthContextType | null>(null);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<Me | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [authError, setAuthError] = useState<string | null>(null);
   const [staffTwoFactorRequired, setStaffTwoFactorRequired] = useState(true);
   const [twoFactorRequiredByApi, setTwoFactorRequiredByApi] = useState(false);
 
@@ -28,30 +31,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => window.removeEventListener('admin:two-factor-required', handle2FaReq);
   }, []);
 
-  useEffect(() => {
-    let mounted = true;
-
-    async function load() {
-      try {
-        const [me, cfg] = await Promise.all([
-          api.me(),
-          api.publicConfig().catch(() => null),
-        ]);
-        if (mounted) {
-          setUser(me);
-          if (cfg && typeof cfg.staffTwoFactorRequired === 'boolean') {
-            setStaffTwoFactorRequired(cfg.staffTwoFactorRequired);
-          }
-        }
-      } catch (err: any) {
-        if (err instanceof ApiError && err.status === 401) {
-          window.location.href = appLinks.exchange.login(window.location.pathname + window.location.search, import.meta.env.VITE_EXCHANGE_ORIGIN);
-        }
-      } finally {
-        if (mounted) setIsLoading(false);
+  const loadUser = useCallback(async () => {
+    setIsLoading(true);
+    setAuthError(null);
+    try {
+      const [me, cfg] = await Promise.all([
+        api.me(),
+        api.publicConfig().catch(() => null),
+      ]);
+      setUser(me);
+      if (cfg && typeof cfg.staffTwoFactorRequired === 'boolean') {
+        setStaffTwoFactorRequired(cfg.staffTwoFactorRequired);
       }
+    } catch (err: any) {
+      if (err instanceof ApiError && err.status === 401) {
+        window.location.href = appLinks.exchange.login(window.location.pathname + window.location.search, import.meta.env.VITE_EXCHANGE_ORIGIN);
+        return;
+      }
+      setAuthError(formatApiError(err, 'Không thể tải thông tin tài khoản. Vui lòng thử lại.'));
+    } finally {
+      setIsLoading(false);
     }
-    load();
+  }, [api]);
+
+  useEffect(() => {
+    loadUser();
 
     let unsubError: (() => void) | undefined;
     let unsubClose: (() => void) | undefined;
@@ -81,14 +85,34 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch {}
 
     return () => {
-      mounted = false;
       unsubError?.();
       unsubClose?.();
     };
-  }, []);
+  }, [api, loadUser]);
 
   if (isLoading) {
     return <div className="min-h-screen flex items-center justify-center bg-bg text-text">Đang tải...</div>;
+  }
+
+  if (authError && !user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[var(--bg,#000000)] text-[var(--text,#f4f4f5)]">
+        <div className="bg-[var(--panel,#0a0a0b)] p-8 rounded-2xl border border-[var(--line,#1d1e21)] max-w-md text-center shadow-xl">
+          <div className="w-12 h-12 mx-auto mb-4 rounded-full bg-[var(--down,#f2475f)]/10 flex items-center justify-center text-[var(--down,#f2475f)]">
+            <AlertTriangle size={24} />
+          </div>
+          <h2 className="text-xl font-bold mb-2">Không thể tải thông tin phiên</h2>
+          <p className="text-sm text-[var(--text-2,#a1a1aa)] mb-6">{authError}</p>
+          <button
+            type="button"
+            onClick={() => loadUser()}
+            className="px-4 py-2 rounded-lg bg-[var(--accent,#818cf8)] text-white text-xs font-semibold hover:brightness-110 transition-all cursor-pointer"
+          >
+            Thử lại
+          </button>
+        </div>
+      </div>
+    );
   }
 
   if (user && !canOpenAdmin(user)) {

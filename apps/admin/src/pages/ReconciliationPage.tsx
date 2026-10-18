@@ -12,12 +12,15 @@ import {
   ChevronDown,
   ChevronRight,
   ExternalLink,
+  Copy,
+  Check,
 } from 'lucide-react';
 
 const MISMATCHES_PER_PAGE = 10;
 
 export const ReconciliationPage: React.FC<{ onNavigate?: (path: string) => void }> = ({ onNavigate }) => {
   const { hasPerm } = useAuth();
+  const [copiedId, setCopiedId] = useState<string | null>(null);
   const [runs, setRuns] = useState<ReconciliationRun[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -196,8 +199,23 @@ export const ReconciliationPage: React.FC<{ onNavigate?: (path: string) => void 
                       <td className="px-2 py-3 text-center text-[var(--text-3,#63636b)]">
                         {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                       </td>
-                      <td className="px-4 py-3 font-mono text-[var(--text-3,#63636b)]" title={r.id}>
-                        {r.id.slice(0, 8)}...
+                      <td className="px-4 py-3 font-mono text-[var(--text-3,#63636b)]">
+                        <div className="flex items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                          <span title={r.id}>{r.id}</span>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              navigator.clipboard.writeText(r.id);
+                              setCopiedId(r.id);
+                              setTimeout(() => setCopiedId(null), 2000);
+                            }}
+                            className="p-1 hover:text-[var(--text,#f4f4f5)] text-[var(--text-3,#63636b)] transition-colors cursor-pointer"
+                            title="Sao chép mã phiên"
+                          >
+                            {copiedId === r.id ? <Check size={12} className="text-[var(--up,#1fc27a)]" /> : <Copy size={12} />}
+                          </button>
+                        </div>
                       </td>
                       <td className="px-4 py-3 text-[var(--text-2,#a1a1aa)]">
                         {new Date(r.startedAt).toLocaleString('vi-VN')}

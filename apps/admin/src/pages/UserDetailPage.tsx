@@ -49,6 +49,14 @@ const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
   TAX_SETTINGS_UPDATE: 'Cấu hình thuế',
 };
 
+const CLOSE_REASON_LABELS: Record<string, string> = {
+  USER: 'Người dùng đóng',
+  TAKE_PROFIT: 'Chốt lời (TP)',
+  STOP_LOSS: 'Cắt lỗ (SL)',
+  LIQUIDATION: 'Thanh lý',
+  ADMIN: 'Quản trị viên đóng',
+};
+
 const LEDGER_TYPE_LABELS: Record<string, string> = {
   FAUCET: 'Nhận Faucet',
   ORDER_LOCK: 'Khóa lệnh',
@@ -100,28 +108,17 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
   // Tab detailed data
   const [orders, setOrders] = useState<Order[]>([]);
   const [ordersType, setOrdersType] = useState<'true' | 'false'>('true');
-  const [ledgerEntries, setLedgerEntries] = useState<LedgerEntry[]>([]);
-  const [positions, setPositions] = useState<FuturesPosition[]>([]);
-  const [positionsType, setPositionsType] = useState<'true' | 'false'>('true');
-  const [userBots, setUserBots] = useState<{ grid: GridBot[]; dca: DcaPlan[] }>({ grid: [], dca: [] });
-  const [allLogins, setAllLogins] = useState<LoginEvent[]>([]);
-  const [taxWithholdings, setTaxWithholdings] = useState<AdminTaxWithholding[]>([]);
-  const [taxLoading, setTaxLoading] = useState(false);
-  const [taxNextCursor, setTaxNextCursor] = useState<string | null>(null);
-
-  // User Audit Logs state (AD-23)
-  const [userAuditLogs, setUserAuditLogs] = useState<AuditLogEntry[]>([]);
-  const [auditLogsLoading, setAuditLogsLoading] = useState(false);
-  const [auditLogsError, setAuditLogsError] = useState<string | null>(null);
-  const [auditLogsNextCursor, setAuditLogsNextCursor] = useState<string | null>(null);
-  const [auditLogsLoadingMore, setAuditLogsLoadingMore] = useState(false);
-  const [selectedAuditEntry, setSelectedAuditEntry] = useState<AuditLogEntry | null>(null);
-
+  const [ordersLoading, setOrdersLoading] = useState(false);
+  const [ordersError, setOrdersError] = useState<string | null>(null);
   const [ordersNextCursor, setOrdersNextCursor] = useState<string | null>(null);
   const [ordersLoadingMore, setOrdersLoadingMore] = useState(false);
+  const [ordersLoadMoreError, setOrdersLoadMoreError] = useState<string | null>(null);
+  const [copiedOrderId, setCopiedOrderId] = useState<string | null>(null);
 
+  const [ledgerEntries, setLedgerEntries] = useState<LedgerEntry[]>([]);
   const [ledgerNextCursor, setLedgerNextCursor] = useState<string | null>(null);
   const [ledgerLoadingMore, setLedgerLoadingMore] = useState(false);
+  const [ledgerLoadMoreError, setLedgerLoadMoreError] = useState<string | null>(null);
   const [ledgerAsset, setLedgerAsset] = useState<string>('');
   const [ledgerHideLocks, setLedgerHideLocks] = useState<boolean>(true);
   const [ledgerFrom, setLedgerFrom] = useState<string>('');
@@ -129,11 +126,42 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
   const [ledgerLoading, setLedgerLoading] = useState(false);
   const [ledgerError, setLedgerError] = useState<string | null>(null);
 
+  const [positions, setPositions] = useState<FuturesPosition[]>([]);
+  const [positionsType, setPositionsType] = useState<'true' | 'false'>('true');
+  const [positionsLoading, setPositionsLoading] = useState(false);
+  const [positionsError, setPositionsError] = useState<string | null>(null);
   const [positionsNextCursor, setPositionsNextCursor] = useState<string | null>(null);
   const [positionsLoadingMore, setPositionsLoadingMore] = useState(false);
+  const [positionsLoadMoreError, setPositionsLoadMoreError] = useState<string | null>(null);
 
+  const [userBots, setUserBots] = useState<{ grid: GridBot[]; dca: DcaPlan[] }>({ grid: [], dca: [] });
+  const [botsLoading, setBotsLoading] = useState(false);
+  const [botsError, setBotsError] = useState<string | null>(null);
+
+  const [allLogins, setAllLogins] = useState<LoginEvent[]>([]);
+  const [loginsLoading, setLoginsLoading] = useState(false);
+  const [loginsError, setLoginsError] = useState<string | null>(null);
   const [loginsNextCursor, setLoginsNextCursor] = useState<string | null>(null);
   const [loginsLoadingMore, setLoginsLoadingMore] = useState(false);
+  const [loginsLoadMoreError, setLoginsLoadMoreError] = useState<string | null>(null);
+
+  const [taxWithholdings, setTaxWithholdings] = useState<AdminTaxWithholding[]>([]);
+  const [taxLoading, setTaxLoading] = useState(false);
+  const [taxError, setTaxError] = useState<string | null>(null);
+  const [taxNextCursor, setTaxNextCursor] = useState<string | null>(null);
+  const [taxLoadingMore, setTaxLoadingMore] = useState(false);
+  const [taxLoadMoreError, setTaxLoadMoreError] = useState<string | null>(null);
+
+  // User Audit Logs state (AD-23)
+  const [userAuditLogs, setUserAuditLogs] = useState<AuditLogEntry[]>([]);
+  const [auditLogsLoading, setAuditLogsLoading] = useState(false);
+  const [auditLogsError, setAuditLogsError] = useState<string | null>(null);
+  const [auditLogsNextCursor, setAuditLogsNextCursor] = useState<string | null>(null);
+  const [auditLogsLoadingMore, setAuditLogsLoadingMore] = useState(false);
+  const [auditLogsLoadMoreError, setAuditLogsLoadMoreError] = useState<string | null>(null);
+  const [selectedAuditEntry, setSelectedAuditEntry] = useState<AuditLogEntry | null>(null);
+
+  const [sellBase, setSellBase] = useState(false);
 
   // Role change modal state
   const [roleModalOpen, setRoleModalOpen] = useState(false);
@@ -270,6 +298,8 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
         setLedgerEntries([]);
         setLedgerNextCursor(null);
         setLedgerError(formatApiError(err, 'Có lỗi xảy ra khi tải sổ cái.'));
+      } else {
+        setLedgerLoadMoreError(formatApiError(err, 'Không tải thêm được sổ cái.'));
       }
     } finally {
       if (isLoadMore) {
@@ -305,6 +335,8 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
         if (!isLoadMore) {
           setUserAuditLogs([]);
           setAuditLogsError(formatApiError(err, 'Không thể tải nhật ký thao tác của người dùng.'));
+        } else {
+          setAuditLogsLoadMoreError(formatApiError(err, 'Không tải thêm được nhật ký thao tác.'));
         }
       } finally {
         if (isLoadMore) {
@@ -317,93 +349,152 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
     [actualId, notFound, auditLogsLoadingMore, api]
   );
 
+  const loadOrders = useCallback(async () => {
+    if (!actualId || notFound) return;
+    setOrdersLoading(true);
+    setOrdersError(null);
+    setOrdersLoadMoreError(null);
+    try {
+      const r = await api.adminUserOrders({ params: { userId: actualId }, query: { open: ordersType, limit: 50 } });
+      setOrders(r.items);
+      setOrdersNextCursor(r.nextCursor);
+    } catch (err: any) {
+      setOrdersError(formatApiError(err, 'Có lỗi xảy ra khi tải danh sách lệnh.'));
+      setOrders([]);
+      setOrdersNextCursor(null);
+    } finally {
+      setOrdersLoading(false);
+    }
+  }, [actualId, notFound, ordersType, api]);
+
+  const loadPositions = useCallback(async () => {
+    if (!actualId || notFound) return;
+    setPositionsLoading(true);
+    setPositionsError(null);
+    setPositionsLoadMoreError(null);
+    try {
+      const r = await api.adminUserFuturesPositions({ params: { userId: actualId }, query: { open: positionsType, limit: 50 } });
+      setPositions(r.items);
+      setPositionsNextCursor(r.nextCursor);
+    } catch (err: any) {
+      setPositionsError(formatApiError(err, 'Có lỗi xảy ra khi tải danh sách vị thế.'));
+      setPositions([]);
+      setPositionsNextCursor(null);
+    } finally {
+      setPositionsLoading(false);
+    }
+  }, [actualId, notFound, positionsType, api]);
+
+  const loadBots = useCallback(async () => {
+    if (!actualId || notFound) return;
+    setBotsLoading(true);
+    setBotsError(null);
+    try {
+      const r = await api.adminUserBots({ params: { userId: actualId } });
+      setUserBots(r);
+    } catch (err: any) {
+      setBotsError(formatApiError(err, 'Không tải được danh sách bot và DCA.'));
+      setUserBots({ grid: [], dca: [] });
+    } finally {
+      setBotsLoading(false);
+    }
+  }, [actualId, notFound, api]);
+
+  const loadLogins = useCallback(async () => {
+    if (!actualId || notFound) return;
+    setLoginsLoading(true);
+    setLoginsError(null);
+    setLoginsLoadMoreError(null);
+    try {
+      const r = await api.adminUserLoginHistory({ params: { userId: actualId }, query: { limit: 50 } });
+      setAllLogins(r.items);
+      setLoginsNextCursor(r.nextCursor);
+    } catch (err: any) {
+      setLoginsError(formatApiError(err, 'Có lỗi xảy ra khi tải lịch sử đăng nhập.'));
+      setAllLogins([]);
+      setLoginsNextCursor(null);
+    } finally {
+      setLoginsLoading(false);
+    }
+  }, [actualId, notFound, api]);
+
+  const loadTax = useCallback(async () => {
+    if (!actualId || notFound) return;
+    setTaxLoading(true);
+    setTaxError(null);
+    setTaxLoadMoreError(null);
+    try {
+      const r = await api.adminTaxWithholdings({ query: { userId: actualId, limit: 50 } });
+      setTaxWithholdings(r.items);
+      setTaxNextCursor(r.nextCursor);
+    } catch (err: any) {
+      setTaxError(formatApiError(err, 'Có lỗi xảy ra khi tải hồ sơ thuế.'));
+      setTaxWithholdings([]);
+      setTaxNextCursor(null);
+    } finally {
+      setTaxLoading(false);
+    }
+  }, [actualId, notFound, api]);
+
   // Load tab-specific data when tab changes
   useEffect(() => {
     if (!actualId || notFound) return;
 
     if (activeTab === 'orders') {
-      api.adminUserOrders({ params: { userId: actualId }, query: { open: ordersType, limit: 50 } })
-        .then((r) => {
-          setOrders(r.items);
-          setOrdersNextCursor(r.nextCursor);
-        })
-        .catch(() => {
-          setOrders([]);
-          setOrdersNextCursor(null);
-        });
+      loadOrders();
     } else if (activeTab === 'ledger') {
       loadLedger(false);
     } else if (activeTab === 'futures') {
-      api.adminUserFuturesPositions({ params: { userId: actualId }, query: { open: positionsType, limit: 50 } })
-        .then((r) => {
-          setPositions(r.items);
-          setPositionsNextCursor(r.nextCursor);
-        })
-        .catch(() => {
-          setPositions([]);
-          setPositionsNextCursor(null);
-        });
+      loadPositions();
     } else if (activeTab === 'bots') {
-      api.adminUserBots({ params: { userId: actualId } })
-        .then((r) => setUserBots(r))
-        .catch(() => {});
+      loadBots();
     } else if (activeTab === 'logins') {
-      api.adminUserLoginHistory({ params: { userId: actualId }, query: { limit: 50 } })
-        .then((r) => {
-          setAllLogins(r.items);
-          setLoginsNextCursor(r.nextCursor);
-        })
-        .catch(() => {
-          setAllLogins([]);
-          setLoginsNextCursor(null);
-        });
+      loadLogins();
     } else if (activeTab === 'tax') {
-      setTaxLoading(true);
-      api.adminTaxWithholdings({ query: { userId: actualId, limit: 50 } })
-        .then((r) => {
-          setTaxWithholdings(r.items);
-          setTaxNextCursor(r.nextCursor);
-        })
-        .catch(() => {
-          setTaxWithholdings([]);
-          setTaxNextCursor(null);
-        })
-        .finally(() => setTaxLoading(false));
+      loadTax();
     } else if (activeTab === 'audit') {
       loadUserAuditLogs(false);
     }
-  }, [actualId, notFound, activeTab, ordersType, positionsType, api, loadLedger, loadUserAuditLogs]);
+  }, [actualId, notFound, activeTab, loadOrders, loadLedger, loadPositions, loadBots, loadLogins, loadTax, loadUserAuditLogs]);
 
   const loadMoreOrders = async () => {
     if (!ordersNextCursor || !actualId || notFound || ordersLoadingMore) return;
     setOrdersLoadingMore(true);
+    setOrdersLoadMoreError(null);
     try {
       const r = await api.adminUserOrders({ params: { userId: actualId }, query: { open: ordersType, cursor: ordersNextCursor, limit: 50 } });
       setOrders((prev) => [...prev, ...r.items]);
       setOrdersNextCursor(r.nextCursor);
-    } catch {} finally {
+    } catch (err: any) {
+      setOrdersLoadMoreError(formatApiError(err, 'Không tải thêm được lệnh.'));
+    } finally {
       setOrdersLoadingMore(false);
     }
   };
 
   const loadMoreLedger = async () => {
     if (!ledgerNextCursor || !actualId || notFound || ledgerLoadingMore) return;
+    setLedgerLoadMoreError(null);
     loadLedger(true, ledgerNextCursor);
   };
 
   const loadMoreAuditLogs = async () => {
     if (!auditLogsNextCursor || !actualId || notFound || auditLogsLoadingMore) return;
+    setAuditLogsLoadMoreError(null);
     loadUserAuditLogs(true, auditLogsNextCursor);
   };
 
   const loadMorePositions = async () => {
     if (!positionsNextCursor || !actualId || notFound || positionsLoadingMore) return;
     setPositionsLoadingMore(true);
+    setPositionsLoadMoreError(null);
     try {
       const r = await api.adminUserFuturesPositions({ params: { userId: actualId }, query: { open: positionsType, cursor: positionsNextCursor, limit: 50 } });
       setPositions((prev) => [...prev, ...r.items]);
       setPositionsNextCursor(r.nextCursor);
-    } catch {} finally {
+    } catch (err: any) {
+      setPositionsLoadMoreError(formatApiError(err, 'Không tải thêm được vị thế.'));
+    } finally {
       setPositionsLoadingMore(false);
     }
   };
@@ -411,24 +502,30 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
   const loadMoreLogins = async () => {
     if (!loginsNextCursor || !actualId || notFound || loginsLoadingMore) return;
     setLoginsLoadingMore(true);
+    setLoginsLoadMoreError(null);
     try {
       const r = await api.adminUserLoginHistory({ params: { userId: actualId }, query: { cursor: loginsNextCursor, limit: 50 } });
       setAllLogins((prev) => [...prev, ...r.items]);
       setLoginsNextCursor(r.nextCursor);
-    } catch {} finally {
+    } catch (err: any) {
+      setLoginsLoadMoreError(formatApiError(err, 'Không tải thêm được lịch sử đăng nhập.'));
+    } finally {
       setLoginsLoadingMore(false);
     }
   };
 
   const loadMoreTax = async () => {
-    if (!taxNextCursor || !actualId || notFound || taxLoading) return;
-    setTaxLoading(true);
+    if (!taxNextCursor || !actualId || notFound || taxLoadingMore) return;
+    setTaxLoadingMore(true);
+    setTaxLoadMoreError(null);
     try {
       const r = await api.adminTaxWithholdings({ query: { userId: actualId, cursor: taxNextCursor, limit: 50 } });
       setTaxWithholdings((prev) => [...prev, ...r.items]);
       setTaxNextCursor(r.nextCursor);
-    } catch {} finally {
-      setTaxLoading(false);
+    } catch (err: any) {
+      setTaxLoadMoreError(formatApiError(err, 'Không tải thêm được hồ sơ thuế.'));
+    } finally {
+      setTaxLoadingMore(false);
     }
   };
 
@@ -590,7 +687,7 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
           return;
         }
       } else if (confirmAction === 'STOP_BOT' && selectedBotId) {
-        await api.adminStopGridBot({ params: { userId: detail.user.id, botId: selectedBotId }, body: { reason, sellBase: false } });
+        await api.adminStopGridBot({ params: { userId: detail.user.id, botId: selectedBotId }, body: { reason, sellBase } });
       } else if (confirmAction === 'CANCEL_DCA' && selectedPlanId) {
         await api.adminCancelDcaPlan({ params: { userId: detail.user.id, planId: selectedPlanId }, body: { reason } });
       } else if (confirmAction === 'TOGGLE_SIGNALS') {
@@ -909,7 +1006,12 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
             </div>
             <div className="text-base font-bold font-mono text-[var(--text,#f4f4f5)] flex items-center justify-between">
               <span className="text-xs text-[var(--text-3,#63636b)] font-sans">Hôm nay:</span>
-              <span>{formatDecimal(detail.trading.volume.today.total)} USDT</span>
+              <span>
+                <span data-testid="admin-user-volume-today" data-value={detail.trading.volume.today.total}>
+                  {formatDecimal(detail.trading.volume.today.total)}
+                </span>{' '}
+                USDT
+              </span>
             </div>
           </div>
           <div className="text-xs font-mono space-y-1 text-[var(--text-2,#a1a1aa)] border-t border-[var(--line,#1d1e21)] pt-1.5">
@@ -938,7 +1040,10 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
             <div className="text-base font-bold font-mono text-[var(--text,#f4f4f5)] flex items-center justify-between">
               <span className="text-xs text-[var(--text-3,#63636b)] font-sans">Tổng khấu trừ:</span>
               <span className="text-[var(--accent,#818cf8)] font-bold">
-                <span data-testid="admin-user-tax-total">{formatDecimal(detail.tax.withheldTotal)}</span> USDT
+                <span data-testid="admin-user-tax-total" data-value={detail.tax.withheldTotal}>
+                  {formatDecimal(detail.tax.withheldTotal)}
+                </span>{' '}
+                USDT
               </span>
             </div>
           </div>
@@ -1033,30 +1138,59 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
               </thead>
               <tbody className="divide-y divide-[var(--line,#1d1e21)]">
                 {(() => {
-                  const sorted = [...detail.balances].sort((a, b) => {
+                  const held = detail.balances.filter((b) => dec(b.total).gt(0));
+                  const sorted = [...held].sort((a, b) => {
                     const valA = dec(a.valueUsdt ?? '-1');
                     const valB = dec(b.valueUsdt ?? '-1');
                     return valB.cmp(valA);
                   });
                   const totalUsdt = dec(detail.totalValueUsdt);
 
+                  if (sorted.length === 0) {
+                    return (
+                      <tr>
+                        <td colSpan={6} className="px-5 py-8 text-center text-[var(--text-3,#63636b)] font-sans">
+                          Người dùng không có số dư khả dụng hoặc đang khóa nào
+                        </td>
+                      </tr>
+                    );
+                  }
+
                   return sorted.map((b) => {
                     let percentStr = '—';
-                    if (b.valueUsdt !== null && totalUsdt.gt(0)) {
-                      percentStr = dec(b.valueUsdt).div(totalUsdt).mul(100).toFixed(2) + '%';
+                    const pctVal = b.valueUsdt !== null && totalUsdt.gt(0)
+                      ? dec(b.valueUsdt).div(totalUsdt).mul(100).toFixed(2)
+                      : null;
+                    if (pctVal !== null) {
+                      percentStr = `${pctVal}%`;
                     }
 
                     return (
-                      <tr key={b.asset} className="hover:bg-[var(--line,#1d1e21)]/10 font-mono">
+                      <tr
+                        key={b.asset}
+                        data-testid="admin-holding-row"
+                        data-asset={b.asset}
+                        className="hover:bg-[var(--line,#1d1e21)]/10 font-mono"
+                      >
                         <td className="px-5 py-3 font-bold text-[var(--text,#f4f4f5)] font-sans">{b.asset}</td>
                         <td className="px-5 py-3 text-right text-[var(--text,#f4f4f5)]">{formatDecimal(b.available)}</td>
                         <td className="px-5 py-3 text-right text-[var(--text-3,#63636b)]">{formatDecimal(b.locked)}</td>
                         <td className="px-5 py-3 text-right text-[var(--text,#f4f4f5)]">{formatDecimal(b.total)}</td>
                         <td className="px-5 py-3 text-right font-bold text-[var(--text,#f4f4f5)]">
-                          {b.valueUsdt !== null ? `${formatDecimal(b.valueUsdt)} USDT` : '—'}
+                          <span
+                            data-testid="admin-holding-value"
+                            {...(b.valueUsdt !== null ? { 'data-value': b.valueUsdt } : {})}
+                          >
+                            {b.valueUsdt !== null ? `${formatDecimal(b.valueUsdt)} USDT` : '—'}
+                          </span>
                         </td>
                         <td className="px-5 py-3 text-right text-[var(--text-2,#a1a1aa)] font-semibold">
-                          {percentStr}
+                          <span
+                            data-testid="admin-holding-pct"
+                            {...(pctVal !== null ? { 'data-value': pctVal } : {})}
+                          >
+                            {percentStr}
+                          </span>
                         </td>
                       </tr>
                     );
@@ -1069,7 +1203,11 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
                   <td className="px-5 py-3 text-right text-[var(--text-3,#63636b)]">—</td>
                   <td className="px-5 py-3 text-right text-[var(--text-3,#63636b)]">—</td>
                   <td className="px-5 py-3 text-right text-[var(--text-3,#63636b)]">—</td>
-                  <td className="px-5 py-3 text-right text-[var(--accent,#818cf8)]">
+                  <td
+                    data-testid="admin-holdings-total"
+                    data-value={detail.totalValueUsdt}
+                    className="px-5 py-3 text-right text-[var(--accent,#818cf8)]"
+                  >
                     {formatDecimal(detail.totalValueUsdt)} USDT
                   </td>
                   <td className="px-5 py-3 text-right text-[var(--accent,#818cf8)]">
@@ -1150,9 +1288,54 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--line,#1d1e21)] font-mono text-xs">
+              {ordersLoading && orders.length === 0 && (
+                <tr>
+                  <td colSpan={8} className="px-4 py-10 text-center text-[var(--text-3,#63636b)]">
+                    Đang tải danh sách lệnh...
+                  </td>
+                </tr>
+              )}
+              {!ordersLoading && ordersError && orders.length === 0 && (
+                <tr>
+                  <td colSpan={8} className="px-4 py-8 text-center" data-testid="list-error">
+                    <div className="text-[var(--down,#f2475f)] mb-2">{ordersError}</div>
+                    <button
+                      type="button"
+                      onClick={loadOrders}
+                      className="px-3 py-1.5 rounded-lg bg-[var(--line,#1d1e21)] text-xs text-[var(--text,#f4f4f5)] hover:bg-[var(--line,#1d1e21)]/80 cursor-pointer font-semibold"
+                    >
+                      Thử lại
+                    </button>
+                  </td>
+                </tr>
+              )}
+              {!ordersLoading && !ordersError && orders.length === 0 && (
+                <tr>
+                  <td colSpan={8} className="px-4 py-10 text-center text-[var(--text-3,#63636b)]">
+                    Không có lệnh nào
+                  </td>
+                </tr>
+              )}
               {orders.map((o) => (
                 <tr key={o.id} className="hover:bg-[var(--line,#1d1e21)]/10">
-                  <td className="px-4 py-3 text-[var(--text-3,#63636b)]">{o.id.slice(0, 8)}...</td>
+                  <td className="px-4 py-3 text-[var(--text-3,#63636b)] font-mono">
+                    <div className="flex items-center gap-1.5">
+                      <span title={o.id}>{o.id}</span>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigator.clipboard.writeText(o.id);
+                          setCopiedOrderId(o.id);
+                          setTimeout(() => setCopiedOrderId(null), 2000);
+                        }}
+                        className="p-1 hover:text-[var(--text,#f4f4f5)] text-[var(--text-3,#63636b)] transition-colors cursor-pointer"
+                        title="Sao chép mã lệnh"
+                      >
+                        {copiedOrderId === o.id ? <Check size={12} className="text-[var(--up,#1fc27a)]" /> : <Copy size={12} />}
+                      </button>
+                    </div>
+                  </td>
                   <td className="px-4 py-3 font-bold">
                     <a
                       href={appLinks.exchange.trade(o.symbol, exchangeOrigin)}
@@ -1171,13 +1354,20 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
                   <td className="px-4 py-3 text-[var(--text-2,#a1a1aa)]">{o.status}</td>
                 </tr>
               ))}
-              {orders.length === 0 && (
-                <tr>
-                  <td colSpan={8} className="px-4 py-10 text-center text-[var(--text-3,#63636b)]">Không có lệnh nào</td>
-                </tr>
-              )}
             </tbody>
           </table>
+          {ordersLoadMoreError && (
+            <div className="p-3 bg-[var(--down,#f2475f)]/10 border-t border-[var(--line,#1d1e21)] flex items-center justify-between text-xs text-[var(--down,#f2475f)]">
+              <span>{ordersLoadMoreError}</span>
+              <button
+                type="button"
+                onClick={loadMoreOrders}
+                className="px-2.5 py-1 rounded bg-[var(--line,#1d1e21)] text-[var(--text,#f4f4f5)] hover:bg-[var(--line,#1d1e21)]/80 cursor-pointer font-semibold"
+              >
+                Thử lại
+              </button>
+            </div>
+          )}
           {ordersNextCursor && (
             <div className="p-4 border-t border-[var(--line,#1d1e21)] flex justify-center">
               <button
@@ -1394,13 +1584,13 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
           <div className="p-4 border-b border-[var(--line,#1d1e21)] flex items-center gap-3">
             <button
               onClick={() => setPositionsType('true')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${positionsType === 'true' ? 'bg-[var(--accent,#818cf8)] text-white' : 'bg-[var(--bg,#000000)] text-[var(--text-2,#a1a1aa)]'}`}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer ${positionsType === 'true' ? 'bg-[var(--accent,#818cf8)] text-white' : 'bg-[var(--bg,#000000)] text-[var(--text-2,#a1a1aa)]'}`}
             >
               Vị thế đang mở
             </button>
             <button
               onClick={() => setPositionsType('false')}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold ${positionsType === 'false' ? 'bg-[var(--accent,#818cf8)] text-white' : 'bg-[var(--bg,#000000)] text-[var(--text-2,#a1a1aa)]'}`}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer ${positionsType === 'false' ? 'bg-[var(--accent,#818cf8)] text-white' : 'bg-[var(--bg,#000000)] text-[var(--text-2,#a1a1aa)]'}`}
             >
               Lịch sử vị thế
             </button>
@@ -1413,10 +1603,44 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
                 <th className="px-4 py-3 font-semibold text-xs text-[var(--text-2,#a1a1aa)]">Khối lượng</th>
                 <th className="px-4 py-3 font-semibold text-xs text-[var(--text-2,#a1a1aa)]">Giá vào</th>
                 <th className="px-4 py-3 font-semibold text-xs text-[var(--text-2,#a1a1aa)]">Giá đánh dấu</th>
+                <th className="px-4 py-3 font-semibold text-xs text-[var(--text-2,#a1a1aa)]">Ký quỹ</th>
+                <th className="px-4 py-3 font-semibold text-xs text-[var(--text-2,#a1a1aa)]">Giá thanh lý</th>
                 <th className="px-4 py-3 font-semibold text-xs text-[var(--text-2,#a1a1aa)]">PnL chưa chốt</th>
+                <th className="px-4 py-3 font-semibold text-xs text-[var(--text-2,#a1a1aa)]">PnL đã chốt</th>
+                <th className="px-4 py-3 font-semibold text-xs text-[var(--text-2,#a1a1aa)]">Phí</th>
+                <th className="px-4 py-3 font-semibold text-xs text-[var(--text-2,#a1a1aa)]">Funding</th>
+                <th className="px-4 py-3 font-semibold text-xs text-[var(--text-2,#a1a1aa)]">Lý do đóng</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--line,#1d1e21)] font-mono text-xs">
+              {positionsLoading && positions.length === 0 && (
+                <tr>
+                  <td colSpan={12} className="px-4 py-10 text-center text-[var(--text-3,#63636b)]">
+                    Đang tải danh sách vị thế...
+                  </td>
+                </tr>
+              )}
+              {!positionsLoading && positionsError && positions.length === 0 && (
+                <tr>
+                  <td colSpan={12} className="px-4 py-8 text-center" data-testid="list-error">
+                    <div className="text-[var(--down,#f2475f)] mb-2">{positionsError}</div>
+                    <button
+                      type="button"
+                      onClick={loadPositions}
+                      className="px-3 py-1.5 rounded-lg bg-[var(--line,#1d1e21)] text-xs text-[var(--text,#f4f4f5)] hover:bg-[var(--line,#1d1e21)]/80 cursor-pointer font-semibold"
+                    >
+                      Thử lại
+                    </button>
+                  </td>
+                </tr>
+              )}
+              {!positionsLoading && !positionsError && positions.length === 0 && (
+                <tr>
+                  <td colSpan={12} className="px-4 py-10 text-center text-[var(--text-3,#63636b)]">
+                    Không có vị thế nào
+                  </td>
+                </tr>
+              )}
               {positions.map((p) => (
                 <tr key={p.id} className="hover:bg-[var(--line,#1d1e21)]/10">
                   <td className="px-4 py-3 font-bold">
@@ -1435,6 +1659,8 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
                   <td className="px-4 py-3">{p.quantity}</td>
                   <td className="px-4 py-3">{p.entryPrice}</td>
                   <td className="px-4 py-3">{p.markPrice || '—'}</td>
+                  <td className="px-4 py-3">{formatDecimal(p.margin)} USDT</td>
+                  <td className="px-4 py-3">{p.liquidationPrice ? `${formatDecimal(p.liquidationPrice)}` : '—'}</td>
                   <td
                     data-testid="admin-futures-position-upnl"
                     className={`px-4 py-3 font-bold ${
@@ -1447,15 +1673,30 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
                   >
                     {p.unrealizedPnl !== null ? `${formatDecimal(p.unrealizedPnl)} USDT` : '—'}
                   </td>
+                  <td className={`px-4 py-3 font-bold ${dec(p.realizedPnl).gte(0) ? 'text-[var(--up,#1fc27a)]' : 'text-[var(--down,#f2475f)]'}`}>
+                    {formatDecimal(p.realizedPnl)} USDT
+                  </td>
+                  <td className="px-4 py-3">{formatDecimal(p.fees)} USDT</td>
+                  <td className="px-4 py-3">{formatDecimal(p.funding)} USDT</td>
+                  <td className="px-4 py-3 font-sans text-[var(--text-2,#a1a1aa)]">
+                    {p.closeReason ? (CLOSE_REASON_LABELS[p.closeReason] || p.closeReason) : (p.status === 'OPEN' ? 'Đang mở' : '—')}
+                  </td>
                 </tr>
               ))}
-              {positions.length === 0 && (
-                <tr>
-                  <td colSpan={6} className="px-4 py-10 text-center text-[var(--text-3,#63636b)]">Không có vị thế nào</td>
-                </tr>
-              )}
             </tbody>
           </table>
+          {positionsLoadMoreError && (
+            <div className="p-3 bg-[var(--down,#f2475f)]/10 border-t border-[var(--line,#1d1e21)] flex items-center justify-between text-xs text-[var(--down,#f2475f)]">
+              <span>{positionsLoadMoreError}</span>
+              <button
+                type="button"
+                onClick={loadMorePositions}
+                className="px-2.5 py-1 rounded bg-[var(--line,#1d1e21)] text-[var(--text,#f4f4f5)] hover:bg-[var(--line,#1d1e21)]/80 cursor-pointer font-semibold"
+              >
+                Thử lại
+              </button>
+            </div>
+          )}
           {positionsNextCursor && (
             <div className="p-4 border-t border-[var(--line,#1d1e21)] flex justify-center">
               <button
@@ -1475,97 +1716,116 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
       {/* Bots Tab */}
       {activeTab === 'bots' && (
         <div className="space-y-6">
-          {/* Grid Bots */}
-          <div className="bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)] rounded-xl overflow-hidden shadow">
-            <div className="px-4 py-3 border-b border-[var(--line,#1d1e21)] font-bold text-sm text-[var(--text,#f4f4f5)]">
-              Grid Trading Bots
+          {botsLoading && (
+            <div className="p-12 text-center text-[var(--text-3,#63636b)]">Đang tải thông tin bot & DCA...</div>
+          )}
+          {!botsLoading && botsError && (
+            <div data-testid="list-error" className="p-12 text-center bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)] rounded-xl flex flex-col items-center justify-center gap-3">
+              <p className="text-sm text-[var(--down,#f2475f)]">{botsError}</p>
+              <button
+                type="button"
+                onClick={loadBots}
+                className="px-4 py-2 rounded-lg bg-[var(--line,#1d1e21)] text-xs text-[var(--text,#f4f4f5)] hover:bg-[var(--line,#1d1e21)]/80 font-semibold cursor-pointer"
+              >
+                Thử lại
+              </button>
             </div>
-            <table className="w-full text-left text-sm">
-              <thead className="bg-[var(--line,#1d1e21)]/30 border-b border-[var(--line,#1d1e21)] text-xs text-[var(--text-2,#a1a1aa)]">
-                <tr>
-                  <th className="px-4 py-3">ID Bot</th>
-                  <th className="px-4 py-3">Cặp</th>
-                  <th className="px-4 py-3">Biên độ giá</th>
-                  <th className="px-4 py-3">Lưới</th>
-                  <th className="px-4 py-3">Vốn đầu tư</th>
-                  <th className="px-4 py-3">Trạng thái</th>
-                  <th className="px-4 py-3 text-right">Thao tác</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[var(--line,#1d1e21)] font-mono text-xs">
-                {userBots.grid.map((b) => (
-                  <tr key={b.id} className="hover:bg-[var(--line,#1d1e21)]/10">
-                    <td className="px-4 py-3">{b.id}</td>
-                    <td className="px-4 py-3 font-bold text-[var(--text,#f4f4f5)]">{b.symbol}</td>
-                    <td className="px-4 py-3">{b.lowerPrice} - {b.upperPrice}</td>
-                    <td className="px-4 py-3">{b.gridCount}</td>
-                    <td className="px-4 py-3">{b.investment} USDT</td>
-                    <td className="px-4 py-3 text-[var(--accent,#818cf8)]">{b.status}</td>
-                    <td className="px-4 py-3 text-right font-sans">
-                      {hasPerm('bots.manage') && b.status === 'RUNNING' && (
-                        <button
-                          onClick={() => { setSelectedBotId(b.id); setConfirmAction('STOP_BOT'); setConfirmOpen(true); }}
-                          className="px-2.5 py-1 rounded bg-[var(--down,#f2475f)]/10 hover:bg-[var(--down,#f2475f)]/20 text-[var(--down,#f2475f)] text-xs border border-[var(--down,#f2475f)]/30"
-                        >
-                          Dừng bot
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-                {userBots.grid.length === 0 && (
-                  <tr>
-                    <td colSpan={7} className="px-4 py-8 text-center text-[var(--text-3,#63636b)] font-sans">Người dùng chưa tạo Grid Bot nào</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+          )}
+          {!botsLoading && !botsError && (
+            <>
+              {/* Grid Bots */}
+              <div className="bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)] rounded-xl overflow-hidden shadow">
+                <div className="px-4 py-3 border-b border-[var(--line,#1d1e21)] font-bold text-sm text-[var(--text,#f4f4f5)]">
+                  Grid Trading Bots
+                </div>
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-[var(--line,#1d1e21)]/30 border-b border-[var(--line,#1d1e21)] text-xs text-[var(--text-2,#a1a1aa)]">
+                    <tr>
+                      <th className="px-4 py-3">ID Bot</th>
+                      <th className="px-4 py-3">Cặp</th>
+                      <th className="px-4 py-3">Biên độ giá</th>
+                      <th className="px-4 py-3">Lưới</th>
+                      <th className="px-4 py-3">Vốn đầu tư</th>
+                      <th className="px-4 py-3">Trạng thái</th>
+                      <th className="px-4 py-3 text-right">Thao tác</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[var(--line,#1d1e21)] font-mono text-xs">
+                    {userBots.grid.map((b) => (
+                      <tr key={b.id} className="hover:bg-[var(--line,#1d1e21)]/10">
+                        <td className="px-4 py-3">{b.id}</td>
+                        <td className="px-4 py-3 font-bold text-[var(--text,#f4f4f5)]">{b.symbol}</td>
+                        <td className="px-4 py-3">{b.lowerPrice} - {b.upperPrice}</td>
+                        <td className="px-4 py-3">{b.gridCount}</td>
+                        <td className="px-4 py-3">{b.investment} USDT</td>
+                        <td className="px-4 py-3 text-[var(--accent,#818cf8)]">{b.status}</td>
+                        <td className="px-4 py-3 text-right font-sans">
+                          {hasPerm('bots.manage') && b.status === 'RUNNING' && (
+                            <button
+                              onClick={() => { setSelectedBotId(b.id); setSellBase(false); setConfirmAction('STOP_BOT'); setConfirmOpen(true); }}
+                              className="px-2.5 py-1 rounded bg-[var(--down,#f2475f)]/10 hover:bg-[var(--down,#f2475f)]/20 text-[var(--down,#f2475f)] text-xs border border-[var(--down,#f2475f)]/30 cursor-pointer"
+                            >
+                              Dừng bot
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                    {userBots.grid.length === 0 && (
+                      <tr>
+                        <td colSpan={7} className="px-4 py-8 text-center text-[var(--text-3,#63636b)] font-sans">Người dùng chưa tạo Grid Bot nào</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
 
-          {/* DCA Plans */}
-          <div className="bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)] rounded-xl overflow-hidden shadow">
-            <div className="px-4 py-3 border-b border-[var(--line,#1d1e21)] font-bold text-sm text-[var(--text,#f4f4f5)]">
-              Kế hoạch mua định kỳ (DCA)
-            </div>
-            <table className="w-full text-left text-sm">
-              <thead className="bg-[var(--line,#1d1e21)]/30 border-b border-[var(--line,#1d1e21)] text-xs text-[var(--text-2,#a1a1aa)]">
-                <tr>
-                  <th className="px-4 py-3">ID Kế hoạch</th>
-                  <th className="px-4 py-3">Cặp mua</th>
-                  <th className="px-4 py-3">Số tiền mỗi lần</th>
-                  <th className="px-4 py-3">Chu kỳ</th>
-                  <th className="px-4 py-3">Trạng thái</th>
-                  <th className="px-4 py-3 text-right">Thao tác</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[var(--line,#1d1e21)] font-mono text-xs">
-                {userBots.dca.map((d) => (
-                  <tr key={d.id} className="hover:bg-[var(--line,#1d1e21)]/10">
-                    <td className="px-4 py-3">{d.id}</td>
-                    <td className="px-4 py-3 font-bold text-[var(--text,#f4f4f5)]">{d.symbol}</td>
-                    <td className="px-4 py-3">{d.quoteAmount} USDT</td>
-                    <td className="px-4 py-3">{d.interval}</td>
-                    <td className="px-4 py-3 text-[var(--accent,#818cf8)]">{d.status}</td>
-                    <td className="px-4 py-3 text-right font-sans">
-                      {hasPerm('bots.manage') && d.status === 'ACTIVE' && (
-                        <button
-                          onClick={() => { setSelectedPlanId(d.id); setConfirmAction('CANCEL_DCA'); setConfirmOpen(true); }}
-                          className="px-2.5 py-1 rounded bg-[var(--down,#f2475f)]/10 hover:bg-[var(--down,#f2475f)]/20 text-[var(--down,#f2475f)] text-xs border border-[var(--down,#f2475f)]/30"
-                        >
-                          Hủy kế hoạch
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-                {userBots.dca.length === 0 && (
-                  <tr>
-                    <td colSpan={6} className="px-4 py-8 text-center text-[var(--text-3,#63636b)] font-sans">Người dùng chưa tạo kế hoạch DCA nào</td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+              {/* DCA Plans */}
+              <div className="bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)] rounded-xl overflow-hidden shadow">
+                <div className="px-4 py-3 border-b border-[var(--line,#1d1e21)] font-bold text-sm text-[var(--text,#f4f4f5)]">
+                  Kế hoạch mua định kỳ (DCA)
+                </div>
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-[var(--line,#1d1e21)]/30 border-b border-[var(--line,#1d1e21)] text-xs text-[var(--text-2,#a1a1aa)]">
+                    <tr>
+                      <th className="px-4 py-3">ID Kế hoạch</th>
+                      <th className="px-4 py-3">Cặp mua</th>
+                      <th className="px-4 py-3">Số tiền mỗi lần</th>
+                      <th className="px-4 py-3">Chu kỳ</th>
+                      <th className="px-4 py-3">Trạng thái</th>
+                      <th className="px-4 py-3 text-right">Thao tác</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[var(--line,#1d1e21)] font-mono text-xs">
+                    {userBots.dca.map((d) => (
+                      <tr key={d.id} className="hover:bg-[var(--line,#1d1e21)]/10">
+                        <td className="px-4 py-3">{d.id}</td>
+                        <td className="px-4 py-3 font-bold text-[var(--text,#f4f4f5)]">{d.symbol}</td>
+                        <td className="px-4 py-3">{d.quoteAmount} USDT</td>
+                        <td className="px-4 py-3">{d.interval}</td>
+                        <td className="px-4 py-3 text-[var(--accent,#818cf8)]">{d.status}</td>
+                        <td className="px-4 py-3 text-right font-sans">
+                          {hasPerm('bots.manage') && (d.status === 'ACTIVE' || d.status === 'PAUSED') && (
+                            <button
+                              onClick={() => { setSelectedPlanId(d.id); setConfirmAction('CANCEL_DCA'); setConfirmOpen(true); }}
+                              className="px-2.5 py-1 rounded bg-[var(--down,#f2475f)]/10 hover:bg-[var(--down,#f2475f)]/20 text-[var(--down,#f2475f)] text-xs border border-[var(--down,#f2475f)]/30 cursor-pointer"
+                            >
+                              Hủy kế hoạch
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                    {userBots.dca.length === 0 && (
+                      <tr>
+                        <td colSpan={6} className="px-4 py-8 text-center text-[var(--text-3,#63636b)] font-sans">Người dùng chưa tạo kế hoạch DCA nào</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
         </div>
       )}
 
@@ -1583,6 +1843,32 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--line,#1d1e21)] font-mono text-xs">
+              {loginsLoading && allLogins.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="px-4 py-10 text-center text-[var(--text-3,#63636b)] font-sans">
+                    Đang tải lịch sử đăng nhập...
+                  </td>
+                </tr>
+              )}
+              {!loginsLoading && loginsError && allLogins.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="px-4 py-8 text-center" data-testid="list-error">
+                    <div className="text-[var(--down,#f2475f)] mb-2 font-sans">{loginsError}</div>
+                    <button
+                      type="button"
+                      onClick={loadLogins}
+                      className="px-3 py-1.5 rounded-lg bg-[var(--line,#1d1e21)] text-xs text-[var(--text,#f4f4f5)] hover:bg-[var(--line,#1d1e21)]/80 cursor-pointer font-semibold font-sans"
+                    >
+                      Thử lại
+                    </button>
+                  </td>
+                </tr>
+              )}
+              {!loginsLoading && !loginsError && allLogins.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="px-4 py-10 text-center text-[var(--text-3,#63636b)] font-sans">Chưa có dữ liệu đăng nhập</td>
+                </tr>
+              )}
               {allLogins.map((lg) => (
                 <tr key={lg.id} className="hover:bg-[var(--line,#1d1e21)]/10">
                   <td className="px-4 py-3 text-[var(--text-3,#63636b)]">{new Date(lg.at).toLocaleString('vi-VN')}</td>
@@ -1600,13 +1886,20 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
                   </td>
                 </tr>
               ))}
-              {allLogins.length === 0 && (
-                <tr>
-                  <td colSpan={5} className="px-4 py-10 text-center text-[var(--text-3,#63636b)] font-sans">Chưa có dữ liệu đăng nhập</td>
-                </tr>
-              )}
             </tbody>
           </table>
+          {loginsLoadMoreError && (
+            <div className="p-3 bg-[var(--down,#f2475f)]/10 border-t border-[var(--line,#1d1e21)] flex items-center justify-between text-xs text-[var(--down,#f2475f)]">
+              <span>{loginsLoadMoreError}</span>
+              <button
+                type="button"
+                onClick={loadMoreLogins}
+                className="px-2.5 py-1 rounded bg-[var(--line,#1d1e21)] text-[var(--text,#f4f4f5)] hover:bg-[var(--line,#1d1e21)]/80 cursor-pointer font-semibold font-sans"
+              >
+                Thử lại
+              </button>
+            </div>
+          )}
           {loginsNextCursor && (
             <div className="p-4 border-t border-[var(--line,#1d1e21)] flex justify-center">
               <button
@@ -1671,14 +1964,28 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
                     </td>
                   </tr>
                 )}
-                {!taxLoading && taxWithholdings.length === 0 && (
+                {!taxLoading && taxError && taxWithholdings.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="px-4 py-8 text-center" data-testid="list-error">
+                      <div className="text-[var(--down,#f2475f)] mb-2 font-sans">{taxError}</div>
+                      <button
+                        type="button"
+                        onClick={loadTax}
+                        className="px-3 py-1.5 rounded-lg bg-[var(--line,#1d1e21)] text-xs text-[var(--text,#f4f4f5)] hover:bg-[var(--line,#1d1e21)]/80 cursor-pointer font-semibold font-sans"
+                      >
+                        Thử lại
+                      </button>
+                    </td>
+                  </tr>
+                )}
+                {!taxLoading && !taxError && taxWithholdings.length === 0 && (
                   <tr>
                     <td colSpan={7} className="px-4 py-8 text-center text-[var(--text-3,#63636b)] font-sans">
                       Chưa có bản ghi khấu trừ nào.
                     </td>
                   </tr>
                 )}
-                {taxWithholdings.map((wh) => (
+                {!taxLoading && !taxError && taxWithholdings.map((wh) => (
                   <tr key={wh.id} className="hover:bg-[var(--line,#1d1e21)]/10" data-testid="admin-tax-withholding-row" data-trade-id={wh.tradeId}>
                     <td className="px-4 py-3 text-[var(--text-3,#63636b)]">
                       {new Date(wh.createdAt).toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}
@@ -1694,16 +2001,29 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
               </tbody>
             </table>
 
-            {taxNextCursor && (
+            {taxLoadMoreError && (
+              <div className="p-3 bg-[var(--down,#f2475f)]/10 border-t border-[var(--line,#1d1e21)] flex items-center justify-between text-xs text-[var(--down,#f2475f)]">
+                <span>{taxLoadMoreError}</span>
+                <button
+                  type="button"
+                  onClick={loadMoreTax}
+                  className="px-2.5 py-1 rounded bg-[var(--line,#1d1e21)] text-[var(--text,#f4f4f5)] hover:bg-[var(--line,#1d1e21)]/80 cursor-pointer font-semibold font-sans"
+                >
+                  Thử lại
+                </button>
+              </div>
+            )}
+
+            {taxNextCursor && !taxLoading && !taxError && (
               <div className="p-4 border-t border-[var(--line,#1d1e21)] flex justify-center">
                 <button
                   type="button"
                   onClick={loadMoreTax}
-                  disabled={taxLoading}
+                  disabled={taxLoadingMore}
                   data-testid="list-more"
                   className="px-4 py-2 rounded-lg bg-[var(--line,#1d1e21)] hover:bg-[var(--line,#1d1e21)]/80 text-xs font-semibold text-[var(--text,#f4f4f5)] transition-colors disabled:opacity-50"
                 >
-                  {taxLoading ? 'Đang tải...' : 'Xem thêm'}
+                  {taxLoadingMore ? 'Đang tải...' : 'Xem thêm'}
                 </button>
               </div>
             )}
@@ -1813,6 +2133,19 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
             </table>
           </div>
 
+          {auditLogsLoadMoreError && (
+            <div className="p-3 bg-[var(--down,#f2475f)]/10 border-t border-[var(--line,#1d1e21)] flex items-center justify-between text-xs text-[var(--down,#f2475f)]">
+              <span>{auditLogsLoadMoreError}</span>
+              <button
+                type="button"
+                onClick={loadMoreAuditLogs}
+                className="px-2.5 py-1 rounded bg-[var(--line,#1d1e21)] text-[var(--text,#f4f4f5)] hover:bg-[var(--line,#1d1e21)]/80 cursor-pointer font-semibold font-sans"
+              >
+                Thử lại
+              </button>
+            </div>
+          )}
+
           {auditLogsNextCursor && !auditLogsLoading && !auditLogsError && (
             <div className="p-4 border-t border-[var(--line,#1d1e21)] flex justify-center">
               <button
@@ -1918,10 +2251,10 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
               <label className="text-xs font-semibold uppercase text-[var(--text-2,#a1a1aa)]">Chọn vai trò mới</label>
               <div className="space-y-1.5">
                 {[
-                  { r: 'user' as Role, name: 'USER - Khách hàng thường', desc: 'Giao dịch spot, nạp rút tiền, không có quyền quản trị' },
-                  { r: 'support' as Role, name: 'SUPPORT - Chăm sóc khách hàng', desc: 'Chỉ đọc thông tin tài khoản và hỗ trợ khách hàng' },
-                  { r: 'admin' as Role, name: 'ADMIN - Quản trị viên sàn', desc: 'Toàn quyền cấu hình sàn, phân quyền nhân sự, điều chỉnh' },
-                  { r: 'owner' as Role, name: 'OWNER - Chủ sở hữu tối cao', desc: 'Quyền cao nhất của sàn giao dịch' },
+                  { r: 'user' as Role, name: 'USER — Khách giao dịch', desc: 'Giao dịch Spot, Futures, Faucet; không có quyền quản trị' },
+                  { r: 'support' as Role, name: 'SUPPORT — Chăm sóc khách hàng', desc: 'Chỉ đọc dữ liệu tài khoản, sàn, đối soát, thuế, tin tức' },
+                  { r: 'admin' as Role, name: 'ADMIN — Quản trị viên', desc: 'Khóa/mở khóa, điều chỉnh số dư, bot, thuế, cấu hình sàn; không phân quyền nhân sự' },
+                  { r: 'owner' as Role, name: 'OWNER — Chủ sở hữu', desc: 'Toàn quyền hệ thống, phân quyền vai trò nhân sự' },
                 ].map((item) => (
                   <label
                     key={item.r}
@@ -2135,10 +2468,22 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
           confirmAction === 'DEACTIVATE_USER' ? 'DEACTIVATE' : undefined
         }
         onConfirm={handleConfirmAction}
-        onCancel={() => { setConfirmOpen(false); setConfirmAction(null); setConfirmError(null); }}
+        onCancel={() => { setConfirmOpen(false); setConfirmAction(null); setConfirmError(null); setSellBase(false); }}
         isSubmitting={isSubmitting}
         error={confirmError}
-      />
+      >
+        {confirmAction === 'STOP_BOT' && (
+          <label className="flex items-center gap-2 p-3 rounded-lg border border-[var(--line,#1d1e21)] bg-[var(--bg,#000000)] text-xs text-[var(--text,#f4f4f5)] cursor-pointer">
+            <input
+              type="checkbox"
+              checked={sellBase}
+              onChange={(e) => setSellBase(e.target.checked)}
+              className="accent-[var(--accent,#818cf8)] rounded"
+            />
+            <span>Bán coin của bot theo giá thị trường (sellBase)</span>
+          </label>
+        )}
+      </ConfirmDialog>
     </div>
   );
 };

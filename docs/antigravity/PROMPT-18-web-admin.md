@@ -74,5 +74,11 @@ Hoàn thành 100% toàn bộ các mục P1 (AD-02 → AD-11) và P2 (AD-12 → A
 - **AD-28** `UserDetailPage.tsx:589,743`, `ReconciliationPage.tsx:93`: hiện đủ ngày giờ; mã lệnh đầy đủ + nút sao chép.
 - **Nút "Sắp có"** (`RolesPage.tsx:87-95` tạo nhân sự, `SymbolsPage.tsx:83-91` thêm coin): giữ `disabled` + tooltip như hiện tại (đúng), không thêm nút giả mới.
 
+### Trạng thái các mục P3
+- **AD-25:** Hoàn thành. Cập nhật mô tả vai trò trong modal đổi vai trò của `UserDetailPage.tsx` và `UsersPage.tsx` theo đúng `packages/contracts/src/permissions.ts` (USER không có nạp/rút tiền; SUPPORT chỉ đọc dữ liệu tài khoản, sàn, đối soát, thuế, tin tức; ADMIN không phân quyền nhân sự; OWNER toàn quyền phân quyền nhân sự).
+- **AD-26:** Hoàn thành. Trong `UserDetailPage.tsx`: cho phép hủy kế hoạch DCA khi trạng thái là `ACTIVE` hoặc `PAUSED`; bổ sung checkbox "Bán coin của bot theo giá thị trường" (`sellBase`) khi dừng Grid Bot và gửi đúng param `sellBase` đến `adminStopGridBot`; bảng vị thế Futures hiển thị đầy đủ các cột: ký quỹ, giá thanh lý, PnL chưa chốt, PnL đã chốt, phí, funding, lý do đóng.
+- **AD-27:** Hoàn thành. Tạo trang `NotFoundPage.tsx` với `data-testid="admin-not-found"` cho các route không tồn tại trong `App.tsx`; ẩn các thẻ lối tắt trên `OverviewPage.tsx` khi thiếu quyền hạn tương ứng (`users.read`, `users.roles`, `exchange.read`); xử lý lỗi `/me` khác 401 trong `AuthContext.tsx` hiển thị màn hình báo lỗi kèm nút "Thử lại" thay vì màn hình trắng.
+- **AD-28:** Hoàn thành. Định dạng ngày giờ đầy đủ (`toLocaleString('vi-VN')`) cho lịch sử giao dịch gần đây trong `UserDetailPage.tsx`; hiển thị mã ID đầy đủ kèm nút sao chép cho mã lệnh trong `UserDetailPage.tsx` và mã phiên đối soát trong `ReconciliationPage.tsx`.
+
 ## Cần backend (Claude Code ghi vào kế hoạch, KHÔNG làm giả ở giao diện)
 Tìm lệnh/khớp lệnh toàn sàn · màn rủi ro (vị thế lớn, thanh lý, funding) · hủy một lệnh của khách · đăng xuất từng phiên · ghi chú/tag khách · điều chỉnh ví FUTURES · niêm yết cặp mới · công tắc tính năng · tạo nhân sự trực tiếp · mã mời gắn vai trò · xuất CSV audit/người dùng · trang tin tức (`adminNews*`, đợt N6).
