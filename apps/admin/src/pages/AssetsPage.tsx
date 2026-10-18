@@ -1,11 +1,23 @@
 import React, { useState, useEffect } from 'react';
 import { getApiClient } from '../services/api';
 import { useAuth } from '../context/AuthContext';
-import { ConfirmDialog } from '../components/ConfirmDialog';
+import { formatApiError } from '../services/errors';
 import { type AssetInfo, AssetTag, ASSET_TAG_LABELS } from '@cex/contracts';
-import { Edit2, Coins, Tag } from 'lucide-react';
+import { Edit2, X, Tag } from 'lucide-react';
 
-const AVAILABLE_TAGS: AssetTag[] = ['LAYER1', 'LAYER2', 'MEME', 'AI', 'DEFI', 'RWA', 'PAYMENTS', 'INFRA', 'STORAGE', 'EXCHANGE', 'STABLECOIN'];
+const AVAILABLE_TAGS: AssetTag[] = [
+  'LAYER1',
+  'LAYER2',
+  'MEME',
+  'AI',
+  'DEFI',
+  'RWA',
+  'PAYMENTS',
+  'INFRA',
+  'STORAGE',
+  'EXCHANGE',
+  'STABLECOIN',
+];
 
 export const AssetsPage: React.FC = () => {
   const { hasPerm } = useAuth();
@@ -18,7 +30,8 @@ export const AssetsPage: React.FC = () => {
   const [editName, setEditName] = useState('');
   const [editDesc, setEditDesc] = useState('');
   const [editTags, setEditTags] = useState<AssetTag[]>([]);
-  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [reason, setReason] = useState('');
+  const [modalError, setModalError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const api = getApiClient();
@@ -40,8 +53,15 @@ export const AssetsPage: React.FC = () => {
     setSelectedAsset(a);
     setEditName(a.name || '');
     setEditDesc(a.description || '');
-    setEditTags(a.tags || []);
-    setConfirmOpen(true);
+    setEditTags(a.tags ? [...a.tags] : []);
+    setReason('');
+    setModalError(null);
+  };
+
+  const handleCloseEdit = () => {
+    setSelectedAsset(null);
+    setModalError(null);
+    setReason('');
   };
 
   const toggleTag = (tag: AssetTag) => {
@@ -54,23 +74,43 @@ export const AssetsPage: React.FC = () => {
     }
   };
 
-  const handleConfirmEdit = async (reason: string) => {
-    if (!selectedAsset) return;
+  const originalName = selectedAsset?.name || '';
+  const originalDesc = selectedAsset?.description || '';
+  const originalTags = (selectedAsset?.tags || []).slice().sort();
+  const currentTags = editTags.slice().sort();
+
+  const nameChanged = editName.trim() !== originalName.trim();
+  const descChanged = editDesc.trim() !== originalDesc.trim();
+  const tagsChanged = JSON.stringify(originalTags) !== JSON.stringify(currentTags);
+
+  const hasChanged = nameChanged || descChanged || tagsChanged;
+  const canSubmit = hasChanged && reason.trim().length >= 5 && !isSubmitting;
+
+  const handleConfirmEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedAsset || !canSubmit) return;
     setIsSubmitting(true);
+    setModalError(null);
     try {
+      const body: any = { reason: reason.trim() };
+      if (nameChanged) {
+        body.name = editName.trim() ? editName.trim() : null;
+      }
+      if (descChanged) {
+        body.description = editDesc.trim() ? editDesc.trim() : null;
+      }
+      if (tagsChanged) {
+        body.tags = editTags;
+      }
+
       await api.adminUpdateAsset({
         params: { asset: selectedAsset.asset },
-        body: {
-          name: editName || null,
-          description: editDesc || null,
-          tags: editTags,
-          reason,
-        },
+        body,
       });
-      setConfirmOpen(false);
+      handleCloseEdit();
       loadAssets();
     } catch (e) {
-      console.error(e);
+      setModalError(formatApiError(e));
     } finally {
       setIsSubmitting(false);
     }
@@ -157,15 +197,125 @@ export const AssetsPage: React.FC = () => {
         </table>
       </div>
 
+      {/* Edit asset modal */}
       {selectedAsset && (
-        <ConfirmDialog
-          isOpen={confirmOpen}
-          title={`Cập nhật thông tin coin ${selectedAsset.asset}`}
-          consequenceText="Thông tin cập nhật sẽ được hiển thị trên giao diện khám phá thị trường của người dùng."
-          onConfirm={handleConfirmEdit}
-          onCancel={() => setConfirmOpen(false)}
-          isSubmitting={isSubmitting}
-        />
+        <div className="fixed inset-0 z-50 bg-black/75 flex items-center justify-center p-4">
+          <div className="bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)] rounded-xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-[var(--line,#1d1e21)] pb-3">
+              <h3 className="text-lg font-bold text-[var(--text,#f4f4f5)] flex items-center gap-2">
+                <Tag size={18} className="text-[var(--accent,#818cf8)]" />
+                <span>Cập nhật thông tin coin {selectedAsset.asset}</span>
+              </h3>
+              <button onClick={handleCloseEdit} className="text-[var(--text-3,#63636b)] hover:text-white">
+                <X size={18} />
+              </button>
+            </div>
+
+            {modalError && (
+              <div
+                data-testid="confirm-error"
+                className="p-3 rounded-lg bg-[var(--down,#f2475f)]/15 border border-[var(--down,#f2475f)]/30 text-xs text-[var(--down,#f2475f)] leading-relaxed"
+              >
+                {modalError}
+              </div>
+            )}
+
+            <form onSubmit={handleConfirmEdit} className="space-y-4">
+              {/* Name */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold uppercase text-[var(--text-2,#a1a1aa)]">
+                  Tên hiển thị
+                </label>
+                <input
+                  type="text"
+                  maxLength={60}
+                  value={editName}
+                  onChange={(e) => setEditName(e.target.value)}
+                  placeholder="Ví dụ: Dogecoin, Bitcoin..."
+                  className="w-full bg-[var(--bg,#000000)] border border-[var(--line,#1d1e21)] rounded-lg p-2.5 text-sm text-[var(--text,#f4f4f5)] outline-none focus:border-[var(--accent,#818cf8)]"
+                />
+              </div>
+
+              {/* Tags chip selector */}
+              <div className="space-y-1.5">
+                <div className="flex justify-between items-center">
+                  <label className="text-xs font-semibold uppercase text-[var(--text-2,#a1a1aa)]">
+                    Nhóm ngành (Tags)
+                  </label>
+                  <span className="text-[11px] text-[var(--text-3,#63636b)]">
+                    {editTags.length}/5 tag đã chọn
+                  </span>
+                </div>
+                <div className="flex flex-wrap gap-1.5 pt-1">
+                  {AVAILABLE_TAGS.map((tag) => {
+                    const isSelected = editTags.includes(tag);
+                    const tagLabel = ASSET_TAG_LABELS[tag]?.vi || tag;
+                    return (
+                      <button
+                        key={tag}
+                        type="button"
+                        onClick={() => toggleTag(tag)}
+                        className={`px-2.5 py-1 rounded-full text-xs font-medium border transition-all ${
+                          isSelected
+                            ? 'bg-[var(--accent,#818cf8)]/20 border-[var(--accent,#818cf8)] text-[var(--accent,#818cf8)] font-semibold'
+                            : 'bg-[var(--bg,#000000)] border-[var(--line,#1d1e21)] text-[var(--text-2,#a1a1aa)] hover:border-[var(--text-3,#63636b)]'
+                        }`}
+                      >
+                        {tag} {tagLabel !== tag && <span className="opacity-75 text-[10px]">({tagLabel})</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Description */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold uppercase text-[var(--text-2,#a1a1aa)]">
+                  Mô tả cơ bản
+                </label>
+                <textarea
+                  maxLength={1000}
+                  rows={3}
+                  value={editDesc}
+                  onChange={(e) => setEditDesc(e.target.value)}
+                  placeholder="Nhập thông tin cơ bản về dự án và đồng coin..."
+                  className="w-full bg-[var(--bg,#000000)] border border-[var(--line,#1d1e21)] rounded-lg p-2.5 text-sm text-[var(--text,#f4f4f5)] outline-none focus:border-[var(--accent,#818cf8)] resize-none"
+                />
+              </div>
+
+              {/* Reason */}
+              <div className="space-y-1.5">
+                <label className="text-xs font-semibold uppercase text-[var(--text-2,#a1a1aa)]">
+                  Lý do thay đổi (bắt buộc audit, tối thiểu 5 ký tự)
+                </label>
+                <textarea
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  placeholder="Nhập lý do cập nhật thông tin coin..."
+                  rows={2}
+                  className="w-full bg-[var(--bg,#000000)] border border-[var(--line,#1d1e21)] rounded-lg p-2.5 text-sm text-[var(--text,#f4f4f5)] outline-none focus:border-[var(--accent,#818cf8)] resize-none"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-2 border-t border-[var(--line,#1d1e21)]">
+                <button
+                  type="button"
+                  onClick={handleCloseEdit}
+                  className="px-4 py-2 rounded-lg border border-[var(--line,#1d1e21)] text-xs text-[var(--text-2,#a1a1aa)] hover:bg-[var(--line,#1d1e21)] transition-colors"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  disabled={!canSubmit}
+                  className="px-4 py-2 rounded-lg bg-[var(--accent,#818cf8)] hover:brightness-110 text-white text-xs font-bold transition-all disabled:opacity-50"
+                >
+                  {isSubmitting ? 'Đang lưu...' : 'Lưu thay đổi'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );
