@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { getApiClient } from '../services/api';
+import { formatApiError } from '../services/errors';
 import type { AuditLogEntry, AuditAction, AuditTargetType } from '@cex/contracts';
 import { FileText, Filter, Eye, ChevronRight, X } from 'lucide-react';
 
@@ -9,11 +10,13 @@ export const AuditLogsPage: React.FC = () => {
   const [targetTypeFilter, setTargetTypeFilter] = useState<AuditTargetType | ''>('');
   const [selectedEntry, setSelectedEntry] = useState<AuditLogEntry | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const api = getApiClient();
 
   const loadLogs = () => {
     setIsLoading(true);
+    setLoadError(null);
     api.adminAuditLogs({
       query: {
         action: actionFilter || undefined,
@@ -22,7 +25,7 @@ export const AuditLogsPage: React.FC = () => {
       },
     })
       .then((res) => setLogs(res.items))
-      .catch(() => {})
+      .catch((e: any) => setLoadError(formatApiError(e, 'Không thể tải nhật ký quản trị.')))
       .finally(() => setIsLoading(false));
   };
 
@@ -117,7 +120,23 @@ export const AuditLogsPage: React.FC = () => {
                 </td>
               </tr>
             ))}
-            {!isLoading && logs.length === 0 && (
+            {loadError && logs.length === 0 && (
+              <tr>
+                <td colSpan={6} className="px-5 py-10 text-center">
+                  <div data-testid="list-error" className="flex flex-col items-center justify-center gap-3">
+                    <p className="text-sm text-[var(--down,#f2475f)]">{loadError}</p>
+                    <button
+                      type="button"
+                      onClick={() => loadLogs()}
+                      className="px-3.5 py-1.5 rounded-lg bg-[var(--accent,#818cf8)] text-white text-xs font-semibold hover:brightness-110 transition-all"
+                    >
+                      Thử lại
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            )}
+            {!isLoading && !loadError && logs.length === 0 && (
               <tr>
                 <td colSpan={6} className="px-5 py-10 text-center text-[var(--text-3,#63636b)]">
                   Không tìm thấy nhật ký thao tác nào

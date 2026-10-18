@@ -10,6 +10,7 @@ export const RolesPage: React.FC = () => {
   const { user: currentUser, hasPerm } = useAuth();
   const [staffUsers, setStaffUsers] = useState<AdminUserSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Change role state (2 steps)
   const [targetUser, setTargetUser] = useState<AdminUserSummary | null>(null);
@@ -25,6 +26,7 @@ export const RolesPage: React.FC = () => {
 
   const loadStaffUsers = async () => {
     setIsLoading(true);
+    setLoadError(null);
     try {
       // Query support, admin, and owner users
       const [supportRes, adminRes, ownerRes] = await Promise.all([
@@ -38,8 +40,8 @@ export const RolesPage: React.FC = () => {
       const map = new Map<string, AdminUserSummary>();
       all.forEach((u) => map.set(u.id, u));
       setStaffUsers(Array.from(map.values()));
-    } catch (e) {
-      console.error(e);
+    } catch (e: any) {
+      setLoadError(formatApiError(e, 'Không thể tải danh sách nhân sự.'));
     } finally {
       setIsLoading(false);
     }
@@ -207,7 +209,23 @@ export const RolesPage: React.FC = () => {
                 </tr>
               );
             })}
-            {!isLoading && staffUsers.length === 0 && (
+            {loadError && staffUsers.length === 0 && (
+              <tr>
+                <td colSpan={7} className="px-5 py-10 text-center">
+                  <div data-testid="list-error" className="flex flex-col items-center justify-center gap-3">
+                    <p className="text-sm text-[var(--down,#f2475f)]">{loadError}</p>
+                    <button
+                      type="button"
+                      onClick={() => loadStaffUsers()}
+                      className="px-3.5 py-1.5 rounded-lg bg-[var(--accent,#818cf8)] text-white text-xs font-semibold hover:brightness-110 transition-all"
+                    >
+                      Thử lại
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            )}
+            {!isLoading && !loadError && staffUsers.length === 0 && (
               <tr>
                 <td colSpan={7} className="px-5 py-10 text-center text-[var(--text-3,#63636b)]">
                   Chưa có tài khoản nhân sự nào

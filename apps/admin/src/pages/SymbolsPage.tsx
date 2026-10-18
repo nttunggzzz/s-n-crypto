@@ -11,6 +11,7 @@ export const SymbolsPage: React.FC = () => {
   const [symbols, setSymbols] = useState<AdminSymbol[]>([]);
   const [query, setQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Edit symbol dialog
   const [targetSymbol, setTargetSymbol] = useState<AdminSymbol | null>(null);
@@ -26,9 +27,10 @@ export const SymbolsPage: React.FC = () => {
 
   const loadSymbols = () => {
     setIsLoading(true);
+    setLoadError(null);
     api.adminListSymbols()
       .then((res) => setSymbols(res.items))
-      .catch(() => {})
+      .catch((e: any) => setLoadError(formatApiError(e, 'Không thể tải danh sách cặp giao dịch.')))
       .finally(() => setIsLoading(false));
   };
 
@@ -169,7 +171,23 @@ export const SymbolsPage: React.FC = () => {
                 )}
               </tr>
             ))}
-            {!isLoading && filteredSymbols.length === 0 && (
+            {loadError && symbols.length === 0 && (
+              <tr>
+                <td colSpan={7} className="px-5 py-10 text-center">
+                  <div data-testid="list-error" className="flex flex-col items-center justify-center gap-3">
+                    <p className="text-sm text-[var(--down,#f2475f)]">{loadError}</p>
+                    <button
+                      type="button"
+                      onClick={() => loadSymbols()}
+                      className="px-3.5 py-1.5 rounded-lg bg-[var(--accent,#818cf8)] text-white text-xs font-semibold hover:brightness-110 transition-all"
+                    >
+                      Thử lại
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            )}
+            {!isLoading && !loadError && filteredSymbols.length === 0 && (
               <tr>
                 <td colSpan={7} className="px-5 py-10 text-center text-[var(--text-3,#63636b)]">
                   Không tìm thấy cặp giao dịch nào

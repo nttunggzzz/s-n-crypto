@@ -8,18 +8,30 @@ export const ADMIN_ERROR_MESSAGES: Partial<Record<ErrorCode | string, string>> =
   RATE_LIMITED: 'Quá nhiều yêu cầu. Vui lòng thử lại sau giây lát.',
   CONFLICT: 'Thao tác không thực hiện được do xung đột dữ liệu hoặc trạng thái đã thay đổi.',
   INTERNAL_ERROR: 'Lỗi máy chủ nội bộ. Vui lòng thử lại sau.',
-  BOT_ACCOUNT_PROTECTED: 'Tài khoản bot hệ thống được bảo vệ, không thể sửa đổi.',
-  TWO_FACTOR_REQUIRED: 'Tài khoản quản trị bắt buộc phải bật xác thực hai yếu tố (2FA).',
+  BOT_ACCOUNT_PROTECTED: 'Tài khoản bot hệ thống được bảo vệ, không thể sửa đổi hoặc thao tác.',
+  TWO_FACTOR_REQUIRED: 'Tài khoản quản trị bắt buộc phải bật xác thực hai yếu tố (2FA). Vui lòng cài đặt 2FA để tiếp tục.',
   INVALID_TWO_FACTOR_CODE: 'Mã xác thực 2FA không chính xác hoặc đã hết hạn.',
   INSUFFICIENT_BALANCE: 'Số dư khả dụng không đủ để thực hiện điều chỉnh giảm.',
   TRADING_HALTED: 'Sàn giao dịch hiện đang tạm dừng hoạt động.',
 };
 
 export function formatApiError(err: unknown, fallback = 'Đã có lỗi xảy ra. Vui lòng thử lại.'): string {
-  if (err instanceof ApiError || (typeof err === 'object' && err !== null && 'code' in err)) {
+  if (err instanceof ApiError || (typeof err === 'object' && err !== null && ('code' in err || 'status' in err || 'message' in err))) {
     const apiErr = err as { code?: string; message?: string; details?: Record<string, unknown>; status?: number };
     const code = apiErr.code;
     const msg = apiErr.message || '';
+
+    // Check specific known error codes first
+    if (code === 'TWO_FACTOR_REQUIRED') {
+      return 'Tài khoản quản trị bắt buộc phải bật xác thực hai yếu tố (2FA). Vui lòng cài đặt 2FA để tiếp tục.';
+    }
+    if (code === 'BOT_ACCOUNT_PROTECTED') {
+      return 'Tài khoản bot hệ thống được bảo vệ, không thể sửa đổi hoặc thao tác.';
+    }
+
+    if (code && ADMIN_ERROR_MESSAGES[code]) {
+      return ADMIN_ERROR_MESSAGES[code]!;
+    }
 
     // Check specific known message patterns from server
     if (msg.includes('equal or higher role')) {
@@ -39,10 +51,6 @@ export function formatApiError(err: unknown, fallback = 'Đã có lỗi xảy ra
       return `Số tiền trừ lớn hơn số dư khả dụng${avail}.`;
     }
 
-    if (code && ADMIN_ERROR_MESSAGES[code]) {
-      return ADMIN_ERROR_MESSAGES[code]!;
-    }
-
     if (apiErr.status === 403) return 'Bạn không có quyền thực hiện thao tác này.';
     if (apiErr.status === 404) return 'Không tìm thấy đối tượng yêu cầu.';
     if (apiErr.status === 429) return 'Quá nhiều yêu cầu. Vui lòng thử lại sau.';
@@ -60,4 +68,3 @@ export function formatApiError(err: unknown, fallback = 'Đã có lỗi xảy ra
 }
 
 export const getErrorMessage = formatApiError;
-

@@ -11,6 +11,7 @@ export const InvitesPage: React.FC = () => {
   const [invites, setInvites] = useState<Invite[]>([]);
   const [statusFilter, setStatusFilter] = useState<InviteStatus | ''>('');
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Create invite modal
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -33,9 +34,10 @@ export const InvitesPage: React.FC = () => {
 
   const loadInvites = () => {
     setIsLoading(true);
+    setLoadError(null);
     api.adminListInvites({ query: { status: statusFilter || undefined } })
       .then((res) => setInvites(res.items))
-      .catch(() => {})
+      .catch((e: any) => setLoadError(formatApiError(e, 'Không thể tải danh sách mã mời.')))
       .finally(() => setIsLoading(false));
   };
 
@@ -166,7 +168,23 @@ export const InvitesPage: React.FC = () => {
                 )}
               </tr>
             ))}
-            {!isLoading && invites.length === 0 && (
+            {loadError && invites.length === 0 && (
+              <tr>
+                <td colSpan={7} className="px-5 py-10 text-center">
+                  <div data-testid="list-error" className="flex flex-col items-center justify-center gap-3">
+                    <p className="text-sm text-[var(--down,#f2475f)]">{loadError}</p>
+                    <button
+                      type="button"
+                      onClick={() => loadInvites()}
+                      className="px-3.5 py-1.5 rounded-lg bg-[var(--accent,#818cf8)] text-white text-xs font-semibold hover:brightness-110 transition-all"
+                    >
+                      Thử lại
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            )}
+            {!isLoading && !loadError && invites.length === 0 && (
               <tr>
                 <td colSpan={7} className="px-5 py-10 text-center text-[var(--text-3,#63636b)]">
                   Chưa có mã mời nào

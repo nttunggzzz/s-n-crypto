@@ -28,6 +28,7 @@ export const UsersPage: React.FC<{ onNavigate: (path: string) => void }> = ({ on
   const [statusFilter, setStatusFilter] = useState<'active' | 'locked' | ''>('');
   const [copiedUid, setCopiedUid] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Modal Thêm thành viên
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
@@ -50,6 +51,7 @@ export const UsersPage: React.FC<{ onNavigate: (path: string) => void }> = ({ on
 
   const fetchUsers = useCallback(() => {
     setIsLoading(true);
+    setLoadError(null);
     api.adminListUsers({
       query: {
         q: query.trim() || undefined,
@@ -61,7 +63,9 @@ export const UsersPage: React.FC<{ onNavigate: (path: string) => void }> = ({ on
       .then((res) => {
         setUsers(res.items);
       })
-      .catch(() => {})
+      .catch((e: any) => {
+        setLoadError(formatApiError(e, 'Không thể tải danh sách người dùng.'));
+      })
       .finally(() => {
         setIsLoading(false);
       });
@@ -383,7 +387,23 @@ export const UsersPage: React.FC<{ onNavigate: (path: string) => void }> = ({ on
                 </tr>
               );
             })}
-            {!isLoading && users.length === 0 && (
+            {loadError && users.length === 0 && (
+              <tr>
+                <td colSpan={7} className="px-4 py-12 text-center">
+                  <div data-testid="list-error" className="flex flex-col items-center justify-center gap-3">
+                    <p className="text-sm text-[var(--down,#f2475f)]">{loadError}</p>
+                    <button
+                      type="button"
+                      onClick={() => fetchUsers()}
+                      className="px-3.5 py-1.5 rounded-lg bg-[var(--accent,#818cf8)] text-white text-xs font-semibold hover:brightness-110 transition-all"
+                    >
+                      Thử lại
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            )}
+            {!isLoading && !loadError && users.length === 0 && (
               <tr>
                 <td colSpan={7} className="px-4 py-12 text-center text-[var(--text-3,#63636b)]">
                   Không tìm thấy người dùng nào phù hợp với bộ lọc

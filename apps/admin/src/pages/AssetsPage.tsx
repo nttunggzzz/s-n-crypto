@@ -24,6 +24,7 @@ export const AssetsPage: React.FC = () => {
   const [assets, setAssets] = useState<AssetInfo[]>([]);
   const [query, setQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   // Edit modal
   const [selectedAsset, setSelectedAsset] = useState<AssetInfo | null>(null);
@@ -39,9 +40,10 @@ export const AssetsPage: React.FC = () => {
 
   const loadAssets = () => {
     setIsLoading(true);
+    setLoadError(null);
     api.exchangeInfo()
       .then((info) => setAssets(info.assets))
-      .catch(() => {})
+      .catch((e: any) => setLoadError(formatApiError(e, 'Không thể tải danh sách coin.')))
       .finally(() => setIsLoading(false));
   };
 
@@ -186,7 +188,23 @@ export const AssetsPage: React.FC = () => {
                 )}
               </tr>
             ))}
-            {!isLoading && filtered.length === 0 && (
+            {loadError && assets.length === 0 && (
+              <tr>
+                <td colSpan={5} className="px-5 py-10 text-center">
+                  <div data-testid="list-error" className="flex flex-col items-center justify-center gap-3">
+                    <p className="text-sm text-[var(--down,#f2475f)]">{loadError}</p>
+                    <button
+                      type="button"
+                      onClick={() => loadAssets()}
+                      className="px-3.5 py-1.5 rounded-lg bg-[var(--accent,#818cf8)] text-white text-xs font-semibold hover:brightness-110 transition-all"
+                    >
+                      Thử lại
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            )}
+            {!isLoading && !loadError && filtered.length === 0 && (
               <tr>
                 <td colSpan={5} className="px-5 py-10 text-center text-[var(--text-3,#63636b)]">
                   Không tìm thấy coin nào
