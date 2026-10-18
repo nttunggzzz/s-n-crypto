@@ -42,6 +42,10 @@ Rà soát: **2026-10-11** (Claude Code). Cập nhật lần cuối: 2026-10-11 t
 >   - Q-04: không ghi vào thư mục `main`.
 > - **Đã gộp `ui/gd2-exchange` (6b93ac2) vào `main` (7b229bf)**; `npm run verify` trên `main` đạt 629/629. Chưa `host update`, chưa push.
 
+>
+> **Rà soát lần 9 (UI `061fdac`, 2026-10-18): [docs/reports/2026-10-18-ra-soat-ui-lan-9.md](reports/2026-10-18-ra-soat-ui-lan-9.md)** — S-01…S-16 và AD-02…AD-24 đã làm; **không có P0/P1**; 58 test e2e cũ đạt.
+> - Việc tiếp cho Antigravity: **T-01 (P2)** gắn mốc test theo TESTIDS "Rà soát lần 8"; **T-02 (P2)** chi tiết người dùng admin còn nuốt lỗi; T-03…T-06 (P3); AD-25…AD-28.
+
 ## Backend → UI (Claude Code cập nhật mỗi khi đổi backend/hợp đồng; Antigravity đọc đầu mỗi phiên, cùng `packages/contracts/CHANGELOG.md`)
 
 | Ngày | Thay đổi backend / hợp đồng | UI cần làm gì | Trạng thái |
