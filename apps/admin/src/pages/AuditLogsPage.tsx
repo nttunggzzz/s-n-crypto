@@ -10,23 +10,40 @@ export const AuditLogsPage: React.FC = () => {
   const [targetTypeFilter, setTargetTypeFilter] = useState<AuditTargetType | ''>('');
   const [selectedEntry, setSelectedEntry] = useState<AuditLogEntry | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
 
   const api = getApiClient();
 
-  const loadLogs = () => {
-    setIsLoading(true);
+  const loadLogs = (cursor?: string) => {
+    if (cursor) {
+      setIsLoadingMore(true);
+    } else {
+      setIsLoading(true);
+    }
     setLoadError(null);
     api.adminAuditLogs({
       query: {
         action: actionFilter || undefined,
         targetType: targetTypeFilter || undefined,
+        cursor,
         limit: 100,
       },
     })
-      .then((res) => setLogs(res.items))
+      .then((res) => {
+        if (cursor) {
+          setLogs((prev) => [...prev, ...res.items]);
+        } else {
+          setLogs(res.items);
+        }
+        setNextCursor(res.nextCursor);
+      })
       .catch((e: any) => setLoadError(formatApiError(e, 'Không thể tải nhật ký quản trị.')))
-      .finally(() => setIsLoading(false));
+      .finally(() => {
+        setIsLoading(false);
+        setIsLoadingMore(false);
+      });
   };
 
   useEffect(() => {
@@ -39,7 +56,7 @@ export const AuditLogsPage: React.FC = () => {
         <div>
           <h1 className="text-2xl font-bold text-[var(--text,#f4f4f5)]">Nhật ký quản trị (Audit Logs)</h1>
           <p className="text-sm text-[var(--text-2,#a1a1aa)] mt-1">
-            Ghi nhận bất biến mọi thay đổi dữ liệu của nhân viên vận hành sàn và hệ thống
+            Ghi nhận bất biến mọi thay đổi dữ liệu của nhân viên vận hành sàn và hệ thống (đã tải {logs.length} bản ghi)
           </p>
         </div>
 
@@ -145,6 +162,19 @@ export const AuditLogsPage: React.FC = () => {
             )}
           </tbody>
         </table>
+
+        {nextCursor && (
+          <div className="p-4 border-t border-[var(--line,#1d1e21)] flex justify-center">
+            <button
+              onClick={() => loadLogs(nextCursor)}
+              disabled={isLoadingMore}
+              data-testid="list-more"
+              className="px-4 py-2 rounded-lg bg-[var(--line,#1d1e21)] hover:bg-[var(--line,#1d1e21)]/80 text-xs font-semibold text-[var(--text,#f4f4f5)] transition-colors disabled:opacity-50"
+            >
+              {isLoadingMore ? 'Đang tải...' : 'Xem thêm'}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Compare Modal */}

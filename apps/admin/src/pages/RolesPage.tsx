@@ -28,14 +28,25 @@ export const RolesPage: React.FC = () => {
     setIsLoading(true);
     setLoadError(null);
     try {
-      // Query support, admin, and owner users
-      const [supportRes, adminRes, ownerRes] = await Promise.all([
-        api.adminListUsers({ query: { role: 'support', limit: 50 } }),
-        api.adminListUsers({ query: { role: 'admin', limit: 50 } }),
-        api.adminListUsers({ query: { role: 'owner', limit: 50 } }),
+      const fetchAllUsersForRole = async (role: Role) => {
+        let items: AdminUserSummary[] = [];
+        let cursor: string | null = null;
+        while (true) {
+          const res = await api.adminListUsers({ query: { role, cursor: cursor || undefined, limit: 50 } });
+          items = [...items, ...res.items];
+          if (!res.nextCursor || res.items.length === 0) break;
+          cursor = res.nextCursor;
+        }
+        return items;
+      };
+
+      const [supportItems, adminItems, ownerItems] = await Promise.all([
+        fetchAllUsersForRole('support'),
+        fetchAllUsersForRole('admin'),
+        fetchAllUsersForRole('owner'),
       ]);
 
-      const all = [...ownerRes.items, ...adminRes.items, ...supportRes.items];
+      const all = [...ownerItems, ...adminItems, ...supportItems];
       // deduplicate
       const map = new Map<string, AdminUserSummary>();
       all.forEach((u) => map.set(u.id, u));
@@ -91,7 +102,7 @@ export const RolesPage: React.FC = () => {
         <div>
           <h1 className="text-2xl font-bold text-[var(--text,#f4f4f5)]">Nhân sự & Phân quyền</h1>
           <p className="text-sm text-[var(--text-2,#a1a1aa)] mt-1">
-            Danh sách nhân sự quản trị sàn, kiểm tra bảo mật 2FA và phân quyền vai trò (Owner only)
+            Danh sách nhân sự quản trị sàn, kiểm tra bảo mật 2FA và phân quyền vai trò (Owner only) (đã tải {staffUsers.length} nhân sự)
           </p>
         </div>
 

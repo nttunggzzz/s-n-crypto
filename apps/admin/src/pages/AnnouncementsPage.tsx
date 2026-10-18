@@ -23,16 +23,33 @@ export const AnnouncementsPage: React.FC = () => {
   const [modalError, setModalError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
 
   const api = getApiClient();
   const canManage = hasPerm('content.manage');
 
-  const loadAnnouncements = () => {
-    setIsLoading(true);
-    api.adminListAnnouncements({ query: { includeHidden: includeHidden ? 'true' : 'false' } })
-      .then((res) => setItems(res.items))
+  const loadAnnouncements = (cursor?: string) => {
+    if (cursor) {
+      setIsLoadingMore(true);
+    } else {
+      setIsLoading(true);
+    }
+    setActionError(null);
+    api.adminListAnnouncements({ query: { includeHidden: includeHidden ? 'true' : 'false', cursor } })
+      .then((res) => {
+        if (cursor) {
+          setItems((prev) => [...prev, ...res.items]);
+        } else {
+          setItems(res.items);
+        }
+        setNextCursor(res.nextCursor);
+      })
       .catch((err) => setActionError(formatApiError(err)))
-      .finally(() => setIsLoading(false));
+      .finally(() => {
+        setIsLoading(false);
+        setIsLoadingMore(false);
+      });
   };
 
   useEffect(() => {
@@ -147,7 +164,7 @@ export const AnnouncementsPage: React.FC = () => {
         <div>
           <h1 className="text-2xl font-bold text-[var(--text,#f4f4f5)]">Thông báo sàn</h1>
           <p className="text-sm text-[var(--text-2,#a1a1aa)] mt-1">
-            Đăng tin tức, cảnh báo bảo trì và các thông báo quan trọng đến người dùng sàn
+            Đăng tin tức, cảnh báo bảo trì và các thông báo quan trọng đến người dùng sàn (đã tải {items.length} thông báo)
           </p>
         </div>
 
@@ -269,7 +286,23 @@ export const AnnouncementsPage: React.FC = () => {
                 )}
               </tr>
             ))}
-            {!isLoading && items.length === 0 && (
+            {actionError && items.length === 0 && (
+              <tr>
+                <td colSpan={8} className="px-5 py-10 text-center">
+                  <div data-testid="list-error" className="flex flex-col items-center justify-center gap-3">
+                    <p className="text-sm text-[var(--down,#f2475f)]">{actionError}</p>
+                    <button
+                      type="button"
+                      onClick={() => loadAnnouncements()}
+                      className="px-3.5 py-1.5 rounded-lg bg-[var(--accent,#818cf8)] text-white text-xs font-semibold hover:brightness-110 transition-all"
+                    >
+                      Thử lại
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            )}
+            {!isLoading && !actionError && items.length === 0 && (
               <tr>
                 <td colSpan={8} className="px-5 py-10 text-center text-[var(--text-3,#63636b)]">
                   Chưa có thông báo nào
@@ -278,6 +311,19 @@ export const AnnouncementsPage: React.FC = () => {
             )}
           </tbody>
         </table>
+
+        {nextCursor && (
+          <div className="p-4 border-t border-[var(--line,#1d1e21)] flex justify-center">
+            <button
+              onClick={() => loadAnnouncements(nextCursor)}
+              disabled={isLoadingMore}
+              data-testid="list-more"
+              className="px-4 py-2 rounded-lg bg-[var(--line,#1d1e21)] hover:bg-[var(--line,#1d1e21)]/80 text-xs font-semibold text-[var(--text,#f4f4f5)] transition-colors disabled:opacity-50"
+            >
+              {isLoadingMore ? 'Đang tải...' : 'Xem thêm'}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Create / Edit Modal */}

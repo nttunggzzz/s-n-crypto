@@ -28,7 +28,9 @@ export const UsersPage: React.FC<{ onNavigate: (path: string) => void }> = ({ on
   const [statusFilter, setStatusFilter] = useState<'active' | 'locked' | ''>('');
   const [copiedUid, setCopiedUid] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
 
   // Modal Thêm thành viên
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
@@ -49,30 +51,41 @@ export const UsersPage: React.FC<{ onNavigate: (path: string) => void }> = ({ on
   const [isSubmittingAction, setIsSubmittingAction] = useState(false);
   const [actionSuccessMsg, setActionSuccessMsg] = useState<string | null>(null);
 
-  const fetchUsers = useCallback(() => {
-    setIsLoading(true);
+  const fetchUsers = useCallback((cursor?: string) => {
+    if (cursor) {
+      setIsLoadingMore(true);
+    } else {
+      setIsLoading(true);
+    }
     setLoadError(null);
     api.adminListUsers({
       query: {
         q: query.trim() || undefined,
         role: roleFilter || undefined,
         status: statusFilter || undefined,
+        cursor,
         limit: 50,
       },
     })
       .then((res) => {
-        setUsers(res.items);
+        if (cursor) {
+          setUsers((prev) => [...prev, ...res.items]);
+        } else {
+          setUsers(res.items);
+        }
+        setNextCursor(res.nextCursor);
       })
       .catch((e: any) => {
         setLoadError(formatApiError(e, 'Không thể tải danh sách người dùng.'));
       })
       .finally(() => {
         setIsLoading(false);
+        setIsLoadingMore(false);
       });
   }, [api, query, roleFilter, statusFilter]);
 
   useEffect(() => {
-    const timer = setTimeout(fetchUsers, 250);
+    const timer = setTimeout(() => fetchUsers(), 250);
     return () => clearTimeout(timer);
   }, [fetchUsers]);
 
@@ -215,7 +228,7 @@ export const UsersPage: React.FC<{ onNavigate: (path: string) => void }> = ({ on
       {/* Tabs navigation */}
       <div className="flex border-b border-[var(--line,#1d1e21)] mb-6 gap-6">
         <button className="pb-3 border-b-2 border-[var(--accent,#818cf8)] text-[var(--accent,#818cf8)] font-semibold text-sm">
-          Danh sách tài khoản ({users.length})
+          Danh sách tài khoản (đã tải {users.length})
         </button>
         <button
           onClick={() => onNavigate('/admin/roles')}
@@ -263,7 +276,7 @@ export const UsersPage: React.FC<{ onNavigate: (path: string) => void }> = ({ on
         </select>
 
         <button
-          onClick={fetchUsers}
+          onClick={() => fetchUsers()}
           className="p-2 rounded-lg bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)] text-[var(--text-2,#a1a1aa)] hover:text-[var(--text,#f4f4f5)] hover:bg-[var(--line,#1d1e21)] transition-colors"
           title="Tải lại danh sách"
         >
@@ -419,6 +432,19 @@ export const UsersPage: React.FC<{ onNavigate: (path: string) => void }> = ({ on
             )}
           </tbody>
         </table>
+
+        {nextCursor && (
+          <div className="p-4 border-t border-[var(--line,#1d1e21)] flex justify-center">
+            <button
+              onClick={() => fetchUsers(nextCursor)}
+              disabled={isLoadingMore}
+              data-testid="list-more"
+              className="px-4 py-2 rounded-lg bg-[var(--line,#1d1e21)] hover:bg-[var(--line,#1d1e21)]/80 text-xs font-semibold text-[var(--text,#f4f4f5)] transition-colors disabled:opacity-50"
+            >
+              {isLoadingMore ? 'Đang tải...' : 'Xem thêm'}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* MODAL: Thêm thành viên */}

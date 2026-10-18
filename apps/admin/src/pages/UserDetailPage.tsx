@@ -52,6 +52,18 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
   const [taxLoading, setTaxLoading] = useState(false);
   const [taxNextCursor, setTaxNextCursor] = useState<string | null>(null);
 
+  const [ordersNextCursor, setOrdersNextCursor] = useState<string | null>(null);
+  const [ordersLoadingMore, setOrdersLoadingMore] = useState(false);
+
+  const [ledgerNextCursor, setLedgerNextCursor] = useState<string | null>(null);
+  const [ledgerLoadingMore, setLedgerLoadingMore] = useState(false);
+
+  const [positionsNextCursor, setPositionsNextCursor] = useState<string | null>(null);
+  const [positionsLoadingMore, setPositionsLoadingMore] = useState(false);
+
+  const [loginsNextCursor, setLoginsNextCursor] = useState<string | null>(null);
+  const [loginsLoadingMore, setLoginsLoadingMore] = useState(false);
+
   // Role change modal state
   const [roleModalOpen, setRoleModalOpen] = useState(false);
   const [targetRole, setTargetRole] = useState<Role>('user');
@@ -151,24 +163,48 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
 
     if (activeTab === 'orders') {
       api.adminUserOrders({ params: { userId: actualId }, query: { open: ordersType, limit: 50 } })
-        .then((r) => setOrders(r.items))
-        .catch(() => {});
+        .then((r) => {
+          setOrders(r.items);
+          setOrdersNextCursor(r.nextCursor);
+        })
+        .catch(() => {
+          setOrders([]);
+          setOrdersNextCursor(null);
+        });
     } else if (activeTab === 'ledger') {
       api.adminUserLedger({ params: { userId: actualId }, query: { limit: 50 } })
-        .then((r) => setLedgerEntries(r.items))
-        .catch(() => {});
+        .then((r) => {
+          setLedgerEntries(r.items);
+          setLedgerNextCursor(r.nextCursor);
+        })
+        .catch(() => {
+          setLedgerEntries([]);
+          setLedgerNextCursor(null);
+        });
     } else if (activeTab === 'futures') {
       api.adminUserFuturesPositions({ params: { userId: actualId }, query: { open: positionsType, limit: 50 } })
-        .then((r) => setPositions(r.items))
-        .catch(() => {});
+        .then((r) => {
+          setPositions(r.items);
+          setPositionsNextCursor(r.nextCursor);
+        })
+        .catch(() => {
+          setPositions([]);
+          setPositionsNextCursor(null);
+        });
     } else if (activeTab === 'bots') {
       api.adminUserBots({ params: { userId: actualId } })
         .then((r) => setUserBots(r))
         .catch(() => {});
     } else if (activeTab === 'logins') {
       api.adminUserLoginHistory({ params: { userId: actualId }, query: { limit: 50 } })
-        .then((r) => setAllLogins(r.items))
-        .catch(() => {});
+        .then((r) => {
+          setAllLogins(r.items);
+          setLoginsNextCursor(r.nextCursor);
+        })
+        .catch(() => {
+          setAllLogins([]);
+          setLoginsNextCursor(null);
+        });
     } else if (activeTab === 'tax') {
       setTaxLoading(true);
       api.adminTaxWithholdings({ query: { userId: actualId, limit: 50 } })
@@ -184,13 +220,64 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
     }
   }, [actualId, notFound, activeTab, ordersType, positionsType, api]);
 
+  const loadMoreOrders = async () => {
+    if (!ordersNextCursor || !actualId || notFound || ordersLoadingMore) return;
+    setOrdersLoadingMore(true);
+    try {
+      const r = await api.adminUserOrders({ params: { userId: actualId }, query: { open: ordersType, cursor: ordersNextCursor, limit: 50 } });
+      setOrders((prev) => [...prev, ...r.items]);
+      setOrdersNextCursor(r.nextCursor);
+    } catch {} finally {
+      setOrdersLoadingMore(false);
+    }
+  };
+
+  const loadMoreLedger = async () => {
+    if (!ledgerNextCursor || !actualId || notFound || ledgerLoadingMore) return;
+    setLedgerLoadingMore(true);
+    try {
+      const r = await api.adminUserLedger({ params: { userId: actualId }, query: { cursor: ledgerNextCursor, limit: 50 } });
+      setLedgerEntries((prev) => [...prev, ...r.items]);
+      setLedgerNextCursor(r.nextCursor);
+    } catch {} finally {
+      setLedgerLoadingMore(false);
+    }
+  };
+
+  const loadMorePositions = async () => {
+    if (!positionsNextCursor || !actualId || notFound || positionsLoadingMore) return;
+    setPositionsLoadingMore(true);
+    try {
+      const r = await api.adminUserFuturesPositions({ params: { userId: actualId }, query: { open: positionsType, cursor: positionsNextCursor, limit: 50 } });
+      setPositions((prev) => [...prev, ...r.items]);
+      setPositionsNextCursor(r.nextCursor);
+    } catch {} finally {
+      setPositionsLoadingMore(false);
+    }
+  };
+
+  const loadMoreLogins = async () => {
+    if (!loginsNextCursor || !actualId || notFound || loginsLoadingMore) return;
+    setLoginsLoadingMore(true);
+    try {
+      const r = await api.adminUserLoginHistory({ params: { userId: actualId }, query: { cursor: loginsNextCursor, limit: 50 } });
+      setAllLogins((prev) => [...prev, ...r.items]);
+      setLoginsNextCursor(r.nextCursor);
+    } catch {} finally {
+      setLoginsLoadingMore(false);
+    }
+  };
+
   const loadMoreTax = async () => {
-    if (!taxNextCursor || !actualId || notFound) return;
+    if (!taxNextCursor || !actualId || notFound || taxLoading) return;
+    setTaxLoading(true);
     try {
       const r = await api.adminTaxWithholdings({ query: { userId: actualId, cursor: taxNextCursor, limit: 50 } });
       setTaxWithholdings((prev) => [...prev, ...r.items]);
       setTaxNextCursor(r.nextCursor);
-    } catch {}
+    } catch {} finally {
+      setTaxLoading(false);
+    }
   };
 
   if (notFound) {
@@ -725,19 +812,19 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
           onClick={() => setActiveTab('orders')}
           className={`pb-3 font-semibold transition-colors ${activeTab === 'orders' ? 'border-b-2 border-[var(--accent,#818cf8)] text-[var(--accent,#818cf8)]' : 'text-[var(--text-2,#a1a1aa)] hover:text-[var(--text,#f4f4f5)]'}`}
         >
-          Lệnh Spot ({detail.openOrders} mở)
+          Lệnh Spot ({detail.openOrders} mở, đã tải {orders.length})
         </button>
         <button
           onClick={() => setActiveTab('ledger')}
           className={`pb-3 font-semibold transition-colors ${activeTab === 'ledger' ? 'border-b-2 border-[var(--accent,#818cf8)] text-[var(--accent,#818cf8)]' : 'text-[var(--text-2,#a1a1aa)] hover:text-[var(--text,#f4f4f5)]'}`}
         >
-          Sổ cái biến động
+          Sổ cái biến động (đã tải {ledgerEntries.length})
         </button>
         <button
           onClick={() => setActiveTab('futures')}
           className={`pb-3 font-semibold transition-colors ${activeTab === 'futures' ? 'border-b-2 border-[var(--accent,#818cf8)] text-[var(--accent,#818cf8)]' : 'text-[var(--text-2,#a1a1aa)] hover:text-[var(--text,#f4f4f5)]'}`}
         >
-          Vị thế Futures ({detail.futures.openPositions})
+          Vị thế Futures ({detail.futures.openPositions} mở, đã tải {positions.length})
         </button>
         <button
           onClick={() => setActiveTab('bots')}
@@ -749,14 +836,14 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
           onClick={() => setActiveTab('logins')}
           className={`pb-3 font-semibold transition-colors ${activeTab === 'logins' ? 'border-b-2 border-[var(--accent,#818cf8)] text-[var(--accent,#818cf8)]' : 'text-[var(--text-2,#a1a1aa)] hover:text-[var(--text,#f4f4f5)]'}`}
         >
-          Lịch sử Đăng nhập
+          Lịch sử Đăng nhập (đã tải {allLogins.length})
         </button>
         <button
           onClick={() => setActiveTab('tax')}
           className={`pb-3 font-semibold transition-colors flex items-center gap-1.5 ${activeTab === 'tax' ? 'border-b-2 border-[var(--accent,#818cf8)] text-[var(--accent,#818cf8)]' : 'text-[var(--text-2,#a1a1aa)] hover:text-[var(--text,#f4f4f5)]'}`}
         >
           <Receipt size={14} />
-          <span>Hồ sơ Thuế (TT 32/2026)</span>
+          <span>Hồ sơ Thuế (TT 32/2026, đã tải {taxWithholdings.length})</span>
         </button>
       </div>
 
@@ -929,6 +1016,19 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
               )}
             </tbody>
           </table>
+          {ordersNextCursor && (
+            <div className="p-4 border-t border-[var(--line,#1d1e21)] flex justify-center">
+              <button
+                type="button"
+                onClick={loadMoreOrders}
+                disabled={ordersLoadingMore}
+                data-testid="list-more"
+                className="px-4 py-2 rounded-lg bg-[var(--line,#1d1e21)] hover:bg-[var(--line,#1d1e21)]/80 text-xs font-semibold text-[var(--text,#f4f4f5)] transition-colors disabled:opacity-50"
+              >
+                {ordersLoadingMore ? 'Đang tải...' : 'Xem thêm'}
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -964,6 +1064,19 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
               )}
             </tbody>
           </table>
+          {ledgerNextCursor && (
+            <div className="p-4 border-t border-[var(--line,#1d1e21)] flex justify-center">
+              <button
+                type="button"
+                onClick={loadMoreLedger}
+                disabled={ledgerLoadingMore}
+                data-testid="list-more"
+                className="px-4 py-2 rounded-lg bg-[var(--line,#1d1e21)] hover:bg-[var(--line,#1d1e21)]/80 text-xs font-semibold text-[var(--text,#f4f4f5)] transition-colors disabled:opacity-50"
+              >
+                {ledgerLoadingMore ? 'Đang tải...' : 'Xem thêm'}
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -1035,6 +1148,19 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
               )}
             </tbody>
           </table>
+          {positionsNextCursor && (
+            <div className="p-4 border-t border-[var(--line,#1d1e21)] flex justify-center">
+              <button
+                type="button"
+                onClick={loadMorePositions}
+                disabled={positionsLoadingMore}
+                data-testid="list-more"
+                className="px-4 py-2 rounded-lg bg-[var(--line,#1d1e21)] hover:bg-[var(--line,#1d1e21)]/80 text-xs font-semibold text-[var(--text,#f4f4f5)] transition-colors disabled:opacity-50"
+              >
+                {positionsLoadingMore ? 'Đang tải...' : 'Xem thêm'}
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -1173,6 +1299,19 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
               )}
             </tbody>
           </table>
+          {loginsNextCursor && (
+            <div className="p-4 border-t border-[var(--line,#1d1e21)] flex justify-center">
+              <button
+                type="button"
+                onClick={loadMoreLogins}
+                disabled={loginsLoadingMore}
+                data-testid="list-more"
+                className="px-4 py-2 rounded-lg bg-[var(--line,#1d1e21)] hover:bg-[var(--line,#1d1e21)]/80 text-xs font-semibold text-[var(--text,#f4f4f5)] transition-colors disabled:opacity-50"
+              >
+                {loginsLoadingMore ? 'Đang tải...' : 'Xem thêm'}
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -1248,14 +1387,15 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
             </table>
 
             {taxNextCursor && (
-              <div className="p-4 border-t border-[var(--line,#1d1e21)] text-center">
+              <div className="p-4 border-t border-[var(--line,#1d1e21)] flex justify-center">
                 <button
                   type="button"
                   onClick={loadMoreTax}
                   disabled={taxLoading}
-                  className="px-4 py-2 rounded-lg bg-[var(--line,#1d1e21)] text-xs text-[var(--text,#f4f4f5)] hover:bg-[var(--line,#1d1e21)]/80 transition-colors"
+                  data-testid="list-more"
+                  className="px-4 py-2 rounded-lg bg-[var(--line,#1d1e21)] hover:bg-[var(--line,#1d1e21)]/80 text-xs font-semibold text-[var(--text,#f4f4f5)] transition-colors disabled:opacity-50"
                 >
-                  {taxLoading ? 'Đang tải...' : 'Xem thêm bản ghi'}
+                  {taxLoading ? 'Đang tải...' : 'Xem thêm'}
                 </button>
               </div>
             )}

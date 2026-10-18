@@ -11,7 +11,9 @@ export const InvitesPage: React.FC = () => {
   const [invites, setInvites] = useState<Invite[]>([]);
   const [statusFilter, setStatusFilter] = useState<InviteStatus | ''>('');
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
 
   // Create invite modal
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -32,13 +34,27 @@ export const InvitesPage: React.FC = () => {
   const api = getApiClient();
   const canInvite = hasPerm('users.invite');
 
-  const loadInvites = () => {
-    setIsLoading(true);
+  const loadInvites = (cursor?: string) => {
+    if (cursor) {
+      setIsLoadingMore(true);
+    } else {
+      setIsLoading(true);
+    }
     setLoadError(null);
-    api.adminListInvites({ query: { status: statusFilter || undefined } })
-      .then((res) => setInvites(res.items))
+    api.adminListInvites({ query: { status: statusFilter || undefined, cursor } })
+      .then((res) => {
+        if (cursor) {
+          setInvites((prev) => [...prev, ...res.items]);
+        } else {
+          setInvites(res.items);
+        }
+        setNextCursor(res.nextCursor);
+      })
       .catch((e: any) => setLoadError(formatApiError(e, 'Không thể tải danh sách mã mời.')))
-      .finally(() => setIsLoading(false));
+      .finally(() => {
+        setIsLoading(false);
+        setIsLoadingMore(false);
+      });
   };
 
   useEffect(() => {
@@ -95,7 +111,7 @@ export const InvitesPage: React.FC = () => {
         <div>
           <h1 className="text-2xl font-bold text-[var(--text,#f4f4f5)]">Mã mời đăng ký (Invites)</h1>
           <p className="text-sm text-[var(--text-2,#a1a1aa)] mt-1">
-            Quản lý và cấp mã mời tham gia sàn dành cho giai đoạn thử nghiệm đóng
+            Quản lý và cấp mã mời tham gia sàn dành cho giai đoạn thử nghiệm đóng (đã tải {invites.length} mã mời)
           </p>
         </div>
 
@@ -193,6 +209,19 @@ export const InvitesPage: React.FC = () => {
             )}
           </tbody>
         </table>
+
+        {nextCursor && (
+          <div className="p-4 border-t border-[var(--line,#1d1e21)] flex justify-center">
+            <button
+              onClick={() => loadInvites(nextCursor)}
+              disabled={isLoadingMore}
+              data-testid="list-more"
+              className="px-4 py-2 rounded-lg bg-[var(--line,#1d1e21)] hover:bg-[var(--line,#1d1e21)]/80 text-xs font-semibold text-[var(--text,#f4f4f5)] transition-colors disabled:opacity-50"
+            >
+              {isLoadingMore ? 'Đang tải...' : 'Xem thêm'}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Create Modal */}
