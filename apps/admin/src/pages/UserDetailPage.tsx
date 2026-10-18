@@ -645,6 +645,7 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
               <span className="text-[var(--text-3,#63636b)]">PnL chưa chốt:</span>
               <span
                 data-testid="admin-futures-upnl"
+                title={detail.futures.unrealizedPnl === null ? 'Chưa có giá đánh dấu' : undefined}
                 className={
                   detail.futures.unrealizedPnl === null
                     ? 'text-[var(--text-3,#63636b)]'
