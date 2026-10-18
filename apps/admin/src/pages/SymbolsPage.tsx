@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { getApiClient } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { ConfirmDialog } from '../components/ConfirmDialog';
+import { formatApiError } from '../services/errors';
 import { appLinks, type AdminSymbol } from '@cex/contracts';
 import { PlusCircle, Search, ExternalLink, Power } from 'lucide-react';
 
@@ -16,6 +17,7 @@ export const SymbolsPage: React.FC = () => {
   const [newEnabled, setNewEnabled] = useState(false);
   const [cancelOpenOrders, setCancelOpenOrders] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmError, setConfirmError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const api = getApiClient();
@@ -38,12 +40,14 @@ export const SymbolsPage: React.FC = () => {
     setTargetSymbol(sym);
     setNewEnabled(!sym.adminEnabled);
     setCancelOpenOrders(sym.adminEnabled); // Default cancel orders if we are disabling it
+    setConfirmError(null);
     setConfirmOpen(true);
   };
 
   const handleConfirmToggle = async (reason: string) => {
     if (!targetSymbol) return;
     setIsSubmitting(true);
+    setConfirmError(null);
     try {
       await api.adminUpdateSymbol({
         params: { symbol: targetSymbol.symbol },
@@ -54,9 +58,10 @@ export const SymbolsPage: React.FC = () => {
         },
       });
       setConfirmOpen(false);
+      setConfirmError(null);
       loadSymbols();
     } catch (e) {
-      console.error(e);
+      setConfirmError(formatApiError(e));
     } finally {
       setIsSubmitting(false);
     }
@@ -186,8 +191,9 @@ export const SymbolsPage: React.FC = () => {
               }`
         }
         onConfirm={handleConfirmToggle}
-        onCancel={() => setConfirmOpen(false)}
+        onCancel={() => { setConfirmOpen(false); setConfirmError(null); }}
         isSubmitting={isSubmitting}
+        error={confirmError}
       />
     </div>
   );

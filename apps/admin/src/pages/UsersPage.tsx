@@ -16,6 +16,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import { ConfirmDialog } from '../components/ConfirmDialog';
+import { formatApiError } from '../services/errors';
 
 export const UsersPage: React.FC<{ onNavigate: (path: string) => void }> = ({ onNavigate }) => {
   const { hasPerm, user: currentUser } = useAuth();
@@ -43,6 +44,7 @@ export const UsersPage: React.FC<{ onNavigate: (path: string) => void }> = ({ on
   const [actionType, setActionType] = useState<'LOCK' | 'UNLOCK' | 'CHANGE_ROLE' | null>(null);
   const [newRole, setNewRole] = useState<Role>('user');
   const [roleReason, setRoleReason] = useState('');
+  const [actionError, setActionError] = useState<string | null>(null);
   const [isSubmittingAction, setIsSubmittingAction] = useState(false);
   const [actionSuccessMsg, setActionSuccessMsg] = useState<string | null>(null);
 
@@ -91,7 +93,7 @@ export const UsersPage: React.FC<{ onNavigate: (path: string) => void }> = ({ on
       setCreatedInvite(res);
       setInviteNote('');
     } catch (err: any) {
-      setInviteError(err?.message || 'Không thể tạo mã mời.');
+      setInviteError(formatApiError(err, 'Không thể tạo mã mời.'));
     } finally {
       setIsCreatingInvite(false);
     }
@@ -107,12 +109,14 @@ export const UsersPage: React.FC<{ onNavigate: (path: string) => void }> = ({ on
   const handleOpenLock = (e: React.MouseEvent, u: AdminUserSummary) => {
     e.stopPropagation();
     setSelectedUser(u);
+    setActionError(null);
     setActionType('LOCK');
   };
 
   const handleOpenUnlock = (e: React.MouseEvent, u: AdminUserSummary) => {
     e.stopPropagation();
     setSelectedUser(u);
+    setActionError(null);
     setActionType('UNLOCK');
   };
 
@@ -121,12 +125,14 @@ export const UsersPage: React.FC<{ onNavigate: (path: string) => void }> = ({ on
     setSelectedUser(u);
     setNewRole(u.role);
     setRoleReason('');
+    setActionError(null);
     setActionType('CHANGE_ROLE');
   };
 
   const handleConfirmLockOrUnlock = async (reason: string) => {
     if (!selectedUser) return;
     setIsSubmittingAction(true);
+    setActionError(null);
     try {
       if (actionType === 'LOCK') {
         await api.adminLockUser({ params: { userId: selectedUser.id }, body: { reason } });
@@ -137,9 +143,10 @@ export const UsersPage: React.FC<{ onNavigate: (path: string) => void }> = ({ on
       }
       setActionType(null);
       setSelectedUser(null);
+      setActionError(null);
       fetchUsers();
     } catch (err: any) {
-      console.error(err);
+      setActionError(formatApiError(err));
     } finally {
       setIsSubmittingAction(false);
       setTimeout(() => setActionSuccessMsg(null), 4000);
@@ -149,6 +156,7 @@ export const UsersPage: React.FC<{ onNavigate: (path: string) => void }> = ({ on
   const handleConfirmRoleSubmit = async () => {
     if (!selectedUser || !roleReason || roleReason.trim().length < 5) return;
     setIsSubmittingAction(true);
+    setActionError(null);
     try {
       await api.adminSetRole({
         params: { userId: selectedUser.id },
@@ -157,9 +165,10 @@ export const UsersPage: React.FC<{ onNavigate: (path: string) => void }> = ({ on
       setActionSuccessMsg(`Đã cập nhật vai trò của ${selectedUser.email} thành ${newRole.toUpperCase()}`);
       setActionType(null);
       setSelectedUser(null);
+      setActionError(null);
       fetchUsers();
     } catch (err: any) {
-      console.error(err);
+      setActionError(formatApiError(err));
     } finally {
       setIsSubmittingAction(false);
       setTimeout(() => setActionSuccessMsg(null), 4000);
@@ -523,6 +532,15 @@ export const UsersPage: React.FC<{ onNavigate: (path: string) => void }> = ({ on
               <span>Thay Đổi Vai Trò Thành Viên</span>
             </h3>
 
+            {actionError && (
+              <div
+                data-testid="confirm-error"
+                className="p-3 rounded-lg bg-[var(--down,#f2475f)]/15 border border-[var(--down,#f2475f)]/30 text-xs text-[var(--down,#f2475f)] leading-relaxed"
+              >
+                {actionError}
+              </div>
+            )}
+
             <div className="p-3 bg-[var(--bg,#000000)] border border-[var(--line,#1d1e21)] rounded-lg text-xs space-y-1">
               <div>Thành viên: <strong className="text-[var(--text,#f4f4f5)]">{selectedUser.email}</strong></div>
               <div>UID: <span className="font-mono text-[var(--accent,#818cf8)]">{selectedUser.uid}</span></div>
@@ -561,7 +579,7 @@ export const UsersPage: React.FC<{ onNavigate: (path: string) => void }> = ({ on
             <div className="flex justify-end gap-3 pt-2 border-t border-[var(--line,#1d1e21)]">
               <button
                 type="button"
-                onClick={() => setActionType(null)}
+                onClick={() => { setActionType(null); setSelectedUser(null); setActionError(null); }}
                 className="px-4 py-2 rounded-lg border border-[var(--line,#1d1e21)] text-xs text-[var(--text-2,#a1a1aa)] hover:bg-[var(--line,#1d1e21)] transition-colors"
                 disabled={isSubmittingAction}
               >
@@ -591,8 +609,9 @@ export const UsersPage: React.FC<{ onNavigate: (path: string) => void }> = ({ on
             : `Tài khoản ${selectedUser?.email} sẽ được phép đăng nhập lại vào hệ thống và giao dịch bình thường.`
         }
         onConfirm={handleConfirmLockOrUnlock}
-        onCancel={() => { setActionType(null); setSelectedUser(null); }}
+        onCancel={() => { setActionType(null); setSelectedUser(null); setActionError(null); }}
         isSubmitting={isSubmittingAction}
+        error={actionError}
       />
     </div>
   );

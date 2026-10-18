@@ -3,6 +3,7 @@ import { getApiClient } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { useMarket } from '../context/MarketContext';
 import { ConfirmDialog } from '../components/ConfirmDialog';
+import { formatApiError } from '../services/errors';
 import { Button } from '@cex/ui';
 import type { AdminOverview } from '@cex/contracts';
 import {
@@ -27,6 +28,7 @@ export const OverviewPage: React.FC<{ onNavigate?: (path: string) => void }> = (
 
   const [isConfirmOpen, setIsConfirmOpen] = useState(false);
   const [confirmType, setConfirmType] = useState<'HALT' | 'RESUME'>('HALT');
+  const [confirmError, setConfirmError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isReconciling, setIsReconciling] = useState(false);
   const [reconcileResult, setReconcileResult] = useState<string | null>(null);
@@ -38,17 +40,20 @@ export const OverviewPage: React.FC<{ onNavigate?: (path: string) => void }> = (
   }, []);
 
   const handleOpenHalt = () => {
+    setConfirmError(null);
     setConfirmType('HALT');
     setIsConfirmOpen(true);
   };
 
   const handleOpenResume = () => {
+    setConfirmError(null);
     setConfirmType('RESUME');
     setIsConfirmOpen(true);
   };
 
   const handleConfirm = async (reason: string) => {
     setIsSubmitting(true);
+    setConfirmError(null);
     try {
       if (confirmType === 'HALT') {
         await api.adminHaltTrading({ body: { reason, confirm: 'HALT' } });
@@ -57,10 +62,11 @@ export const OverviewPage: React.FC<{ onNavigate?: (path: string) => void }> = (
       }
       await refreshHaltState();
       setIsConfirmOpen(false);
+      setConfirmError(null);
       const fresh = await api.adminOverview().catch(() => null);
       if (fresh) setOverview(fresh);
     } catch (e) {
-      console.error(e);
+      setConfirmError(formatApiError(e));
     } finally {
       setIsSubmitting(false);
     }
@@ -302,8 +308,9 @@ export const OverviewPage: React.FC<{ onNavigate?: (path: string) => void }> = (
         consequenceText={confirmType === 'HALT' ? 'Tất cả hoạt động giao dịch sẽ bị dừng lập tức.' : 'Hệ thống giao dịch sẽ hoạt động trở lại.'}
         requirePhrase={confirmType}
         onConfirm={handleConfirm}
-        onCancel={() => setIsConfirmOpen(false)}
+        onCancel={() => { setIsConfirmOpen(false); setConfirmError(null); }}
         isSubmitting={isSubmitting}
+        error={confirmError}
       />
     </div>
   );

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { getApiClient } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { ConfirmDialog } from '../components/ConfirmDialog';
+import { formatApiError } from '../services/errors';
 import type { Invite, InviteStatus, CreatedInvite } from '@cex/contracts';
 import { KeyRound, Plus, Copy, Check, Ban } from 'lucide-react';
 
@@ -19,11 +20,13 @@ export const InvitesPage: React.FC = () => {
   const [createdResult, setCreatedResult] = useState<CreatedInvite | null>(null);
   const [copiedCode, setCopiedCode] = useState(false);
   const [copiedLink, setCopiedLink] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Revoke modal
   const [selectedInvite, setSelectedInvite] = useState<Invite | null>(null);
   const [revokeOpen, setRevokeOpen] = useState(false);
+  const [revokeError, setRevokeError] = useState<string | null>(null);
 
   const api = getApiClient();
   const canInvite = hasPerm('users.invite');
@@ -44,31 +47,41 @@ export const InvitesPage: React.FC = () => {
     e.preventDefault();
     if (!note) return;
     setIsSubmitting(true);
+    setCreateError(null);
     try {
       const res = await api.adminCreateInvite({
         body: { note, maxUses, expiresInDays },
       });
       setCreatedResult(res);
+      setCreateError(null);
       loadInvites();
     } catch (e) {
-      console.error(e);
+      setCreateError(formatApiError(e));
     } finally {
       setIsSubmitting(false);
     }
   };
 
+  const handleOpenRevoke = (inv: Invite) => {
+    setSelectedInvite(inv);
+    setRevokeError(null);
+    setRevokeOpen(true);
+  };
+
   const handleConfirmRevoke = async (reason: string) => {
     if (!selectedInvite) return;
     setIsSubmitting(true);
+    setRevokeError(null);
     try {
       await api.adminRevokeInvite({
         params: { inviteId: selectedInvite.id },
         body: { reason },
       });
       setRevokeOpen(false);
+      setRevokeError(null);
       loadInvites();
     } catch (e) {
-      console.error(e);
+      setRevokeError(formatApiError(e));
     } finally {
       setIsSubmitting(false);
     }
@@ -143,7 +156,7 @@ export const InvitesPage: React.FC = () => {
                   <td className="px-5 py-3 text-right">
                     {inv.status === 'ACTIVE' && (
                       <button
-                        onClick={() => { setSelectedInvite(inv); setRevokeOpen(true); }}
+                        onClick={() => handleOpenRevoke(inv)}
                         className="px-2.5 py-1 rounded bg-[var(--down,#f2475f)]/10 hover:bg-[var(--down,#f2475f)]/20 text-[var(--down,#f2475f)] text-xs border border-[var(--down,#f2475f)]/30"
                       >
                         Thu hồi
@@ -215,6 +228,16 @@ export const InvitesPage: React.FC = () => {
             ) : (
               <form onSubmit={handleCreateSubmit} className="space-y-4">
                 <h2 className="text-lg font-bold text-[var(--text,#f4f4f5)]">Tạo mã mời mới</h2>
+
+                {createError && (
+                  <div
+                    data-testid="confirm-error"
+                    className="p-3 rounded-lg bg-[var(--down,#f2475f)]/15 border border-[var(--down,#f2475f)]/30 text-xs text-[var(--down,#f2475f)] leading-relaxed"
+                  >
+                    {createError}
+                  </div>
+                )}
+
                 <div className="flex flex-col gap-1.5">
                   <label className="text-xs font-semibold uppercase text-[var(--text-2,#a1a1aa)]">Ghi chú đối tượng</label>
                   <input
@@ -255,7 +278,7 @@ export const InvitesPage: React.FC = () => {
                 <div className="flex justify-end gap-3 pt-2 border-t border-[var(--line,#1d1e21)]">
                   <button
                     type="button"
-                    onClick={() => setIsCreateOpen(false)}
+                    onClick={() => { setIsCreateOpen(false); setCreateError(null); }}
                     className="px-4 py-2 rounded-lg border border-[var(--line,#1d1e21)] text-sm text-[var(--text-2,#a1a1aa)] hover:bg-[var(--line,#1d1e21)]/40"
                   >
                     Hủy
@@ -281,8 +304,9 @@ export const InvitesPage: React.FC = () => {
           title={`Thu hồi mã mời ${selectedInvite.codePrefix}••••`}
           consequenceText="Mã mời này sẽ bị vô hiệu hóa ngay lập tức. Người giữ mã sẽ không thể đăng ký tài khoản được nữa."
           onConfirm={handleConfirmRevoke}
-          onCancel={() => setRevokeOpen(false)}
+          onCancel={() => { setRevokeOpen(false); setSelectedInvite(null); setRevokeError(null); }}
           isSubmitting={isSubmitting}
+          error={revokeError}
         />
       )}
     </div>
