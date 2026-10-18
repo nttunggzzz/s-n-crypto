@@ -2,18 +2,20 @@ import React, { useState, useEffect } from 'react';
 import { getApiClient } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import { ConfirmDialog } from '../components/ConfirmDialog';
+import { formatApiError } from '../services/errors';
 import type { AdminUserSummary, Role } from '@cex/contracts';
-import { Shield, ShieldAlert, UserCheck, UserPlus, ShieldCheck } from 'lucide-react';
+import { Shield, ShieldAlert, UserCheck, UserPlus, ShieldCheck, X } from 'lucide-react';
 
 export const RolesPage: React.FC = () => {
   const { user: currentUser, hasPerm } = useAuth();
   const [staffUsers, setStaffUsers] = useState<AdminUserSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Change role state
+  // Change role state (2 steps)
   const [targetUser, setTargetUser] = useState<AdminUserSummary | null>(null);
   const [newRole, setNewRole] = useState<Role>('support');
-  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [roleStep, setRoleStep] = useState<1 | 2>(1);
+  const [roleError, setRoleError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -50,12 +52,20 @@ export const RolesPage: React.FC = () => {
   const handleOpenChangeRole = (u: AdminUserSummary) => {
     setTargetUser(u);
     setNewRole(u.role);
-    setConfirmOpen(true);
+    setRoleStep(1);
+    setRoleError(null);
+  };
+
+  const handleCloseRoleModal = () => {
+    setTargetUser(null);
+    setRoleStep(1);
+    setRoleError(null);
   };
 
   const handleConfirmRole = async (reason: string) => {
     if (!targetUser) return;
     setIsSubmitting(true);
+    setRoleError(null);
     setErrorMsg(null);
     setSuccessMsg(null);
     try {
@@ -64,10 +74,10 @@ export const RolesPage: React.FC = () => {
         body: { role: newRole, reason },
       });
       setSuccessMsg(`Đã cập nhật vai trò của ${targetUser.email} thành ${newRole.toUpperCase()} thành công.`);
-      setConfirmOpen(false);
+      handleCloseRoleModal();
       loadStaffUsers();
     } catch (err: any) {
-      setErrorMsg(err?.message || 'Có lỗi khi cập nhật vai trò nhân sự.');
+      setRoleError(formatApiError(err));
     } finally {
       setIsSubmitting(false);
     }
@@ -208,17 +218,25 @@ export const RolesPage: React.FC = () => {
         </table>
       </div>
 
-      {/* Change role dialog */}
-      {targetUser && (
+      {/* Step 1: Modal chọn vai trò */}
+      {targetUser && roleStep === 1 && (
         <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
           <div className="bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)] rounded-xl w-full max-w-md p-6 flex flex-col gap-4 shadow-2xl">
-            <h2 className="text-lg font-bold text-[var(--text,#f4f4f5)]">Thay đổi vai trò nhân sự</h2>
-            <p className="text-xs text-[var(--text-2,#a1a1aa)]">
-              Điều chỉnh quyền hạn cho tài khoản: <strong className="text-white">{targetUser.email}</strong>
-            </p>
+            <div className="flex items-center justify-between border-b border-[var(--line,#1d1e21)] pb-3">
+              <h2 className="text-lg font-bold text-[var(--text,#f4f4f5)]">Thay đổi vai trò nhân sự</h2>
+              <button onClick={handleCloseRoleModal} className="text-[var(--text-3,#63636b)] hover:text-white">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="p-3 bg-[var(--bg,#000000)] border border-[var(--line,#1d1e21)] rounded-lg text-xs space-y-1">
+              <div>Thành viên: <strong className="text-white">{targetUser.email}</strong></div>
+              <div>UID: <span className="font-mono text-[var(--accent,#818cf8)]">{targetUser.uid}</span></div>
+              <div>Vai trò hiện tại: <strong className="uppercase text-amber-400">{targetUser.role}</strong></div>
+            </div>
 
             <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-semibold uppercase text-[var(--text-2,#a1a1aa)]">Vai trò mới</label>
+              <label className="text-xs font-semibold uppercase text-[var(--text-2,#a1a1aa)]">Chọn vai trò mới</label>
               <select
                 value={newRole}
                 onChange={(e) => setNewRole(e.target.value as Role)}
@@ -229,18 +247,43 @@ export const RolesPage: React.FC = () => {
                 <option value="owner">Owner — Toàn quyền chủ sở hữu</option>
                 <option value="user">User — Giáng cấp về khách thường</option>
               </select>
+              {newRole === targetUser.role && (
+                <span className="text-[11px] text-amber-400">Vui lòng chọn vai trò mới khác với vai trò hiện tại ({targetUser.role.toUpperCase()})</span>
+              )}
             </div>
 
-            <ConfirmDialog
-              isOpen={confirmOpen}
-              title={`Xác nhận đổi vai trò của ${targetUser.email}`}
-              consequenceText={`Vai trò mới (${newRole.toUpperCase()}) sẽ áp dụng ngay trong phiên đăng nhập tiếp theo của nhân viên.`}
-              onConfirm={handleConfirmRole}
-              onCancel={() => setConfirmOpen(false)}
-              isSubmitting={isSubmitting}
-            />
+            <div className="flex justify-end gap-3 pt-2 border-t border-[var(--line,#1d1e21)]">
+              <button
+                type="button"
+                onClick={handleCloseRoleModal}
+                className="px-4 py-2 rounded-lg border border-[var(--line,#1d1e21)] text-xs text-[var(--text-2,#a1a1aa)] hover:bg-[var(--line,#1d1e21)] transition-colors"
+              >
+                Hủy
+              </button>
+              <button
+                type="button"
+                disabled={newRole === targetUser.role}
+                onClick={() => setRoleStep(2)}
+                className="px-4 py-2 rounded-lg bg-[var(--accent,#818cf8)] hover:brightness-110 text-white text-xs font-bold transition-all disabled:opacity-50"
+              >
+                Tiếp tục
+              </button>
+            </div>
           </div>
         </div>
+      )}
+
+      {/* Step 2: Modal xác nhận với lý do */}
+      {targetUser && roleStep === 2 && (
+        <ConfirmDialog
+          isOpen={true}
+          title={`Xác nhận đổi vai trò của ${targetUser.email}`}
+          consequenceText={`Vai trò của nhân viên sẽ chuyển từ ${targetUser.role.toUpperCase()} sang ${newRole.toUpperCase()}. Có hiệu lực ngay lập tức.`}
+          onConfirm={handleConfirmRole}
+          onCancel={() => setRoleStep(1)}
+          isSubmitting={isSubmitting}
+          error={roleError}
+        />
       )}
     </div>
   );
