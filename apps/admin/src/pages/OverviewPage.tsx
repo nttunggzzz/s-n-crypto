@@ -204,35 +204,57 @@ export const OverviewPage: React.FC<{ onNavigate?: (path: string) => void }> = (
       <div
         className="bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)] p-5 rounded-xl shadow-md flex items-center justify-between flex-wrap gap-4"
         data-testid="admin-trading-state"
-        data-halted={tradingHalted ? 'true' : 'false'}
+        data-halted={tradingHalted === null ? 'unknown' : (tradingHalted ? 'true' : 'false')}
       >
         <div className="flex items-center gap-4">
-          <div className={`w-3.5 h-3.5 rounded-full ${tradingHalted ? 'bg-[var(--down,#f2475f)] animate-pulse' : 'bg-[var(--up,#1fc27a)]'}`} />
+          <div
+            className={`w-3.5 h-3.5 rounded-full ${
+              tradingHalted === null
+                ? 'bg-[var(--text-3,#63636b)]'
+                : tradingHalted
+                ? 'bg-[var(--down,#f2475f)] animate-pulse'
+                : 'bg-[var(--up,#1fc27a)]'
+            }`}
+          />
           <div>
             <div className="text-sm font-bold text-[var(--text,#f4f4f5)]">
-              {tradingHalted ? 'Trạng thái sàn: ĐANG TẠM NGƯNG GIAO DỊCH KHẨN CẤP' : 'Trạng thái sàn: HOẠT ĐỘNG BÌNH THƯỜNG'}
+              {tradingHalted === null
+                ? 'Trạng thái sàn: Không xác định'
+                : tradingHalted
+                ? 'Trạng thái sàn: ĐANG TẠM NGƯNG GIAO DỊCH KHẨN CẤP'
+                : 'Trạng thái sàn: HOẠT ĐỘNG BÌNH THƯỜNG'}
             </div>
             <div className="text-xs text-[var(--text-2,#a1a1aa)] mt-0.5">
-              {tradingHalted
+              {tradingHalted === null
+                ? 'Không thể tải hoặc kết nối trạng thái dừng sàn. Vui lòng thử lại.'
+                : tradingHalted
                 ? 'Mọi lệnh đặt mới bị từ chối, form đặt lệnh của người dùng trên toàn hệ thống đã bị khóa.'
                 : 'Khớp lệnh Spot & Futures thông suốt, dữ liệu giá đồng bộ liên tục với Binance.'}
             </div>
           </div>
         </div>
 
-        {hasPerm('exchange.halt') && (
-          <div>
-            {tradingHalted ? (
-              <Button data-testid="admin-resume-open" variant="primary" size="sm" onClick={handleOpenResume}>
-                Mở lại giao dịch sàn
-              </Button>
-            ) : (
-              <Button data-testid="admin-halt-open" variant="danger" size="sm" onClick={handleOpenHalt}>
-                Tạm ngưng khẩn cấp
-              </Button>
-            )}
-          </div>
-        )}
+        <div>
+          {tradingHalted === null ? (
+            <Button size="sm" variant="outline" onClick={() => refreshHaltState()}>
+              Thử lại
+            </Button>
+          ) : (
+            hasPerm('exchange.halt') && (
+              <div>
+                {tradingHalted ? (
+                  <Button data-testid="admin-resume-open" variant="primary" size="sm" onClick={handleOpenResume}>
+                    Mở lại giao dịch sàn
+                  </Button>
+                ) : (
+                  <Button data-testid="admin-halt-open" variant="danger" size="sm" onClick={handleOpenHalt}>
+                    Tạm ngưng khẩn cấp
+                  </Button>
+                )}
+              </div>
+            )
+          )}
+        </div>
       </div>
 
       {/* SECTION 1: Core System & User Metrics */}

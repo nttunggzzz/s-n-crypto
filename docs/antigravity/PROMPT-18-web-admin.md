@@ -51,6 +51,9 @@ Dùng chung cho cả đợt: **một** hàm dịch lỗi theo `code` cho admin (
 
 (AD-20 đã gộp vào **S-15** của PROMPT-17.)
 
+### Trạng thái các mục P2
+- **AD-12:** Hoàn thành. Cập nhật `context/MarketContext.tsx` để `tradingHalted` có kiểu `boolean | null`, bắt lỗi khi đọc cài đặt để trả về `null`. Trong `pages/OverviewPage.tsx`, khi trạng thái dừng sàn là `null`, hiển thị nhãn "Không xác định", thuộc tính `data-halted="unknown"`, ẩn các nút dừng/mở và hiển thị nút "Thử lại".
+
 ## P3
 - **AD-25** `UserDetailPage.tsx:1120-1123`, `UsersPage.tsx:655-656`: mô tả quyền vai trò sai (Admin "phân quyền nhân sự" — chỉ owner; User "nạp rút tiền" — sàn không có). Viết lại theo `packages/contracts/src/permissions.ts`.
 - **AD-26** `UserDetailPage.tsx:349,899,944,824-857`: cho hủy DCA đang PAUSED; checkbox "Bán coin của bot theo giá thị trường" (`sellBase`); bảng vị thế thêm ký quỹ, giá thanh lý, PnL đã chốt, phí, funding, lý do đóng.

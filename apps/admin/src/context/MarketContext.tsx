@@ -3,21 +3,23 @@ import { getApiClient, getRealtimeClient } from '../services/api';
 import type { ExchangeStatus } from '@cex/contracts';
 
 interface MarketContextType {
-  tradingHalted: boolean;
+  tradingHalted: boolean | null;
   refreshHaltState: () => Promise<void>;
 }
 
 const MarketContext = createContext<MarketContextType | null>(null);
 
 export const MarketProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [tradingHalted, setTradingHalted] = useState(false);
+  const [tradingHalted, setTradingHalted] = useState<boolean | null>(null);
   const api = getApiClient();
 
   const refreshHaltState = async () => {
     try {
       const settings = await api.adminGetSettings();
       setTradingHalted(settings.tradingHalted);
-    } catch {}
+    } catch {
+      setTradingHalted(null);
+    }
   };
 
   useEffect(() => {
