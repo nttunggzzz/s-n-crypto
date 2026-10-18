@@ -46,10 +46,16 @@ Rà soát: **2026-10-11** (Claude Code). Cập nhật lần cuối: 2026-10-11 t
 > **Rà soát lần 9 (UI `061fdac`, 2026-10-18): [docs/reports/2026-10-18-ra-soat-ui-lan-9.md](reports/2026-10-18-ra-soat-ui-lan-9.md)** — S-01…S-16 và AD-02…AD-24 đã làm; **không có P0/P1**; 58 test e2e cũ đạt.
 > - Việc tiếp cho Antigravity: **T-01 (P2)** gắn mốc test theo TESTIDS "Rà soát lần 8"; **T-02 (P2)** chi tiết người dùng admin còn nuốt lỗi; T-03…T-06 (P3); AD-25…AD-28.
 
+>
+> **Rà soát lần 10 (UI `b994b81`, 2026-10-18 chiều): [docs/reports/2026-10-18-ra-soat-ui-lan-10.md](reports/2026-10-18-ra-soat-ui-lan-10.md)** — T-01…T-06 xong (17/21 test nghiệm thu đạt), trừ T-04 bị đưa lại.
+> - **V-05 (P1)**: hộp chatbot che nút "Mở Short"/"Mở Long" trên trang Futures (đã chứng minh bằng e2e).
+> - **V-01 (P1)**: chatbot "AI Concierge" nói sai (Faucet 1.000 USDT, thật 10.000) và tự nhận là AI — chờ chủ dự án quyết giữ/gỡ; **V-02 (P2)** tỉ lệ thuế đoán 0,1% quay lại; V-03, V-04.
+
 ## Backend → UI (Claude Code cập nhật mỗi khi đổi backend/hợp đồng; Antigravity đọc đầu mỗi phiên, cùng `packages/contracts/CHANGELOG.md`)
 
 | Ngày | Thay đổi backend / hợp đồng | UI cần làm gì | Trạng thái |
 |---|---|---|---|
+| 2026-10-18 | **Có rồi (contracts 0.23.0, back office AD3):** `adminCancelUserOrder`, `adminCancelUserOrders`, `adminRevokeSession`, `adminRevokeAllSessions` (quyền mới `orders.manage`), `adminAdjustBalance` nhận `account: 'FUTURES'` (chỉ USDT). Admin hủy lệnh thì TP/SL chờ chuyển SKIPPED (`ADMIN_CANCELED`), không sinh lệnh mới. Sửa kèm: đặt lệnh LIMIT khóa số dư hai đồng theo thứ tự (hết kẹt khóa khi khớp ngay) | Màn hình trong PROMPT-19 (nút hủy lệnh ở tab Lệnh, tab Phiên + thu hồi, chọn ví khi điều chỉnh số dư). Thông báo `TPSL_SKIPPED` lý do `ADMIN_CANCELED` cần nhãn tiếng Việt | **Có rồi** — chờ PROMPT-19 |
 | 2026-10-18 | **Có rồi (contracts 0.21.0 + 0.22.0, back office AD1 + AD2):** `adminSearchOrders`, `adminSearchTrades`, `adminUserSessions`, `adminAuditExport`, `adminUsersExport` (quyền mới `users.export`); `adminRiskPositions`, `adminLiquidations`, `adminFundingSummary`, `adminMetrics`. README hợp đồng mục "Back office" | Chưa làm vội: màn hình sẽ giao trong PROMPT-19 khi AD3 + AD4 cũng gộp xong. Nếu `Record<Permission, …>` ở app admin báo thiếu `users.export` thì thêm nhãn | **Có rồi** — chờ PROMPT-19 |
 | 2026-10-17 | **Có rồi (contracts 0.20.0):** `accountTradingStats` GET `/api/v1/account/stats` (khối lượng hôm nay / 7 ngày / 30 ngày / tháng này / tháng trước, tách Spot–Futures; thuế đã khấu trừ tháng này và tháng trước); `AdminUserDetail.trading` cùng số cho admin. README mục 17 | Hồ sơ người dùng và chi tiết người dùng admin hiện các con số này (đợt 2 của PROMPT-17). Thuế ghi là "đã khấu trừ", không phải "còn phải nộp" | **Có rồi** — chờ Antigravity dùng |
 | 2026-10-17 | **Có rồi (contracts 0.19.0):** `publicConfig.staffTwoFactorRequired`; `npm run dev` chạy server với `STAFF_REQUIRE_2FA=false` (admin không cần 2FA, quyết định của chủ dự án tới khi làm lại bảo mật; production từ chối) | `apps/admin/src/context/AuthContext.tsx`: bỏ kiểm tra hostname của commit `7179707`, chỉ hiện màn "bắt buộc bật 2FA" khi `publicConfig().staffTwoFactorRequired === true` (S-13) | **Có rồi** — chờ Antigravity dùng |

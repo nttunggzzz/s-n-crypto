@@ -761,4 +761,5 @@ export * from './journal.ts';
 export * from './tax.ts';
 export * from './accountStats.ts';
 export * from './news.ts';
+export * from './adminActions.ts';
 export * from './adminRisk.ts';

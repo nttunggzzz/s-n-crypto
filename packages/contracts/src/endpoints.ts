@@ -35,7 +35,12 @@ import {
   UpdateAnnouncementRequest,
 } from './announcements.ts';
 import {
+  AdminCancelOrderRequest,
+  AdminCancelOrderResult,
+  AdminCancelOrdersRequest,
+  AdminCancelOrdersResult,
   AdminOverview,
+  AdminRevokeSessionsResult,
   AdminStopGridBotRequest,
   AdminSymbol,
   AdminUserBots,
@@ -64,6 +69,8 @@ import {
   UserBotParam,
   UserDcaParam,
   UserIdParam,
+  UserOrderParam,
+  UserSessionParam,
 } from './admin.ts';
 import type { Permission } from './permissions.ts';
 import { AdminOrderRow, AdminOrderSearchListQuery, AdminTradeRow, AdminTradeSearchListQuery, AdminUserSessions } from './adminLookup.ts';
@@ -317,6 +324,15 @@ export const endpoints = {
   adminSetSignalsAccess: ep({ method: 'PUT', path: '/api/v1/admin/users/:userId/signals-access', auth: 'staff', permission: 'users.signals', params: UserIdParam, body: SignalsAccessRequest, response: AdminUserSummary }),
   adminSetRole: ep({ method: 'PUT', path: '/api/v1/admin/users/:userId/role', auth: 'staff', permission: 'users.roles', params: UserIdParam, body: SetRoleRequest, response: AdminUserSummary }),
   adminAdjustBalance: ep({ method: 'POST', path: '/api/v1/admin/users/:userId/balance-adjustments', auth: 'staff', permission: 'balances.adjust', params: UserIdParam, body: BalanceAdjustmentRequest, response: BalanceAdjustmentResult, status: 201 }),
+  // AD3: admin actions on orders and sessions (audited in the same transaction; no action on an equal/higher role, none on the bot account)
+  /** Cancels one open order (Spot: its whole OCO list; a grid bot's order also stops that bot). closeReason ADMIN. Already closed → ORDER_NOT_CANCELABLE; not the user's → NOT_FOUND. */
+  adminCancelUserOrder: ep({ method: 'POST', path: '/api/v1/admin/users/:userId/orders/:orderId/cancel', auth: 'staff', permission: 'orders.manage', params: UserOrderParam, body: AdminCancelOrderRequest, response: AdminCancelOrderResult }),
+  /** Cancels every open order of the user in scope (market / symbol); one audit row per book. Nothing open → zero counts. */
+  adminCancelUserOrders: ep({ method: 'POST', path: '/api/v1/admin/users/:userId/orders/cancel-all', auth: 'staff', permission: 'orders.manage', params: UserIdParam, body: AdminCancelOrdersRequest, response: AdminCancelOrdersResult }),
+  /** Signs out one session of the user (not theirs → NOT_FOUND) and closes its /ws connection with code 4401. */
+  adminRevokeSession: ep({ method: 'POST', path: '/api/v1/admin/users/:userId/sessions/:sessionId/revoke', auth: 'staff', permission: 'users.lock', params: UserSessionParam, body: ReasonBody, response: AdminRevokeSessionsResult }),
+  /** Signs out every session of the user. Not allowed on your own account. */
+  adminRevokeAllSessions: ep({ method: 'POST', path: '/api/v1/admin/users/:userId/sessions/revoke-all', auth: 'staff', permission: 'users.lock', params: UserIdParam, body: ReasonBody, response: AdminRevokeSessionsResult }),
   adminResetAccount: ep({ method: 'POST', path: '/api/v1/admin/users/:userId/reset', auth: 'staff', permission: 'accounts.reset', params: UserIdParam, body: ResetAccountRequest, response: AdminUserDetail }),
   adminGetSettings: ep({ method: 'GET', path: '/api/v1/admin/exchange/settings', auth: 'staff', permission: 'exchange.read', response: ExchangeSettings }),
   adminUpdateSettings: ep({ method: 'PATCH', path: '/api/v1/admin/exchange/settings', auth: 'staff', permission: 'exchange.configure', body: UpdateSettingsRequest, response: ExchangeSettings }),

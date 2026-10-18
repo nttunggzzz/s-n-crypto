@@ -16,6 +16,8 @@ coverage/
 # local embedded Postgres data
 .pgdata/
 .pgdata-test/
+.pgdata-test-*/
+.pgdata-*/
 legacy/node_modules/
 # legacy: build output, corrupt SQLite DB and the original export archive stay local only
 legacy/dist/

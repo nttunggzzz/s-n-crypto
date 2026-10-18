@@ -156,7 +156,7 @@ export function createApp(deps: AppDeps) {
   const news = new AnnouncementService(deps.db);
   route(router, opts, 'announcements', async ({ query }) => ({ items: await news.listPublic(query.limit) }));
   registerExchangeRoutes(router, opts, deps.db, deps.exchange, deps.market, config.RATE_LIMIT_SCALE);
-  registerAdminRoutes(router, opts, new AdminService(deps.db, deps.exchange, deps.market, deps.futures, deps.bots), news, deps.auth.invites, config.RATE_LIMIT_SCALE);
+  registerAdminRoutes(router, opts, new AdminService(deps.db, deps.exchange, deps.market, deps.futures, deps.bots, deps.auth), news, deps.auth.invites, config.RATE_LIMIT_SCALE);
   registerTaxRoutes(router, opts, new TaxService(deps.db, exConfig), deps.db, config.RATE_LIMIT_SCALE);
   registerNewsRoutes(router, opts, deps.db, deps.newsClock);
   registerAdminRiskRoutes(router, opts, new AdminRiskService(deps.db, deps.futures, deps.adminClock), new AdminMetricsService(deps.db, deps.adminClock));
