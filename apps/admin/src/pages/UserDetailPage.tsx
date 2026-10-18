@@ -21,6 +21,33 @@ import { dec } from '@cex/core';
 import { formatDecimal } from '@cex/ui';
 import { Copy, Check, ExternalLink, ShieldAlert, ArrowDownUp, AlertCircle, Shield, Trash2, Radio, Receipt, UserX, X, Building, Download } from 'lucide-react';
 
+const LEDGER_TYPE_LABELS: Record<string, string> = {
+  FAUCET: 'Nhận Faucet',
+  ORDER_LOCK: 'Khóa lệnh',
+  ORDER_UNLOCK: 'Mở khóa lệnh',
+  TRADE_DEBIT: 'Trừ khớp lệnh',
+  TRADE_CREDIT: 'Cộng khớp lệnh',
+  FEE: 'Phí giao dịch',
+  ADMIN_ADJUST: 'Admin điều chỉnh',
+  ACCOUNT_RESET: 'Đặt lại tài khoản',
+  TAX_WITHHOLDING: 'Khấu trừ thuế',
+  TRANSFER: 'Chuyển ví Spot/Futures',
+  REALIZED_PNL: 'PnL đã chốt',
+  FUNDING_FEE: 'Phí Funding',
+  LIQUIDATION: 'Thanh lý vị thế',
+  MARGIN_ADJUST: 'Điều chỉnh ký quỹ',
+};
+
+const REF_TYPE_LABELS: Record<string, string> = {
+  ORDER: 'Lệnh Spot',
+  TRADE: 'Khớp lệnh',
+  FAUCET: 'Faucet',
+  ADMIN: 'Quản trị',
+  TRANSFER: 'Chuyển ví',
+  FUTURES_ORDER: 'Lệnh Futures',
+  FUTURES_POSITION: 'Vị thế Futures',
+};
+
 interface UserDetailPageProps {
   userId: string;
   onNavigate: (path: string) => void;
@@ -57,6 +84,12 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
 
   const [ledgerNextCursor, setLedgerNextCursor] = useState<string | null>(null);
   const [ledgerLoadingMore, setLedgerLoadingMore] = useState(false);
+  const [ledgerAsset, setLedgerAsset] = useState<string>('');
+  const [ledgerHideLocks, setLedgerHideLocks] = useState<boolean>(true);
+  const [ledgerFrom, setLedgerFrom] = useState<string>('');
+  const [ledgerTo, setLedgerTo] = useState<string>('');
+  const [ledgerLoading, setLedgerLoading] = useState(false);
+  const [ledgerError, setLedgerError] = useState<string | null>(null);
 
   const [positionsNextCursor, setPositionsNextCursor] = useState<string | null>(null);
   const [positionsLoadingMore, setPositionsLoadingMore] = useState(false);
@@ -157,6 +190,48 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
     loadUserData();
   }, [loadUserData]);
 
+  const loadLedger = useCallback(async (isLoadMore = false, cursor?: string | null) => {
+    if (!actualId || notFound) return;
+    if (isLoadMore) {
+      if (!cursor || ledgerLoadingMore) return;
+      setLedgerLoadingMore(true);
+    } else {
+      setLedgerLoading(true);
+      setLedgerError(null);
+    }
+
+    try {
+      const query: Record<string, any> = {
+        limit: 50,
+        hideLocks: ledgerHideLocks ? 'true' : 'false',
+      };
+      if (ledgerAsset) query.asset = ledgerAsset;
+      if (ledgerFrom) query.from = new Date(ledgerFrom).toISOString();
+      if (ledgerTo) query.to = new Date(ledgerTo).toISOString();
+      if (cursor) query.cursor = cursor;
+
+      const r = await api.adminUserLedger({ params: { userId: actualId }, query });
+      if (isLoadMore) {
+        setLedgerEntries((prev) => [...prev, ...r.items]);
+      } else {
+        setLedgerEntries(r.items);
+      }
+      setLedgerNextCursor(r.nextCursor);
+    } catch (err: any) {
+      if (!isLoadMore) {
+        setLedgerEntries([]);
+        setLedgerNextCursor(null);
+        setLedgerError(formatApiError(err, 'Có lỗi xảy ra khi tải sổ cái.'));
+      }
+    } finally {
+      if (isLoadMore) {
+        setLedgerLoadingMore(false);
+      } else {
+        setLedgerLoading(false);
+      }
+    }
+  }, [actualId, notFound, ledgerAsset, ledgerHideLocks, ledgerFrom, ledgerTo, ledgerLoadingMore, api]);
+
   // Load tab-specific data when tab changes
   useEffect(() => {
     if (!actualId || notFound) return;
@@ -172,15 +247,7 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
           setOrdersNextCursor(null);
         });
     } else if (activeTab === 'ledger') {
-      api.adminUserLedger({ params: { userId: actualId }, query: { limit: 50 } })
-        .then((r) => {
-          setLedgerEntries(r.items);
-          setLedgerNextCursor(r.nextCursor);
-        })
-        .catch(() => {
-          setLedgerEntries([]);
-          setLedgerNextCursor(null);
-        });
+      loadLedger(false);
     } else if (activeTab === 'futures') {
       api.adminUserFuturesPositions({ params: { userId: actualId }, query: { open: positionsType, limit: 50 } })
         .then((r) => {
@@ -218,7 +285,7 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
         })
         .finally(() => setTaxLoading(false));
     }
-  }, [actualId, notFound, activeTab, ordersType, positionsType, api]);
+  }, [actualId, notFound, activeTab, ordersType, positionsType, api, loadLedger]);
 
   const loadMoreOrders = async () => {
     if (!ordersNextCursor || !actualId || notFound || ordersLoadingMore) return;
@@ -234,14 +301,7 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
 
   const loadMoreLedger = async () => {
     if (!ledgerNextCursor || !actualId || notFound || ledgerLoadingMore) return;
-    setLedgerLoadingMore(true);
-    try {
-      const r = await api.adminUserLedger({ params: { userId: actualId }, query: { cursor: ledgerNextCursor, limit: 50 } });
-      setLedgerEntries((prev) => [...prev, ...r.items]);
-      setLedgerNextCursor(r.nextCursor);
-    } catch {} finally {
-      setLedgerLoadingMore(false);
-    }
+    loadLedger(true, ledgerNextCursor);
   };
 
   const loadMorePositions = async () => {
@@ -1035,36 +1095,182 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
       {/* Ledger Tab */}
       {activeTab === 'ledger' && (
         <div className="bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)] rounded-xl overflow-hidden shadow">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-[var(--line,#1d1e21)]/30 border-b border-[var(--line,#1d1e21)]">
-              <tr>
-                <th className="px-4 py-3 font-semibold text-xs text-[var(--text-2,#a1a1aa)]">Thời gian</th>
-                <th className="px-4 py-3 font-semibold text-xs text-[var(--text-2,#a1a1aa)]">Tài sản</th>
-                <th className="px-4 py-3 font-semibold text-xs text-[var(--text-2,#a1a1aa)]">Biến động khả dụng</th>
-                <th className="px-4 py-3 font-semibold text-xs text-[var(--text-2,#a1a1aa)]">Số dư sau</th>
-                <th className="px-4 py-3 font-semibold text-xs text-[var(--text-2,#a1a1aa)]">Loại</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[var(--line,#1d1e21)] font-mono text-xs">
-              {ledgerEntries.map((l) => (
-                <tr key={l.id} className="hover:bg-[var(--line,#1d1e21)]/10">
-                  <td className="px-4 py-3 text-[var(--text-3,#63636b)]">{new Date(l.createdAt).toLocaleString('vi-VN')}</td>
-                  <td className="px-4 py-3 font-bold text-[var(--text,#f4f4f5)]">{l.asset}</td>
-                  <td className={`px-4 py-3 font-bold ${dec(l.deltaAvailable).gte(0) ? 'text-[var(--up,#1fc27a)]' : 'text-[var(--down,#f2475f)]'}`}>
-                    {dec(l.deltaAvailable).gt(0) ? `+${l.deltaAvailable}` : l.deltaAvailable}
-                  </td>
-                  <td className="px-4 py-3">{l.availableAfter}</td>
-                  <td className="px-4 py-3 text-[var(--text-2,#a1a1aa)]">{l.type}</td>
-                </tr>
-              ))}
-              {ledgerEntries.length === 0 && (
+          {/* Filter Bar */}
+          <div className="p-4 border-b border-[var(--line,#1d1e21)] flex flex-wrap items-center gap-3 text-xs">
+            <div className="flex items-center gap-1.5">
+              <span className="text-[var(--text-3,#63636b)]">Tài sản:</span>
+              <select
+                value={ledgerAsset}
+                onChange={(e) => setLedgerAsset(e.target.value)}
+                className="bg-[var(--bg,#000000)] border border-[var(--line,#1d1e21)] rounded-lg px-2.5 py-1.5 text-[var(--text,#f4f4f5)] focus:outline-none focus:border-[var(--accent,#818cf8)]"
+              >
+                <option value="">Tất cả</option>
+                {Array.from(new Set(detail?.balances.map((b) => b.asset) || ['USDT', 'BTC', 'ETH'])).map((a) => (
+                  <option key={a} value={a}>
+                    {a}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <label className="flex items-center gap-1.5 cursor-pointer text-[var(--text-2,#a1a1aa)] hover:text-[var(--text,#f4f4f5)]">
+                <input
+                  type="checkbox"
+                  checked={ledgerHideLocks}
+                  onChange={(e) => setLedgerHideLocks(e.target.checked)}
+                  className="rounded border-[var(--line,#1d1e21)] text-[var(--accent,#818cf8)] focus:ring-0"
+                />
+                <span>Ẩn khóa / mở khóa lệnh</span>
+              </label>
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <span className="text-[var(--text-3,#63636b)]">Từ:</span>
+              <input
+                type="datetime-local"
+                value={ledgerFrom}
+                onChange={(e) => setLedgerFrom(e.target.value)}
+                className="bg-[var(--bg,#000000)] border border-[var(--line,#1d1e21)] rounded-lg px-2 py-1 text-[var(--text,#f4f4f5)] focus:outline-none focus:border-[var(--accent,#818cf8)]"
+              />
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <span className="text-[var(--text-3,#63636b)]">Đến:</span>
+              <input
+                type="datetime-local"
+                value={ledgerTo}
+                onChange={(e) => setLedgerTo(e.target.value)}
+                className="bg-[var(--bg,#000000)] border border-[var(--line,#1d1e21)] rounded-lg px-2 py-1 text-[var(--text,#f4f4f5)] focus:outline-none focus:border-[var(--accent,#818cf8)]"
+              />
+            </div>
+
+            <button
+              type="button"
+              onClick={() => loadLedger(false)}
+              className="px-3 py-1.5 rounded-lg bg-[var(--accent,#818cf8)] hover:bg-[var(--accent,#818cf8)]/80 text-white font-semibold transition-colors"
+            >
+              Lọc
+            </button>
+
+            {(ledgerAsset || !ledgerHideLocks || ledgerFrom || ledgerTo) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setLedgerAsset('');
+                  setLedgerHideLocks(true);
+                  setLedgerFrom('');
+                  setLedgerTo('');
+                }}
+                className="px-3 py-1.5 rounded-lg bg-[var(--line,#1d1e21)] hover:bg-[var(--line,#1d1e21)]/80 text-[var(--text-2,#a1a1aa)] transition-colors"
+              >
+                Đặt lại
+              </button>
+            )}
+          </div>
+
+          {/* Table */}
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm min-w-[900px]">
+              <thead className="bg-[var(--line,#1d1e21)]/30 border-b border-[var(--line,#1d1e21)]">
                 <tr>
-                  <td colSpan={5} className="px-4 py-10 text-center text-[var(--text-3,#63636b)]">Chưa có giao dịch sổ cái</td>
+                  <th className="px-4 py-3 font-semibold text-xs text-[var(--text-2,#a1a1aa)]">Thời gian</th>
+                  <th className="px-4 py-3 font-semibold text-xs text-[var(--text-2,#a1a1aa)]">Ví</th>
+                  <th className="px-4 py-3 font-semibold text-xs text-[var(--text-2,#a1a1aa)]">Tài sản</th>
+                  <th className="px-4 py-3 font-semibold text-xs text-[var(--text-2,#a1a1aa)]">Loại biến động</th>
+                  <th className="px-4 py-3 font-semibold text-xs text-[var(--text-2,#a1a1aa)] text-right">Biến động khả dụng</th>
+                  <th className="px-4 py-3 font-semibold text-xs text-[var(--text-2,#a1a1aa)] text-right">Khả dụng sau</th>
+                  <th className="px-4 py-3 font-semibold text-xs text-[var(--text-2,#a1a1aa)] text-right">Biến động đóng băng</th>
+                  <th className="px-4 py-3 font-semibold text-xs text-[var(--text-2,#a1a1aa)] text-right">Đóng băng sau</th>
+                  <th className="px-4 py-3 font-semibold text-xs text-[var(--text-2,#a1a1aa)]">Tham chiếu</th>
                 </tr>
-              )}
-            </tbody>
-          </table>
-          {ledgerNextCursor && (
+              </thead>
+              <tbody className="divide-y divide-[var(--line,#1d1e21)] font-mono text-xs">
+                {ledgerLoading && (
+                  <tr>
+                    <td colSpan={9} className="px-4 py-8 text-center text-[var(--text-3,#63636b)]">Đang tải sổ cái...</td>
+                  </tr>
+                )}
+                {!ledgerLoading && ledgerError && (
+                  <tr>
+                    <td colSpan={9} className="px-4 py-8 text-center" data-testid="list-error">
+                      <div className="text-[var(--down,#f2475f)] mb-2">{ledgerError}</div>
+                      <button
+                        type="button"
+                        onClick={() => loadLedger(false)}
+                        className="px-3 py-1.5 rounded-lg bg-[var(--line,#1d1e21)] text-xs text-[var(--text,#f4f4f5)] hover:bg-[var(--line,#1d1e21)]/80"
+                      >
+                        Thử lại
+                      </button>
+                    </td>
+                  </tr>
+                )}
+                {!ledgerLoading && !ledgerError && ledgerEntries.map((l) => (
+                  <tr key={l.id} className="hover:bg-[var(--line,#1d1e21)]/10">
+                    <td className="px-4 py-3 text-[var(--text-3,#63636b)] whitespace-nowrap">
+                      {new Date(l.createdAt).toLocaleString('vi-VN')}
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold font-sans ${
+                        l.account === 'FUTURES'
+                          ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                          : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                      }`}>
+                        {l.account}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 font-bold text-[var(--text,#f4f4f5)]">{l.asset}</td>
+                    <td className="px-4 py-3 font-sans text-[var(--text-2,#a1a1aa)]">
+                      {LEDGER_TYPE_LABELS[l.type] || l.type}
+                    </td>
+                    <td className={`px-4 py-3 text-right font-bold ${
+                      dec(l.deltaAvailable).gt(0)
+                        ? 'text-[var(--up,#1fc27a)]'
+                        : dec(l.deltaAvailable).lt(0)
+                        ? 'text-[var(--down,#f2475f)]'
+                        : 'text-[var(--text-3,#63636b)]'
+                    }`}>
+                      {dec(l.deltaAvailable).gt(0) ? `+${l.deltaAvailable}` : l.deltaAvailable}
+                    </td>
+                    <td className="px-4 py-3 text-right">{l.availableAfter}</td>
+                    <td className={`px-4 py-3 text-right ${
+                      dec(l.deltaLocked).gt(0)
+                        ? 'text-amber-400'
+                        : dec(l.deltaLocked).lt(0)
+                        ? 'text-amber-300'
+                        : 'text-[var(--text-3,#63636b)]'
+                    }`}>
+                      {dec(l.deltaLocked).gt(0) ? `+${l.deltaLocked}` : l.deltaLocked}
+                    </td>
+                    <td className="px-4 py-3 text-right">{l.lockedAfter}</td>
+                    <td className="px-4 py-3 text-[var(--text-3,#63636b)] font-sans">
+                      {l.refType ? (
+                        <span>
+                          <span className="text-[var(--text-2,#a1a1aa)]">{REF_TYPE_LABELS[l.refType] || l.refType}</span>
+                          {l.refId && (
+                            <span className="ml-1 text-[var(--text-3,#63636b)] font-mono text-[11px]" title={l.refId}>
+                              ({l.refId.slice(0, 8)}...)
+                            </span>
+                          )}
+                        </span>
+                      ) : (
+                        '—'
+                      )}
+                    </td>
+                  </tr>
+                ))}
+                {!ledgerLoading && !ledgerError && ledgerEntries.length === 0 && (
+                  <tr>
+                    <td colSpan={9} className="px-4 py-10 text-center text-[var(--text-3,#63636b)]">
+                      Chưa có giao dịch sổ cái phù hợp
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {ledgerNextCursor && !ledgerLoading && !ledgerError && (
             <div className="p-4 border-t border-[var(--line,#1d1e21)] flex justify-center">
               <button
                 type="button"
