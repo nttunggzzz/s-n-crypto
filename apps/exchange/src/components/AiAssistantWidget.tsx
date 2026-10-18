@@ -33,10 +33,10 @@ const INITIAL_SUGGESTIONS = [
 
 /** Avatar mapping for Sakura's expressions */
 const SAKURA_SPRITES: Record<SakuraExpression, string> = {
-  default: '/sakura/sakura-avatar-white-bg.png',
-  cheerful: '/sakura/sakura-avatar-white-bg.png',
-  explaining: '/sakura/sakura-avatar-white-bg.png',
-  thoughtful: '/sakura/sakura-avatar-white-bg.png',
+  default: '/sakura/sakura-chibi-avatar.png',
+  cheerful: '/sakura/sakura-chibi-avatar.png',
+  explaining: '/sakura/sakura-chibi-avatar.png',
+  thoughtful: '/sakura/sakura-chibi-avatar.png',
 };
 
 /** Intelligent localized AI answering engine for Sakura (Chatbot CSKH) */
@@ -293,18 +293,18 @@ export const AiAssistantWidget: React.FC<AiAssistantWidgetProps> = ({ onNavigate
           {/* Header */}
           <div className="px-5 py-3.5 bg-gradient-to-r from-[#1A2E40] via-[#243B53] to-[#1A2E40] border-b border-[#FFD700]/30 flex items-center justify-between shadow-md">
             <div className="flex items-center gap-3">
-              {/* Sakura Avatar in Header with Clean White Background */}
+              {/* Sakura Chibi Avatar in Header */}
               <div 
-                className="relative w-10 h-10 rounded-full bg-white border-2 border-[#FFD700] flex items-center justify-center overflow-hidden shadow-inner shrink-0"
+                className="relative w-10 h-10 rounded-full bg-[#0C1729] border-2 border-[#FFD700] flex items-center justify-center overflow-hidden shadow-inner shrink-0"
                 title="Sakura Trợ lý CSKH ✨"
               >
                 <img 
-                  src="/sakura/sakura-avatar-white-bg.png" 
+                  src="/sakura/sakura-chibi-avatar.png" 
                   alt="Sakura CSKH" 
-                  className={`w-full h-full object-contain p-0.5 rounded-full ${getActiveAnimationClass()}`}
+                  className={`w-full h-full object-cover ${getActiveAnimationClass()}`}
                 />
                 {/* Active Green Dot */}
-                <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-[#1fc27a] border-2 border-white rounded-full" />
+                <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-[#1fc27a] border-2 border-[#0C1729] rounded-full" />
               </div>
               <div>
                 <div className="flex items-center gap-1.5">
@@ -389,11 +389,11 @@ export const AiAssistantWidget: React.FC<AiAssistantWidgetProps> = ({ onNavigate
                 className={`flex gap-2.5 ${m.sender === 'user' ? 'justify-end' : 'justify-start'}`}
               >
                 {m.sender === 'bot' && (
-                  <div className="w-8 h-8 rounded-full bg-white border border-[#FFD700]/70 flex items-center justify-center shrink-0 mt-0.5 overflow-hidden shadow-sm">
+                  <div className="w-8 h-8 rounded-full bg-[#0C1729] border border-[#FFD700]/70 flex items-center justify-center shrink-0 mt-0.5 overflow-hidden shadow-sm">
                     <img 
-                      src="/sakura/sakura-avatar-white-bg.png" 
+                      src="/sakura/sakura-chibi-avatar.png" 
                       alt="Sakura" 
-                      className="w-full h-full object-contain p-0.5"
+                      className="w-full h-full object-cover"
                     />
                   </div>
                 )}
@@ -426,11 +426,11 @@ export const AiAssistantWidget: React.FC<AiAssistantWidgetProps> = ({ onNavigate
 
             {isTyping && (
               <div className="flex gap-2.5 items-center">
-                <div className="w-8 h-8 rounded-full bg-white border border-[#FFD700]/70 flex items-center justify-center shrink-0 overflow-hidden shadow-sm">
+                <div className="w-8 h-8 rounded-full bg-[#0C1729] border border-[#FFD700]/70 flex items-center justify-center shrink-0 overflow-hidden shadow-sm">
                   <img 
-                    src="/sakura/sakura-avatar-white-bg.png" 
+                    src="/sakura/sakura-chibi-avatar.png" 
                     alt="Sakura suy nghĩ" 
-                    className="w-full h-full object-contain p-0.5 animate-anime-float-soft"
+                    className="w-full h-full object-cover animate-anime-float-soft"
                   />
                 </div>
                 <div className="bg-[#1A2E40]/80 border border-white/10 px-3.5 py-2 rounded-2xl rounded-tl-none flex items-center gap-1.5">
@@ -481,7 +481,7 @@ export const AiAssistantWidget: React.FC<AiAssistantWidgetProps> = ({ onNavigate
         </div>
       )}
 
-      {/* Floating Animated Sakura Face Icon Button (White Background) */}
+      {/* Floating Animated Sakura Chibi Mascot Button */}
       <button
         onClick={() => {
           setIsOpen(!isOpen);
@@ -502,29 +502,29 @@ export const AiAssistantWidget: React.FC<AiAssistantWidgetProps> = ({ onNavigate
         )}
 
         {/* Ambient Fintech Gold/Pink Glow */}
-        <span className="absolute -inset-1 rounded-full bg-gradient-to-tr from-[#FFB7C5] via-[#FFD700] to-[#1A2E40] opacity-50 blur-md group-hover:opacity-85 transition-opacity pointer-events-none" />
+        <span className="absolute -inset-1.5 rounded-full bg-gradient-to-tr from-[#FFB7C5] via-[#FFD700] to-[#1A2E40] opacity-60 blur-md group-hover:opacity-90 transition-opacity pointer-events-none" />
 
-        {/* Pure White Background Avatar Circle */}
-        <div className="relative w-16 h-16 rounded-full bg-white border-2 border-[#FFD700] shadow-[0_8px_25px_rgba(0,0,0,0.45),0_0_15px_rgba(255,215,0,0.35)] flex items-center justify-center overflow-hidden">
+        {/* Sakura Chibi Avatar Circle */}
+        <div className="relative w-16 h-16 rounded-full bg-gradient-to-b from-[#1E3348] via-[#12202E] to-[#0A131E] border-2 border-[#FFD700] shadow-[0_10px_35px_rgba(255,183,197,0.5),0_0_20px_rgba(255,215,0,0.4)] flex items-center justify-center overflow-hidden">
           <img 
-            src="/sakura/sakura-avatar-white-bg.png" 
-            alt="Sakura Face" 
-            className="w-full h-full object-contain p-0.5 rounded-full select-none pointer-events-none transform scale-105 transition-transform duration-300 group-hover:scale-110"
+            src="/sakura/sakura-chibi-avatar.png" 
+            alt="Sakura Chibi Mascot" 
+            className="w-full h-full object-cover select-none pointer-events-none transform transition-transform duration-300 group-hover:scale-110"
           />
 
           {/* Micro microphone pulse wave when speaking */}
           {isSpeaking && (
-            <span className="absolute bottom-3 right-3 w-2.5 h-2.5 rounded-full bg-cyan-400 opacity-80 animate-sakura-mic-wave pointer-events-none" />
+            <span className="absolute bottom-2.5 right-2.5 w-2.5 h-2.5 rounded-full bg-cyan-400 opacity-80 animate-sakura-mic-wave pointer-events-none" />
           )}
         </div>
 
         {/* Gold SUPPORT Badge */}
-        <div className="absolute -bottom-1.5 left-1/2 transform -translate-x-1/2 px-2 py-0.5 rounded-full bg-[#1A2E40] border border-[#FFD700] shadow-md flex items-center justify-center pointer-events-none">
-          <span className="text-[8px] font-black tracking-widest text-[#FFD700]">SUPPORT</span>
+        <div className="absolute -bottom-1.5 left-1/2 transform -translate-x-1/2 px-2.5 py-0.5 rounded-full bg-[#0B1520] border border-[#FFD700] shadow-md flex items-center justify-center pointer-events-none">
+          <span className="text-[8.5px] font-black tracking-widest text-[#FFD700]">SUPPORT</span>
         </div>
 
         {/* Active Online Ping Dot */}
-        <div className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-[#1fc27a] border-2 border-white shadow-sm flex items-center justify-center pointer-events-none">
+        <div className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-[#1fc27a] border-2 border-[#0B1520] shadow-sm flex items-center justify-center pointer-events-none">
           <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
         </div>
       </button>
