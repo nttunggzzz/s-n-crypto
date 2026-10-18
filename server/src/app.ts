@@ -25,6 +25,9 @@ import { registerAdminRoutes } from './modules/admin/routes.ts';
 import { TaxService } from './modules/tax/taxService.ts';
 import { registerTaxRoutes } from './modules/tax/routes.ts';
 import { registerNewsRoutes } from './modules/news/index.ts';
+import { AdminMetricsService } from './modules/admin/metricsService.ts';
+import { AdminRiskService } from './modules/admin/riskService.ts';
+import { registerAdminRiskRoutes } from './modules/admin/riskRoutes.ts';
 
 export interface AppDeps {
   config: Config;
@@ -42,6 +45,8 @@ export interface AppDeps {
   version?: string;
   /** Clock of the admin news endpoints (default windows, source freshness); tests inject one. */
   newsClock?: () => Date;
+  /** Clock of the admin risk and metrics endpoints (default windows, day buckets); tests inject one. */
+  adminClock?: () => Date;
   /** Production build of the exchange web app to serve at `/` (config WEB_DIST); none in dev. */
   webDist?: string;
   /** Production build of the admin web app to serve at `/admin` (config ADMIN_WEB_DIST); none in dev. */
@@ -154,6 +159,7 @@ export function createApp(deps: AppDeps) {
   registerAdminRoutes(router, opts, new AdminService(deps.db, deps.exchange, deps.market, deps.futures, deps.bots), news, deps.auth.invites, config.RATE_LIMIT_SCALE);
   registerTaxRoutes(router, opts, new TaxService(deps.db, exConfig), deps.db, config.RATE_LIMIT_SCALE);
   registerNewsRoutes(router, opts, deps.db, deps.newsClock);
+  registerAdminRiskRoutes(router, opts, new AdminRiskService(deps.db, deps.futures, deps.adminClock), new AdminMetricsService(deps.db, deps.adminClock));
   if (deps.futures) registerFuturesRoutes(router, opts, deps.db, deps.futures, deps.market, config.RATE_LIMIT_SCALE);
   if (deps.bots) registerBotRoutes(router, opts, deps.bots, config.RATE_LIMIT_SCALE);
   app.use(router);

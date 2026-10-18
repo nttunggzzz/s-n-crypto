@@ -33,6 +33,7 @@ import { journalResolvers } from './journal.ts';
 import { taxResolvers } from './tax.ts';
 import { accountStatsResolvers } from './accountStats.ts';
 import { newsResolvers } from './news.ts';
+import { adminRiskResolvers } from './adminRisk.ts';
 import type { BinaryFile } from '../common.ts';
 const requireTradable = (symbol: string) => {
   if (mockStore.scenario === 'halted') throw new MockError('TRADING_HALTED', 'Trading is halted by the operator');
@@ -381,6 +382,7 @@ const resolvers: { [N in EndpointName]: Resolver<N> } = {
   ...taxResolvers,
   ...accountStatsResolvers,
   ...newsResolvers,
+  ...adminRiskResolvers,
 
   markNotificationsRead: ({ body }) => {
     requireUser();
