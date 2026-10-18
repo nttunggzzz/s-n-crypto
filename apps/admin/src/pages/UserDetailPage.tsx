@@ -14,12 +14,40 @@ import {
   type LoginEvent,
   type Role,
   type AdminTaxWithholding,
+  type AuditLogEntry,
+  type AuditAction,
   exportUrl,
 } from '@cex/contracts';
 import { formatApiError } from '../services/errors';
 import { dec } from '@cex/core';
 import { formatDecimal } from '@cex/ui';
-import { Copy, Check, ExternalLink, ShieldAlert, ArrowDownUp, AlertCircle, Shield, Trash2, Radio, Receipt, UserX, X, Building, Download } from 'lucide-react';
+import { Copy, Check, ExternalLink, ShieldAlert, ArrowDownUp, AlertCircle, Shield, Trash2, Radio, Receipt, UserX, X, Building, Download, FileText, Eye } from 'lucide-react';
+
+const AUDIT_ACTION_LABELS: Record<AuditAction, string> = {
+  USER_LOCK: 'Khóa tài khoản',
+  USER_UNLOCK: 'Mở khóa tài khoản',
+  USER_SIGNALS_ACCESS: 'Quyền tín hiệu',
+  USER_ROLE: 'Đổi vai trò',
+  BALANCE_ADJUST: 'Điều chỉnh số dư',
+  ACCOUNT_RESET: 'Đặt lại tài khoản',
+  SETTINGS_UPDATE: 'Cấu hình sàn',
+  TRADING_HALT: 'Dừng sàn khẩn cấp',
+  TRADING_RESUME: 'Mở lại giao dịch',
+  SYMBOL_UPDATE: 'Cấu hình cặp Spot',
+  RECONCILIATION_RUN: 'Chạy đối soát',
+  TWO_FACTOR_ENABLE: 'Bật 2FA',
+  TWO_FACTOR_DISABLE: 'Tắt 2FA',
+  ROLE_BOOTSTRAP: 'Khởi tạo vai trò',
+  ASSET_UPDATE: 'Cấu hình tài sản/coin',
+  ANNOUNCEMENT_CREATE: 'Tạo thông báo',
+  ANNOUNCEMENT_UPDATE: 'Sửa thông báo',
+  FUTURES_SYMBOL_UPDATE: 'Cấu hình Futures',
+  GRID_BOT_STOP: 'Dừng Grid Bot',
+  DCA_PLAN_CANCEL: 'Hủy kế hoạch DCA',
+  INVITE_CREATE: 'Tạo mã mời',
+  INVITE_REVOKE: 'Thu hồi mã mời',
+  TAX_SETTINGS_UPDATE: 'Cấu hình thuế',
+};
 
 const LEDGER_TYPE_LABELS: Record<string, string> = {
   FAUCET: 'Nhận Faucet',
@@ -62,7 +90,7 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
   const [notFound, setNotFound] = useState(false);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<'balances' | 'orders' | 'ledger' | 'futures' | 'bots' | 'logins' | 'tax'>('balances');
+  const [activeTab, setActiveTab] = useState<'balances' | 'orders' | 'ledger' | 'futures' | 'bots' | 'logins' | 'tax' | 'audit'>('balances');
   const [copiedUid, setCopiedUid] = useState(false);
 
   // Evidence state
@@ -80,6 +108,14 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
   const [taxWithholdings, setTaxWithholdings] = useState<AdminTaxWithholding[]>([]);
   const [taxLoading, setTaxLoading] = useState(false);
   const [taxNextCursor, setTaxNextCursor] = useState<string | null>(null);
+
+  // User Audit Logs state (AD-23)
+  const [userAuditLogs, setUserAuditLogs] = useState<AuditLogEntry[]>([]);
+  const [auditLogsLoading, setAuditLogsLoading] = useState(false);
+  const [auditLogsError, setAuditLogsError] = useState<string | null>(null);
+  const [auditLogsNextCursor, setAuditLogsNextCursor] = useState<string | null>(null);
+  const [auditLogsLoadingMore, setAuditLogsLoadingMore] = useState(false);
+  const [selectedAuditEntry, setSelectedAuditEntry] = useState<AuditLogEntry | null>(null);
 
   const [ordersNextCursor, setOrdersNextCursor] = useState<string | null>(null);
   const [ordersLoadingMore, setOrdersLoadingMore] = useState(false);
@@ -244,6 +280,43 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
     }
   }, [actualId, notFound, ledgerAsset, ledgerHideLocks, ledgerFrom, ledgerTo, ledgerLoadingMore, api]);
 
+  const loadUserAuditLogs = useCallback(
+    async (isLoadMore = false, cursor?: string | null) => {
+      if (!actualId || notFound) return;
+      if (isLoadMore) {
+        if (!cursor || auditLogsLoadingMore) return;
+        setAuditLogsLoadingMore(true);
+      } else {
+        setAuditLogsLoading(true);
+        setAuditLogsError(null);
+      }
+
+      try {
+        const res = await api.adminAuditLogs({
+          query: { targetId: actualId, limit: 50, cursor: cursor || undefined },
+        });
+        if (isLoadMore) {
+          setUserAuditLogs((prev) => [...prev, ...res.items]);
+        } else {
+          setUserAuditLogs(res.items);
+        }
+        setAuditLogsNextCursor(res.nextCursor);
+      } catch (err: any) {
+        if (!isLoadMore) {
+          setUserAuditLogs([]);
+          setAuditLogsError(formatApiError(err, 'Không thể tải nhật ký thao tác của người dùng.'));
+        }
+      } finally {
+        if (isLoadMore) {
+          setAuditLogsLoadingMore(false);
+        } else {
+          setAuditLogsLoading(false);
+        }
+      }
+    },
+    [actualId, notFound, auditLogsLoadingMore, api]
+  );
+
   // Load tab-specific data when tab changes
   useEffect(() => {
     if (!actualId || notFound) return;
@@ -296,8 +369,10 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
           setTaxNextCursor(null);
         })
         .finally(() => setTaxLoading(false));
+    } else if (activeTab === 'audit') {
+      loadUserAuditLogs(false);
     }
-  }, [actualId, notFound, activeTab, ordersType, positionsType, api, loadLedger]);
+  }, [actualId, notFound, activeTab, ordersType, positionsType, api, loadLedger, loadUserAuditLogs]);
 
   const loadMoreOrders = async () => {
     if (!ordersNextCursor || !actualId || notFound || ordersLoadingMore) return;
@@ -314,6 +389,11 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
   const loadMoreLedger = async () => {
     if (!ledgerNextCursor || !actualId || notFound || ledgerLoadingMore) return;
     loadLedger(true, ledgerNextCursor);
+  };
+
+  const loadMoreAuditLogs = async () => {
+    if (!auditLogsNextCursor || !actualId || notFound || auditLogsLoadingMore) return;
+    loadUserAuditLogs(true, auditLogsNextCursor);
   };
 
   const loadMorePositions = async () => {
@@ -919,6 +999,13 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
         >
           <Receipt size={14} />
           <span>Hồ sơ Thuế (TT 32/2026, đã tải {taxWithholdings.length})</span>
+        </button>
+        <button
+          onClick={() => setActiveTab('audit')}
+          className={`pb-3 font-semibold transition-colors flex items-center gap-1.5 ${activeTab === 'audit' ? 'border-b-2 border-[var(--accent,#818cf8)] text-[var(--accent,#818cf8)]' : 'text-[var(--text-2,#a1a1aa)] hover:text-[var(--text,#f4f4f5)]'}`}
+        >
+          <FileText size={14} />
+          <span>Nhật ký (đã tải {userAuditLogs.length})</span>
         </button>
       </div>
 
@@ -1620,6 +1707,187 @@ export const UserDetailPage: React.FC<UserDetailPageProps> = ({ userId, onNaviga
                 </button>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* Audit Logs Tab (AD-23) */}
+      {activeTab === 'audit' && (
+        <div className="bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)] rounded-xl overflow-hidden shadow">
+          <div className="p-4 border-b border-[var(--line,#1d1e21)] flex flex-wrap items-center justify-between gap-3">
+            <div className="font-bold text-sm text-[var(--text,#f4f4f5)] flex items-center gap-2">
+              <FileText size={16} className="text-[var(--accent,#818cf8)]" />
+              <span>Nhật ký kiểm toán liên quan đến người dùng này</span>
+            </div>
+            <span className="text-xs text-[var(--text-3,#63636b)]">
+              Ghi nhận các thao tác quản trị tác động lên tài khoản (khóa, mở khóa, đổi vai trò, chỉnh số dư...)
+            </span>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-sm min-w-[800px]">
+              <thead className="bg-[var(--line,#1d1e21)]/30 border-b border-[var(--line,#1d1e21)] text-xs font-semibold text-[var(--text-2,#a1a1aa)] uppercase">
+                <tr>
+                  <th className="px-5 py-3">Thời gian</th>
+                  <th className="px-5 py-3">Người thực hiện</th>
+                  <th className="px-5 py-3">Hành động</th>
+                  <th className="px-5 py-3">Lý do</th>
+                  <th className="px-5 py-3">IP</th>
+                  <th className="px-5 py-3 text-right">Chi tiết</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[var(--line,#1d1e21)] text-xs">
+                {auditLogsLoading && userAuditLogs.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="px-5 py-8 text-center text-[var(--text-3,#63636b)] font-sans">
+                      Đang tải nhật ký kiểm toán...
+                    </td>
+                  </tr>
+                )}
+                {!auditLogsLoading && auditLogsError && (
+                  <tr>
+                    <td colSpan={6} className="px-5 py-8 text-center" data-testid="list-error">
+                      <div className="text-[var(--down,#f2475f)] mb-2">{auditLogsError}</div>
+                      <button
+                        type="button"
+                        onClick={() => loadUserAuditLogs(false)}
+                        className="px-3 py-1.5 rounded-lg bg-[var(--line,#1d1e21)] text-xs text-[var(--text,#f4f4f5)] hover:bg-[var(--line,#1d1e21)]/80"
+                      >
+                        Thử lại
+                      </button>
+                    </td>
+                  </tr>
+                )}
+                {!auditLogsLoading && !auditLogsError && userAuditLogs.map((log) => (
+                  <tr key={log.id} data-testid="user-audit-row" className="hover:bg-[var(--line,#1d1e21)]/15">
+                    <td className="px-5 py-3 text-xs text-[var(--text-3,#63636b)] font-mono whitespace-nowrap">
+                      {new Date(log.createdAt).toLocaleString('vi-VN')}
+                    </td>
+                    <td className="px-5 py-3">
+                      {log.actor ? (
+                        <a
+                          href={`/admin/users/${log.actor.id}`}
+                          className="text-[var(--accent,#818cf8)] hover:underline font-medium"
+                        >
+                          {log.actor.email}
+                        </a>
+                      ) : (
+                        <span className="text-[var(--text-3,#63636b)] font-sans">(Hệ thống)</span>
+                      )}
+                    </td>
+                    <td className="px-5 py-3">
+                      <div className="flex flex-col">
+                        <span className="font-mono font-semibold text-xs text-[var(--accent,#818cf8)]">
+                          {log.action}
+                        </span>
+                        <span className="text-[11px] text-[var(--text-3,#63636b)]">
+                          {AUDIT_ACTION_LABELS[log.action] || log.action}
+                        </span>
+                      </div>
+                    </td>
+                    <td className="px-5 py-3 text-[var(--text-2,#a1a1aa)] max-w-xs truncate" title={log.reason || ''}>
+                      {log.reason || '—'}
+                    </td>
+                    <td className="px-5 py-3 font-mono text-[var(--text-3,#63636b)]">
+                      {log.ip || '—'}
+                    </td>
+                    <td className="px-5 py-3 text-right">
+                      <button
+                        onClick={() => setSelectedAuditEntry(log)}
+                        className="p-1.5 rounded hover:bg-[var(--line,#1d1e21)] text-[var(--text-3,#63636b)] hover:text-white transition-colors"
+                        title="Xem thay đổi Before / After"
+                      >
+                        <Eye size={15} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {!auditLogsLoading && !auditLogsError && userAuditLogs.length === 0 && (
+                  <tr>
+                    <td colSpan={6} className="px-5 py-10 text-center text-[var(--text-3,#63636b)] font-sans">
+                      Chưa có bản ghi nhật ký quản trị nào liên quan đến người dùng này.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {auditLogsNextCursor && !auditLogsLoading && !auditLogsError && (
+            <div className="p-4 border-t border-[var(--line,#1d1e21)] flex justify-center">
+              <button
+                type="button"
+                onClick={loadMoreAuditLogs}
+                disabled={auditLogsLoadingMore}
+                data-testid="list-more"
+                className="px-4 py-2 rounded-lg bg-[var(--line,#1d1e21)] hover:bg-[var(--line,#1d1e21)]/80 text-xs font-semibold text-[var(--text,#f4f4f5)] transition-colors disabled:opacity-50"
+              >
+                {auditLogsLoadingMore ? 'Đang tải...' : 'Xem thêm'}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* User Audit Log Compare Modal */}
+      {selectedAuditEntry && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-[var(--panel,#0a0a0b)] border border-[var(--line,#1d1e21)] rounded-xl w-full max-w-2xl p-6 flex flex-col gap-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-[var(--line,#1d1e21)] pb-3">
+              <div>
+                <h2 className="text-base font-bold text-[var(--text,#f4f4f5)]">Chi tiết thao tác nhật ký</h2>
+                <div className="text-xs text-[var(--text-3,#63636b)] mt-0.5">Mã ID: {selectedAuditEntry.id}</div>
+              </div>
+              <button onClick={() => setSelectedAuditEntry(null)} className="text-[var(--text-3,#63636b)] hover:text-white">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 text-xs bg-[var(--bg,#000000)] p-3 rounded-lg border border-[var(--line,#1d1e21)]">
+              <div>
+                <strong className="text-[var(--text-3,#63636b)]">Hành động:</strong>{' '}
+                <span className="font-semibold text-[var(--accent,#818cf8)]">{selectedAuditEntry.action}</span> (
+                {AUDIT_ACTION_LABELS[selectedAuditEntry.action] || selectedAuditEntry.action})
+              </div>
+              <div>
+                <strong className="text-[var(--text-3,#63636b)]">Thời gian:</strong>{' '}
+                {new Date(selectedAuditEntry.createdAt).toLocaleString('vi-VN')}
+              </div>
+              <div>
+                <strong className="text-[var(--text-3,#63636b)]">Thực hiện bởi:</strong>{' '}
+                {selectedAuditEntry.actor ? selectedAuditEntry.actor.email : 'Hệ thống'}
+              </div>
+              <div>
+                <strong className="text-[var(--text-3,#63636b)]">Địa chỉ IP:</strong> {selectedAuditEntry.ip || '—'}
+              </div>
+              <div className="col-span-2">
+                <strong className="text-[var(--text-3,#63636b)]">Lý do:</strong> {selectedAuditEntry.reason || '—'}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <div className="text-xs font-semibold text-[var(--text-2,#a1a1aa)] mb-1 uppercase">Dữ liệu trước (Before)</div>
+                <pre className="p-3 bg-[var(--bg,#000000)] border border-[var(--line,#1d1e21)] rounded-lg text-xs font-mono text-amber-300/80 overflow-auto max-h-60">
+                  {selectedAuditEntry.before ? JSON.stringify(selectedAuditEntry.before, null, 2) : 'null'}
+                </pre>
+              </div>
+              <div>
+                <div className="text-xs font-semibold text-[var(--text-2,#a1a1aa)] mb-1 uppercase">Dữ liệu sau (After)</div>
+                <pre className="p-3 bg-[var(--bg,#000000)] border border-[var(--line,#1d1e21)] rounded-lg text-xs font-mono text-[var(--up,#1fc27a)]/80 overflow-auto max-h-60">
+                  {selectedAuditEntry.after ? JSON.stringify(selectedAuditEntry.after, null, 2) : 'null'}
+                </pre>
+              </div>
+            </div>
+
+            <div className="flex justify-end pt-2 border-t border-[var(--line,#1d1e21)]">
+              <button
+                onClick={() => setSelectedAuditEntry(null)}
+                className="px-4 py-2 rounded-lg bg-[var(--line,#1d1e21)] text-xs font-semibold text-white hover:bg-[var(--line,#1d1e21)]/80"
+              >
+                Đóng
+              </button>
+            </div>
           </div>
         </div>
       )}
