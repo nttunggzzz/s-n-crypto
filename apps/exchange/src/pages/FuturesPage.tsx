@@ -644,10 +644,10 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
         return `Khối lượng nhỏ hơn mức tối thiểu (${minQtyStr} ${baseAsset})`;
       }
       if (minNotionalStr && notionalValue.lt(dec(minNotionalStr))) {
-        return `Giá trị lệnh nhỏ hơn mức tối thiểu (${minNotionalStr} USDT)`;
+        return `Giá trị lệnh nhỏ hơn mức tối thiểu ${minNotionalStr} USDT (hiện ${formatDecimal(notionalValue.toString(), { decimals: 2 })} USDT)`;
       }
       if (isAuthenticated && totalCost.gt(futuresAvailable)) {
-        return `Cần thêm ~${formatDecimal(totalCost.sub(futuresAvailable).toString(), { decimals: 2 })} USDT (ký quỹ + phí)`;
+        return `Cần thêm ~${formatDecimal(totalCost.sub(futuresAvailable).toString(), { decimals: 2 })} USDT (ký quỹ + phí). Khả dụng: ${formatDecimal(futuresAvailable.toString(), { decimals: 2 })} USDT`;
       }
     }
     return null;
