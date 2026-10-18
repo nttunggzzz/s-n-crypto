@@ -7,6 +7,7 @@ import { Header } from './components/Header.tsx';
 import { BottomNav } from './components/BottomNav.tsx';
 import { DevToolbar } from './components/DevToolbar.tsx';
 import { CommandPalette } from './components/CommandPalette.tsx';
+import { AiAssistantWidget } from './components/AiAssistantWidget.tsx';
 import { ToastProvider, SimulatedBanner } from '@cex/ui';
 
 // Lazy-loaded Pages for route code-splitting
@@ -144,6 +145,9 @@ const AppContent: React.FC = () => {
           </Suspense>
         </ErrorBoundary>
       </main>
+
+      {/* AI Assistant Chatbot for New Users */}
+      <AiAssistantWidget onNavigate={navigate} />
 
       {/* Mobile Bottom Navigation Bar */}
       <BottomNav currentPath={currentPath} onNavigate={navigate} />

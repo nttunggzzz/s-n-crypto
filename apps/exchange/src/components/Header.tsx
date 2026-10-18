@@ -109,7 +109,7 @@ export const Header: React.FC<HeaderProps> = ({ currentPath, onNavigate }) => {
 
   return (
     <>
-      <header className="sticky top-0 z-40 w-full h-[56px] bg-[var(--panel)] border-b border-[var(--line)] flex flex-col justify-center">
+      <header className="sticky top-0 z-40 w-full h-[58px] bg-[rgba(10,10,12,0.85)] border-b border-white/[0.08] backdrop-blur-xl flex flex-col justify-center transition-colors">
         <div className="px-4 h-full flex items-center justify-between">
           {/* Brand & Left Menu */}
           <div className="flex items-center gap-6 h-full">
@@ -145,7 +145,7 @@ export const Header: React.FC<HeaderProps> = ({ currentPath, onNavigate }) => {
                 >
                   Giao dịch <ChevronDown size={14} className="text-[var(--text-3,#63636b)] group-hover:text-[var(--text-2,#a1a1aa)] transition-colors" />
                 </button>
-                <div className="absolute top-full left-0 mt-0 w-48 py-1 bg-[var(--panel)] border border-[var(--line)] rounded-[var(--radius-lg,10px)] shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50">
+                <div className="absolute top-full left-0 mt-0 w-52 py-1.5 bg-[rgba(15,18,26,0.96)] border border-white/10 rounded-2xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 backdrop-blur-2xl">
                   <div 
                     onClick={() => onNavigate(`/trade/${activeSymbol || 'BTC-USDT'}`)}
                     className="px-4 py-2 hover:bg-[var(--panel-2)] cursor-pointer"
