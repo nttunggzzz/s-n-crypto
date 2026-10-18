@@ -216,10 +216,14 @@ test.fixme('AD-07: vị thế Futures có mark price không live → admin-futur
 test.describe('S-13: cờ staffTwoFactorRequired của server (e2e: true)', () => {
   // The admin app may or may not call admin endpoints before it shows the 2FA screen; if it does, the server answers 403 TWO_FACTOR_REQUIRED
   // (a refusal this test provokes on purpose). Any other failing call is still a failure.
+  // The list needs a number of entries other than 2: Playwright reads a bare two-element array whose second item is an object as a fixture
+  // tuple `[value, options]` and would hand the fixture only the first entry ("expectedApiErrors.find is not a function"). The three calls
+  // below are the ones the first test can provoke: the overview page, its exchange-settings read, and /admin/users (deep link).
   test.use({
     expectedApiErrors: [
       { method: 'GET', path: '/api/v1/admin/overview', status: 403, code: 'TWO_FACTOR_REQUIRED' },
       { method: 'GET', path: '/api/v1/admin/exchange/settings', status: 403, code: 'TWO_FACTOR_REQUIRED' },
+      { method: 'GET', path: '/api/v1/admin/users', status: 403, code: 'TWO_FACTOR_REQUIRED' },
     ],
   });
 
