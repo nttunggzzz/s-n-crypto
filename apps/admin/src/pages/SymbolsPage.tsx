@@ -12,6 +12,7 @@ export const SymbolsPage: React.FC = () => {
   const [query, setQuery] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [marketStatuses, setMarketStatuses] = useState<Record<string, string>>({});
 
   // Edit symbol dialog
   const [targetSymbol, setTargetSymbol] = useState<AdminSymbol | null>(null);
@@ -28,8 +29,20 @@ export const SymbolsPage: React.FC = () => {
   const loadSymbols = () => {
     setIsLoading(true);
     setLoadError(null);
-    api.adminListSymbols()
-      .then((res) => setSymbols(res.items))
+    Promise.all([
+      api.adminListSymbols(),
+      api.marketStatus().catch(() => null),
+    ])
+      .then(([res, mStatus]) => {
+        setSymbols(res.items);
+        if (mStatus?.symbols) {
+          const map: Record<string, string> = {};
+          mStatus.symbols.forEach((s) => {
+            map[s.symbol] = s.status;
+          });
+          setMarketStatuses(map);
+        }
+      })
       .catch((e: any) => setLoadError(formatApiError(e, 'Không thể tải danh sách cặp giao dịch.')))
       .finally(() => setIsLoading(false));
   };
@@ -41,7 +54,7 @@ export const SymbolsPage: React.FC = () => {
   const handleToggleClick = (sym: AdminSymbol) => {
     setTargetSymbol(sym);
     setNewEnabled(!sym.adminEnabled);
-    setCancelOpenOrders(sym.adminEnabled); // Default cancel orders if we are disabling it
+    setCancelOpenOrders(false); // Checkbox "Hủy N lệnh đang mở" (mặc định tắt)
     setConfirmError(null);
     setConfirmOpen(true);
   };
@@ -115,6 +128,7 @@ export const SymbolsPage: React.FC = () => {
           <thead className="bg-[var(--line,#1d1e21)]/30 border-b border-[var(--line,#1d1e21)] text-xs font-semibold text-[var(--text-2,#a1a1aa)] uppercase">
             <tr>
               <th className="px-5 py-3">Cặp giao dịch</th>
+              <th className="px-5 py-3">Trạng thái dữ liệu</th>
               <th className="px-5 py-3">Nguồn Binance</th>
               <th className="px-5 py-3">Lệnh đang mở</th>
               <th className="px-5 py-3">Độ bước giá</th>
@@ -135,6 +149,22 @@ export const SymbolsPage: React.FC = () => {
                   >
                     {s.symbol} <ExternalLink size={12} />
                   </a>
+                </td>
+                <td className="px-5 py-3">
+                  {(() => {
+                    const status = marketStatuses[s.symbol] || (s.sourceStatus === 'TRADING' ? 'LIVE' : 'UNAVAILABLE');
+                    const colorClass =
+                      status === 'LIVE'
+                        ? 'text-[var(--up,#1fc27a)] bg-[var(--up,#1fc27a)]/10'
+                        : status === 'STALE'
+                        ? 'text-amber-400 bg-amber-950/40'
+                        : 'text-[var(--down,#f2475f)] bg-[var(--down,#f2475f)]/10';
+                    return (
+                      <span className={`px-2 py-0.5 rounded text-xs font-semibold ${colorClass}`}>
+                        {status}
+                      </span>
+                    );
+                  })()}
                 </td>
                 <td className="px-5 py-3">
                   <span className={`px-2 py-0.5 rounded text-xs font-medium ${
@@ -173,7 +203,7 @@ export const SymbolsPage: React.FC = () => {
             ))}
             {loadError && symbols.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-5 py-10 text-center">
+                <td colSpan={8} className="px-5 py-10 text-center">
                   <div data-testid="list-error" className="flex flex-col items-center justify-center gap-3">
                     <p className="text-sm text-[var(--down,#f2475f)]">{loadError}</p>
                     <button
@@ -189,7 +219,7 @@ export const SymbolsPage: React.FC = () => {
             )}
             {!isLoading && !loadError && filteredSymbols.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-5 py-10 text-center text-[var(--text-3,#63636b)]">
+                <td colSpan={8} className="px-5 py-10 text-center text-[var(--text-3,#63636b)]">
                   Không tìm thấy cặp giao dịch nào
                 </td>
               </tr>
@@ -205,14 +235,28 @@ export const SymbolsPage: React.FC = () => {
           newEnabled
             ? `Cặp ${targetSymbol?.symbol} sẽ mở lại cho người dùng đặt lệnh.`
             : `Cặp ${targetSymbol?.symbol} sẽ bị đóng giao dịch ngay lập tức.${
-                cancelOpenOrders ? ' Tất cả các lệnh đang mở trên cặp này sẽ bị hủy tự động.' : ''
+                cancelOpenOrders ? ` Tất cả ${targetSymbol?.openOrders ?? 0} lệnh đang mở trên cặp này sẽ bị hủy tự động.` : ''
               }`
         }
         onConfirm={handleConfirmToggle}
         onCancel={() => { setConfirmOpen(false); setConfirmError(null); }}
         isSubmitting={isSubmitting}
         error={confirmError}
-      />
+      >
+        {!newEnabled && (
+          <label className="flex items-center gap-2.5 p-3 rounded-lg bg-[var(--bg,#000000)] border border-[var(--line,#1d1e21)] cursor-pointer text-sm">
+            <input
+              type="checkbox"
+              checked={cancelOpenOrders}
+              onChange={(e) => setCancelOpenOrders(e.target.checked)}
+              className="w-4 h-4 rounded border-[var(--line,#1d1e21)] text-[var(--accent,#818cf8)] focus:ring-0 focus:ring-offset-0 bg-[var(--panel,#0a0a0b)]"
+            />
+            <span className="text-[var(--text,#f4f4f5)] font-medium">
+              Hủy {targetSymbol?.openOrders ?? 0} lệnh đang mở
+            </span>
+          </label>
+        )}
+      </ConfirmDialog>
     </div>
   );
 };

@@ -11,6 +11,7 @@ interface ConfirmDialogProps {
   onCancel: () => void;
   isSubmitting?: boolean;
   error?: string | null;
+  children?: React.ReactNode;
 }
 
 export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
@@ -23,6 +24,7 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   onCancel,
   isSubmitting,
   error,
+  children,
 }) => {
   const [reason, setReason] = useState('');
   const [phrase, setPhrase] = useState('');
@@ -75,6 +77,12 @@ export const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
                 </button>
               ))}
             </div>
+          </div>
+        )}
+
+        {children && (
+          <div>
+            {children}
           </div>
         )}
 
