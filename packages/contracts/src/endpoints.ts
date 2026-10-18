@@ -66,6 +66,7 @@ import {
   UserIdParam,
 } from './admin.ts';
 import type { Permission } from './permissions.ts';
+import { AdminOrderRow, AdminOrderSearchListQuery, AdminTradeRow, AdminTradeSearchListQuery, AdminUserSessions } from './adminLookup.ts';
 import { AssetInfo, Candles, CandlesQuery, Depth, DepthQuery, ExchangeInfo, LimitQuery, MarketConnection, MarketStatus, MarketTrades, Sparklines, SparklinesQuery, Ticker } from './market.ts';
 import { Balances, FaucetClaimResult, FaucetStatus, LedgerEntry, LedgerQuery } from './wallet.ts';
 import { CancelAllResponse, HistoryQuery, Order, OrderList, PlaceOcoRequest, PlaceOrderRequest, PlaceOrderResponse, SymbolFilterQuery, Trade } from './orders.ts';
@@ -298,7 +299,15 @@ export const endpoints = {
   // ---- admin (P03/P05, phase 3) — staff + 2FA + permission; every change writes the audit log
   adminOverview: ep({ method: 'GET', path: '/api/v1/admin/overview', auth: 'staff', permission: 'exchange.read', response: AdminOverview }),
   adminListUsers: ep({ method: 'GET', path: '/api/v1/admin/users', auth: 'staff', permission: 'users.read', query: AdminUserListQuery.extend(PaginationQuery.shape), response: paginated(AdminUserSummary) }),
+  /** AD1: CSV of the user list (contains e-mail addresses), same filters as adminListUsers, USERS_EXPORT_COLUMNS, <= 10,000 rows newest first. Declared before :userId so the path never matches it. */
+  adminUsersExport: ep({ method: 'GET', path: '/api/v1/admin/users/export.csv', auth: 'staff', permission: 'users.export', query: AdminUserListQuery, response: Csv, format: 'csv' }),
   adminGetUser: ep({ method: 'GET', path: '/api/v1/admin/users/:userId', auth: 'staff', permission: 'users.read', params: UserIdParam, response: AdminUserDetail }),
+  /** AD1: orders of every user (market SPOT or FUTURES is required), newest first. user = uuid or 8-digit UID; unknown user = 404. */
+  adminSearchOrders: ep({ method: 'GET', path: '/api/v1/admin/orders', auth: 'staff', permission: 'users.read', query: AdminOrderSearchListQuery, response: paginated(AdminOrderRow) }),
+  /** AD1: fills of every user, newest first. */
+  adminSearchTrades: ep({ method: 'GET', path: '/api/v1/admin/trades', auth: 'staff', permission: 'users.read', query: AdminTradeSearchListQuery, response: paginated(AdminTradeRow) }),
+  /** AD1: the user's live sessions (no token material), newest first, at most 100. */
+  adminUserSessions: ep({ method: 'GET', path: '/api/v1/admin/users/:userId/sessions', auth: 'staff', permission: 'users.read', params: UserIdParam, response: AdminUserSessions }),
   adminUserOrders: ep({ method: 'GET', path: '/api/v1/admin/users/:userId/orders', auth: 'staff', permission: 'users.read', params: UserIdParam, query: AdminUserOrdersQuery.extend(PaginationQuery.shape), response: paginated(Order) }),
   adminUserLedger: ep({ method: 'GET', path: '/api/v1/admin/users/:userId/ledger', auth: 'staff', permission: 'users.read', params: UserIdParam, query: LedgerQuery.extend(PaginationQuery.shape), response: paginated(LedgerEntry) }),
   /** Locking signs the user out everywhere; their open orders stay. */
@@ -314,6 +323,8 @@ export const endpoints = {
   adminResumeTrading: ep({ method: 'POST', path: '/api/v1/admin/exchange/resume', auth: 'staff', permission: 'exchange.halt', body: ResumeRequest, response: ExchangeSettings }),
   adminListSymbols: ep({ method: 'GET', path: '/api/v1/admin/symbols', auth: 'staff', permission: 'exchange.read', response: z.object({ items: z.array(AdminSymbol) }) }),
   adminUpdateSymbol: ep({ method: 'PATCH', path: '/api/v1/admin/symbols/:symbol', auth: 'staff', permission: 'exchange.configure', params: AdminSymbolParam, body: UpdateSymbolRequest, response: AdminSymbol }),
+  /** AD1: CSV of the audit log, same filters as adminAuditLogs, AUDIT_EXPORT_COLUMNS, <= 10,000 rows newest first. */
+  adminAuditExport: ep({ method: 'GET', path: '/api/v1/admin/audit-logs/export.csv', auth: 'staff', permission: 'audit.read', query: AuditLogQuery, response: Csv, format: 'csv' }),
   adminAuditLogs: ep({ method: 'GET', path: '/api/v1/admin/audit-logs', auth: 'staff', permission: 'audit.read', query: AuditLogQuery.extend(PaginationQuery.shape), response: paginated(AuditLogEntry) }),
   adminReconciliationRuns: ep({ method: 'GET', path: '/api/v1/admin/reconciliation', auth: 'staff', permission: 'reconciliation.read', query: PaginationQuery, response: paginated(ReconciliationRun) }),
   adminRunReconciliation: ep({ method: 'POST', path: '/api/v1/admin/reconciliation/run', auth: 'staff', permission: 'reconciliation.run', body: Empty, response: ReconciliationRun }),

@@ -7,6 +7,8 @@ import type { Role } from './common.ts';
  */
 export const Permission = z.enum([
   'users.read',
+  /** AD1: CSV of the user list (contains e-mail addresses) */
+  'users.export',
   'users.lock',
   'users.signals',
   /** change roles — owner only */
@@ -49,6 +51,7 @@ const ADMIN: Permission[] = [
   'content.manage',
   'bots.manage',
   'users.invite',
+  'users.export',
 ];
 
 export const ROLE_PERMISSIONS: Record<Role, readonly Permission[]> = {
