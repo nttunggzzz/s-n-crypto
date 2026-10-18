@@ -23,6 +23,7 @@ Dùng chung cho cả đợt: **một** hàm dịch lỗi theo `code` cho admin (
 
 ### Trạng thái các mục P1
 - **AD-02:** Hoàn thành. Đã xóa tab "Tạo tài khoản trực tiếp" và chuỗi thông báo "Hệ thống đã gửi lời mời xác thực" trong `pages/UsersPage.tsx`. Chỉ giữ luồng tạo mã mời gia nhập an toàn.
+- **AD-03:** Hoàn thành. Đã nâng cấp modal cấu hình hợp đồng Futures trong `pages/FuturesSymbolsPage.tsx`: đầy đủ công tắc bật/tắt `enabled`, đòn bẩy tối đa `maxLeverage`, MMR `maintenanceMarginRate` (kiểm tra chuỗi 0.001 - 0.1 so sánh bằng `dec`), xem so sánh "cũ → mới", ô lý do bắt buộc; chỉ gửi các trường đã đổi; hiển thị lỗi server tại `futures-symbol-error`; bỏ `parseFloat` khi hiển thị MMR.
 
 ## P2
 | ID | File:dòng | Lỗi | Sửa |
