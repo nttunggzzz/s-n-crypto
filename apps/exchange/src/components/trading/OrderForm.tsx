@@ -483,17 +483,18 @@ export const OrderForm: React.FC<OrderFormProps> = ({
   const feeRate = effectiveFeeRate;
 
   const formattedTaxRatePercent = useMemo(() => {
-    if (!taxRate) return '—';
+    const rateToUse = taxRate && taxRate.trim?.() !== '' ? taxRate : '0.001';
     try {
-      return `${formatDecimal(dec(taxRate).mul(100).toString(), { locale: 'vi', trimTrailingZeros: true })}%`;
+      return `${formatDecimal(dec(rateToUse).mul(100).toString(), { locale: 'vi', trimTrailingZeros: true })}%`;
     } catch {
-      return '—';
+      return '0,1%';
     }
   }, [taxRate]);
 
   const taxCalculation = useMemo(() => {
     if (side !== 'SELL' || taxMode !== 'WITHHOLD' || isDomesticOrg) return null;
-    if (!quantity || !activeSymbolInfo || !feeRate || !taxRate) return null;
+    const effectiveTaxRate = taxRate && taxRate.trim?.() !== '' ? taxRate : '0.001';
+    if (!quantity || !activeSymbolInfo || !feeRate || !effectiveTaxRate) return null;
     try {
       const q = dec(quantity);
       if (q.lte(0)) return null;
@@ -510,7 +511,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({
       const gross = p.mul(q);
       const fRate = dec(feeRate);
       const fee = roundUp(gross.mul(fRate));
-      const tRate = dec(taxRate);
+      const tRate = dec(effectiveTaxRate);
       const tax = roundUp(gross.mul(tRate));
       const net = gross.sub(fee).sub(tax);
 
@@ -1536,7 +1537,7 @@ export const OrderForm: React.FC<OrderFormProps> = ({
             ) : taxCalculation ? (
               <>
                 <div data-testid="spot-tax-line" className="flex items-center justify-between text-[11px] text-[var(--color-text-muted,#6b7280)]">
-                  <span>Thuế ({formattedTaxRatePercent}):</span>
+                  <span>Thuế ước tính ({formattedTaxRatePercent}):</span>
                   <span className="font-mono text-amber-400 font-medium">
                     {formatDecimal(taxCalculation.tax.toString(), { decimals: 8 })} {quoteAsset}
                   </span>

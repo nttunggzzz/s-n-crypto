@@ -162,3 +162,82 @@ body {
   animation: typingDot 1.4s infinite ease-in-out 0.4s;
 }
 
+/* Anime AI Concierge Keyframes */
+@keyframes animeHandWave {
+  0%, 100% {
+    transform: rotate(0deg);
+  }
+  15%, 45% {
+    transform: rotate(14deg);
+  }
+  30%, 60% {
+    transform: rotate(-8deg);
+  }
+  75% {
+    transform: rotate(4deg);
+  }
+}
+
+@keyframes animeEyeWink {
+  0%, 42%, 48%, 100% {
+    transform: scaleY(1);
+  }
+  45% {
+    transform: scaleY(0.08);
+  }
+}
+
+@keyframes animeHeadsetPulse {
+  0%, 100% {
+    filter: drop-shadow(0 0 2px rgba(244, 114, 182, 0.9)) drop-shadow(0 0 6px rgba(236, 72, 153, 0.6));
+    opacity: 0.92;
+  }
+  50% {
+    filter: drop-shadow(0 0 5px rgba(56, 189, 248, 0.95)) drop-shadow(0 0 10px rgba(129, 140, 248, 0.8));
+    opacity: 1;
+  }
+}
+
+@keyframes animeFloatSoft {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-5px) rotate(1.2deg);
+  }
+}
+
+@keyframes animeHairShimmer {
+  0%, 100% {
+    opacity: 0.75;
+    transform: translateX(0);
+  }
+  50% {
+    opacity: 1;
+    transform: translateX(1.5px);
+  }
+}
+
+.animate-anime-hand-wave {
+  animation: animeHandWave 2.4s ease-in-out infinite;
+  transform-origin: 76px 82px;
+}
+
+.animate-anime-eye-wink {
+  animation: animeEyeWink 3.8s ease-in-out infinite;
+  transform-origin: 58.5px 42px;
+}
+
+.animate-anime-headset-pulse {
+  animation: animeHeadsetPulse 2.4s ease-in-out infinite;
+}
+
+.animate-anime-float-soft {
+  animation: animeFloatSoft 3.4s ease-in-out infinite;
+}
+
+.animate-anime-hair-shimmer {
+  animation: animeHairShimmer 3s ease-in-out infinite;
+}
+
+
