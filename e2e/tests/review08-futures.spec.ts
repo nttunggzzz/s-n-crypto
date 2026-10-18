@@ -297,7 +297,11 @@ test.describe('S-01: TP/SL sai phía', () => {
       await page.getByTestId('futures-order-tp').fill(tp);
       await page.getByTestId('futures-order-sl').fill(sl);
 
+      // The form is ready once the contract and the mark price are loaded: until then its button is disabled ("Đang tải thông tin hợp đồng…")
+      // and isEnabled() below would be false for that reason only — the total cost of the typed quantity is positive only after both arrived.
+      await expect(page.getByTestId('futures-est-cost'), 'form chưa tính được chi phí (hợp đồng / giá mark chưa tải)').toHaveAttribute('data-value', /[1-9]/);
       const open = page.getByTestId(side === 'LONG' ? 'futures-open-long' : 'futures-open-short');
+      // a form that already refuses the wrong-side TP (disabled button + the message) is as good as a server refusal: only click an enabled button
       if (await open.isEnabled({ timeout: 5_000 })) {
         await open.click();
         // the confirmation box (preferences.confirmOrders) — absent if the form already refused the order
