@@ -34,11 +34,11 @@ export const UsersPage: React.FC<{ onNavigate: (path: string) => void }> = ({ on
 
   // Modal Thêm thành viên
   const [isAddUserOpen, setIsAddUserOpen] = useState(false);
-  const [inviteRole, setInviteRole] = useState<Role>('user');
   const [inviteUses, setInviteUses] = useState('1');
   const [inviteNote, setInviteNote] = useState('');
   const [createdInvite, setCreatedInvite] = useState<CreatedInvite | null>(null);
   const [copiedInvite, setCopiedInvite] = useState(false);
+  const [copiedInviteLink, setCopiedInviteLink] = useState(false);
   const [isCreatingInvite, setIsCreatingInvite] = useState(false);
   const [inviteError, setInviteError] = useState<string | null>(null);
 
@@ -103,7 +103,7 @@ export const UsersPage: React.FC<{ onNavigate: (path: string) => void }> = ({ on
     try {
       const res = await api.adminCreateInvite({
         body: {
-          note: inviteNote.trim() ? `[Vai trò: ${inviteRole}] ${inviteNote.trim()}` : `Mời thành viên vai trò ${inviteRole}`,
+          note: inviteNote.trim() || 'Mã mời thành viên',
           maxUses: parseInt(inviteUses, 10) || 1,
         },
       });
@@ -121,6 +121,13 @@ export const UsersPage: React.FC<{ onNavigate: (path: string) => void }> = ({ on
     navigator.clipboard.writeText(createdInvite.code);
     setCopiedInvite(true);
     setTimeout(() => setCopiedInvite(false), 2000);
+  };
+
+  const copyCreatedInviteLink = () => {
+    if (!createdInvite?.link) return;
+    navigator.clipboard.writeText(createdInvite.link);
+    setCopiedInviteLink(true);
+    setTimeout(() => setCopiedInviteLink(false), 2000);
   };
 
   const handleOpenLock = (e: React.MouseEvent, u: AdminUserSummary) => {
@@ -260,7 +267,6 @@ export const UsersPage: React.FC<{ onNavigate: (path: string) => void }> = ({ on
           <option value="">Tất cả vai trò</option>
           <option value="user">User (Khách)</option>
           <option value="support">Support (Hỗ trợ)</option>
-          <option value="operator">Operator (Vận hành)</option>
           <option value="admin">Admin (Quản trị)</option>
           <option value="owner">Owner (Chủ sàn)</option>
         </select>
@@ -469,21 +475,44 @@ export const UsersPage: React.FC<{ onNavigate: (path: string) => void }> = ({ on
                     <span>Đã tạo mã mời thành công!</span>
                   </div>
 
-                  <div className="p-3 bg-[var(--bg,#000000)] border border-[var(--line,#1d1e21)] rounded-lg flex items-center justify-between">
-                    <span className="font-mono text-base font-bold text-[var(--accent,#818cf8)] tracking-wider">
-                      {createdInvite.code}
-                    </span>
-                    <button
-                      onClick={copyCreatedInvite}
-                      className="px-3 py-1.5 rounded bg-[var(--accent,#818cf8)] hover:brightness-110 text-white text-xs font-bold transition-all flex items-center gap-1"
-                    >
-                      {copiedInvite ? <Check size={13} /> : <Copy size={13} />}
-                      <span>{copiedInvite ? 'Đã chép' : 'Sao chép'}</span>
-                    </button>
+                  <div className="space-y-3 font-mono text-xs">
+                    <div>
+                      <span className="text-[var(--text-3,#63636b)] font-sans block mb-1">Mã mời:</span>
+                      <div className="p-2.5 bg-[var(--bg,#000000)] border border-[var(--line,#1d1e21)] rounded-lg flex items-center justify-between">
+                        <span className="font-mono text-base font-bold text-[var(--accent,#818cf8)] tracking-wider">
+                          {createdInvite.code}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={copyCreatedInvite}
+                          className="px-3 py-1.5 rounded bg-[var(--accent,#818cf8)] hover:brightness-110 text-white text-xs font-bold transition-all flex items-center gap-1 font-sans"
+                        >
+                          {copiedInvite ? <Check size={13} /> : <Copy size={13} />}
+                          <span>{copiedInvite ? 'Đã chép' : 'Sao chép mã'}</span>
+                        </button>
+                      </div>
+                    </div>
+
+                    {createdInvite.link && (
+                      <div>
+                        <span className="text-[var(--text-3,#63636b)] font-sans block mb-1">Đường link đăng ký trực tiếp:</span>
+                        <div className="flex items-center gap-2 bg-[var(--bg,#000000)] p-2 rounded border border-[var(--line,#1d1e21)]">
+                          <span className="text-xs truncate flex-1 text-[var(--text-2,#a1a1aa)]">{createdInvite.link}</span>
+                          <button
+                            type="button"
+                            onClick={copyCreatedInviteLink}
+                            className="p-1.5 rounded bg-[var(--line,#1d1e21)] text-[var(--text-2,#a1a1aa)] hover:text-white"
+                            title="Sao chép liên kết"
+                          >
+                            {copiedInviteLink ? <Check size={14} className="text-[var(--up,#1fc27a)]" /> : <Copy size={14} />}
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   <p className="text-[11px] text-[var(--text-2,#a1a1aa)] leading-relaxed">
-                    Mã này chỉ hiển thị một lần. Hãy gửi mã này cho thành viên để họ nhập khi đăng ký tài khoản tại web sàn.
+                    Mã này chỉ hiển thị một lần. Hãy gửi mã hoặc đường link đăng ký này cho thành viên để tham gia web sàn.
                   </p>
 
                   <button
@@ -500,22 +529,6 @@ export const UsersPage: React.FC<{ onNavigate: (path: string) => void }> = ({ on
                       {inviteError}
                     </div>
                   )}
-
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-semibold uppercase text-[var(--text-2,#a1a1aa)]">
-                      Vai trò dự kiến của thành viên
-                    </label>
-                    <select
-                      value={inviteRole}
-                      onChange={(e) => setInviteRole(e.target.value as Role)}
-                      className="w-full bg-[var(--bg,#000000)] border border-[var(--line,#1d1e21)] rounded-lg p-2.5 text-sm text-[var(--text,#f4f4f5)] outline-none focus:border-[var(--accent,#818cf8)]"
-                    >
-                      <option value="user">User (Khách giao dịch bình thường)</option>
-                      <option value="support">Support (Nhân viên chăm sóc khách hàng)</option>
-                      <option value="operator">Operator (Vận hành viên sàn)</option>
-                      <option value="admin">Admin (Quản trị viên)</option>
-                    </select>
-                  </div>
 
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1.5">
