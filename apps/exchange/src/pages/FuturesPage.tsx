@@ -434,26 +434,28 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
   const notionalValue = orderNotional;
 
   const takerFeeRate = useMemo(() => {
-    return futuresExchangeInfo?.fees?.takerFee || '0.0005';
+    return futuresExchangeInfo?.fees?.takerFee ?? null;
   }, [futuresExchangeInfo]);
 
   const makerFeeRate = useMemo(() => {
-    return futuresExchangeInfo?.fees?.makerFee || '0.0002';
+    return futuresExchangeInfo?.fees?.makerFee ?? null;
   }, [futuresExchangeInfo]);
 
   const takerFeePercent = useMemo(() => {
+    if (!takerFeeRate) return null;
     try {
       return formatDecimal(dec(takerFeeRate).mul(100).toString());
     } catch {
-      return '0,05';
+      return null;
     }
   }, [takerFeeRate]);
 
   const makerFeePercent = useMemo(() => {
+    if (!makerFeeRate) return null;
     try {
       return formatDecimal(dec(makerFeeRate).mul(100).toString());
     } catch {
-      return '0,02';
+      return null;
     }
   }, [makerFeeRate]);
 
@@ -494,7 +496,7 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
   }, [account?.available]);
 
   const estFee = useMemo(() => {
-    if (orderNotional.lte(0)) return ZERO;
+    if (orderNotional.lte(0) || !takerFeeRate) return ZERO;
     try {
       return roundUp(orderNotional.mul(dec(takerFeeRate)));
     } catch {
@@ -512,7 +514,7 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
   }, [currentSymbolInfo?.stepSize]);
 
   const maxByBalance = useMemo(() => {
-    if (refPrice.lte(0) || futuresAvailable.lte(0) || currentLeverage <= 0) return ZERO;
+    if (refPrice.lte(0) || futuresAvailable.lte(0) || currentLeverage <= 0 || !takerFeeRate) return ZERO;
     try {
       const denom = refPrice.div(currentLeverage).add(refPrice.mul(dec(takerFeeRate)));
       return denom.gt(0) ? floorToStep(futuresAvailable.div(denom), stepSize) : ZERO;
@@ -556,13 +558,14 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
   }, [orderType, maxByDepthShort, maxByBalance, stepSize]);
 
   // Funding calculations (S-02)
-  const fundingRate = markPrice?.fundingRate || '0';
+  const fundingRate = markPrice?.fundingRate ?? null;
 
   const fundingRatePercent = useMemo(() => {
+    if (fundingRate === null) return null;
     try {
       return formatDecimal(dec(fundingRate).mul(100).toString());
     } catch {
-      return '0';
+      return null;
     }
   }, [fundingRate]);
 
@@ -580,7 +583,7 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
   }, [markPrice?.nextFundingTime, now]);
 
   const estFunding = useMemo(() => {
-    if (orderNotional.lte(0)) return ZERO;
+    if (orderNotional.lte(0) || fundingRate === null) return ZERO;
     try {
       return orderNotional.mul(dec(fundingRate).abs());
     } catch {
@@ -589,12 +592,15 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
   }, [orderNotional, fundingRate]);
 
   const fundingPayer = useMemo(() => {
+    if (fundingRate === null) return '—';
     try {
       const fr = dec(fundingRate);
       if (fr.gt(0)) return 'Long trả Short';
       if (fr.lt(0)) return 'Short trả Long';
-    } catch {}
-    return 'Không tính phí funding';
+      return 'Không tính phí funding';
+    } catch {
+      return '—';
+    }
   }, [fundingRate]);
 
   const handleFillMax = useCallback(() => {
@@ -612,11 +618,15 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
     setSliderValue(100);
   }, [currentPosition?.side, maxShort, maxLong, unitMode, refPrice]);
 
+  const isContractLoading = !futuresExchangeInfo || !currentSymbolInfo || !markPrice;
   const isTradingHalted = tradingHalted || Boolean(futuresExchangeInfo?.tradingHalted) || activeTradeBlock === 'HALTED';
   const isMarketDataStale = markPrice === null || markPrice.status !== 'LIVE' || currentTicker?.status === 'STALE' || activeTradeBlock === 'PRICE_STALE';
   const isSymbolDisabled = Boolean(currentSymbolInfo && (currentSymbolInfo.enabled === false || (currentSymbolInfo as { status?: string }).status === 'DISABLED')) || activeTradeBlock === 'PAIR_DISABLED';
 
   const blockReason = useMemo<string | null>(() => {
+    if (isContractLoading) {
+      return 'Đang tải thông tin hợp đồng…';
+    }
     if (isTradingHalted) {
       return 'Sàn giao dịch đang tạm dừng khẩn cấp';
     }
@@ -626,14 +636,14 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
     if (isSymbolDisabled) {
       return 'Cặp giao dịch đang tạm ngưng';
     }
-    const minQtyStr = (currentSymbolInfo as { minQuantity?: string } | null)?.minQuantity || currentSymbolInfo?.minQty || '0.001';
-    const minNotionalStr = currentSymbolInfo?.minNotional || '5';
+    const minQtyStr = (currentSymbolInfo as { minQuantity?: string } | null)?.minQuantity || currentSymbolInfo?.minQty;
+    const minNotionalStr = currentSymbolInfo?.minNotional;
 
     if (calculatedQty.gt(0)) {
-      if (calculatedQty.lt(dec(minQtyStr))) {
+      if (minQtyStr && calculatedQty.lt(dec(minQtyStr))) {
         return `Khối lượng nhỏ hơn mức tối thiểu (${minQtyStr} ${baseAsset})`;
       }
-      if (notionalValue.lt(dec(minNotionalStr))) {
+      if (minNotionalStr && notionalValue.lt(dec(minNotionalStr))) {
         return `Giá trị lệnh nhỏ hơn mức tối thiểu (${minNotionalStr} USDT)`;
       }
       if (isAuthenticated && totalCost.gt(futuresAvailable)) {
@@ -642,6 +652,7 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
     }
     return null;
   }, [
+    isContractLoading,
     isTradingHalted,
     isMarketDataStale,
     markPrice,
@@ -1630,7 +1641,13 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
             <div className="flex items-center justify-between">
               <span>Phí mở (ước tính):</span>
               <span data-testid="futures-est-fee" className="font-mono text-white text-right">
-                {formatDecimal(estFee.toString())} USDT ({takerFeePercent}% taker){orderType === 'LIMIT' ? `; tối đa theo taker, khớp maker ${makerFeePercent}% thì hoàn chênh` : ''}
+                {takerFeePercent !== null ? (
+                  <>
+                    {formatDecimal(estFee.toString())} USDT ({takerFeePercent}% taker){orderType === 'LIMIT' && makerFeePercent !== null ? `; tối đa theo taker, khớp maker ${makerFeePercent}% thì hoàn chênh` : ''}
+                  </>
+                ) : (
+                  '—'
+                )}
               </span>
             </div>
 
@@ -1667,7 +1684,11 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
             <div className="flex items-center justify-between">
               <span>Funding:</span>
               <span data-testid="futures-est-funding" className="font-mono text-right text-[var(--warn,#f59e0b)]">
-                {fundingRatePercent}% · còn {fundingCountdown} (~{formatDecimal(estFunding.toString())} USDT; {fundingPayer})
+                {fundingRatePercent !== null ? (
+                  `${fundingRatePercent}% · còn ${fundingCountdown} (~${formatDecimal(estFunding.toString())} USDT; ${fundingPayer})`
+                ) : (
+                  '—'
+                )}
               </span>
             </div>
 
@@ -1957,7 +1978,7 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
             <div className="flex items-center justify-between pb-2 border-b border-[var(--line,#1d1e21)]">
               <span className="text-[var(--text-3,#63636b)]">Phí mở (ước tính):</span>
               <span data-testid="futures-confirm-fee" className="font-mono text-white font-semibold">
-                {formatDecimal(estFee.toString())} USDT
+                {takerFeePercent !== null ? `${formatDecimal(estFee.toString())} USDT (${takerFeePercent}% taker)` : '—'}
               </span>
             </div>
             <div className="flex items-center justify-between pb-2 border-b border-[var(--line,#1d1e21)]">
@@ -1981,7 +2002,7 @@ export const FuturesPage: React.FC<FuturesPageProps> = ({
             <div className="flex items-center justify-between pb-2 border-b border-[var(--line,#1d1e21)]">
               <span className="text-[var(--text-3,#63636b)]">Funding ước tính mỗi kỳ:</span>
               <span className="font-mono text-[var(--warn,#f59e0b)] font-semibold">
-                ~{formatDecimal(estFunding.toString())} USDT ({fundingRatePercent}%)
+                {fundingRatePercent !== null ? `~${formatDecimal(estFunding.toString())} USDT (${fundingRatePercent}%)` : '—'}
               </span>
             </div>
             <div className="grid grid-cols-2 gap-2 mt-2 pt-3 border-t border-[var(--line,#1d1e21)]">

@@ -412,13 +412,14 @@ export const OrderForm: React.FC<OrderFormProps> = ({
   }, [stopPrice, activeTicker]);
 
   // Fee rate & formatted percentage
-  const effectiveFeeRate = (exchangeInfo as any)?.makerFeeRate ?? (exchangeInfo as any)?.takerFeeRate ?? exchangeInfo?.feeRate ?? '0.001';
+  const effectiveFeeRate = exchangeInfo?.feeRate ?? null;
 
   const formattedFeeRatePercent = useMemo(() => {
+    if (!effectiveFeeRate) return '—';
     try {
       return `${formatDecimal(dec(effectiveFeeRate).mul(100).toString(), { locale: 'vi', trimTrailingZeros: true })}%`;
     } catch {
-      return '0,1%';
+      return '—';
     }
   }, [effectiveFeeRate]);
 
@@ -797,7 +798,11 @@ export const OrderForm: React.FC<OrderFormProps> = ({
     !user.emailVerified
   );
 
-  const cannotTradeReason = tradingHalted
+  const isContractLoading = !exchangeInfo || !activeSymbolInfo;
+
+  const cannotTradeReason = isContractLoading
+    ? 'Đang tải thông tin hợp đồng…'
+    : tradingHalted
     ? 'Sàn đang tạm dừng giao dịch'
     : isSymbolDisabled
     ? 'Cặp giao dịch đang tạm ngưng'

@@ -165,6 +165,7 @@ S-01…S-04: đúng hướng, công thức ký quỹ/phí/tối đa đúng (`ini
 - `OrderForm.tsx` (`c6e483d`): `(exchangeInfo as any)?.makerFeeRate ?? (exchangeInfo as any)?.takerFeeRate ?? exchangeInfo?.feeRate ?? '0.001'` — hợp đồng Spot chỉ có `feeRate`; bỏ `as any` và hai trường không tồn tại.
 - Sửa: chưa có `futuresExchangeInfo` / `exchangeInfo` / `markPrice` thì hiện "—" và **khóa nút đặt lệnh** với lý do "Đang tải thông tin hợp đồng…", không đoán số. `fundingRate` null → "—".
 **Nghiệm thu:** chặn `GET /api/v1/futures/exchange-info` → form hiện "—", nút khóa, không có "0,05%".
+**Trạng thái:** Hoàn thành. Đã chỉnh sửa `apps/exchange/src/pages/FuturesPage.tsx` và `apps/exchange/src/components/trading/OrderForm.tsx`: loại bỏ hoàn toàn các fallback đoán số mặc định (`0.0005`, `0.0002`, `5`, `0.001`, `0`), hiển thị "—" khi dữ liệu hợp đồng hoặc tỷ lệ phí/funding chưa tải; khóa nút đặt lệnh kèm lý do "Đang tải thông tin hợp đồng…". Bỏ `as any` và các trường không tồn tại trong `OrderForm.tsx`.
 
 ---
 Đợt 3: lỗi web admin — xem `PROMPT-18-web-admin.md`.
