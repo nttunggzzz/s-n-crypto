@@ -403,3 +403,12 @@ s.tax.thisMonth             // { month: '2026-10', withheldCount, withheldAmount
 **Mock:** `accountTradingStats` tính từ kho mock (các lần khớp Spot và Futures của người dùng demo, bản ghi thuế): người dùng demo có 2 lệnh MUA ngày 9/10/2026 và 2 lệnh BÁN cũ (tháng 9 và tháng 8) nên
 số liệu phụ thuộc ngày hiện tại của máy bạn; đặt một lệnh khớp ngay trong mock thì khối lượng hôm nay tăng theo giá trị lệnh vừa khớp. Người dùng khác trong `adminGetUser` (mock) luôn là toàn số 0 vì mock không có lệnh của họ.
 Fixture tĩnh: `fixtureAccountTradingStats` (người dùng demo lúc 2026-10-09T03:00Z), `fixtureEmptyTradingStats()`.
+
+## Back office: tra cứu và xuất (đợt AD1)
+
+Chỉ đọc, dành cho web admin; mọi endpoint là `auth: staff` (cần 2FA như các endpoint admin khác).
+
+- `adminSearchOrders` / `adminSearchTrades` (`users.read`): `market` (`SPOT`|`FUTURES`) **bắt buộc**. `user` nhận uuid hoặc UID 8 số (sai dạng = 400, không có người dùng = 404). Mới nhất trước; trang kế tiếp dùng `nextCursor` của trang trước. Lệnh Futures có `source = null` và `leverage` có số; khớp Futures có `tax = null`.
+- `adminUserSessions` (`users.read`): phiên còn hiệu lực của khách (tối đa 100). Không có token hay băm token; chỉ id, thời điểm, ip, userAgent, `mfaVerified`.
+- `adminAuditExport` (`audit.read`) và `adminUsersExport` (**`users.export`**, chỉ ADMIN và owner vì có email): trả chuỗi CSV (UTF-8 có BOM, tối đa 10.000 dòng, mới nhất trước). Tiêu đề lấy từ `AUDIT_EXPORT_COLUMNS` / `USERS_EXPORT_COLUMNS`; ô trống = `null`. Ô văn bản tự do bắt đầu bằng `=` `+` `-` `@` được thêm dấu `'` phía trước để bảng tính không chạy như công thức. Ẩn nút xuất người dùng khi `hasPermission(role, 'users.export')` là false.
+- Mock: `mocks/adminLookup.ts` với `fixtures/adminLookup.ts` (người dùng demo có lệnh Spot, người dùng thứ hai có lệnh Futures); cùng luật và cùng quyền với server.

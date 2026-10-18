@@ -22,6 +22,7 @@ export * from './accountStats.ts';
 export * from './news.ts';
 export * from './permissions.ts';
 export * from './admin.ts';
+export * from './adminLookup.ts';
 export * from './realtime.ts';
 export * from './endpoints.ts';
 export * from './client.ts';

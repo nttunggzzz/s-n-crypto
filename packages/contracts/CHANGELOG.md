@@ -1,5 +1,17 @@
 # Changelog — @cex/contracts
 
+## 0.21.0 — 2026-10-18 (Back office đợt AD1: tra cứu lệnh/khớp lệnh toàn sàn, phiên của khách, xuất CSV) (Back office: tra cứu và xuất, chỉ đọc)
+Thêm 5 endpoint; không đổi endpoint cũ. Lead đánh số phiên bản khi gộp. Hướng dẫn: README mục "Back office: tra cứu và xuất (đợt AD1)".
+
+**Thêm**
+- Quyền `users.export` (ADMIN và owner; support không có): xuất CSV người dùng (chứa email).
+- `adminSearchOrders` GET `/api/v1/admin/orders` và `adminSearchTrades` GET `/api/v1/admin/trades` (`users.read`): `market` (`SPOT`|`FUTURES`) bắt buộc; lọc `symbol`, `side`, `user` (uuid hoặc UID 8 số, không thấy = 404), `orderId`, `from`/`to`; riêng lệnh: `status` (`open`|`closed`|`all`), `clientOrderId`. Mới nhất trước, cursor = id dòng cuối, `limit` ≤ 200. Dòng `AdminOrderRow` / `AdminTradeRow` kèm `userId`, `uid`, `email`. Lệnh Futures: `source`/`sourceId` = `null`; khớp Futures: `tax = null`.
+- `adminUserSessions` GET `/api/v1/admin/users/:userId/sessions` (`users.read`): phiên còn hiệu lực (≤ 100), không trả token hay băm token.
+- `adminAuditExport` GET `/api/v1/admin/audit-logs/export.csv` (`audit.read`, bộ lọc của `adminAuditLogs`) và `adminUsersExport` GET `/api/v1/admin/users/export.csv` (`users.export`, bộ lọc của `adminListUsers`): CSV UTF-8 có BOM, ≤ 10.000 dòng, mới nhất trước. Tiêu đề cố định: `AUDIT_EXPORT_COLUMNS`, `USERS_EXPORT_COLUMNS`. Ô văn bản tự do bắt đầu bằng `=` `+` `-` `@` tab CR được thêm dấu `'` phía trước (`csvTextCell`).
+- Fixture `fixtures/adminLookup.ts`; resolver mock `mocks/adminLookup.ts` (cùng luật, cùng quyền với server).
+
+**Có thể ảnh hưởng UI:** thêm giá trị vào enum `Permission` — nơi nào có `Record<Permission, …>` phải thêm `users.export`.
+
 ## 0.20.0 — 2026-10-17 (Hồ sơ: khối lượng giao dịch và thuế đã khấu trừ trong tháng — người dùng và admin)
 Chỉ thêm một endpoint (tổng 154) và một trường bắt buộc trong phản hồi. Hướng dẫn: README mục 17.
 
