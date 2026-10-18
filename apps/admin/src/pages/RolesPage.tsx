@@ -201,7 +201,36 @@ export const RolesPage: React.FC = () => {
                     )}
                   </td>
                   <td className="px-5 py-3">
-                    <span className="text-xs text-[var(--up,#1fc27a)] font-medium">Hoạt động</span>
+                    {u.status === 'locked' ? (
+                      <span className="inline-flex items-center gap-1 text-xs px-2 py-0.5 rounded bg-[var(--down,#f2475f)]/10 text-[var(--down,#f2475f)] border border-[var(--down,#f2475f)]/20 font-medium">
+                        Bị khóa
+                      </span>
+                    ) : (() => {
+                      if (!u.lastSeenAt) {
+                        return (
+                          <div className="flex flex-col">
+                            <span className="text-xs text-[var(--text-3,#63636b)]">Chưa đăng nhập</span>
+                          </div>
+                        );
+                      }
+                      const diffMinutes = Math.floor((Date.now() - new Date(u.lastSeenAt).getTime()) / 60000);
+                      const isOnline = diffMinutes < 15;
+                      return (
+                        <div className="flex flex-col">
+                          <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${
+                            isOnline ? 'text-[var(--up,#1fc27a)]' : 'text-[var(--text-2,#a1a1aa)]'
+                          }`}>
+                            <span className={`w-1.5 h-1.5 rounded-full ${
+                              isOnline ? 'bg-[var(--up,#1fc27a)] animate-pulse' : 'bg-[var(--text-3,#63636b)]'
+                            }`} />
+                            {isOnline ? 'Trực tuyến' : 'Ngoại tuyến'}
+                          </span>
+                          <span className="text-[10px] text-[var(--text-3,#63636b)] font-mono mt-0.5">
+                            {new Date(u.lastSeenAt).toLocaleString('vi-VN')}
+                          </span>
+                        </div>
+                      );
+                    })()}
                   </td>
                   {isOwner && (
                     <td className="px-5 py-3 text-right">
