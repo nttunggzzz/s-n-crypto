@@ -46,6 +46,10 @@ Rà soát: **2026-10-11** (Claude Code). Cập nhật lần cuối: 2026-10-11 t
 > **Rà soát lần 9 (UI `061fdac`, 2026-10-18): [docs/reports/2026-10-18-ra-soat-ui-lan-9.md](reports/2026-10-18-ra-soat-ui-lan-9.md)** — S-01…S-16 và AD-02…AD-24 đã làm; **không có P0/P1**; 58 test e2e cũ đạt.
 > - Việc tiếp cho Antigravity: **T-01 (P2)** gắn mốc test theo TESTIDS "Rà soát lần 8"; **T-02 (P2)** chi tiết người dùng admin còn nuốt lỗi; T-03…T-06 (P3); AD-25…AD-28.
 
+>
+> **Rà soát lần 10 (UI `b994b81`, 2026-10-18 chiều): [docs/reports/2026-10-18-ra-soat-ui-lan-10.md](reports/2026-10-18-ra-soat-ui-lan-10.md)** — T-01…T-06 xong (17/21 test nghiệm thu đạt), trừ T-04 bị đưa lại.
+> - **V-01 (P1)**: chatbot "AI Concierge" nói sai (Faucet 1.000 USDT, thật 10.000) và tự nhận là AI — chờ chủ dự án quyết giữ/gỡ; **V-02 (P2)** tỉ lệ thuế đoán 0,1% quay lại; V-03, V-04.
+
 ## Backend → UI (Claude Code cập nhật mỗi khi đổi backend/hợp đồng; Antigravity đọc đầu mỗi phiên, cùng `packages/contracts/CHANGELOG.md`)
 
 | Ngày | Thay đổi backend / hợp đồng | UI cần làm gì | Trạng thái |
