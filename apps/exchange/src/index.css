@@ -362,5 +362,30 @@ body {
   animation: starGlint 3.6s ease-in-out infinite;
 }
 
+/* Storefront Concierge Gentle Wave & Greeting (Slow, smooth, natural, welcoming) */
+@keyframes sakuraGentleWave {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg) scale(1);
+  }
+  20% {
+    transform: translateY(-2px) rotate(1.2deg) scale(1.008);
+  }
+  45% {
+    transform: translateY(-3.5px) rotate(-1deg) scale(1.015);
+  }
+  70% {
+    transform: translateY(-1.5px) rotate(0.8deg) scale(1.008);
+  }
+  85% {
+    transform: translateY(-0.5px) rotate(-0.3deg) scale(1.003);
+  }
+}
+
+.animate-sakura-gentle-wave {
+  animation: sakuraGentleWave 3.8s ease-in-out infinite;
+  transform-origin: 50% 95%;
+  will-change: transform;
+}
+
 
 

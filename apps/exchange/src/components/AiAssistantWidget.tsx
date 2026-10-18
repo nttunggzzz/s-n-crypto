@@ -3,6 +3,7 @@ import {
   X, Send, Sparkles, RefreshCw, Zap, TrendingUp, ShieldCheck, 
   Coins, ChevronRight, User, HelpCircle, Bot, BarChart3, Volume2
 } from 'lucide-react';
+import { useAuth } from '../context/AuthContext.tsx';
 
 export interface AiAssistantWidgetProps {
   onNavigate: (path: string) => void;
@@ -31,11 +32,11 @@ const INITIAL_SUGGESTIONS = [
 ];
 
 /** Avatar mapping for Sakura's expressions */
-export const SAKURA_SPRITES: Record<SakuraExpression, string> = {
-  default: '/sakura/sakura-avatar-transparent.png',
-  cheerful: '/sakura/sakura-exp-cheerful-transparent.png',
-  explaining: '/sakura/sakura-exp-explaining-transparent.png',
-  thoughtful: '/sakura/sakura-exp-thoughtful-transparent.png',
+const SAKURA_SPRITES: Record<SakuraExpression, string> = {
+  default: '/sakura/sakura-avatar-white-bg.png',
+  cheerful: '/sakura/sakura-avatar-white-bg.png',
+  explaining: '/sakura/sakura-avatar-white-bg.png',
+  thoughtful: '/sakura/sakura-avatar-white-bg.png',
 };
 
 /** Intelligent localized AI answering engine for Sakura (Chatbot CSKH) */
@@ -149,18 +150,21 @@ Anh/chị có thể bấm vào các câu hỏi gợi ý bên dưới hoặc nh�
 }
 
 export const AiAssistantWidget: React.FC<AiAssistantWidgetProps> = ({ onNavigate }) => {
+  const { user } = useAuth();
+  const accountName = user?.name || user?.email?.split('@')[0] || 'bạn';
+  const fullGreeting = `Xin chào ${accountName}! Tôi có thể giúp gì cho bạn?`;
+
   const [isOpen, setIsOpen] = useState(false);
   const [showGreetingBubble, setShowGreetingBubble] = useState(false);
   const [displayedGreeting, setDisplayedGreeting] = useState('');
   const [isHovered, setIsHovered] = useState(false);
   const [isSpeaking, setIsSpeaking] = useState(false);
-  const [isGiggling, setIsGiggling] = useState(false);
 
   const [messages, setMessages] = useState<Message[]>([
     {
       id: 'welcome',
       sender: 'bot',
-      text: 'Xin chào anh/chị! ✨ Em là Sakura - Trợ lý CSKH của sàn giao dịch. Em có thể hỗ trợ anh/chị nhận 1.000 USDT từ Faucet, hướng dẫn đặt lệnh Spot, đòn bẩy Futures 20x hoặc chính sách thuế 0.1% ạ!',
+      text: `Xin chào ${accountName}! ✨ Tôi là Sakura - Trợ lý CSKH của sàn giao dịch. Tôi có thể hỗ trợ bạn nhận 1.000 USDT từ Faucet, hướng dẫn đặt lệnh Spot, đòn bẩy Futures 20x hoặc chính sách thuế 0.1% ạ!`,
       time: 'Vừa xong',
       expression: 'cheerful',
     },
@@ -169,14 +173,13 @@ export const AiAssistantWidget: React.FC<AiAssistantWidgetProps> = ({ onNavigate
   const [isTyping, setIsTyping] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const fullGreeting = 'Xin chào! Em là Sakura, có thể giúp gì cho anh/chị hôm nay? ✨';
-
-  // Smooth typewriter effect for greeting bubble after 1.5s
+  // Smooth typewriter effect for greeting bubble after 1.2s
   useEffect(() => {
     const timer = setTimeout(() => {
       setShowGreetingBubble(true);
       setIsSpeaking(true);
       let i = 0;
+      setDisplayedGreeting('');
       const interval = setInterval(() => {
         if (i < fullGreeting.length) {
           setDisplayedGreeting(fullGreeting.slice(0, i + 1));
@@ -185,12 +188,12 @@ export const AiAssistantWidget: React.FC<AiAssistantWidgetProps> = ({ onNavigate
           clearInterval(interval);
           setTimeout(() => setIsSpeaking(false), 1200);
         }
-      }, 40);
+      }, 35);
       return () => clearInterval(interval);
-    }, 1500);
+    }, 1200);
 
     return () => clearTimeout(timer);
-  }, []);
+  }, [fullGreeting]);
 
   // Auto-scroll chat to bottom
   useEffect(() => {
@@ -242,22 +245,16 @@ export const AiAssistantWidget: React.FC<AiAssistantWidgetProps> = ({ onNavigate
   // Determine active avatar sprite based on interaction state
   const getActiveAvatarSprite = () => {
     if (isTyping) return SAKURA_SPRITES.thoughtful;
-    if (isGiggling || isHovered) return SAKURA_SPRITES.cheerful;
+    if (isHovered) return SAKURA_SPRITES.cheerful;
     if (isSpeaking) return SAKURA_SPRITES.explaining;
     return SAKURA_SPRITES.default;
   };
 
   // Determine active animation class for Sakura's avatar
   const getActiveAnimationClass = () => {
-    if (isGiggling) return 'animate-sakura-giggle';
     if (isSpeaking) return 'animate-sakura-talk';
     if (isTyping) return 'animate-anime-float-soft';
     return 'animate-sakura-breathe';
-  };
-
-  const handleTriggerGiggle = () => {
-    setIsGiggling(true);
-    setTimeout(() => setIsGiggling(false), 700);
   };
 
   return (
@@ -268,7 +265,7 @@ export const AiAssistantWidget: React.FC<AiAssistantWidgetProps> = ({ onNavigate
           <div className="relative group bg-[rgba(26,46,64,0.95)] text-white text-xs px-4 py-2.5 rounded-2xl border-2 border-[#FFB7C5]/60 shadow-[0_10px_30px_rgba(255,183,197,0.35)] backdrop-blur-xl flex items-center gap-2.5 cursor-pointer hover:border-[#FFD700] transition-all">
             <span className="w-2 h-2 rounded-full bg-[#FFD700] animate-ping shrink-0" />
             <span 
-              onClick={() => { setIsOpen(true); setShowGreetingBubble(false); handleTriggerGiggle(); }}
+              onClick={() => { setIsOpen(true); setShowGreetingBubble(false); }}
               className="font-medium text-white leading-relaxed select-none"
             >
               {displayedGreeting}
@@ -296,19 +293,18 @@ export const AiAssistantWidget: React.FC<AiAssistantWidgetProps> = ({ onNavigate
           {/* Header */}
           <div className="px-5 py-3.5 bg-gradient-to-r from-[#1A2E40] via-[#243B53] to-[#1A2E40] border-b border-[#FFD700]/30 flex items-center justify-between shadow-md">
             <div className="flex items-center gap-3">
-              {/* Sakura Avatar in Header with Talking/Giggle animation */}
+              {/* Sakura Avatar in Header with Clean White Background */}
               <div 
-                onClick={handleTriggerGiggle}
-                className="relative w-10 h-10 rounded-full bg-gradient-to-tr from-[#FFB7C5]/40 to-[#FFD700]/30 border-2 border-[#FFD700] flex items-center justify-center overflow-hidden shadow-inner shrink-0 cursor-pointer"
-                title="Bấm để chào Sakura ✨"
+                className="relative w-10 h-10 rounded-full bg-white border-2 border-[#FFD700] flex items-center justify-center overflow-hidden shadow-inner shrink-0"
+                title="Sakura Trợ lý CSKH ✨"
               >
                 <img 
-                  src={getActiveAvatarSprite()} 
+                  src="/sakura/sakura-avatar-white-bg.png" 
                   alt="Sakura CSKH" 
-                  className={`w-full h-full object-cover object-top transform scale-110 translate-y-1 transition-all duration-300 ${getActiveAnimationClass()}`}
+                  className={`w-full h-full object-contain p-0.5 rounded-full ${getActiveAnimationClass()}`}
                 />
                 {/* Active Green Dot */}
-                <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-[#1fc27a] border-2 border-[#1A2E40] rounded-full" />
+                <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-[#1fc27a] border-2 border-white rounded-full" />
               </div>
               <div>
                 <div className="flex items-center gap-1.5">
@@ -364,26 +360,25 @@ export const AiAssistantWidget: React.FC<AiAssistantWidgetProps> = ({ onNavigate
 
           {/* Messages Stream */}
           <div className="flex-1 overflow-y-auto p-4 space-y-3.5 text-xs leading-relaxed">
-            {/* Welcoming Card with Sakura Character Sprite */}
-            <div className="p-3.5 rounded-2xl bg-gradient-to-r from-[#1A2E40]/90 to-[#2A4365]/80 border border-[#FFD700]/30 shadow-md flex items-center gap-3">
+            {/* Welcoming Card with Sakura 50% Body */}
+            <div className="p-3.5 rounded-2xl bg-gradient-to-r from-[#1A2E40]/90 to-[#2A4365]/80 border border-[#FFD700]/30 shadow-md flex items-center gap-3.5">
               <div 
-                onClick={handleTriggerGiggle}
-                className="w-16 h-20 shrink-0 overflow-hidden rounded-xl bg-gradient-to-b from-[#FFB7C5]/20 to-transparent flex items-center justify-center cursor-pointer hover:scale-105 transition-transform"
-                title="Bấm để xem Sakura chào ✨"
+                className="w-20 h-24 shrink-0 overflow-hidden rounded-xl bg-gradient-to-b from-white/10 to-transparent border border-[#FFD700]/30 flex items-end justify-center shadow-inner"
+                title="Sakura Trợ lý CSKH ✨"
               >
                 <img 
-                  src="/sakura/sakura-sprite-transparent.png" 
-                  alt="Sakura Character" 
-                  className={`w-full h-full object-contain object-top transform scale-125 translate-y-1 ${getActiveAnimationClass()}`}
+                  src="/sakura/sakura-upper-body-clean.png" 
+                  alt="Sakura 50% Body" 
+                  className="w-full h-full object-contain object-bottom animate-sakura-gentle-wave select-none pointer-events-none filter drop-shadow-[0_4px_10px_rgba(0,0,0,0.5)]"
                 />
               </div>
               <div className="text-[11px] text-pink-100/90 leading-snug">
                 <p className="font-bold text-[#FFD700] text-xs mb-1 flex items-center gap-1">
                   <Sparkles size={12} className="text-[#FFD700]" />
-                  <span>Sakura chào bạn!</span>
+                  <span>Sakura chào {accountName}!</span>
                 </p>
                 <p>
-                  Sẵn sàng hướng dẫn nhận 1.000 USDT Faucet, giao dịch Spot, đòn bẩy Futures và tính thuế tự động 0.1% ạ!
+                  Sẵn sàng hướng dẫn nhận 1.000 USDT Faucet, giao dịch Spot, đòn bẩy Futures 20x và tính thuế tự động 0.1% ạ!
                 </p>
               </div>
             </div>
@@ -394,11 +389,11 @@ export const AiAssistantWidget: React.FC<AiAssistantWidgetProps> = ({ onNavigate
                 className={`flex gap-2.5 ${m.sender === 'user' ? 'justify-end' : 'justify-start'}`}
               >
                 {m.sender === 'bot' && (
-                  <div className="w-8 h-8 rounded-full bg-[#1A2E40] border border-[#FFD700]/70 flex items-center justify-center shrink-0 mt-0.5 overflow-hidden shadow-sm">
+                  <div className="w-8 h-8 rounded-full bg-white border border-[#FFD700]/70 flex items-center justify-center shrink-0 mt-0.5 overflow-hidden shadow-sm">
                     <img 
-                      src={SAKURA_SPRITES[m.expression || 'default']} 
+                      src="/sakura/sakura-avatar-white-bg.png" 
                       alt="Sakura" 
-                      className="w-full h-full object-cover object-top transform scale-110"
+                      className="w-full h-full object-contain p-0.5"
                     />
                   </div>
                 )}
@@ -431,11 +426,11 @@ export const AiAssistantWidget: React.FC<AiAssistantWidgetProps> = ({ onNavigate
 
             {isTyping && (
               <div className="flex gap-2.5 items-center">
-                <div className="w-8 h-8 rounded-full bg-[#1A2E40] border border-[#FFD700]/70 flex items-center justify-center shrink-0 overflow-hidden shadow-sm">
+                <div className="w-8 h-8 rounded-full bg-white border border-[#FFD700]/70 flex items-center justify-center shrink-0 overflow-hidden shadow-sm">
                   <img 
-                    src={SAKURA_SPRITES.thoughtful} 
+                    src="/sakura/sakura-avatar-white-bg.png" 
                     alt="Sakura suy nghĩ" 
-                    className="w-full h-full object-cover object-top transform scale-110 animate-anime-float-soft"
+                    className="w-full h-full object-contain p-0.5 animate-anime-float-soft"
                   />
                 </div>
                 <div className="bg-[#1A2E40]/80 border border-white/10 px-3.5 py-2 rounded-2xl rounded-tl-none flex items-center gap-1.5">
@@ -486,17 +481,16 @@ export const AiAssistantWidget: React.FC<AiAssistantWidgetProps> = ({ onNavigate
         </div>
       )}
 
-      {/* Floating Animated Sakura Button */}
+      {/* Floating Animated Sakura Face Icon Button (White Background) */}
       <button
         onClick={() => {
           setIsOpen(!isOpen);
           setShowGreetingBubble(false);
-          handleTriggerGiggle();
         }}
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={() => setIsHovered(false)}
         aria-label="Sakura - Trợ lý CSKH Sàn Giao Dịch"
-        className="relative group p-1.5 rounded-full cursor-pointer focus:outline-none transition-transform hover:scale-105 active:scale-95"
+        className="relative group cursor-pointer focus:outline-none transition-all duration-300 hover:scale-105 active:scale-95"
       >
         {/* Floating Sakura Petals Animation when hovered */}
         {isHovered && (
@@ -507,39 +501,30 @@ export const AiAssistantWidget: React.FC<AiAssistantWidgetProps> = ({ onNavigate
           </div>
         )}
 
-        {/* Radar Wave Pulse Background */}
-        <span className="absolute inset-0 rounded-full bg-gradient-to-tr from-[#FFB7C5] via-pink-500 to-[#FFD700] opacity-35 animate-radar-ripple pointer-events-none" />
-        <span className="absolute -inset-1 rounded-full bg-gradient-to-tr from-[#FFB7C5] via-[#FFD700] to-[#1A2E40] opacity-70 blur-md group-hover:opacity-100 transition-opacity pointer-events-none" />
+        {/* Ambient Fintech Gold/Pink Glow */}
+        <span className="absolute -inset-1 rounded-full bg-gradient-to-tr from-[#FFB7C5] via-[#FFD700] to-[#1A2E40] opacity-50 blur-md group-hover:opacity-85 transition-opacity pointer-events-none" />
 
-        {/* Sakura Avatar Body Circle */}
-        <div className="relative w-16 h-16 rounded-full bg-gradient-to-b from-[#243B53] via-[#1A2E40] to-[#0F1A24] border-2 border-[#FFD700] shadow-[0_8px_30px_rgba(255,183,197,0.5)] flex items-center justify-center overflow-hidden">
+        {/* Pure White Background Avatar Circle */}
+        <div className="relative w-16 h-16 rounded-full bg-white border-2 border-[#FFD700] shadow-[0_8px_25px_rgba(0,0,0,0.45),0_0_15px_rgba(255,215,0,0.35)] flex items-center justify-center overflow-hidden">
           <img 
-            src={getActiveAvatarSprite()} 
-            alt="Sakura CSKH" 
-            className={`w-full h-full object-cover object-top transform scale-110 translate-y-1.5 transition-all duration-300 ${getActiveAnimationClass()}`}
+            src="/sakura/sakura-avatar-white-bg.png" 
+            alt="Sakura Face" 
+            className="w-full h-full object-contain p-0.5 rounded-full select-none pointer-events-none transform scale-105 transition-transform duration-300 group-hover:scale-110"
           />
-          
-          {/* Star hairpins glint animation */}
-          <span className="absolute top-2.5 left-3 text-yellow-300 animate-star-glint pointer-events-none text-[9px] font-black">
-            ✦
-          </span>
-          <span className="absolute top-3 right-3.5 text-yellow-300 animate-star-glint pointer-events-none text-[9px] font-black [animation-delay:1.8s]">
-            ✦
-          </span>
 
           {/* Micro microphone pulse wave when speaking */}
           {isSpeaking && (
-            <span className="absolute bottom-3 right-3 w-3 h-3 rounded-full bg-cyan-400 opacity-80 animate-sakura-mic-wave pointer-events-none" />
+            <span className="absolute bottom-3 right-3 w-2.5 h-2.5 rounded-full bg-cyan-400 opacity-80 animate-sakura-mic-wave pointer-events-none" />
           )}
         </div>
 
         {/* Gold SUPPORT Badge */}
-        <div className="absolute -bottom-1 left-1/2 transform -translate-x-1/2 px-2 py-0.2 rounded-full bg-[#1A2E40] border border-[#FFD700] shadow-md flex items-center justify-center">
+        <div className="absolute -bottom-1.5 left-1/2 transform -translate-x-1/2 px-2 py-0.5 rounded-full bg-[#1A2E40] border border-[#FFD700] shadow-md flex items-center justify-center pointer-events-none">
           <span className="text-[8px] font-black tracking-widest text-[#FFD700]">SUPPORT</span>
         </div>
 
-        {/* Active Ping Dot */}
-        <div className="absolute top-0 right-0 w-3.5 h-3.5 rounded-full bg-[#1fc27a] border-2 border-[#1A2E40] shadow-sm flex items-center justify-center">
+        {/* Active Online Ping Dot */}
+        <div className="absolute -top-0.5 -right-0.5 w-4 h-4 rounded-full bg-[#1fc27a] border-2 border-white shadow-sm flex items-center justify-center pointer-events-none">
           <span className="w-1.5 h-1.5 rounded-full bg-white animate-ping" />
         </div>
       </button>
