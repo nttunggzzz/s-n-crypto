@@ -55,7 +55,7 @@ const AppContent: React.FC = () => {
     if (normalized === '/admin/invites') return <InvitesPage />;
     if (normalized === '/admin/settings') return <SettingsPage />;
     if (normalized === '/admin/audit-logs') return <AuditLogsPage />;
-    if (normalized === '/admin/reconciliation') return <ReconciliationPage />;
+    if (normalized === '/admin/reconciliation') return <ReconciliationPage onNavigate={navigate} />;
     if (normalized === '/admin/roles') return <RolesPage />;
 
     return <OverviewPage onNavigate={navigate} />;
